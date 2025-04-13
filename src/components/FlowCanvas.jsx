@@ -357,10 +357,14 @@ const FlowCanvas = ({
         onConnect={onConnect}
         onNodeClick={(event, node) => {
           // Only trigger node click if the target is not a button or inside a button
+          // and not an edit or delete button
           if (!event.target.closest('button') && 
               !event.target.classList.contains('edit-button') && 
               !event.target.classList.contains('delete-button')) {
-            onNodeClick(event, node);
+            // This should only handle selection, not editing
+            if (onNodeClick) {
+              onNodeClick(event, node);
+            }
           }
         }}
         onConnectStart={handleConnectStart}

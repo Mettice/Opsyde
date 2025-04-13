@@ -66,6 +66,15 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     setIsModified(true);
   }, []);
 
+  // Toggle API key visibility
+  const [showApiKey, setShowApiKey] = useState(false);
+  
+  // Format API key for display
+  const formatApiKey = (key) => {
+    if (!key) return '';
+    return showApiKey ? key : '••••••••••••••••';
+  };
+
   // Return null if modal is not open
   if (!isOpen) return null;
 
@@ -357,14 +366,27 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 </div>
 
                 <div className="mb-4">
-                  <label className="block text-gray-700 mb-1">API Key (optional)</label>
-                  <input
-                    type="text"
-                    value={formData.apiKey}
-                    onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="Your API key"
-                  />
+                  <label className="block text-gray-700 mb-1 flex items-center">
+                    <span>API Key (optional)</span>
+                    <HelpTooltip type="tool" field="apiKey" />
+                    <button 
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="ml-2 text-gray-500 hover:text-gray-700 text-xs p-1"
+                      title={showApiKey ? "Hide API key" : "Show API key"}
+                    >
+                      {showApiKey ? "🔒" : "👁️"}
+                    </button>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? "text" : "password"}
+                      value={formatApiKey(formData.apiKey)}
+                      onChange={(e) => handleInputChange('apiKey', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      placeholder={showApiKey ? "" : "••••••••••••••••"}
+                    />
+                  </div>
                 </div>
               </>
             )}

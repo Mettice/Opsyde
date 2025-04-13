@@ -43,64 +43,250 @@ const Toolbar = React.memo(({
   onRedo,
   canUndo,
   canRedo,
-  onOpenTemplates,
-  onOpenToolRegistry,
-}) => (
-  <div className="cursor-move select-none">
-    <div className="bg-white border-b p-2 flex space-x-2 overflow-x-auto">
-      <button className="bg-blue-500 text-white px-4 py-2 rounded flex items-center" onClick={onAddAgent}>
-        Add Agent
-      </button>
-      <button className="bg-yellow-500 text-white px-4 py-2 rounded flex items-center" onClick={onAddTask}>
-        Add Task
-      </button>
-      <button className="bg-blue-400 text-white px-4 py-2 rounded flex items-center" onClick={onAddTool}>
-        Add Tool
-      </button>
-      <button className="bg-purple-400 text-white px-4 py-2 rounded flex items-center" onClick={onOpenTemplates}>
-        Templates
-      </button>
-      <button className="bg-green-400 text-white px-4 py-2 rounded flex items-center" onClick={onOpenToolRegistry}>
-        Tool Registry
-      </button>
-      <div className="h-8 border-l border-gray-300 mx-1"></div>
-      <button className="bg-green-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportYAML}>
-        Export YAML
-      </button>
-      <button className="bg-indigo-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportPython}>
-        Export main.py
-      </button>
-      <button className="bg-teal-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportStructured}>
-        Export Project
-      </button>
-      <div className="h-8 border-l border-gray-300 mx-1"></div>
-      <button className="bg-purple-500 text-white px-4 py-2 rounded flex items-center" onClick={onSaveProject}>
-        Save Project
-      </button>
-      <button className="bg-indigo-400 text-white px-4 py-2 rounded flex items-center" onClick={onLoadProject}>
-        Load Project
-      </button>
-      <button className="bg-pink-500 text-white px-4 py-2 rounded flex items-center" onClick={onPreviewWorkflow}>
-        Preview Workflow
-      </button>
-      <div className="h-8 border-l border-gray-300 mx-1"></div>
-      <button 
-        className={`px-4 py-2 rounded flex items-center ${canUndo ? 'bg-gray-600 text-white' : 'bg-gray-300 text-gray-500'}`} 
-        onClick={onUndo} 
-        disabled={!canUndo}
+}) => {
+  // Add state for tooltip visibility
+  const [activeTooltip, setActiveTooltip] = useState(null);
+  
+  // Tooltip content with more detailed descriptions
+  const tooltips = {
+    addAgent: "Add an AI agent with specific role, goals, and capabilities to your workflow",
+    addTask: "Add a task that can be assigned to agents with expected inputs and outputs",
+    addTool: "Add a tool that extends agent capabilities (API, search, calculator, etc.)",
+    exportYAML: "Export your workflow as a YAML configuration file for CrewAI",
+    exportPython: "Generate a complete Python script with all agents, tasks, and tools defined",
+    previewWorkflow: "Preview and simulate how your workflow will execute step by step",
+    saveProject: "Save your current project to continue editing later",
+    loadProject: "Load a previously saved project"
+  };
+  
+  // Function to show tooltip - make it more reliable
+  const showTooltip = (id) => {
+    // Use setTimeout to ensure state updates properly
+    setTimeout(() => {
+      setActiveTooltip(id);
+    }, 0);
+  };
+  
+  // Function to hide tooltip
+  const hideTooltip = () => {
+    setActiveTooltip(null);
+  };
+  
+  // Improved Tooltip component with better styling and positioning
+  const Tooltip = ({ id }) => {
+    if (activeTooltip !== id) return null;
+    
+    return (
+      <div 
+        className="fixed z-[9999] bg-gray-800 text-white text-xs rounded-md py-2 px-3 shadow-lg min-w-[200px] max-w-[250px]"
+        style={{
+          top: 'calc(var(--tooltip-y, 0) - 40px)',
+          left: 'var(--tooltip-x, 0)',
+          transform: 'translateX(-50%)',
+        }}
       >
-        Undo
-      </button>
-      <button 
-        className={`px-4 py-2 rounded flex items-center ${canRedo ? 'bg-gray-700 text-white' : 'bg-gray-300 text-gray-500'}`} 
-        onClick={onRedo} 
-        disabled={!canRedo}
-      >
-        Redo
-      </button>
+        {tooltips[id]}
+        <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 rotate-45 w-3 h-3 bg-gray-800"></div>
+      </div>
+    );
+  };
+  
+  // Update the button implementation to use refs and set tooltip position
+  const buttonRefs = useRef({});
+
+  return (
+    <div className="cursor-move select-none">
+      <div className="bg-white border-b p-2 flex space-x-2 overflow-x-auto">
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.addAgent = el}
+            className="bg-blue-500 hover:bg-blue-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onAddAgent}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.addAgent) {
+                const rect = buttonRefs.current.addAgent.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('addAgent');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Add Agent</span>
+            <span className="w-5 h-5 rounded-full bg-blue-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="addAgent" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.addTask = el}
+            className="bg-yellow-500 hover:bg-yellow-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onAddTask}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.addTask) {
+                const rect = buttonRefs.current.addTask.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('addTask');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Add Task</span>
+            <span className="w-5 h-5 rounded-full bg-yellow-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="addTask" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.addTool = el}
+            className="bg-blue-400 hover:bg-blue-500 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onAddTool}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.addTool) {
+                const rect = buttonRefs.current.addTool.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('addTool');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Add Tool</span>
+            <span className="w-5 h-5 rounded-full bg-blue-300 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="addTool" />
+        </div>
+        
+        <div className="h-8 border-l border-gray-300 mx-1"></div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.exportYAML = el}
+            className="bg-green-500 hover:bg-green-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onExportYAML}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.exportYAML) {
+                const rect = buttonRefs.current.exportYAML.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('exportYAML');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Export YAML</span>
+            <span className="w-5 h-5 rounded-full bg-green-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="exportYAML" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.exportPython = el}
+            className="bg-indigo-500 hover:bg-indigo-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onExportPython}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.exportPython) {
+                const rect = buttonRefs.current.exportPython.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('exportPython');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Export main.py</span>
+            <span className="w-5 h-5 rounded-full bg-indigo-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="exportPython" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.previewWorkflow = el}
+            className="bg-purple-500 hover:bg-purple-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onPreviewWorkflow}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.previewWorkflow) {
+                const rect = buttonRefs.current.previewWorkflow.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('previewWorkflow');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Preview Workflow</span>
+            <span className="w-5 h-5 rounded-full bg-purple-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="previewWorkflow" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.saveProject = el}
+            className="bg-pink-500 hover:bg-pink-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onSaveProject}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.saveProject) {
+                const rect = buttonRefs.current.saveProject.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('saveProject');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Save Project</span>
+            <span className="w-5 h-5 rounded-full bg-pink-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="saveProject" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.loadProject = el}
+            className="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onLoadProject}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.loadProject) {
+                const rect = buttonRefs.current.loadProject.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('loadProject');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Load Project</span>
+            <span className="w-5 h-5 rounded-full bg-blue-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="loadProject" />
+        </div>
+        
+        <div className="ml-auto flex space-x-2">
+          <button 
+            className={`px-4 py-2 rounded ${canUndo ? 'bg-gray-300 hover:bg-gray-400 text-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+            onClick={onUndo}
+            disabled={!canUndo}
+          >
+            Undo
+          </button>
+          <button 
+            className={`px-4 py-2 rounded ${canRedo ? 'bg-gray-300 hover:bg-gray-400 text-gray-800' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+            onClick={onRedo}
+            disabled={!canRedo}
+          >
+            Redo
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-));
+  );
+});
 
 const BuilderPage = () => {
   // Use ReactFlow's state hooks directly
@@ -116,7 +302,6 @@ const BuilderPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showToolTemplates, setShowToolTemplates] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showToolRegistry, setShowToolRegistry] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
 
   const reactFlowWrapper = useRef(null);
@@ -297,8 +482,11 @@ const BuilderPage = () => {
 
   // Handle node click for editing
   const onNodeClick = useCallback((event, node) => {
-    setSelectedNode(node);
-    setShowEditModal(true);
+    // This should only handle selection, not editing
+    console.log('Node clicked:', node);
+    
+    // Don't trigger edit on node click - only selection
+    // The edit functionality should only be triggered by the edit button
   }, []);
 
   // Handle saving edits from modal
@@ -1191,8 +1379,6 @@ if __name__ == "__main__":
     onRedo: redo,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,
-    onOpenTemplates: () => setShowTemplateModal(true),
-    onOpenToolRegistry: () => setShowToolRegistry(true)
   }), [
     addAgent,
     addTask,
@@ -1206,9 +1392,7 @@ if __name__ == "__main__":
     undo,
     redo,
     historyIndex,
-    history.length,
-    setShowTemplateModal,
-    setShowToolRegistry
+    history.length
   ]);
 
   // Add this function to the Builder component to handle applying a flow template
@@ -1292,197 +1476,11 @@ if __name__ == "__main__":
     }
   }, [handleNodeEdit, handleNodeDelete, debouncedAddToHistory, templateToNode, nodes, edges]);
 
-  // Add this component for Tool Registry Integration
-  const ToolRegistryModal = React.memo(({ onClose, onSelectTool }) => {
-    const [source, setSource] = useState('langchain');
-    const [tools, setTools] = useState([]);
-    const [loading, setLoading] = useState(false);
-    const [jsonSchema, setJsonSchema] = useState('');
-    const [error, setError] = useState('');
-    
-    // Fetch tools from LangChain
-    const fetchLangChainTools = useCallback(async () => {
-      setLoading(true);
-      setError('');
-      
-      try {
-        // This would be a real API call in production
-        // For demo, we'll use mock data
-        const mockLangChainTools = [
-          {
-            name: "Serper Search",
-            description: "A tool that searches the web using the Serper API",
-            type: "api",
-            parameters: ["query", "num_results"],
-            category: "Search"
-          },
-          {
-            name: "Tavily Research",
-            description: "Research tool powered by Tavily API",
-            type: "api",
-            parameters: ["query", "search_depth", "include_domains", "exclude_domains"],
-            category: "Research"
-          },
-          {
-            name: "DALL-E Image Generator",
-            description: "Generates images from text descriptions using DALL-E",
-            type: "api",
-            parameters: ["prompt", "size", "quality", "style"],
-            category: "Creative"
-          },
-          {
-            name: "Zapier NLA",
-            description: "Natural Language Actions with Zapier",
-            type: "api",
-            parameters: ["action", "parameters"],
-            category: "Automation"
-          }
-        ];
-        
-        // Simulate API delay
-        setTimeout(() => {
-          setTools(mockLangChainTools);
-          setLoading(false);
-        }, 500);
-        
-      } catch (err) {
-        console.error("Error fetching LangChain tools:", err);
-        setError("Failed to fetch tools from LangChain");
-        setLoading(false);
-      }
-    }, []);
-    
-    // Parse JSON schema
-    const parseJsonSchema = useCallback(() => {
-      setLoading(true);
-      setError('');
-      
-      try {
-        const parsedTools = JSON.parse(jsonSchema);
-        
-        if (!Array.isArray(parsedTools)) {
-          throw new Error("JSON schema must be an array of tool objects");
-        }
-        
-        // Validate each tool has required fields
-        const validTools = parsedTools.filter(tool => {
-          return tool.name && tool.description;
-        });
-        
-        if (validTools.length === 0) {
-          throw new Error("No valid tools found in JSON schema");
-        }
-        
-        setTools(validTools);
-        setLoading(false);
-        
-      } catch (err) {
-        console.error("Error parsing JSON schema:", err);
-        setError(err.message || "Invalid JSON schema");
-        setLoading(false);
-      }
-    }, [jsonSchema]);
-    
-    // Load tools when source changes
-    useEffect(() => {
-      if (source === 'langchain') {
-        fetchLangChainTools();
-      } else {
-        setTools([]);
-      }
-    }, [source, fetchLangChainTools]);
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold">Tool Registry</h2>
-            <button onClick={onClose}>❌</button>
-          </div>
-          
-          <div className="mb-4">
-            <div className="flex gap-4 mb-4">
-              <button
-                className={`px-4 py-2 rounded ${source === 'langchain' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-                onClick={() => setSource('langchain')}
-              >
-                LangChain Tools
-              </button>
-              <button
-                className={`px-4 py-2 rounded ${source === 'json' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
-                onClick={() => setSource('json')}
-              >
-                Custom JSON
-              </button>
-            </div>
-            
-            {source === 'json' && (
-              <div className="mb-4">
-                <textarea
-                  className="w-full h-40 p-2 border border-gray-300 rounded"
-                  placeholder="Paste your JSON tool schema here..."
-                  value={jsonSchema}
-                  onChange={(e) => setJsonSchema(e.target.value)}
-                ></textarea>
-                <button
-                  className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
-                  onClick={parseJsonSchema}
-                >
-                  Parse JSON
-                </button>
-              </div>
-            )}
-            
-            {error && (
-              <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
-                {error}
-              </div>
-            )}
-            
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                <p className="mt-2">Loading tools...</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-4">
-                {tools.map((tool, idx) => (
-                  <div
-                    key={idx}
-                    className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
-                    onClick={() => {
-                      onSelectTool(tool);
-                      onClose();
-                    }}
-                  >
-                    <div className="flex items-center mb-1">
-                      <span className="text-lg mr-2">🔧</span>
-                      <h4 className="font-medium">{tool.name}</h4>
-                    </div>
-                    <p className="text-sm text-gray-600 mb-1">{tool.description}</p>
-                    {tool.category && (
-                      <span className="inline-block text-xs bg-gray-100 px-2 py-1 rounded">
-                        {tool.category}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          
-          <div className="flex justify-end">
-            <button
-              className="px-4 py-2 bg-gray-300 text-gray-800 rounded"
-              onClick={onClose}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  });
+  // Modify the ToolTemplates component to include Tool Registry functionality
+  const handleShowToolTemplates = useCallback(() => {
+    // Show the enhanced tool templates that includes registry functionality
+    setShowToolTemplates(true);
+  }, []);
 
   // Handle tool selection from registry
   const handleToolFromRegistry = useCallback((toolData) => {
@@ -1603,6 +1601,8 @@ if __name__ == "__main__":
         <ToolTemplates
           onClose={() => setShowToolTemplates(false)}
           onSelectTemplate={onSelectToolTemplate}
+          showRegistry={true}
+          onSelectToolFromRegistry={handleToolFromRegistry}
         />
       )}
       
@@ -1635,13 +1635,6 @@ if __name__ == "__main__":
             }
             setShowTemplateModal(false);
           }}
-        />
-      )}
-      
-      {showToolRegistry && (
-        <ToolRegistryModal
-          onClose={() => setShowToolRegistry(false)}
-          onSelectTool={handleToolFromRegistry}
         />
       )}
     </div>

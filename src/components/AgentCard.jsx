@@ -1,9 +1,13 @@
-import React, { useCallback, memo } from 'react';
+import React, { useCallback, memo, useEffect, useRef } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
 // Make sure your component is memoized
 const AgentCard = memo(({ data, isConnectable, selected }) => {
+  const editButtonRef = useRef(null);
+  const deleteButtonRef = useRef(null);
+  const cardRef = useRef(null);
+  
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
     // Ensure we have an event object
@@ -39,6 +43,81 @@ const AgentCard = memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
+  // Add event listeners directly to the buttons and prevent propagation
+  useEffect(() => {
+    const editButton = editButtonRef.current;
+    const deleteButton = deleteButtonRef.current;
+    const card = cardRef.current;
+    
+    // Define stopPropagation function once to reuse
+    const stopPropagation = (e) => {
+      e.stopPropagation();
+    };
+    
+    if (editButton) {
+      editButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleEditClick(e);
+      }, true);
+      
+      editButton.addEventListener('mousedown', stopPropagation, true);
+      editButton.addEventListener('touchstart', stopPropagation, true);
+    }
+    
+    if (deleteButton) {
+      deleteButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleDeleteClick(e);
+      }, true);
+      
+      deleteButton.addEventListener('mousedown', stopPropagation, true);
+      deleteButton.addEventListener('touchstart', stopPropagation, true);
+    }
+    
+    // Prevent the card from triggering edit on click
+    if (card) {
+      const handleCardClick = (e) => {
+        // Only stop propagation if the click is directly on the card
+        // and not on a button or handle
+        if (e.target === card || card.contains(e.target)) {
+          if (!e.target.closest('button') && 
+              !e.target.classList.contains('edit-button') && 
+              !e.target.classList.contains('delete-button') &&
+              !e.target.classList.contains('react-flow__handle')) {
+            // Allow the click to propagate for selection, but don't trigger edit
+            e.stopImmediatePropagation();
+          }
+        }
+      };
+      
+      card.addEventListener('click', handleCardClick, true);
+      
+      return () => {
+        card.removeEventListener('click', handleCardClick, true);
+        
+        if (editButton) {
+          // Use anonymous functions for event handlers that include handleEditClick
+          editButton.removeEventListener('click', (e) => {
+            e.stopPropagation();
+            handleEditClick(e);
+          }, true);
+          editButton.removeEventListener('mousedown', stopPropagation, true);
+          editButton.removeEventListener('touchstart', stopPropagation, true);
+        }
+        
+        if (deleteButton) {
+          // Use anonymous functions for event handlers that include handleDeleteClick
+          deleteButton.removeEventListener('click', (e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
+          }, true);
+          deleteButton.removeEventListener('mousedown', stopPropagation, true);
+          deleteButton.removeEventListener('touchstart', stopPropagation, true);
+        }
+      };
+    }
+  }, [handleEditClick, handleDeleteClick]);
+
   // Handle rendering with an improved error message if data is missing
   if (!data) {
     return (
@@ -50,6 +129,7 @@ const AgentCard = memo(({ data, isConnectable, selected }) => {
 
   return (
     <div 
+      ref={cardRef}
       className={`bg-white border-2 ${selected ? 'border-blue-500' : 'border-blue-200'} shadow-md rounded p-3 w-72`}
       data-nodeid={data.id} // Add data attribute for debugging
     >
@@ -98,25 +178,21 @@ const AgentCard = memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div className="flex mt-2 space-x-2">
         <button
+          ref={editButtonRef}
           type="button"
-          onClick={handleEditClick}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
           aria-label="Edit agent"
+          data-no-drag="true"
         >
           Edit
         </button>
         
         <button
+          ref={deleteButtonRef}
           type="button"
-          onClick={handleDeleteClick}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
-          onTouchStart={(e) => e.stopPropagation()}
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
           aria-label="Delete agent"
+          data-no-drag="true"
         >
           Delete
         </button>

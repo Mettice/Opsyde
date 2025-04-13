@@ -33,13 +33,13 @@ export const templateToNode = (template) => {
     return {
       ...baseNode,
       data: {
-        label: template.name,
-        parameters: template.parameters.split('\n'),
-        toolType: template.toolType,
-        icon: template.icon,
-        description: template.description,
+        label: template.label || template.name,
+        parameters: template.parameters ? template.parameters.split('\n') : [],
+        toolType: template.toolType || 'custom',
+        icon: template.icon || '🔧',
+        description: template.description || '',
         apiEndpoint: template.apiEndpoint || '',
-        category: template.category,
+        category: template.category || 'Custom',
         nodeId: id,
         nodeType: 'tool'
       }
