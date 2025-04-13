@@ -58,8 +58,12 @@ const AgentCard = memo(({ data, isConnectable, selected }) => {
         type="target"
         position={Position.Top}
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-blue-500"
-      />
+        className="w-4 h-4 bg-blue-500 hover:bg-blue-400 hover:w-5 hover:h-5 transition-all -top-2"
+        id={`${data.id}-target`}
+        title="Connect from: Tool"
+      >
+        <div className="absolute -top-5 text-xs text-gray-500 whitespace-nowrap">← Tool</div>
+      </Handle>
       
       {/* Node content */}
       <div
@@ -123,8 +127,12 @@ const AgentCard = memo(({ data, isConnectable, selected }) => {
         type="source"
         position={Position.Bottom}
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-blue-500"
-      />
+        className="w-4 h-4 bg-blue-600 hover:bg-blue-500 hover:w-5 hover:h-5 transition-all -bottom-2"
+        id={`${data.id}-source`}
+        title="Connect to: Task"
+      >
+        <div className="absolute -bottom-5 text-xs text-gray-500 whitespace-nowrap">→ Task</div>
+      </Handle>
     </div>
   );
 });

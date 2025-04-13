@@ -304,9 +304,17 @@ const BuilderPage = () => {
   }, []);
 
   const onConnectEnd = useCallback((event) => {
+    // Immediately reset the connecting node ID to prevent loops
+    const sourceNodeId = connectingNodeId.current;
+    connectingNodeId.current = null;
+    
+    // If we don't have a source node, exit early
+    if (!sourceNodeId) return;
+    
     const targetIsPane = event.target.classList.contains('react-flow__pane');
-
-    if (targetIsPane && connectingNodeId.current) {
+    
+    // Only handle connections to the pane (empty space)
+    if (targetIsPane && reactFlowWrapper.current) {
       // Get wrapper bounds to calculate position
       const { top, left } = reactFlowWrapper.current.getBoundingClientRect();
       const id = `node-${Date.now()}`;
@@ -332,8 +340,9 @@ const BuilderPage = () => {
       setEdges((eds) =>
         eds.concat({ 
           id: `edge-${Date.now()}`, 
-          source: connectingNodeId.current, 
-          target: id 
+          source: sourceNodeId, 
+          target: id,
+          type: 'default' // Specify a valid edge type
         })
       );
       
@@ -341,13 +350,20 @@ const BuilderPage = () => {
       setTimeout(() => {
         debouncedAddToHistory({ 
           nodes: [...nodes, newNode], 
-          edges: [...edges, { id: `edge-${Date.now()}`, source: connectingNodeId.current, target: id }] 
+          edges: [...edges, { 
+            id: `edge-${Date.now()}`, 
+            source: sourceNodeId, 
+            target: id,
+            type: 'default' // Specify a valid edge type
+          }] 
         });
       }, 0);
     }
+    // We don't need to handle node-to-node connections here
+    // as they are handled by the onConnect callback
   }, [handleNodeEdit, handleNodeDelete, nodes, edges, debouncedAddToHistory]);
 
-  // Improved connection validation
+  // Update the onConnect function with better type normalization
   const onConnect = useCallback((params) => {
     // Validate connection
     const sourceNode = nodes.find(n => n.id === params.source);
@@ -358,37 +374,80 @@ const BuilderPage = () => {
       return;
     }
     
+    // Get normalized node types - handle all possible type variations
+    const getNormalizedType = (type) => {
+      if (!type) return '';
+      type = type.toLowerCase();
+      if (type.includes('agent')) return 'agent';
+      if (type.includes('task')) return 'task';
+      if (type.includes('tool')) return 'tool';
+      return type;
+    };
+    
+    const sourceType = getNormalizedType(sourceNode.type);
+    const targetType = getNormalizedType(targetNode.type);
+    
+    console.log("Connecting:", sourceType, "→", targetType);
+    
     // Validate connection rules
-    // 1. Agents can connect to tasks
-    // 2. Tools can connect to agents
-    // 3. Tasks can connect to tasks (dependencies)
-    
     let isValid = false;
+    let errorMessage = "";
+    let successMessage = "";
     
-    if (sourceNode.type === 'agent' && targetNode.type === 'task') {
+    // Allow all valid CrewAI connections
+    if (sourceType === 'tool' && targetType === 'agent') {
       isValid = true;
-    } else if (sourceNode.type === 'tool' && targetNode.type === 'agent') {
+      successMessage = `Agent "${targetNode.data.label}" will use tool "${sourceNode.data.label}"`;
+    } else if (sourceType === 'agent' && targetType === 'task') {
       isValid = true;
-    } else if (sourceNode.type === 'task' && targetNode.type === 'task') {
+      successMessage = `Agent "${sourceNode.data.label}" will perform task "${targetNode.data.label}"`;
+    } else if (sourceType === 'task' && targetType === 'task') {
       isValid = true;
+      successMessage = `Task "${targetNode.data.label}" depends on task "${sourceNode.data.label}"`;
+    } else {
+      // Provide clear error messages
+      if (sourceType === 'agent' && targetType === 'tool') {
+        errorMessage = `Invalid connection: Agents cannot connect to Tools. Instead, connect from the Tool to the Agent.`;
+      } else if (sourceType === 'task' && targetType === 'agent') {
+        errorMessage = `Invalid connection: Tasks cannot connect to Agents. Instead, connect from the Agent to the Task.`;
+      } else if (sourceType === 'task' && targetType === 'tool') {
+        errorMessage = `Invalid connection: Tasks cannot connect to Tools. Tools connect to Agents, and Agents connect to Tasks.`;
+      } else if (sourceType === 'tool' && targetType === 'task') {
+        errorMessage = `Invalid connection: Tools cannot connect to Tasks. Tools connect to Agents, and Agents connect to Tasks.`;
+      } else {
+        errorMessage = `Invalid connection: ${sourceType} cannot connect to ${targetType}`;
+      }
     }
     
     if (!isValid) {
-      console.warn(`Invalid connection: ${sourceNode.type} → ${targetNode.type}`);
-      alert(`Invalid connection: ${sourceNode.type} cannot connect to ${targetNode.type}`);
+      console.warn(errorMessage);
+      alert(errorMessage);
       return;
     }
+    
+    // Show success message
+    console.log(successMessage);
     
     // Create a unique ID for the edge
     const edgeId = `edge-${Date.now()}`;
     
-    // Add the edge with the unique ID
-    setEdges((eds) => addEdge({ ...params, id: edgeId }, eds));
+    // Add the edge with the unique ID and a valid type
+    setEdges((eds) => addEdge({ 
+      ...params, 
+      id: edgeId,
+      type: 'default', // Ensure we use a valid edge type
+      data: { label: successMessage } // Add a label to the edge
+    }, eds));
     
-    // Add to history
+    // Add to history with the valid edge type
     debouncedAddToHistory({
       nodes,
-      edges: [...edges, { ...params, id: edgeId }]
+      edges: [...edges, { 
+        ...params, 
+        id: edgeId,
+        type: 'default', // Ensure we use a valid edge type
+        data: { label: successMessage } // Add a label to the edge
+      }]
     });
   }, [nodes, edges, debouncedAddToHistory]);
 

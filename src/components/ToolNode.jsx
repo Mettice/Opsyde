@@ -58,8 +58,9 @@ const ToolNode = React.memo(({ data, isConnectable, selected }) => {
         type="target" 
         position={Position.Top} 
         isConnectable={isConnectable} 
-        className="w-3 h-3 bg-blue-500"
-        id={`${data.id}-target`} // Add id for debugging
+        className="w-3 h-3 bg-green-500 hover:bg-green-400 hover:w-4 hover:h-4 transition-all"
+        id={`${data.id}-target`}
+        title="Tools don't receive connections"
       />
       
       {/* Node content */}
@@ -126,9 +127,12 @@ const ToolNode = React.memo(({ data, isConnectable, selected }) => {
         type="source" 
         position={Position.Bottom} 
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-blue-500"
-        id={`${data.id}-source`} // Add id for debugging
-      />
+        className="w-3 h-3 bg-green-600 hover:bg-green-500 hover:w-4 hover:h-4 transition-all"
+        id={`${data.id}-source`}
+        title="Connect to: Agent"
+      >
+        <div className="absolute -bottom-4 text-xs text-gray-500">→ Agent</div>
+      </Handle>
     </div>
   );
 });

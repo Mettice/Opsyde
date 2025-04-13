@@ -76,8 +76,9 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         type="target" 
         position={Position.Top} 
         isConnectable={isConnectable} 
-        className="w-3 h-3 bg-blue-500"
-        id={`${data.id}-target`} // Add id for debugging
+        className="w-3 h-3 bg-yellow-500 hover:bg-yellow-400 hover:w-4 hover:h-4 transition-all"
+        id={`${data.id}-target`}
+        title="Connect from: Agent, Task"
       />
       
       {/* Node content */}
@@ -171,8 +172,9 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         type="source" 
         position={Position.Bottom} 
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-blue-500"
-        id={`${data.id}-source`} // Add id for debugging
+        className="w-3 h-3 bg-yellow-600 hover:bg-yellow-500 hover:w-4 hover:h-4 transition-all"
+        id={`${data.id}-source`}
+        title="Connect to: Task"
       />
     </div>
   );

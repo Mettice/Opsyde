@@ -2,6 +2,29 @@ import { agentTemplates } from '../data/agentTemplates';
 import { taskTemplates } from '../data/taskTemplates';
 import { flowTemplates } from '../data/flowTemplates';
 
+// Add validation to ensure templates have all required fields
+const validateTemplate = (template) => {
+  // Basic required fields for all template types
+  if (!template.name || !template.type) {
+    console.warn('Template missing required fields:', template);
+    return false;
+  }
+  
+  // Type-specific validation
+  switch (template.type) {
+    case 'agent':
+      return !!template.role;
+    case 'task':
+      return !!template.description;
+    case 'tool':
+      return !!template.toolType;
+    case 'flow':
+      return Array.isArray(template.nodes) && Array.isArray(template.edges);
+    default:
+      return true;
+  }
+};
+
 export const recommendTemplates = (nodes, edges) => {
   const recommendations = [];
   
@@ -25,7 +48,7 @@ export const recommendTemplates = (nodes, edges) => {
       type: 'agent'
     });
     
-    return recommendations;
+    return recommendations.filter(validateTemplate);
   }
   
   // Always include at least one flow template if available
@@ -70,5 +93,6 @@ export const recommendTemplates = (nodes, edges) => {
     });
   }
   
-  return recommendations.slice(0, 3); // Return top 3 recommendations
+  // Filter out any templates that don't have complete data
+  return recommendations.filter(validateTemplate).slice(0, 3); // Return top 3 recommendations
 }; 
