@@ -25,7 +25,7 @@ CrewBuilder is an open-source visual interface for designing, testing, and deplo
 
 | Design View | Preview Mode | Export Options |
 |-------------|--------------|----------------|
-| ![Design View](public/demo-screenshot1.png) | ![Preview Mode](public/demo-screenshot2.png) | ![Export Options](public/demo-screenshot3.png) |
+| ![Design View](public/demo-screenshot2.png) | ![Preview Mode](public/demo-screenshot1.png) | ![Export Options](public/demo-screenshot3.png) |
 
 ## 🛠️ Installation
 
