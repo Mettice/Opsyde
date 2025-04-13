@@ -429,9 +429,9 @@ const FlowCanvas = ({
         </button>
       </div>
 
-      {/* Template Gallery - moved to top */}
+      {/* Template Gallery - moved to bottom */}
       {showTemplateGallery && (
-        <div className="absolute top-2 left-2 right-2 bg-white rounded shadow-md z-10 p-2 max-h-[300px] overflow-y-auto">
+        <div className="absolute bottom-16 left-2 right-2 bg-white rounded shadow-md z-10 p-2 max-h-[300px] overflow-y-auto">
           <h3 className="font-semibold mb-2">Quick Templates</h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
             {(templates || []).map((template, idx) => (

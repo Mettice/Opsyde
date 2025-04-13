@@ -1,5 +1,4 @@
 import React from 'react';
-import { getBezierPath, getSmoothStepPath, getStraightPath } from 'reactflow';
 import PropTypes from 'prop-types';
 
 // Add this function at the top of the file, before the ConnectionLine component
@@ -12,7 +11,7 @@ const getConnectionStyle = (sourceType, targetType) => {
         end: '#9f7aea'
       },
       valid: true,
-      strokeWidth: 3
+      strokeWidth: 2
     };
   }
   
@@ -32,7 +31,7 @@ const getConnectionStyle = (sourceType, targetType) => {
         end: '#9f7aea'
       },
       valid: true,
-      strokeWidth: 3
+      strokeWidth: 2
     };
   }
   
@@ -63,65 +62,47 @@ const ConnectionLine = ({
   showOverlay = true,
   baseStrokeColor = '#b1b1b7',
   overlayStrokeColor = '#fff',
-  baseStrokeWidth = 3,
+  baseStrokeWidth = 2,
   overlayStrokeWidth = 1,
   dashArray = '5,5',
-  curvature = 0.5,
-  // For backward compatibility
-  sourceX,
-  sourceY,
-  sourcePosition,
-  targetX,
-  targetY,
-  targetPosition,
   sourceType,
   targetType,
 }) => {
-  // Use the new prop names if available, otherwise fall back to the old ones
-  const validFromX = fromX !== undefined ? fromX : sourceX;
-  const validFromY = fromY !== undefined ? fromY : sourceY;
-  const validFromPosition = fromPosition !== undefined ? fromPosition : sourcePosition;
-  const validToX = toX !== undefined ? toX : targetX;
-  const validToY = toY !== undefined ? toY : targetY;
-  const validToPosition = toPosition !== undefined ? toPosition : targetPosition;
-
   // Ensure we have valid values
-  const validatedFromX = isNaN(validFromX) ? 0 : validFromX;
-  const validatedFromY = isNaN(validFromY) ? 0 : validFromY;
-  const validatedToX = isNaN(validToX) ? validatedFromX + 50 : validToX;
-  const validatedToY = isNaN(validToY) ? validatedFromY + 50 : validToY;
-
-  let pathFunction;
-  switch (connectionLineType) {
-    case 'bezier':
-      pathFunction = getBezierPath;
-      break;
-    case 'straight':
-      pathFunction = getStraightPath;
-      break;
-    case 'smoothstep':
-    case 'step':
-    default:
-      pathFunction = getSmoothStepPath;
-      break;
-  }
-
-  const [edgePath] = pathFunction({
-    sourceX: validatedFromX,
-    sourceY: validatedFromY,
-    sourcePosition: validFromPosition,
-    targetX: validatedToX,
-    targetY: validatedToY,
-    targetPosition: validToPosition,
-    curvature: curvature,
-  });
-
-  const animatedClass = animated ? 'animated' : '';
-  const connectionLineId = `connection-line-${validatedFromX}-${validatedFromY}-${validatedToX}-${validatedToY}`;
+  const validatedFromX = isNaN(fromX) ? 0 : fromX;
+  const validatedFromY = isNaN(fromY) ? 0 : fromY;
+  const validatedToX = isNaN(toX) ? validatedFromX + 50 : toX;
+  const validatedToY = isNaN(toY) ? validatedFromY + 50 : toY;
 
   // Get connection style based on node types
   const connectionStyle = getConnectionStyle(sourceType, targetType);
+  const connectionLineId = `connection-line-${validatedFromX}-${validatedFromY}-${validatedToX}-${validatedToY}`;
   const gradientId = `gradient-${connectionLineId}`;
+
+  // Calculate control points for a smooth curved line
+  // This creates a more natural curve like in your first screenshot
+  const dx = Math.abs(validatedToX - validatedFromX);
+  const dy = Math.abs(validatedToY - validatedFromY);
+  const curvature = 0.5;
+  
+  // Calculate control points for a smooth S-curve
+  let path;
+  
+  // If the nodes are far apart horizontally, use an S-curve
+  if (dx > 100) {
+    const cp1x = validatedFromX;
+    const cp1y = validatedFromY + Math.min(80, dy * curvature);
+    const cp2x = validatedToX;
+    const cp2y = validatedToY - Math.min(80, dy * curvature);
+    
+    path = `M${validatedFromX},${validatedFromY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${validatedToX},${validatedToY}`;
+  } else {
+    // For nodes that are closer, use a simple curve
+    const midX = (validatedFromX + validatedToX) / 2;
+    const midY = (validatedFromY + validatedToY) / 2;
+    
+    path = `M${validatedFromX},${validatedFromY} Q${midX},${midY} ${validatedToX},${validatedToY}`;
+  }
 
   return (
     <g key={connectionLineId}>
@@ -136,8 +117,8 @@ const ConnectionLine = ({
         fill="none"
         stroke={`url(#${gradientId})`}
         strokeWidth={connectionStyle.strokeWidth}
-        className={animatedClass}
-        d={edgePath}
+        className={animated ? 'animated' : ''}
+        d={path}
         style={connectionLineStyle}
         strokeDasharray={connectionStyle.valid ? '' : '5,5'}
       />
@@ -147,35 +128,25 @@ const ConnectionLine = ({
           fill="none"
           stroke={overlayStrokeColor}
           strokeWidth={overlayStrokeWidth}
-          className={animatedClass}
-          d={edgePath}
+          className={animated ? 'animated' : ''}
+          d={path}
           style={connectionLineStyle}
           strokeDasharray={dashArray}
         />
       )}
+      <circle cx={validatedFromX} cy={validatedFromY} fill={baseStrokeColor} r={3} />
     </g>
   );
 };
 
 ConnectionLine.propTypes = {
-  // New prop names (React Flow v10+)
   fromX: PropTypes.number,
   fromY: PropTypes.number,
   fromPosition: PropTypes.string,
   toX: PropTypes.number,
   toY: PropTypes.number,
   toPosition: PropTypes.string,
-  
-  // Old prop names (for backward compatibility)
-  sourceX: PropTypes.number,
-  sourceY: PropTypes.number,
-  sourcePosition: PropTypes.string,
-  targetX: PropTypes.number,
-  targetY: PropTypes.number,
-  targetPosition: PropTypes.string,
-  
-  // Common props
-  connectionLineType: PropTypes.oneOf(['bezier', 'straight', 'step', 'smoothstep', 'default']),
+  connectionLineType: PropTypes.string,
   connectionLineStyle: PropTypes.object,
   animated: PropTypes.bool,
   showOverlay: PropTypes.bool,
@@ -184,7 +155,6 @@ ConnectionLine.propTypes = {
   baseStrokeWidth: PropTypes.number,
   overlayStrokeWidth: PropTypes.number,
   dashArray: PropTypes.string,
-  curvature: PropTypes.number,
   sourceType: PropTypes.string,
   targetType: PropTypes.string,
 };

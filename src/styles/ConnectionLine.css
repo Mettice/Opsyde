@@ -1,0 +1,9 @@
+.animated-dash {
+  animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+} 

@@ -5,6 +5,7 @@ import yaml from 'js-yaml';
 import { useNodesState, useEdgesState, addEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { ReactFlowProvider } from 'reactflow';
+import toast from 'react-hot-toast';
 
 import FlowCanvas from '../components/FlowCanvas';
 import HelpPanel from '../components/HelpPanel';
@@ -14,6 +15,18 @@ import ToolTemplates from '../components/templates/ToolTemplates';
 import { getSafeNodePosition } from '../utils/getSafeNodePosition';
 import { flowTemplates } from '../data/flowTemplates';
 import { templateToNode } from '../utils/templateToNode';
+import ConnectionLine from '../components/ConnectionLine';
+
+// Add this function at the top of your file, outside any component
+function inspectNode(node) {
+  return {
+    id: node.id,
+    type: node.type,
+    dataType: node.data?.nodeType,
+    label: node.data?.label,
+    rawNode: { ...node }
+  };
+}
 
 // Memoized Toolbar to avoid unnecessary re-renders
 const Toolbar = React.memo(({
@@ -303,154 +316,105 @@ const BuilderPage = () => {
     connectingNodeId.current = nodeId;
   }, []);
 
-  const onConnectEnd = useCallback((event) => {
-    // Immediately reset the connecting node ID to prevent loops
-    const sourceNodeId = connectingNodeId.current;
+  // Add this function to fix the error
+  const onConnectEnd = useCallback(() => {
     connectingNodeId.current = null;
-    
-    // If we don't have a source node, exit early
-    if (!sourceNodeId) return;
-    
-    const targetIsPane = event.target.classList.contains('react-flow__pane');
-    
-    // Only handle connections to the pane (empty space)
-    if (targetIsPane && reactFlowWrapper.current) {
-      // Get wrapper bounds to calculate position
-      const { top, left } = reactFlowWrapper.current.getBoundingClientRect();
-      const id = `node-${Date.now()}`;
-      
-      // Create a new node at the connection end point
-      const newNode = {
-        id,
-        position: { 
-          x: event.clientX - left - 75, 
-          y: event.clientY - top 
-        },
-        data: { 
-          label: `New Node ${id}`,
-          onEdit: () => handleNodeEdit(id),
-          onDelete: () => handleNodeDelete(id)
-        },
-        type: 'default',
-      };
+  }, []);
 
-      setNodes((nds) => nds.concat(newNode));
-      
-      // Create an edge from the source to the new node
-      setEdges((eds) =>
-        eds.concat({ 
-          id: `edge-${Date.now()}`, 
-          source: sourceNodeId, 
-          target: id,
-          type: 'default' // Specify a valid edge type
-        })
-      );
-      
-      // Add to history
-      setTimeout(() => {
-        debouncedAddToHistory({ 
-          nodes: [...nodes, newNode], 
-          edges: [...edges, { 
-            id: `edge-${Date.now()}`, 
-            source: sourceNodeId, 
-            target: id,
-            type: 'default' // Specify a valid edge type
-          }] 
-        });
-      }, 0);
-    }
-    // We don't need to handle node-to-node connections here
-    // as they are handled by the onConnect callback
-  }, [handleNodeEdit, handleNodeDelete, nodes, edges, debouncedAddToHistory]);
-
-  // Update the onConnect function with better type normalization
   const onConnect = useCallback((params) => {
-    // Validate connection
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
-    
+  
     if (!sourceNode || !targetNode) {
-      console.error("Cannot connect: source or target node not found");
+      toast.error("Connection failed: source or target node not found");
       return;
     }
-    
-    // Get normalized node types - handle all possible type variations
-    const getNormalizedType = (type) => {
-      if (!type) return '';
-      type = type.toLowerCase();
-      if (type.includes('agent')) return 'agent';
-      if (type.includes('task')) return 'task';
-      if (type.includes('tool')) return 'tool';
-      return type;
-    };
-    
-    const sourceType = getNormalizedType(sourceNode.type);
-    const targetType = getNormalizedType(targetNode.type);
-    
-    console.log("Connecting:", sourceType, "→", targetType);
-    
-    // Validate connection rules
+  
+    const sourceType = normalizeType(sourceNode);
+    const targetType = normalizeType(targetNode);
+  
+    console.log("🔌 Attempting connection:", sourceType, "→", targetType);
+  
     let isValid = false;
-    let errorMessage = "";
-    let successMessage = "";
-    
-    // Allow all valid CrewAI connections
-    if (sourceType === 'tool' && targetType === 'agent') {
+    let message = '';
+  
+    if (sourceType === "tool" && targetType === "agent") {
       isValid = true;
-      successMessage = `Agent "${targetNode.data.label}" will use tool "${sourceNode.data.label}"`;
-    } else if (sourceType === 'agent' && targetType === 'task') {
+      message = `✅ Agent "${targetNode.data.label}" will use tool "${sourceNode.data.label}".`;
+    } else if (sourceType === "agent" && targetType === "task") {
       isValid = true;
-      successMessage = `Agent "${sourceNode.data.label}" will perform task "${targetNode.data.label}"`;
-    } else if (sourceType === 'task' && targetType === 'task') {
+      message = `✅ Agent "${sourceNode.data.label}" will perform task "${targetNode.data.label}".`;
+    } else if (sourceType === "task" && targetType === "task") {
       isValid = true;
-      successMessage = `Task "${targetNode.data.label}" depends on task "${sourceNode.data.label}"`;
+      message = `✅ Task "${targetNode.data.label}" depends on task "${sourceNode.data.label}".`;
     } else {
-      // Provide clear error messages
-      if (sourceType === 'agent' && targetType === 'tool') {
-        errorMessage = `Invalid connection: Agents cannot connect to Tools. Instead, connect from the Tool to the Agent.`;
-      } else if (sourceType === 'task' && targetType === 'agent') {
-        errorMessage = `Invalid connection: Tasks cannot connect to Agents. Instead, connect from the Agent to the Task.`;
-      } else if (sourceType === 'task' && targetType === 'tool') {
-        errorMessage = `Invalid connection: Tasks cannot connect to Tools. Tools connect to Agents, and Agents connect to Tasks.`;
-      } else if (sourceType === 'tool' && targetType === 'task') {
-        errorMessage = `Invalid connection: Tools cannot connect to Tasks. Tools connect to Agents, and Agents connect to Tasks.`;
+      // Invalid case messages
+      if (sourceType === "task" && targetType === "agent") {
+        message = `❌ Invalid: Tasks cannot assign agents. Use Agent → Task.`;
+      } else if (sourceType === "agent" && targetType === "tool") {
+        message = `❌ Invalid: Agents cannot directly link to Tools. Use Tool → Agent.`;
+      } else if (sourceType === "tool" && targetType === "task") {
+        message = `❌ Invalid: Tools cannot be assigned to Tasks directly. Connect Tool → Agent.`;
       } else {
-        errorMessage = `Invalid connection: ${sourceType} cannot connect to ${targetType}`;
+        message = `❌ Invalid connection: ${sourceType} → ${targetType}`;
       }
     }
-    
+  
     if (!isValid) {
-      console.warn(errorMessage);
-      alert(errorMessage);
+      toast.error(message);
       return;
     }
-    
-    // Show success message
-    console.log(successMessage);
-    
-    // Create a unique ID for the edge
+  
+    // Add edge with styling
     const edgeId = `edge-${Date.now()}`;
-    
-    // Add the edge with the unique ID and a valid type
-    setEdges((eds) => addEdge({ 
-      ...params, 
-      id: edgeId,
-      type: 'default', // Ensure we use a valid edge type
-      data: { label: successMessage } // Add a label to the edge
-    }, eds));
-    
-    // Add to history with the valid edge type
+    setEdges((eds) =>
+      addEdge(
+        {
+          ...params,
+          id: edgeId,
+          type: "bezier",
+          animated: true,
+          style: {
+            stroke: '#888',
+            strokeWidth: 1.5,
+            strokeDasharray: '5,5'
+          },
+          data: { label: message }
+        },
+        eds
+      )
+    );
+  
+    toast.success(message);
+  
     debouncedAddToHistory({
       nodes,
-      edges: [...edges, { 
-        ...params, 
+      edges: [...edges, {
+        ...params,
         id: edgeId,
-        type: 'default', // Ensure we use a valid edge type
-        data: { label: successMessage } // Add a label to the edge
+        type: "bezier",
+        animated: true,
+        style: {
+          stroke: '#888',
+          strokeWidth: 1.5,
+          strokeDasharray: '5,5'
+        },
+        data: { label: message }
       }]
     });
   }, [nodes, edges, debouncedAddToHistory]);
-
+  
+  const normalizeType = (node) => {
+    const type = (node?.type || '').toLowerCase();
+    const dataType = (node?.data?.nodeType || '').toLowerCase();
+    
+    if (type.includes('agent') || dataType.includes('agent')) return 'agent';
+    if (type.includes('task') || dataType.includes('task')) return 'task';
+    if (type.includes('tool') || dataType.includes('tool')) return 'tool';
+    return 'unknown';
+  };
+  
+  
   // Add Agent function
   const addAgent = useCallback(() => {
     const id = `agent-${Date.now()}`;
@@ -460,6 +424,8 @@ const BuilderPage = () => {
       id,
       type: 'agent',
       position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
       data: {
         label: `Agent ${nodes.filter(n => n.type === 'agent').length + 1}`,
         role: 'Assistant',
@@ -484,6 +450,8 @@ const BuilderPage = () => {
       id,
       type: 'task',
       position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
       data: {
         label: `New Task`,
         description: 'Task description',
@@ -505,6 +473,8 @@ const BuilderPage = () => {
       id,
       type: 'tool',
       position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
       data: {
         ...template,
         nodeId: id,
@@ -644,8 +614,8 @@ agents = {}
     role="${node.data.role || 'Assistant'}",
     goal="${node.data.goal || 'Help accomplish tasks'}",
     backstory="${node.data.backstory || ''}",
-    verbose=${node.data.verbose},
-    allow_delegation=${node.data.allowDelegation},
+    verbose=${node.data.verbose ? 'True' : 'False'},
+    allow_delegation=${node.data.allowDelegation ? 'True' : 'False'},
     llm="${node.data.llmModel || 'gpt-4'}"
 )
 `;
@@ -656,52 +626,71 @@ agents = {}
       if (toolNodes.length > 0) {
         pythonCode += '\n# Create tools\ntools = {}\n';
         toolNodes.forEach(node => {
+          const toolClassName = node.data.label.replace(/\s+/g, '') + 'Tool';
+          const paramsList = node.data.parameters ? 
+            node.data.parameters.split('\n')
+              .map(p => p.trim())
+              .filter(p => p)
+              .join(', ') : '';
+            
           pythonCode += `
-class ${node.data.label.replace(/\s+/g, '')}Tool(BaseTool):
+class ${toolClassName}(BaseTool):
     name = "${node.data.label}"
     description = "${node.data.description || 'A tool'}"
     
-    def _run(self, ${node.data.parameters ? node.data.parameters.split('\n').map(p => p.trim()).filter(p => p).join(', ') : ''}) -> str:
+    def _run(self, ${paramsList}) -> str:
         # TODO: Implement ${node.data.label} functionality
         return "Result from ${node.data.label}"
 
-tools["${node.id}"] = ${node.data.label.replace(/\s+/g, '')}Tool()
+tools["${node.id}"] = ${toolClassName}()
 `;
         });
       }
       
       const taskNodes = nodes.filter(n => n.type === 'task');
       if (taskNodes.length > 0) {
+        // First define task variables without dependencies
         pythonCode += '\n# Create tasks\ntasks = []\n';
-        const taskIdToIndex = {};
-        taskNodes.forEach((node, index) => {
-          taskIdToIndex[node.id] = index;
-        });
         
-        taskNodes.forEach(node => {
+        // Create task variables first
+        taskNodes.forEach((node, index) => {
+          pythonCode += `task${index + 1} = Task(\n`;
+          pythonCode += `    description="${node.data.description || 'Task description'}",\n`;
+          pythonCode += `    expected_output="${node.data.expectedOutput || 'Expected output'}",\n`;
+          
           const assignedAgentEdges = edges.filter(e => e.target === node.id && agentNodes.some(a => a.id === e.source));
           const assignedAgent = assignedAgentEdges.length > 0 
             ? `agents["${assignedAgentEdges[0].source}"]`
             : 'None  # TODO: Assign an agent to this task';
-            
+          pythonCode += `    agent=${assignedAgent},\n`;
+          
           const usedToolsEdges = edges.filter(e => e.target === node.id && toolNodes.some(t => t.id === e.source));
-          const usedTools = usedToolsEdges.length > 0 
-            ? `[${usedToolsEdges.map(e => `tools["${e.source}"]`).join(', ')}]`
-            : '[]';
-            
+          if (usedToolsEdges.length > 0) {
+            pythonCode += `    tools=[${usedToolsEdges.map(e => `tools["${e.source}"]`).join(', ')}],\n`;
+          } else {
+            pythonCode += `    tools=[],\n`;
+          }
+          
+          pythonCode += `    async_execution=${node.data.async ? 'True' : 'False'}\n`;
+          pythonCode += `)\n`;
+          pythonCode += `tasks.append(task${index + 1})\n\n`;
+        });
+        
+        // Now add dependencies
+        taskNodes.forEach((node, index) => {
           const dependencyEdges = edges.filter(e => e.target === node.id && taskNodes.some(t => t.id === e.source));
-          const dependencies = dependencyEdges.length > 0 
-            ? `\n    dependencies=[${dependencyEdges.map(e => `tasks[${taskIdToIndex[e.source]}]`).join(', ')}],`
-            : '';
+          if (dependencyEdges.length > 0) {
+            pythonCode += `# Add dependencies for task${index + 1}\n`;
+            pythonCode += `task${index + 1}.dependencies = [`;
             
-          pythonCode += `tasks.append(Task(
-    description="${node.data.description || 'Task description'}",
-    expected_output="${node.data.expectedOutput || 'Expected output'}",
-    agent=${assignedAgent},
-    tools=${usedTools},${dependencies}
-    async_execution=${node.data.async}
-))
-`;
+            const deps = dependencyEdges.map(e => {
+              const sourceIndex = taskNodes.findIndex(t => t.id === e.source);
+              return `task${sourceIndex + 1}`;
+            });
+            
+            pythonCode += deps.join(', ');
+            pythonCode += `]\n\n`;
+          }
         });
       }
       
@@ -1031,6 +1020,17 @@ if __name__ == "__main__":
             onNodeDragStop={onNodeDragStop}
             onTemplateApply={applyFlowTemplate}
             templates={flowTemplates}
+            connectionLineComponent={ConnectionLine}
+            connectionLineType="bezier"
+            defaultEdgeOptions={{
+              type: 'bezier',
+              animated: true,
+              style: {
+                stroke: '#888',
+                strokeWidth: 1.5,
+                strokeDasharray: '5,5'
+              }
+            }}
           />
         </ReactFlowProvider>
       </div>
@@ -1086,5 +1086,36 @@ if __name__ == "__main__":
     </div>
   );
 };
+
+// Simple TemplateModal component
+const TemplateModal = React.memo(({ onClose, onSelectTemplate }) => {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <h2 className="text-xl font-bold mb-4">Select a Template</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {flowTemplates.map((template, index) => (
+            <div 
+              key={index}
+              className="border rounded-lg p-4 cursor-pointer hover:bg-blue-50"
+              onClick={() => onSelectTemplate(template)}
+            >
+              <h3 className="font-bold">{template.name}</h3>
+              <p className="text-sm text-gray-600">{template.description}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button 
+            className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default BuilderPage;
