@@ -1,10 +1,10 @@
-# CrewBuilder
+# Opsyde
 
-![CrewBuilder Logo](public/crewbuilderlogo.png)
+![Opsyde Logo](public/opsydelogo2.png)
 
 ## Build AI Agent Workflows Without Code
 
-CrewBuilder is an open-source visual interface for designing, testing, and deploying AI agent workflows using the [CrewAI framework](https://github.com/crewAIInc/crewAI). Create complex multi-agent systems with a simple drag-and-drop interface - no coding required.
+Opsyde is an open-source visual interface for designing, testing, and deploying AI agent workflows using the [CrewAI framework](https://github.com/crewAIInc/crewAI). Create complex multi-agent systems with a simple drag-and-drop interface - no coding required.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/efuet/crewbuilder.svg)](https://github.com/efuet/crewbuilder/stargazers)
