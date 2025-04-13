@@ -35,6 +35,7 @@ const Toolbar = React.memo(({
   onAddTool,
   onExportYAML,
   onExportPython,
+  onExportStructured,
   onSaveProject,
   onLoadProject,
   onPreviewWorkflow,
@@ -43,6 +44,7 @@ const Toolbar = React.memo(({
   canUndo,
   canRedo,
   onOpenTemplates,
+  onOpenToolRegistry,
 }) => (
   <div className="cursor-move select-none">
     <div className="bg-white border-b p-2 flex space-x-2 overflow-x-auto">
@@ -58,12 +60,20 @@ const Toolbar = React.memo(({
       <button className="bg-purple-400 text-white px-4 py-2 rounded flex items-center" onClick={onOpenTemplates}>
         Templates
       </button>
+      <button className="bg-green-400 text-white px-4 py-2 rounded flex items-center" onClick={onOpenToolRegistry}>
+        Tool Registry
+      </button>
+      <div className="h-8 border-l border-gray-300 mx-1"></div>
       <button className="bg-green-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportYAML}>
         Export YAML
       </button>
       <button className="bg-indigo-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportPython}>
         Export main.py
       </button>
+      <button className="bg-teal-500 text-white px-4 py-2 rounded flex items-center" onClick={onExportStructured}>
+        Export Project
+      </button>
+      <div className="h-8 border-l border-gray-300 mx-1"></div>
       <button className="bg-purple-500 text-white px-4 py-2 rounded flex items-center" onClick={onSaveProject}>
         Save Project
       </button>
@@ -73,6 +83,7 @@ const Toolbar = React.memo(({
       <button className="bg-pink-500 text-white px-4 py-2 rounded flex items-center" onClick={onPreviewWorkflow}>
         Preview Workflow
       </button>
+      <div className="h-8 border-l border-gray-300 mx-1"></div>
       <button 
         className={`px-4 py-2 rounded flex items-center ${canUndo ? 'bg-gray-600 text-white' : 'bg-gray-300 text-gray-500'}`} 
         onClick={onUndo} 
@@ -105,6 +116,8 @@ const BuilderPage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showToolTemplates, setShowToolTemplates] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showToolRegistry, setShowToolRegistry] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(true);
 
   const reactFlowWrapper = useRef(null);
   const connectingNodeId = useRef(null);
@@ -854,6 +867,315 @@ if __name__ == "__main__":
     }
   }, [history, historyIndex, handleNodeEdit, handleNodeDelete]);
 
+  // Add this function before the toolbarProps definition
+  const exportStructuredProject = useCallback(() => {
+    try {
+      // Create directory structure and files
+      const files = {};
+      
+      // 1. Create agents.yaml
+      const agentNodes = nodes.filter(n => n.type === 'agent');
+      let agentsYaml = "# CrewAI Agents Configuration\n\n";
+      agentsYaml += "agents:\n";
+      
+      agentNodes.forEach(node => {
+        agentsYaml += `  ${node.id}:\n`;
+        agentsYaml += `    name: "${node.data.label}"\n`;
+        agentsYaml += `    role: "${node.data.role || 'Assistant'}"\n`;
+        agentsYaml += `    goal: "${node.data.goal || 'Help accomplish tasks'}"\n`;
+        agentsYaml += `    backstory: "${node.data.backstory || ''}"\n`;
+        agentsYaml += `    verbose: ${node.data.verbose ? 'true' : 'false'}\n`;
+        agentsYaml += `    allow_delegation: ${node.data.allowDelegation ? 'true' : 'false'}\n`;
+        agentsYaml += `    llm: "${node.data.llmModel || 'gpt-4'}"\n\n`;
+      });
+      
+      files['src/crew/config/agents.yaml'] = agentsYaml;
+      
+      // 2. Create tasks.yaml
+      const taskNodes = nodes.filter(n => n.type === 'task');
+      const toolNodes = nodes.filter(n => n.type === 'tool');
+      
+      let tasksYaml = "# CrewAI Tasks Configuration\n\n";
+      tasksYaml += "tasks:\n";
+      
+      taskNodes.forEach(node => {
+        tasksYaml += `  ${node.id}:\n`;
+        tasksYaml += `    description: "${node.data.description || 'Task description'}"\n`;
+        tasksYaml += `    expected_output: "${node.data.expectedOutput || 'Expected output'}"\n`;
+        
+        // Find assigned agent
+        const assignedAgentEdges = edges.filter(e => e.target === node.id && agentNodes.some(a => a.id === e.source));
+        if (assignedAgentEdges.length > 0) {
+          tasksYaml += `    agent: ${assignedAgentEdges[0].source}\n`;
+        }
+        
+        // Find tools
+        const usedToolsEdges = edges.filter(e => e.target === node.id && toolNodes.some(t => t.id === e.source));
+        if (usedToolsEdges.length > 0) {
+          tasksYaml += `    tools:\n`;
+          usedToolsEdges.forEach(edge => {
+            tasksYaml += `      - ${edge.source}\n`;
+          });
+        }
+        
+        // Find dependencies
+        const dependencyEdges = edges.filter(e => e.target === node.id && taskNodes.some(t => t.id === e.source));
+        if (dependencyEdges.length > 0) {
+          tasksYaml += `    dependencies:\n`;
+          dependencyEdges.forEach(edge => {
+            tasksYaml += `      - ${edge.source}\n`;
+          });
+        }
+        
+        tasksYaml += `    async: ${node.data.async ? 'true' : 'false'}\n\n`;
+      });
+      
+      files['src/crew/config/tasks.yaml'] = tasksYaml;
+      
+      // 3. Create tools.yaml
+      let toolsYaml = "# CrewAI Tools Configuration\n\n";
+      toolsYaml += "tools:\n";
+      
+      toolNodes.forEach(node => {
+        toolsYaml += `  ${node.id}:\n`;
+        toolsYaml += `    name: "${node.data.label}"\n`;
+        toolsYaml += `    description: "${node.data.description || 'A tool'}"\n`;
+        toolsYaml += `    type: "${node.data.toolType || 'custom'}"\n`;
+        
+        if (node.data.apiEndpoint) {
+          toolsYaml += `    api_endpoint: "${node.data.apiEndpoint}"\n`;
+        }
+        
+        if (node.data.parameters) {
+          toolsYaml += `    parameters:\n`;
+          node.data.parameters.split('\n')
+            .map(p => p.trim())
+            .filter(p => p)
+            .forEach(param => {
+              toolsYaml += `      - ${param}\n`;
+            });
+        }
+        
+        toolsYaml += '\n';
+      });
+      
+      files['src/crew/config/tools.yaml'] = toolsYaml;
+      
+      // 4. Create crew.py
+      const crewPy = `# CrewAI Crew Configuration
+import yaml
+import os
+from crewai import Agent, Task, Crew, Process
+from crewai.tools import BaseTool
+
+class CrewBuilder:
+    def __init__(self):
+        self.config_dir = os.path.dirname(os.path.abspath(__file__)) + "/config"
+        self.agents = {}
+        self.tasks = []
+        self.tools = {}
+        
+    def load_config(self):
+        # Load agents
+        with open(f"{self.config_dir}/agents.yaml", "r") as f:
+            agents_config = yaml.safe_load(f)
+            
+        # Load tasks
+        with open(f"{self.config_dir}/tasks.yaml", "r") as f:
+            tasks_config = yaml.safe_load(f)
+            
+        # Load tools
+        with open(f"{self.config_dir}/tools.yaml", "r") as f:
+            tools_config = yaml.safe_load(f)
+            
+        return agents_config, tasks_config, tools_config
+        
+    def build_crew(self):
+        agents_config, tasks_config, tools_config = self.load_config()
+        
+        # Create agents
+        for agent_id, agent_data in agents_config.get("agents", {}).items():
+            self.agents[agent_id] = Agent(
+                name=agent_data["name"],
+                role=agent_data["role"],
+                goal=agent_data["goal"],
+                backstory=agent_data["backstory"],
+                verbose=agent_data["verbose"],
+                allow_delegation=agent_data["allow_delegation"],
+                llm=agent_data["llm"]
+            )
+            
+        # Create tools
+        for tool_id, tool_data in tools_config.get("tools", {}).items():
+            # This is a simplified implementation
+            # In a real scenario, you'd create proper tool classes
+            class DynamicTool(BaseTool):
+                name = tool_data["name"]
+                description = tool_data["description"]
+                
+                def _run(self, **kwargs):
+                    # Placeholder implementation
+                    return f"Result from {self.name}"
+                    
+            self.tools[tool_id] = DynamicTool()
+            
+        # Create tasks
+        task_objects = {}
+        for task_id, task_data in tasks_config.get("tasks", {}).items():
+            agent = self.agents.get(task_data.get("agent"))
+            
+            task_tools = []
+            for tool_id in task_data.get("tools", []):
+                if tool_id in self.tools:
+                    task_tools.append(self.tools[tool_id])
+            
+            task = Task(
+                description=task_data["description"],
+                expected_output=task_data["expected_output"],
+                agent=agent,
+                tools=task_tools,
+                async_execution=task_data["async"]
+            )
+            
+            task_objects[task_id] = task
+            self.tasks.append(task)
+            
+        # Add dependencies
+        for task_id, task_data in tasks_config.get("tasks", {}).items():
+            if "dependencies" in task_data and task_id in task_objects:
+                dependencies = []
+                for dep_id in task_data["dependencies"]:
+                    if dep_id in task_objects:
+                        dependencies.append(task_objects[dep_id])
+                
+                if dependencies:
+                    task_objects[task_id].dependencies = dependencies
+        
+        # Create crew
+        crew = Crew(
+            agents=list(self.agents.values()),
+            tasks=self.tasks,
+            verbose=True,
+            process=Process.SEQUENTIAL
+        )
+        
+        return crew
+
+def get_crew():
+    builder = CrewBuilder()
+    return builder.build_crew()
+`;
+      
+      files['src/crew/crew.py'] = crewPy;
+      
+      // 5. Create main.py
+      const mainPy = `# Main entry point for the CrewAI project
+import asyncio
+from src.crew.crew import get_crew
+
+async def main():
+    # Get the configured crew
+    crew = get_crew()
+    
+    # Run the crew
+    result = await crew.kickoff()
+    
+    # Print the result
+    print("\\nResult:\\n", result)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+`;
+      
+      files['main.py'] = mainPy;
+      
+      // Create a zip file with all the files
+      const JSZip = require('jszip');
+      const zip = new JSZip();
+      
+      // Add files to zip
+      Object.entries(files).forEach(([path, content]) => {
+        // Create directories if needed
+        const parts = path.split('/');
+        let folder = zip;
+        
+        if (parts.length > 1) {
+          for (let i = 0; i < parts.length - 1; i++) {
+            folder = folder.folder(parts[i]);
+          }
+        }
+        
+        folder.file(parts[parts.length - 1], content);
+      });
+      
+      // Generate zip and save
+      zip.generateAsync({ type: 'blob' })
+        .then(blob => {
+          saveAs(blob, `${projectName.replace(/\s+/g, '_').toLowerCase()}_project.zip`);
+        });
+      
+    } catch (error) {
+      console.error("Error exporting project:", error);
+      alert("Failed to export project. Please try again.");
+    }
+  }, [projectName, nodes, edges]);
+
+  // Also add the GraphMetricsPanel component
+  const GraphMetricsPanel = React.memo(() => {
+    const agentCount = nodes.filter(n => n.type === 'agent').length;
+    const taskCount = nodes.filter(n => n.type === 'task').length;
+    const toolCount = nodes.filter(n => n.type === 'tool').length;
+    
+    // Count valid connections
+    const validConnections = edges.filter(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      const targetNode = nodes.find(n => n.id === edge.target);
+      
+      if (!sourceNode || !targetNode) return false;
+      
+      const sourceType = normalizeType(sourceNode);
+      const targetType = normalizeType(targetNode);
+      
+      // Valid connection patterns
+      return (
+        (sourceType === 'tool' && targetType === 'agent') ||
+        (sourceType === 'agent' && targetType === 'task') ||
+        (sourceType === 'task' && targetType === 'task')
+      );
+    }).length;
+    
+    return (
+      <div className="absolute top-16 right-4 bg-white p-3 rounded shadow-md z-40">
+        <h3 className="font-bold text-sm mb-2">Graph Metrics</h3>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+            <span>Agents:</span>
+          </div>
+          <div className="font-medium">{agentCount}</div>
+          
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></div>
+            <span>Tasks:</span>
+          </div>
+          <div className="font-medium">{taskCount}</div>
+          
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+            <span>Tools:</span>
+          </div>
+          <div className="font-medium">{toolCount}</div>
+          
+          <div className="flex items-center">
+            <div className="w-3 h-3 bg-purple-500 rounded-full mr-2"></div>
+            <span>Valid Connections:</span>
+          </div>
+          <div className="font-medium">{validConnections} ✅</div>
+        </div>
+      </div>
+    );
+  });
+
   // Memoize toolbar props to prevent unnecessary re-renders
   const toolbarProps = useMemo(() => ({
     onAddAgent: addAgent,
@@ -861,6 +1183,7 @@ if __name__ == "__main__":
     onAddTool: () => setShowToolTemplates(true),
     onExportYAML: exportYAML,
     onExportPython: exportMainPy,
+    onExportStructured: exportStructuredProject,
     onSaveProject: saveProject,
     onLoadProject: loadProject,
     onPreviewWorkflow: () => setShowPreview(true),
@@ -868,13 +1191,15 @@ if __name__ == "__main__":
     onRedo: redo,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,
-    onOpenTemplates: () => setShowTemplateModal(true)
+    onOpenTemplates: () => setShowTemplateModal(true),
+    onOpenToolRegistry: () => setShowToolRegistry(true)
   }), [
     addAgent,
     addTask,
     setShowToolTemplates,
     exportYAML,
     exportMainPy,
+    exportStructuredProject,
     saveProject,
     loadProject,
     showPreview,
@@ -882,7 +1207,8 @@ if __name__ == "__main__":
     redo,
     historyIndex,
     history.length,
-    setShowTemplateModal
+    setShowTemplateModal,
+    setShowToolRegistry
   ]);
 
   // Add this function to the Builder component to handle applying a flow template
@@ -966,6 +1292,222 @@ if __name__ == "__main__":
     }
   }, [handleNodeEdit, handleNodeDelete, debouncedAddToHistory, templateToNode, nodes, edges]);
 
+  // Add this component for Tool Registry Integration
+  const ToolRegistryModal = React.memo(({ onClose, onSelectTool }) => {
+    const [source, setSource] = useState('langchain');
+    const [tools, setTools] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [jsonSchema, setJsonSchema] = useState('');
+    const [error, setError] = useState('');
+    
+    // Fetch tools from LangChain
+    const fetchLangChainTools = useCallback(async () => {
+      setLoading(true);
+      setError('');
+      
+      try {
+        // This would be a real API call in production
+        // For demo, we'll use mock data
+        const mockLangChainTools = [
+          {
+            name: "Serper Search",
+            description: "A tool that searches the web using the Serper API",
+            type: "api",
+            parameters: ["query", "num_results"],
+            category: "Search"
+          },
+          {
+            name: "Tavily Research",
+            description: "Research tool powered by Tavily API",
+            type: "api",
+            parameters: ["query", "search_depth", "include_domains", "exclude_domains"],
+            category: "Research"
+          },
+          {
+            name: "DALL-E Image Generator",
+            description: "Generates images from text descriptions using DALL-E",
+            type: "api",
+            parameters: ["prompt", "size", "quality", "style"],
+            category: "Creative"
+          },
+          {
+            name: "Zapier NLA",
+            description: "Natural Language Actions with Zapier",
+            type: "api",
+            parameters: ["action", "parameters"],
+            category: "Automation"
+          }
+        ];
+        
+        // Simulate API delay
+        setTimeout(() => {
+          setTools(mockLangChainTools);
+          setLoading(false);
+        }, 500);
+        
+      } catch (err) {
+        console.error("Error fetching LangChain tools:", err);
+        setError("Failed to fetch tools from LangChain");
+        setLoading(false);
+      }
+    }, []);
+    
+    // Parse JSON schema
+    const parseJsonSchema = useCallback(() => {
+      setLoading(true);
+      setError('');
+      
+      try {
+        const parsedTools = JSON.parse(jsonSchema);
+        
+        if (!Array.isArray(parsedTools)) {
+          throw new Error("JSON schema must be an array of tool objects");
+        }
+        
+        // Validate each tool has required fields
+        const validTools = parsedTools.filter(tool => {
+          return tool.name && tool.description;
+        });
+        
+        if (validTools.length === 0) {
+          throw new Error("No valid tools found in JSON schema");
+        }
+        
+        setTools(validTools);
+        setLoading(false);
+        
+      } catch (err) {
+        console.error("Error parsing JSON schema:", err);
+        setError(err.message || "Invalid JSON schema");
+        setLoading(false);
+      }
+    }, [jsonSchema]);
+    
+    // Load tools when source changes
+    useEffect(() => {
+      if (source === 'langchain') {
+        fetchLangChainTools();
+      } else {
+        setTools([]);
+      }
+    }, [source, fetchLangChainTools]);
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold">Tool Registry</h2>
+            <button onClick={onClose}>❌</button>
+          </div>
+          
+          <div className="mb-4">
+            <div className="flex gap-4 mb-4">
+              <button
+                className={`px-4 py-2 rounded ${source === 'langchain' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                onClick={() => setSource('langchain')}
+              >
+                LangChain Tools
+              </button>
+              <button
+                className={`px-4 py-2 rounded ${source === 'json' ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+                onClick={() => setSource('json')}
+              >
+                Custom JSON
+              </button>
+            </div>
+            
+            {source === 'json' && (
+              <div className="mb-4">
+                <textarea
+                  className="w-full h-40 p-2 border border-gray-300 rounded"
+                  placeholder="Paste your JSON tool schema here..."
+                  value={jsonSchema}
+                  onChange={(e) => setJsonSchema(e.target.value)}
+                ></textarea>
+                <button
+                  className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
+                  onClick={parseJsonSchema}
+                >
+                  Parse JSON
+                </button>
+              </div>
+            )}
+            
+            {error && (
+              <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
+                {error}
+              </div>
+            )}
+            
+            {loading ? (
+              <div className="text-center py-8">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                <p className="mt-2">Loading tools...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                {tools.map((tool, idx) => (
+                  <div
+                    key={idx}
+                    className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
+                    onClick={() => {
+                      onSelectTool(tool);
+                      onClose();
+                    }}
+                  >
+                    <div className="flex items-center mb-1">
+                      <span className="text-lg mr-2">🔧</span>
+                      <h4 className="font-medium">{tool.name}</h4>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-1">{tool.description}</p>
+                    {tool.category && (
+                      <span className="inline-block text-xs bg-gray-100 px-2 py-1 rounded">
+                        {tool.category}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <div className="flex justify-end">
+            <button
+              className="px-4 py-2 bg-gray-300 text-gray-800 rounded"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  });
+
+  // Handle tool selection from registry
+  const handleToolFromRegistry = useCallback((toolData) => {
+    const id = `tool-${Date.now()}`;
+    const newNode = {
+      id,
+      type: 'tool',
+      position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
+      data: {
+        label: toolData.name,
+        description: toolData.description,
+        toolType: toolData.type || 'api',
+        parameters: Array.isArray(toolData.parameters) ? toolData.parameters.join('\n') : '',
+        category: toolData.category,
+        nodeId: id,
+        nodeType: 'tool'
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    debouncedAddToHistory({ nodes: [...nodes, newNode], edges });
+  }, [nodes, edges, debouncedAddToHistory]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <header className="bg-gray-800 text-white p-4">
@@ -975,7 +1517,7 @@ if __name__ == "__main__":
             <p className="text-sm text-gray-300">Visual AI Agent Workflow Designer</p>
           </div>
           
-          <div className="flex items-center space-x-2">
+          <div className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center">
             <div className="bg-gray-700 rounded-md px-4 py-2 flex items-center">
               <span className="text-gray-400 mr-2">Project:</span>
               {editingProjectName ? (
@@ -994,19 +1536,20 @@ if __name__ == "__main__":
                 </span>
               )}
             </div>
-            <button 
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center" 
-              onClick={() => setShowHelpPanel(true)}
-            >
-              Help
-            </button>
           </div>
+          
+          <button 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center" 
+            onClick={() => setShowHelpPanel(true)}
+          >
+            Help
+          </button>
         </div>
       </header>
       
       <Toolbar {...toolbarProps} />
       
-      <div className="flex-1">
+      <div className="flex-1 relative">
         <ReactFlowProvider>
           <FlowCanvas
             nodes={nodes}
@@ -1033,6 +1576,17 @@ if __name__ == "__main__":
             }}
           />
         </ReactFlowProvider>
+        
+        {/* Add the metrics panel */}
+        {showMetrics && <GraphMetricsPanel />}
+        
+        {/* Toggle metrics button */}
+        <button 
+          className="absolute top-4 right-4 bg-gray-700 text-white px-3 py-1 rounded text-sm z-40"
+          onClick={() => setShowMetrics(!showMetrics)}
+        >
+          {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
+        </button>
       </div>
       
       {showEditModal && selectedNode && (
@@ -1081,6 +1635,13 @@ if __name__ == "__main__":
             }
             setShowTemplateModal(false);
           }}
+        />
+      )}
+      
+      {showToolRegistry && (
+        <ToolRegistryModal
+          onClose={() => setShowToolRegistry(false)}
+          onSelectTool={handleToolFromRegistry}
         />
       )}
     </div>
