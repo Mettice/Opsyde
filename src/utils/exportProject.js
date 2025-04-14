@@ -83,6 +83,22 @@ export const exportProjectWithStructure = async (nodes, edges, projectName = 'cr
     const readmeContent = generateReadme(projectName, nodes, edges);
     zip.file('README.md', readmeContent);
     
+    // Add project.json for easy reloading
+    const projectJson = {
+      name: projectName,
+      nodes: nodes.map(node => {
+        // Clean node data for JSON export
+        const { data, ...rest } = node;
+        const cleanData = { ...data };
+        delete cleanData.onEdit;
+        delete cleanData.onDelete;
+        return { ...rest, data: cleanData };
+      }),
+      edges: edges,
+      lastModified: new Date().toISOString()
+    };
+    zip.file('project.json', JSON.stringify(projectJson, null, 2));
+    
     // Generate the zip file
     const content = await zip.generateAsync({ type: 'blob' });
     
@@ -140,6 +156,10 @@ function generateCrewPyFile(nodes, edges) {
 from crewai import Agent, Task, Crew, Process
 import yaml
 import os
+from langchain.chat_models import ChatOpenAI
+from langchain.tools import BaseTool
+from typing import Optional, Type
+from pydantic import BaseModel, Field
 
 def load_config(file_path):
     """Load YAML configuration file"""
@@ -172,12 +192,19 @@ def create_crew():
             tools[tool_config['id']] = DuckDuckGoSearchTool()
         else:
             # Default custom tool
-            from langchain.tools import Tool
-            tools[tool_config['id']] = Tool(
-                name=tool_config['name'],
-                description=tool_config['description'],
-                func=lambda x: f"Custom tool {tool_config['name']} executed with input: {x}"
-            )
+            class CustomTool(BaseTool):
+                name = tool_config['name']
+                description = tool_config['description']
+                
+                def _run(self, query: str) -> str:
+                    """Use the tool."""
+                    return f"Custom tool {self.name} executed with input: {query}"
+                
+                async def _arun(self, query: str) -> str:
+                    """Use the tool asynchronously."""
+                    return self._run(query)
+                    
+            tools[tool_config['id']] = CustomTool()
     
     # Create agents
     agents = {}
@@ -187,6 +214,9 @@ def create_crew():
         # Logic to assign tools to agents based on your graph connections
         # This would be based on your edge connections in the actual implementation
         
+        # Create LLM model
+        llm = ChatOpenAI(model=agent_config.get('llm_model', 'gpt-4'))
+        
         agents[agent_config['id']] = Agent(
             role=agent_config['role'],
             goal=agent_config['goal'],
@@ -194,7 +224,7 @@ def create_crew():
             verbose=agent_config.get('verbose', True),
             allow_delegation=agent_config.get('allow_delegation', False),
             tools=agent_tools,
-            llm=agent_config.get('llm_model', 'gpt-4')
+            llm=llm
         )
     
     # Create tasks
@@ -309,4 +339,6 @@ You can modify the YAML files in the \`src/crew/config/\` directory to adjust th
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 `;
-} 
+}
+
+export { generateMainPyFile };

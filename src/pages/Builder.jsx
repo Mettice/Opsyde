@@ -16,7 +16,8 @@ import { getSafeNodePosition } from '../utils/getSafeNodePosition';
 import { flowTemplates } from '../data/flowTemplates';
 import { templateToNode } from '../utils/templateToNode';
 import ConnectionLine from '../components/ConnectionLine';
-import { exportProjectWithStructure } from '../utils/exportProject';
+import { exportProjectWithStructure, generateMainPyFile } from '../utils/exportProject';
+
 
 // Add this function at the top of your file, outside any component
 function inspectNode(node) {
@@ -1079,7 +1080,7 @@ if __name__ == "__main__":
     }
   }, [history, historyIndex, handleNodeEdit, handleNodeDelete]);
 
-  // Move handleExportProject above toolbarProps as well
+  // Update handleExportProject to save main.py in JSON format
   const handleExportProject = useCallback(() => {
     // Use a different variable name to avoid the circular reference
     const currentProjectName = projectName || 'crewai-project';
@@ -1094,7 +1095,18 @@ if __name__ == "__main__":
     exportProjectWithStructure(nodes, edges, currentProjectName)
       .then(success => {
         if (success) {
-          toast.success('Project exported successfully! Use the JSON file to reload your project.', { id: toastId });
+          // Also save the main.py content as JSON for easy reloading
+          const mainPyContent = generateMainPyFile(currentProjectName);
+          const mainPyJson = {
+            projectName: currentProjectName,
+            content: mainPyContent,
+            timestamp: new Date().toISOString()
+          };
+          
+          const jsonBlob = new Blob([JSON.stringify(mainPyJson, null, 2)], { type: 'application/json' });
+          saveAs(jsonBlob, `${currentProjectName}_main.json`);
+          
+          toast.success('Project exported successfully! JSON files saved for reloading.', { id: toastId });
         } else {
           toast.error('Failed to export project structure', { id: toastId });
         }
