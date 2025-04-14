@@ -16,6 +16,7 @@ import { getSafeNodePosition } from '../utils/getSafeNodePosition';
 import { flowTemplates } from '../data/flowTemplates';
 import { templateToNode } from '../utils/templateToNode';
 import ConnectionLine from '../components/ConnectionLine';
+import { exportProjectWithStructure } from '../utils/exportProject';
 
 // Add this function at the top of your file, outside any component
 function inspectNode(node) {
@@ -43,6 +44,7 @@ const Toolbar = React.memo(({
   onRedo,
   canUndo,
   canRedo,
+  onExportProject,
 }) => {
   // Add state for tooltip visibility
   const [activeTooltip, setActiveTooltip] = useState(null);
@@ -56,7 +58,8 @@ const Toolbar = React.memo(({
     exportPython: "Generate a complete Python script with all agents, tasks, and tools defined",
     previewWorkflow: "Preview and simulate how your workflow will execute step by step",
     saveProject: "Save your current project to continue editing later",
-    loadProject: "Load a previously saved project"
+    loadProject: "Load a previously saved project",
+    exportProject: "Export a complete project with file structure (src/crew/config, main.py, etc.)",
   };
   
   // Function to show tooltip - make it more reliable
@@ -265,6 +268,27 @@ const Toolbar = React.memo(({
             <span className="w-5 h-5 rounded-full bg-blue-400 text-white flex items-center justify-center text-xs font-bold">?</span>
           </button>
           <Tooltip id="loadProject" />
+        </div>
+        
+        <div className="relative group">
+          <button 
+            ref={el => buttonRefs.current.exportProject = el}
+            className="bg-teal-500 hover:bg-teal-600 transition-colors text-white px-4 py-2 rounded flex items-center" 
+            onClick={onExportProject}
+            onMouseEnter={(e) => {
+              if (buttonRefs.current.exportProject) {
+                const rect = buttonRefs.current.exportProject.getBoundingClientRect();
+                document.documentElement.style.setProperty('--tooltip-x', `${rect.left + rect.width/2}px`);
+                document.documentElement.style.setProperty('--tooltip-y', `${rect.top}px`);
+              }
+              showTooltip('exportProject');
+            }}
+            onMouseLeave={hideTooltip}
+          >
+            <span className="mr-2">Export Project</span>
+            <span className="w-5 h-5 rounded-full bg-teal-400 text-white flex items-center justify-center text-xs font-bold">?</span>
+          </button>
+          <Tooltip id="exportProject" />
         </div>
         
         <div className="ml-auto flex space-x-2">
@@ -1055,258 +1079,31 @@ if __name__ == "__main__":
     }
   }, [history, historyIndex, handleNodeEdit, handleNodeDelete]);
 
-  // Add this function before the toolbarProps definition
-  const exportStructuredProject = useCallback(() => {
-    try {
-      // Create directory structure and files
-      const files = {};
-      
-      // 1. Create agents.yaml
-      const agentNodes = nodes.filter(n => n.type === 'agent');
-      let agentsYaml = "# CrewAI Agents Configuration\n\n";
-      agentsYaml += "agents:\n";
-      
-      agentNodes.forEach(node => {
-        agentsYaml += `  ${node.id}:\n`;
-        agentsYaml += `    name: "${node.data.label}"\n`;
-        agentsYaml += `    role: "${node.data.role || 'Assistant'}"\n`;
-        agentsYaml += `    goal: "${node.data.goal || 'Help accomplish tasks'}"\n`;
-        agentsYaml += `    backstory: "${node.data.backstory || ''}"\n`;
-        agentsYaml += `    verbose: ${node.data.verbose ? 'true' : 'false'}\n`;
-        agentsYaml += `    allow_delegation: ${node.data.allowDelegation ? 'true' : 'false'}\n`;
-        agentsYaml += `    llm: "${node.data.llmModel || 'gpt-4'}"\n\n`;
-      });
-      
-      files['src/crew/config/agents.yaml'] = agentsYaml;
-      
-      // 2. Create tasks.yaml
-      const taskNodes = nodes.filter(n => n.type === 'task');
-      const toolNodes = nodes.filter(n => n.type === 'tool');
-      
-      let tasksYaml = "# CrewAI Tasks Configuration\n\n";
-      tasksYaml += "tasks:\n";
-      
-      taskNodes.forEach(node => {
-        tasksYaml += `  ${node.id}:\n`;
-        tasksYaml += `    description: "${node.data.description || 'Task description'}"\n`;
-        tasksYaml += `    expected_output: "${node.data.expectedOutput || 'Expected output'}"\n`;
-        
-        // Find assigned agent
-        const assignedAgentEdges = edges.filter(e => e.target === node.id && agentNodes.some(a => a.id === e.source));
-        if (assignedAgentEdges.length > 0) {
-          tasksYaml += `    agent: ${assignedAgentEdges[0].source}\n`;
-        }
-        
-        // Find tools
-        const usedToolsEdges = edges.filter(e => e.target === node.id && toolNodes.some(t => t.id === e.source));
-        if (usedToolsEdges.length > 0) {
-          tasksYaml += `    tools:\n`;
-          usedToolsEdges.forEach(edge => {
-            tasksYaml += `      - ${edge.source}\n`;
-          });
-        }
-        
-        // Find dependencies
-        const dependencyEdges = edges.filter(e => e.target === node.id && taskNodes.some(t => t.id === e.source));
-        if (dependencyEdges.length > 0) {
-          tasksYaml += `    dependencies:\n`;
-          dependencyEdges.forEach(edge => {
-            tasksYaml += `      - ${edge.source}\n`;
-          });
-        }
-        
-        tasksYaml += `    async: ${node.data.async ? 'true' : 'false'}\n\n`;
-      });
-      
-      files['src/crew/config/tasks.yaml'] = tasksYaml;
-      
-      // 3. Create tools.yaml
-      let toolsYaml = "# CrewAI Tools Configuration\n\n";
-      toolsYaml += "tools:\n";
-      
-      toolNodes.forEach(node => {
-        toolsYaml += `  ${node.id}:\n`;
-        toolsYaml += `    name: "${node.data.label}"\n`;
-        toolsYaml += `    description: "${node.data.description || 'A tool'}"\n`;
-        toolsYaml += `    type: "${node.data.toolType || 'custom'}"\n`;
-        
-        if (node.data.apiEndpoint) {
-          toolsYaml += `    api_endpoint: "${node.data.apiEndpoint}"\n`;
-        }
-        
-        if (node.data.parameters) {
-          toolsYaml += `    parameters:\n`;
-          node.data.parameters.split('\n')
-            .map(p => p.trim())
-            .filter(p => p)
-            .forEach(param => {
-              toolsYaml += `      - ${param}\n`;
-            });
-        }
-        
-        toolsYaml += '\n';
-      });
-      
-      files['src/crew/config/tools.yaml'] = toolsYaml;
-      
-      // 4. Create crew.py
-      const crewPy = `# CrewAI Crew Configuration
-import yaml
-import os
-from crewai import Agent, Task, Crew, Process
-from crewai.tools import BaseTool
-
-class CrewBuilder:
-    def __init__(self):
-        self.config_dir = os.path.dirname(os.path.abspath(__file__)) + "/config"
-        self.agents = {}
-        self.tasks = []
-        self.tools = {}
-        
-    def load_config(self):
-        # Load agents
-        with open(f"{self.config_dir}/agents.yaml", "r") as f:
-            agents_config = yaml.safe_load(f)
-            
-        # Load tasks
-        with open(f"{self.config_dir}/tasks.yaml", "r") as f:
-            tasks_config = yaml.safe_load(f)
-            
-        # Load tools
-        with open(f"{self.config_dir}/tools.yaml", "r") as f:
-            tools_config = yaml.safe_load(f)
-            
-        return agents_config, tasks_config, tools_config
-        
-    def build_crew(self):
-        agents_config, tasks_config, tools_config = self.load_config()
-        
-        # Create agents
-        for agent_id, agent_data in agents_config.get("agents", {}).items():
-            self.agents[agent_id] = Agent(
-                name=agent_data["name"],
-                role=agent_data["role"],
-                goal=agent_data["goal"],
-                backstory=agent_data["backstory"],
-                verbose=agent_data["verbose"],
-                allow_delegation=agent_data["allow_delegation"],
-                llm=agent_data["llm"]
-            )
-            
-        # Create tools
-        for tool_id, tool_data in tools_config.get("tools", {}).items():
-            # This is a simplified implementation
-            # In a real scenario, you'd create proper tool classes
-            class DynamicTool(BaseTool):
-                name = tool_data["name"]
-                description = tool_data["description"]
-                
-                def _run(self, **kwargs):
-                    # Placeholder implementation
-                    return f"Result from {self.name}"
-                    
-            self.tools[tool_id] = DynamicTool()
-            
-        # Create tasks
-        task_objects = {}
-        for task_id, task_data in tasks_config.get("tasks", {}).items():
-            agent = self.agents.get(task_data.get("agent"))
-            
-            task_tools = []
-            for tool_id in task_data.get("tools", []):
-                if tool_id in self.tools:
-                    task_tools.append(self.tools[tool_id])
-            
-            task = Task(
-                description=task_data["description"],
-                expected_output=task_data["expected_output"],
-                agent=agent,
-                tools=task_tools,
-                async_execution=task_data["async"]
-            )
-            
-            task_objects[task_id] = task
-            self.tasks.append(task)
-            
-        # Add dependencies
-        for task_id, task_data in tasks_config.get("tasks", {}).items():
-            if "dependencies" in task_data and task_id in task_objects:
-                dependencies = []
-                for dep_id in task_data["dependencies"]:
-                    if dep_id in task_objects:
-                        dependencies.append(task_objects[dep_id])
-                
-                if dependencies:
-                    task_objects[task_id].dependencies = dependencies
-        
-        # Create crew
-        crew = Crew(
-            agents=list(self.agents.values()),
-            tasks=self.tasks,
-            verbose=True,
-            process=Process.SEQUENTIAL
-        )
-        
-        return crew
-
-def get_crew():
-    builder = CrewBuilder()
-    return builder.build_crew()
-`;
-      
-      files['src/crew/crew.py'] = crewPy;
-      
-      // 5. Create main.py
-      const mainPy = `# Main entry point for the CrewAI project
-import asyncio
-from src.crew.crew import get_crew
-
-async def main():
-    # Get the configured crew
-    crew = get_crew()
+  // Move handleExportProject above toolbarProps as well
+  const handleExportProject = useCallback(() => {
+    // Use a different variable name to avoid the circular reference
+    const currentProjectName = projectName || 'crewai-project';
     
-    # Run the crew
-    result = await crew.kickoff()
+    // Show a loading toast
+    const toastId = toast.loading('Preparing project export...');
     
-    # Print the result
-    print("\\nResult:\\n", result)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-`;
-      
-      files['main.py'] = mainPy;
-      
-      // Create a zip file with all the files
-      const JSZip = require('jszip');
-      const zip = new JSZip();
-      
-      // Add files to zip
-      Object.entries(files).forEach(([path, content]) => {
-        // Create directories if needed
-        const parts = path.split('/');
-        let folder = zip;
-        
-        if (parts.length > 1) {
-          for (let i = 0; i < parts.length - 1; i++) {
-            folder = folder.folder(parts[i]);
-          }
+    // First save the project in JSON format for later loading
+    saveProject();
+    
+    // Then export the project structure (Python, YAML, etc.)
+    exportProjectWithStructure(nodes, edges, currentProjectName)
+      .then(success => {
+        if (success) {
+          toast.success('Project exported successfully! Use the JSON file to reload your project.', { id: toastId });
+        } else {
+          toast.error('Failed to export project structure', { id: toastId });
         }
-        
-        folder.file(parts[parts.length - 1], content);
+      })
+      .catch(error => {
+        console.error('Error exporting project:', error);
+        toast.error(`Export failed: ${error.message}`, { id: toastId });
       });
-      
-      // Generate zip and save
-      zip.generateAsync({ type: 'blob' })
-        .then(blob => {
-          saveAs(blob, `${projectName.replace(/\s+/g, '_').toLowerCase()}_project.zip`);
-        });
-      
-    } catch (error) {
-      console.error("Error exporting project:", error);
-      alert("Failed to export project. Please try again.");
-    }
-  }, [projectName, nodes, edges]);
+  }, [nodes, edges, projectName, saveProject]);
 
   // Also add the GraphMetricsPanel component
   const GraphMetricsPanel = React.memo(() => {
@@ -1364,14 +1161,20 @@ if __name__ == "__main__":
     );
   });
 
+  // Move this function definition above the toolbarProps definition
+  const handleShowToolTemplates = useCallback(() => {
+    // Show the enhanced tool templates that includes registry functionality
+    setShowToolTemplates(true);
+  }, []);
+
   // Memoize toolbar props to prevent unnecessary re-renders
   const toolbarProps = useMemo(() => ({
     onAddAgent: addAgent,
     onAddTask: addTask,
-    onAddTool: () => setShowToolTemplates(true),
+    onAddTool: handleShowToolTemplates,
     onExportYAML: exportYAML,
     onExportPython: exportMainPy,
-    onExportStructured: exportStructuredProject,
+    onExportStructured: handleExportProject,
     onSaveProject: saveProject,
     onLoadProject: loadProject,
     onPreviewWorkflow: () => setShowPreview(true),
@@ -1379,13 +1182,14 @@ if __name__ == "__main__":
     onRedo: redo,
     canUndo: historyIndex > 0,
     canRedo: historyIndex < history.length - 1,
+    onExportProject: handleExportProject,
   }), [
     addAgent,
     addTask,
-    setShowToolTemplates,
+    handleShowToolTemplates,
     exportYAML,
     exportMainPy,
-    exportStructuredProject,
+    handleExportProject,
     saveProject,
     loadProject,
     showPreview,
@@ -1475,12 +1279,6 @@ if __name__ == "__main__":
       }
     }
   }, [handleNodeEdit, handleNodeDelete, debouncedAddToHistory, templateToNode, nodes, edges]);
-
-  // Modify the ToolTemplates component to include Tool Registry functionality
-  const handleShowToolTemplates = useCallback(() => {
-    // Show the enhanced tool templates that includes registry functionality
-    setShowToolTemplates(true);
-  }, []);
 
   // Handle tool selection from registry
   const handleToolFromRegistry = useCallback((toolData) => {
