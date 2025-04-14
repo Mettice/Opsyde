@@ -195,5 +195,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 <p align="center">
-  Made with ❤️ by the CrewBuilder team
+  Made with ❤️ by the OpSyde team
 </p>

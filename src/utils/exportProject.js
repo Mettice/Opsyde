@@ -297,11 +297,11 @@ function generateReadme(projectName, nodes, edges) {
   
   return `# ${projectName}
 
-This project was generated using CrewBuilder, a visual workflow designer for CrewAI.
+This project was generated using OpsFlow Builder, a visual workflow designer for AI agents.
 
 ## Project Overview
 
-This CrewAI project contains:
+This AI workflow project contains:
 - ${agentCount} Agents
 - ${taskCount} Tasks
 - ${toolCount} Tools

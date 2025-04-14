@@ -1321,7 +1321,7 @@ if __name__ == "__main__":
       <header className="bg-gray-800 text-white p-4">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold">CrewBuilder</h1>
+            <h1 className="text-xl font-bold">OpsFlow Builder</h1>
             <p className="text-sm text-gray-300">Visual AI Agent Workflow Designer</p>
           </div>
           

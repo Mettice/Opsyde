@@ -4,11 +4,11 @@ const DemoSlideshow = () => {
   // Use public URLs for images in the public folder
   const slides = [
     { 
-      src: '/demo-screenshot2.png', // This will look in crewbuilder/public/
+      src: '/configure.png', // This will look in crewbuilder/public/
       caption: 'Design your agent workflow' 
     },
     { 
-      src: '/demo-screenshot.png',
+      src: '/connect.png',
       caption: 'Connect agents and tasks' 
     },
     { 
@@ -16,7 +16,7 @@ const DemoSlideshow = () => {
       caption: 'Export to code with one click' 
     },
     { 
-      src: '/demo-screenshot1.png',
+      src: '/preview.png',
       caption: 'Run your workflow in preview mode' 
     },
   ];
