@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import DemoSlideshow from '../components/DemoSlideshow';
-import Logo from '/opsydelogo2.png';
+import Logo from '/nodai lo.png';
 
 // Testimonials component
 const TestimonialsSlider = () => {
@@ -13,7 +13,7 @@ const TestimonialsSlider = () => {
       name: "Alex Chen",
       role: "Lead Developer, TechFuse",
       image: "/api/placeholder/64/64",
-      text: "OpSyde has revolutionized how we build and deploy AI agents. What used to take days now takes hours, and the visual interface makes our entire team more productive."
+      text: "NodAi has revolutionized how we build and deploy AI agents. What used to take days now takes hours, and the visual interface makes our entire team more productive."
     },
     {
       id: 2,
@@ -106,8 +106,8 @@ export default function HomePage() {
       <header className="bg-gray-900 shadow-md sticky top-0 z-10 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <img src={Logo} alt="OpsFlow Logo" className="h-10 w-10 transition-transform hover:scale-110" />
-            <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-cyan-400">OpSyde</h1>
+            <img src={Logo} alt="Nodai Logo" className="h-10 w-10 transition-transform hover:scale-110" />
+            <h1 className="h-8 w-auto transition-transform duration-200 hover:scale-110">Nodai</h1>
           </div>
           <div className="flex items-center gap-4">
             <a href="#features" className="text-gray-300 hover:text-cyan-400 font-medium">Features</a>
@@ -247,7 +247,7 @@ export default function HomePage() {
             <p className="text-gray-300 leading-relaxed">
               Unlock enterprise-grade capabilities: team workspaces, project versioning, agent memory sync, API runtime integration and more.
             </p>
-            <a href="mailto:contact@opsyde.com" className="inline-block mt-4 text-cyan-400 font-medium hover:text-cyan-300 transition-colors">Contact Us →</a>
+            <a href="mailto:enterprise@nodai.io" className="inline-block mt-4 text-cyan-400 font-medium hover:text-cyan-300 transition-colors">Contact Us →</a>
           </div>
         </div>
       </div>
@@ -353,7 +353,7 @@ export default function HomePage() {
             <div className="col-span-1">
               <div className="flex items-center gap-3 mb-6">
                 <img src={Logo} alt="OpsFlow Logo" className="h-10 w-10" />
-                <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-cyan-400">OpSyde</h1>
+                <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-cyan-400">NodAi</h1>
               </div>
               <p className="text-gray-400 mb-6">
                 Building the future of AI agent workflows, one visual connection at a time.
@@ -402,8 +402,8 @@ export default function HomePage() {
           </div>
           
           <div className="mt-12 pt-8 border-t border-gray-800 text-center text-gray-400">
-            <p>© {new Date().getFullYear()} OpSyde. All rights reserved.</p>
-            <p className="mt-2 text-sm">Built with ❤️ for the CrewAI community</p>
+            <p>© {new Date().getFullYear()} NodAi. All rights reserved.</p>
+            <p className="mt-2 text-sm">Built with ❤️ for the CrewAI, LangChain, HuggingFace, and OpenAI community</p>
           </div>
         </div>
       </footer>

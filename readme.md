@@ -197,3 +197,52 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <p align="center">
   Made with ❤️ by the OpSyde team
 </p>
+
+# CrewBuilder Frontend
+
+The frontend application for CrewBuilder, built with React and ReactFlow.
+
+## Overview
+
+This frontend provides a visual interface for designing AI agent workflows. It allows users to:
+- Create and connect different types of nodes (agents, tasks, tools)
+- Configure node properties through a user-friendly interface
+- Run workflows and view execution results in real-time
+- Export workflows and results in various formats
+
+## Key Components
+
+- **BuilderPage**: Main workflow editor page
+- **FlowCanvas**: ReactFlow canvas for the node editor
+- **NodeTypes**: Custom node components for agents, tasks, and tools
+- **Panels**: UI panels for templates, help, and execution results
+
+## Development
+
+### Prerequisites
+
+- Node.js (v14+)
+- npm or yarn
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/efuet/crewbuilder.git
+cd crewbuilder
+
+# Install dependencies
+npm install
+# or
+yarn install
+
+# Start the development server
+npm run dev
+# or
+yarn dev
+```
+
+### Running the Development Server
+
+```
+npm

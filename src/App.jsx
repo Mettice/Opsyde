@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/Home';
-import BuilderPage from './pages/Builder';
+import BuilderPage from './pages/BuilderPage';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
 
