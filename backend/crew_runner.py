@@ -30,29 +30,6 @@ from simpleeval import simple_eval
 from frameworks.webhook_runner import post_to_webhook
 from chat_runner import run_chat_node
 from frameworks.delay_runner import run_delay_node
-from frameworks.trigger_runner import run_trigger_node
-
-
-try:
-    from frameworks.trigger_runner import run_trigger_node
-except ImportError:
-    # Fallback to local trigger_runner
-    try:
-        from trigger_runner import run_trigger_node
-    except ImportError:
-        # Define a simple version if all else fails
-        def run_trigger_node(data=None):
-            if data is None:
-                return {
-                    "output": "Trigger activated (no data provided)",
-                    "type": "trigger_status",
-                    "trigger_type": "manual"
-                }
-            return {
-                "output": f"Trigger {data.get('label', 'Unknown')} activated",
-                "type": "trigger_status",
-                "trigger_type": data.get("triggerType", "manual")
-            }
 
 # Logging
 logging.basicConfig(level=logging.INFO)
@@ -115,13 +92,59 @@ async def run_crew(data: Dict[str, Any]) -> AsyncGenerator[str, None]:
     collected_logs = ""
     yield "Starting crew execution...\n\n"
 
+    # Initialize node_results to store outputs
+    node_results = {}
+    
+    # FIRST: Process all trigger nodes directly, before anything else
+    trigger_nodes = [n for n in nodes if n.get("type") == "trigger" or 
+                    (n.get("data", {}) and n.get("data", {}).get("nodeType") == "trigger")]
+    
+    if trigger_nodes:
+        yield "⚡ Processing trigger nodes first...\n\n"
+        
+        for trigger_node in trigger_nodes:
+            trigger_id = trigger_node.get("id")
+            trigger_data = trigger_node.get("data", {})
+            trigger_label = trigger_data.get("label", "Unnamed Trigger")
+            
+            yield f"⚡ Processing trigger: {trigger_label}\n\n"
+            
+            try:
+                # Process trigger directly with minimal dependencies
+                result = {
+                    "output": f"Trigger '{trigger_label}' activated",
+                    "type": "trigger_status",
+                    "trigger_type": trigger_data.get("triggerType", "manual"),
+                    "trigger_id": trigger_id,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                # Store the result
+                node_results[trigger_id] = result
+                yield f"✅ Trigger '{trigger_label}' activated successfully\n\n"
+                
+            except Exception as e:
+                logger.error(f"Error processing trigger '{trigger_label}': {str(e)}")
+                error_result = {
+                    "output": f"Error in trigger: {str(e)}",
+                    "type": "error",
+                    "error": str(e)
+                }
+                node_results[trigger_id] = error_result
+                yield f"❌ Error in trigger '{trigger_label}': {str(e)}\n\n"
+    
+    # SECOND: Process the rest of the nodes using the dependency graph
     dependency_graph = build_dependency_graph(nodes, edges)
     execution_order = determine_execution_order(dependency_graph)
-    node_results = {}
-
+    
+    # Filter out trigger nodes that we've already processed
+    execution_order = [node_id for node_id in execution_order 
+                      if node_id not in [n.get("id") for n in trigger_nodes]]
+    
     # Debug execution order
-    logger.info(f"Execution order: {execution_order}")
+    logger.info(f"Execution order (after removing triggers): {execution_order}")
 
+    # Continue with the rest of your existing code for processing non-trigger nodes
     for i, current_node in enumerate(execution_order):
         # Debug current node_id
         debug_object(current_node, f"node_id_{i}")
@@ -313,46 +336,31 @@ async def run_crew(data: Dict[str, Any]) -> AsyncGenerator[str, None]:
                     node_results[current_node] = result
 
             elif node_type == "trigger":
-                # Make sure node_data is never None
-                if node_data is None:
-                    node_data = {}
-                    logger.warning("Trigger node has no 'data' — defaulting to empty.")
-                
-                # Debug the node_data before calling run_trigger_node
-                logger.info(f"Trigger node_data before calling run_trigger_node: {node_data}")
-                
-                # Try different ways to call run_trigger_node
                 try:
-                    # First try with the async version
-                    try:
-                        result = await run_trigger_node(node_data)
-                    except TypeError as te:
-                        logger.info(f"Trying non-async run_trigger_node: {str(te)}")
-                        # Then try with the non-async version
-                        result = run_trigger_node(node_data)
+                    # Make sure node_data is never None
+                    if node_data is None:
+                        node_data = {}
+                        logger.warning("Trigger node has no 'data' — defaulting to empty.")
+                    
+                    # Clear debugging
+                    logger.info(f"Processing trigger node in run_crew: {node_data.get('label', 'Unnamed')}")
+                    
+                    # Use our local handler instead of the imported one
+                    result = await handle_trigger_node(node_data)
+                    
+                    # Store the result
+                    node_results[current_node] = result
+                    yield f"⚡ Trigger '{node_data.get('label', 'Unnamed')}' activated\n\n"
+                    
                 except Exception as e:
-                    logger.error(f"Error in run_trigger_node: {str(e)}")
-                    # Create a fallback result if run_trigger_node fails
+                    logger.error(f"Error executing Trigger in run_crew: {str(e)}")
                     result = {
-                        "output": f"Trigger '{node_data.get('label', 'Unknown')}' activated (fallback)",
-                        "type": "trigger_status",
-                        "trigger_type": node_data.get("triggerType", "manual"),
-                        "trigger_id": node_data.get("nodeId", "unknown")
+                        "output": f"Error in trigger: {str(e)}",
+                        "type": "error",
+                        "error": str(e)
                     }
-                
-                # Debug the result
-                logger.info(f"Trigger result: {result}")
-
-                # Store the result
-                node_results[current_node] = result
-
-                # CRM Sync, Notify Team, etc. remain at the same indentation level
-                if "CRM Sync" in label:
-                    result = run_crm_logger_tool(node.get("data", {}))
-                elif "Notify Team" in label:
-                    result = run_discord_notifier(node.get("data", {}))
-                elif "Check Readiness" in label:
-                    result = run_readiness_check(node.get("data", {}))
+                    node_results[current_node] = result
+                    yield f"❌ Error in trigger: {str(e)}\n\n"
 
             if result is not None:
                 result = ensure_dict_result(result, label)
@@ -425,29 +433,36 @@ def build_dependency_graph(nodes: List[Dict], edges: List[Dict]) -> Dict[str, Li
 
 def determine_execution_order(dependency_graph: Dict[str, List[str]]) -> List[str]:
     """
-    Determine the execution order of nodes based on dependencies
-    Prioritizes trigger nodes to be executed first
+    Determine the execution order of nodes with triggers first
     """
-    visited, order = set(), []
-
+    visited = set()
+    order = []
+    
+    # Helper function for topological sort
     def visit(node_id):
+        if node_id in visited:
+            return
+        visited.add(node_id)
+        for dep in dependency_graph.get(node_id, []):
+            visit(dep)
+        order.append(node_id)
+    
+    # First process trigger nodes
+    trigger_nodes = [node for node in dependency_graph if "trigger" in node.lower()]
+    logger.info(f"Found trigger nodes: {trigger_nodes}")  # Debug line
+    for node_id in trigger_nodes:
         if node_id not in visited:
-            visited.add(node_id)
-            for dep in dependency_graph.get(node_id, []):
-                visit(dep)
-            order.append(node_id)
-
-    # First prioritize trigger nodes
-    for node_id in dependency_graph:
-        if "trigger" in node_id.lower():
             visit(node_id)
-
-    # Then visit any remaining nodes
+    
+    # Then process non-trigger nodes
     for node_id in dependency_graph:
-        visit(node_id)
-
-    # Reverse the order to get the correct execution sequence
-    return list(reversed(order))
+        if node_id not in visited:
+            visit(node_id)
+            
+    # Return the reversed order for correct execution sequence
+    execution_order = list(reversed(order))
+    logger.info(f"Final execution order: {execution_order}")  # Debug line
+    return execution_order
 
 def get_node_inputs(node_id: str, edges: List[Dict], node_results: Dict[str, Any], global_inputs: Dict[str, Any]) -> Dict[str, Any]:
     inputs = dict(global_inputs)
@@ -695,35 +710,25 @@ async def process_node(node, i, inputs, context, node_results):
         elif node_type == "delay":
             result = await run_delay_node(node_data)
         elif node_type == "trigger":
-            # Make sure node_data is never None
-            if node_data is None:
-                node_data = {}
-                logger.warning("Trigger node has no 'data' — defaulting to empty.")
-            
-            # Debug the node_data before calling run_trigger_node
-            logger.info(f"Trigger node_data before calling run_trigger_node: {node_data}")
-            
-            # Try different ways to call run_trigger_node
             try:
-                # First try with the async version
-                try:
-                    result = await run_trigger_node(node_data)
-                except TypeError as te:
-                    logger.info(f"Trying non-async run_trigger_node: {str(te)}")
-                    # Then try with the non-async version
-                    result = run_trigger_node(node_data)
+                # Make sure node_data is never None
+                if node_data is None:
+                    node_data = {}
+                    logger.warning("Trigger node has no 'data' — defaulting to empty.")
+                
+                # Clear debugging
+                logger.info(f"Processing trigger node: {node_data.get('label', 'Unnamed')}")
+                
+                # Use our local handler instead of the imported one
+                result = await handle_trigger_node(node_data)
+                
             except Exception as e:
-                logger.error(f"Error in run_trigger_node: {str(e)}")
-                # Create a fallback result if run_trigger_node fails
+                logger.error(f"Error executing Trigger: {str(e)}")
                 result = {
-                    "output": f"Trigger '{node_data.get('label', 'Unknown')}' activated (fallback)",
-                    "type": "trigger_status",
-                    "trigger_type": node_data.get("triggerType", "manual"),
-                    "trigger_id": node_data.get("nodeId", "unknown")
+                    "output": f"Error in trigger: {str(e)}",
+                    "type": "error",
+                    "error": str(e)
                 }
-            
-            # Debug the result
-            logger.info(f"Trigger result: {result}")
         elif node_type == "logic":
             result = await run_logic_node(node_data, inputs, context)
         else:
@@ -982,3 +987,25 @@ async def run_tool_node(node_data, inputs, context=None):
             "type": "error",
             "error": str(e)
         }
+
+async def handle_trigger_node(node_data=None):
+    """
+    Local trigger handler to avoid dependency issues
+    """
+    logger.info("Using local handle_trigger_node function")  # Debug line
+    
+    # Safety check for None input
+    if node_data is None:
+        node_data = {}
+    
+    trigger_type = node_data.get("triggerType", "manual")
+    trigger_id = node_data.get("nodeId", "unknown")
+    label = node_data.get("label", "Trigger")
+    
+    return {
+        "output": f"Trigger '{label}' of type '{trigger_type}' activated",
+        "type": "trigger_status",
+        "trigger_type": trigger_type,
+        "trigger_id": trigger_id,
+        "timestamp": datetime.now().isoformat()
+    }
