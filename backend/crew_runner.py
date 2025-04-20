@@ -913,35 +913,21 @@ async def run_tool_node(node_data, inputs, context=None):
         Dictionary containing the tool execution result
     """
     try:
-        tool_name = safe_get(node_data, "label", "Unknown Tool")
-        tool_type = safe_get(node_data, "toolType", "unknown")
-        framework = safe_get(node_data, "framework", "unknown")
+        tool_type = node_data.get("toolType", "unknown")
+        tool_name = node_data.get("label", "Unnamed Tool")
         
-        logger.info(f"Executing tool '{tool_name}' of type '{tool_type}' using framework '{framework}'")
+        logger.info(f"Processing tool '{tool_name}' of type '{tool_type}' using framework '{context}'")
         
-        # Handle different frameworks for tools
-        if framework == "huggingface":
+        # Handle different tool types
+        if tool_type == "api":
             try:
-                tool_inputs = {**node_data, "inputs": inputs}
-                result = run_huggingface_tool(tool_inputs)
+                # Call the API runner
+                result = run_api_tool(node_data, inputs)
                 
                 # Ensure result is a dictionary
                 if not isinstance(result, dict):
-                    result = {"output": str(result), "type": "huggingface_result"}
-                
-                return result
-            except Exception as e:
-                logger.error(f"Error executing {tool_name} with HuggingFace: {str(e)}")
-                return {
-                    "output": f"Error: {str(e)}",
-                    "type": "error",
-                    "error": str(e)
-                }
-        elif tool_type == "api":
-            try:
-                result = run_api_tool(node_data, inputs)
-                if not isinstance(result, dict):
                     result = {"output": str(result), "type": "api_result"}
+                
                 return result
             except Exception as e:
                 logger.error(f"Error executing API tool {tool_name}: {str(e)}")
@@ -950,36 +936,9 @@ async def run_tool_node(node_data, inputs, context=None):
                     "type": "error",
                     "error": str(e)
                 }
-        elif tool_type == "custom":
-            try:
-                # Implement custom tool handling based on the label or other properties
-                if "Clearbit" in tool_name:
-                    result = run_clearbit_tool(node_data)
-                elif "Score" in tool_name:
-                    result = run_lead_scorer(node_data)
-                elif "Logger" in tool_name:
-                    result = run_log_lead_to_sheet(node_data)
-                else:
-                    result = {"output": f"Custom tool {tool_name} executed", "type": "custom_result"}
-                
-                # Ensure result is a dictionary
-                if not isinstance(result, dict):
-                    result = {"output": str(result), "type": "custom_result"}
-                
-                return result
-            except Exception as e:
-                logger.error(f"Error executing custom tool {tool_name}: {str(e)}")
-                return {
-                    "output": f"Error: {str(e)}",
-                    "type": "error",
-                    "error": str(e)
-                }
-            else:
-                # Handle unknown tool types
-                return {
-                    "output": f"Unknown tool type: {tool_type}",
-                    "type": "unknown_tool"
-                }
+        
+        # Other tool types...
+
     except Exception as e:
         logger.error(f"Error in tool node: {str(e)}")
         return {

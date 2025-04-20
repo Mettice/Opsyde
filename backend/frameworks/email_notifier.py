@@ -2,6 +2,10 @@
 import smtplib
 import os
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def send_candidate_email(parsed_data, hr_email="hr@company.com"):
     try:
@@ -17,18 +21,17 @@ def send_candidate_email(parsed_data, hr_email="hr@company.com"):
 
         msg = MIMEText(body)
         msg['Subject'] = subject
-        msg['From'] = "noreply@opsyde.io"
+        msg['From'] = os.getenv("EMAIL_SENDER", "noreply@opsyde.io")
         msg['To'] = hr_email
 
-        # For development, just return the message instead of sending
-        return f"✅ Would send email to {hr_email} with subject: {subject}"
-        
         # Uncomment this to actually send emails
-        """
-        smtp_server = "smtp.gmail.com"
+        smtp_server = "smtp.gmail.com"  # Change based on your email provider
         smtp_port = 587
-        smtp_user = "noreply@opsyde.io"
-        smtp_pass = os.getenv("OPSYDE_EMAIL_PASS")
+        smtp_user = os.getenv("EMAIL_SENDER")
+        smtp_pass = os.getenv("EMAIL_PASSWORD")
+
+        if not smtp_user or not smtp_pass:
+            return f"⚠️ Email not sent: Missing EMAIL_SENDER or EMAIL_PASSWORD in .env file"
 
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
@@ -36,7 +39,7 @@ def send_candidate_email(parsed_data, hr_email="hr@company.com"):
         server.sendmail(smtp_user, [hr_email], msg.as_string())
         server.quit()
 
-        return "Email sent!"
-        """
+        return f"✅ Email sent to {hr_email} with subject: {subject}"
+        
     except Exception as e:
         return f"[Error] Email not sent: {str(e)}"

@@ -2,6 +2,10 @@ import os, smtplib, json, requests
 from email.message import EmailMessage
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 def send_to_google_sheet(sheet_config, row_data):
     try:
@@ -60,8 +64,27 @@ def route_output(logs, config):
     # Email output
     if config.get("emailEnabled") and config.get("email"):
         try:
-            # Simulate email sending
-            status_msgs.append(f"✅ Would send email to: {config['email']}")
+            # Get email credentials from environment
+            email_sender = os.getenv("EMAIL_SENDER")
+            email_password = os.getenv("EMAIL_PASSWORD")
+            
+            if not email_sender or not email_password:
+                status_msgs.append("❌ Email error: Missing EMAIL_SENDER or EMAIL_PASSWORD in .env file")
+            else:
+                # Configure SMTP
+                smtp_config = {
+                    "server": "smtp.gmail.com",  # Change based on your email provider
+                    "port": 465,
+                    "user": email_sender,
+                    "password": email_password,
+                    "from": email_sender,
+                    "to": config["email"]
+                }
+                
+                # Send the email
+                subject = "CrewBuilder Workflow Results"
+                result = send_email(smtp_config, subject, logs)
+                status_msgs.append(f"📧 {result} to {config['email']}")
         except Exception as e:
             status_msgs.append(f"❌ Email error: {str(e)}")
     
