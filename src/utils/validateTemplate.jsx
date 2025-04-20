@@ -3,7 +3,11 @@ export const validateTemplate = (template, type) => {
     agent: ['name', 'role', 'goal', 'backstory'],
     task: ['name', 'description', 'expectedOutput'],
     tool: ['name', 'description', 'toolType', 'parameters'],
-    flow: ['name', 'description', 'nodes', 'edges', 'tags']
+    chat: ['name', 'prompt', 'model', 'description'], 
+    flow: ['name', 'description', 'nodes', 'edges', 'tags'],
+    delay: ['name', 'description', 'duration', 'triggerType', 'runAt'],
+    trigger: ['name', 'description', 'triggerType', 'webhook'],
+    logic: ['name', 'description', 'condition']
   };
   
   const fields = requiredFields[type] || [];

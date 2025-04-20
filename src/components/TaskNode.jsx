@@ -87,6 +87,32 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         title={data.label || 'Unnamed Task'}
       >
         {data.label || 'Unnamed Task'}
+        {data.origin && (
+          <div className="text-xs inline-flex items-center px-2 py-0.5 rounded-full mb-2 mt-1" 
+               style={{
+                 backgroundColor: 
+                   data.origin === 'make' ? 'rgba(79, 70, 229, 0.1)' : 
+                   data.origin === 'zapier' ? 'rgba(245, 158, 11, 0.1)' : 
+                   data.origin === 'n8n' ? 'rgba(168, 85, 247, 0.1)' :
+                   data.origin === 'marketplace' ? 'rgba(16, 185, 129, 0.1)' :
+                   data.origin === 'ai' ? 'rgba(59, 130, 246, 0.1)' :
+                   'rgba(107, 114, 128, 0.1)',
+                 color:
+                   data.origin === 'make' ? '#4f46e5' : 
+                   data.origin === 'zapier' ? '#f59e0b' : 
+                   data.origin === 'n8n' ? '#a855f7' :
+                   data.origin === 'marketplace' ? '#10b981' :
+                   data.origin === 'ai' ? '#3b82f6' :
+                   '#6b7280'
+               }}>
+            {data.origin === 'make' && '🧩 From Make'}
+            {data.origin === 'zapier' && '⚡ From Zapier'}
+            {data.origin === 'n8n' && '🔄 From n8n'}
+            {data.origin === 'marketplace' && '🛒 Marketplace'}
+            {data.origin === 'ai' && '🤖 AI-Suggested'}
+            {data.origin && !['make', 'zapier', 'n8n', 'marketplace', 'ai'].includes(data.origin) && `📦 From ${data.origin}`}
+          </div>
+        )}
       </div>
       
       {data.description && (

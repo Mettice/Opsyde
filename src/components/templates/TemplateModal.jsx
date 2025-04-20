@@ -1,3 +1,4 @@
+// components/TemplateModal.js
 import React, { useState } from 'react';
 import ToolTemplates from './ToolTemplates';
 import AgentTemplates from './AgentTemplates';
@@ -17,41 +18,29 @@ const TemplateModal = ({ onClose, onSelectTemplate }) => {
 
   const handleSearch = (term) => {
     setSearchTerm(term);
-    
+
     if (!term.trim()) {
       setShowSearchResults(false);
       return;
     }
-    
+
     const termLower = term.toLowerCase();
-    
-    // Search across all template types
+
     const agentResults = agentTemplates
-      .filter(t => t.name.toLowerCase().includes(termLower) || 
-                  t.description.toLowerCase().includes(termLower))
+      .filter(t => t.name.toLowerCase().includes(termLower) || t.description.toLowerCase().includes(termLower))
       .map(t => ({ ...t, type: 'agent' }));
-      
+
     const taskResults = taskTemplates
-      .filter(t => t.name.toLowerCase().includes(termLower) || 
-                  t.description.toLowerCase().includes(termLower))
+      .filter(t => t.name.toLowerCase().includes(termLower) || t.description.toLowerCase().includes(termLower))
       .map(t => ({ ...t, type: 'task' }));
-      
+
     const flowResults = flowTemplates
-      .filter(t => t.name.toLowerCase().includes(termLower) || 
-                  t.description.toLowerCase().includes(termLower))
+      .filter(t => t.name.toLowerCase().includes(termLower) || t.description.toLowerCase().includes(termLower))
       .map(t => ({ ...t, type: 'flow' }));
-    
-    // Combine and sort by relevance (name matches first)
+
     const allResults = [...agentResults, ...taskResults, ...flowResults]
-      .sort((a, b) => {
-        const aNameMatch = a.name.toLowerCase().includes(termLower);
-        const bNameMatch = b.name.toLowerCase().includes(termLower);
-        
-        if (aNameMatch && !bNameMatch) return -1;
-        if (!aNameMatch && bNameMatch) return 1;
-        return 0;
-      });
-    
+      .sort((a, b) => a.name.toLowerCase().includes(termLower) ? -1 : 1);
+
     setSearchResults(allResults);
     setShowSearchResults(true);
   };
@@ -64,7 +53,6 @@ const TemplateModal = ({ onClose, onSelectTemplate }) => {
           <button onClick={onClose}>❌</button>
         </div>
 
-        {/* Global Search */}
         <div className="mb-4">
           <input
             type="text"
@@ -75,38 +63,50 @@ const TemplateModal = ({ onClose, onSelectTemplate }) => {
           />
         </div>
 
-        {/* Search Results */}
-        {showSearchResults && (
+        {showSearchResults ? (
           <div className="mb-4">
             <h3 className="font-semibold mb-2">Search Results ({searchResults.length})</h3>
-            {searchResults.length > 0 ? (
-              <div className="grid grid-cols-2 gap-4">
-                {searchResults.map((result, idx) => (
-                  <div
-                    key={idx}
-                    className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
-                    onClick={() => onSelectTemplate(result)}
-                  >
-                    <div className="flex items-center mb-1">
-                      <span className={`w-2 h-2 rounded-full mr-2 ${
-                        result.type === 'agent' ? 'bg-blue-500' : 
-                        result.type === 'task' ? 'bg-yellow-500' : 
-                        'bg-green-500'
-                      }`}></span>
-                      <h4 className="font-medium">{result.name}</h4>
-                      <span className="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">
-                        {result.type.charAt(0).toUpperCase() + result.type.slice(1)}
+            <div className="grid grid-cols-2 gap-4">
+              {searchResults.map((result, idx) => (
+                <div
+                  key={idx}
+                  className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-300 cursor-pointer"
+                  onClick={() => onSelectTemplate(result)}
+                >
+                  <div className="flex items-center mb-1">
+                    <span className={`w-2 h-2 rounded-full mr-2 ${
+                      result.type === 'agent' ? 'bg-blue-500' :
+                      result.type === 'task' ? 'bg-yellow-500' :
+                      'bg-green-500'
+                    }`}></span>
+                    <h4 className="font-medium">{result.name}</h4>
+                    <span className="ml-2 text-xs bg-gray-100 px-2 py-1 rounded">
+                      {result.type.charAt(0).toUpperCase() + result.type.slice(1)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600">{result.description}</p>
+                  {result.metadata?.tags && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {result.metadata.tags.map((tag, i) => (
+                        <span key={i} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+                  {result.metadata?.complexity && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Complexity:
+                      <span className={`ml-1 ${
+                        result.metadata.complexity === 'Simple' ? 'text-green-600' :
+                        result.metadata.complexity === 'Medium' ? 'text-yellow-600' :
+                        'text-red-600'
+                      }`}>
+                        {result.metadata.complexity}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">{result.description}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center text-gray-500 py-4">
-                No templates match your search.
-              </div>
-            )}
+                  )}
+                </div>
+              ))}
+            </div>
             <button
               onClick={() => {
                 setSearchTerm('');
@@ -117,10 +117,7 @@ const TemplateModal = ({ onClose, onSelectTemplate }) => {
               Clear search
             </button>
           </div>
-        )}
-
-        {/* Tab Navigation */}
-        {!showSearchResults && (
+        ) : (
           <>
             <div className="mb-4 flex gap-4">
               {tabs.map(tab => (
@@ -133,8 +130,6 @@ const TemplateModal = ({ onClose, onSelectTemplate }) => {
                 </button>
               ))}
             </div>
-
-            {/* Tab Content */}
             {activeTab === 'Tools' && <ToolTemplates onClose={onClose} onSelectTemplate={onSelectTemplate} />}
             {activeTab === 'Agents' && <AgentTemplates onClose={onClose} onSelectTemplate={onSelectTemplate} />}
             {activeTab === 'Tasks' && <TaskTemplates onClose={onClose} onSelectTemplate={onSelectTemplate} />}

@@ -3,6 +3,8 @@ import { useCallback, useRef } from 'react';
 import { addEdge } from 'reactflow';
 import toast from 'react-hot-toast';
 import { normalizeType } from '../utils/nodeHelpers';
+import { validateConnection } from '../utils/validateConnection';
+
 
 export const useNodeInteractions = ({
   nodes,
@@ -84,86 +86,51 @@ export const useNodeInteractions = ({
   }, []);
 
   const onConnect = useCallback((params) => {
-    const sourceNode = nodes.find(n => n.id === params.source);
-    const targetNode = nodes.find(n => n.id === params.target);
-  
-    if (!sourceNode || !targetNode) {
-      toast.error("Connection failed: source or target node not found");
-      return;
-    }
-  
-    const sourceType = normalizeType(sourceNode);
-    const targetType = normalizeType(targetNode);
-  
-    console.log("🔌 Attempting connection:", sourceType, "→", targetType);
-  
-    let isValid = false;
-    let message = '';
-  
-    if (sourceType === "tool" && targetType === "agent") {
-      isValid = true;
-      message = `✅ Agent "${targetNode.data.label}" will use tool "${sourceNode.data.label}".`;
-    } else if (sourceType === "agent" && targetType === "task") {
-      isValid = true;
-      message = `✅ Agent "${sourceNode.data.label}" will perform task "${targetNode.data.label}".`;
-    } else if (sourceType === "task" && targetType === "task") {
-      isValid = true;
-      message = `✅ Task "${targetNode.data.label}" depends on task "${sourceNode.data.label}".`;
-    } else {
-      // Invalid case messages
-      if (sourceType === "task" && targetType === "agent") {
-        message = `❌ Invalid: Tasks cannot assign agents. Use Agent → Task.`;
-      } else if (sourceType === "agent" && targetType === "tool") {
-        message = `❌ Invalid: Agents cannot directly link to Tools. Use Tool → Agent.`;
-      } else if (sourceType === "tool" && targetType === "task") {
-        message = `❌ Invalid: Tools cannot be assigned to Tasks directly. Connect Tool → Agent.`;
-      } else {
-        message = `❌ Invalid connection: ${sourceType} → ${targetType}`;
-      }
-    }
-  
-    if (!isValid) {
-      toast.error(message);
-      return;
-    }
-  
-    // Add edge with styling
+    const isValid = validateConnection(params, nodes, edges, toast);
+
+    if (!isValid) return;
+
     const edgeId = `edge-${Date.now()}`;
-    setEdges((eds) =>
-      addEdge(
-        {
-          ...params,
-          id: edgeId,
-          type: "bezier",
-          animated: true,
-          style: {
-            stroke: '#888',
-            strokeWidth: 1.5,
-            strokeDasharray: '5,5'
-          },
-          data: { label: message }
-        },
-        eds
-      )
-    );
-  
-    toast.success(message);
-  
+
+    const newEdge = {
+      ...params,
+      id: edgeId,
+      type: "bezier",
+      animated: true,
+      style: {
+        stroke: '#888',
+        strokeWidth: 1.5,
+        strokeDasharray: '5,5'
+      },
+      data: {
+        label: `${params.source} → ${params.target}`
+      }
+    };
+
+    setEdges((eds) => addEdge(newEdge, eds));
+
+    toast.success("Connection added!");
+
     addToHistory({
       nodes,
-      edges: [...edges, {
-        ...params,
-        id: edgeId,
-        type: "bezier",
-        animated: true,
-        style: {
-          stroke: '#888',
-          strokeWidth: 1.5,
-          strokeDasharray: '5,5'
-        },
-        data: { label: message }
-      }]
+      edges: [...edges, newEdge]
     });
+  }, [nodes, edges, setEdges, addToHistory]);
+
+  // Edge click handler
+  const onEdgeClick = useCallback((event, edge) => {
+    // Confirm before deleting
+    if (window.confirm('Are you sure you want to delete this connection?')) {
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+      
+      // Add to history
+      addToHistory({
+        nodes,
+        edges: edges.filter((e) => e.id !== edge.id)
+      });
+      
+      toast.success('Connection deleted');
+    }
   }, [nodes, edges, setEdges, addToHistory]);
 
   return {
@@ -173,6 +140,7 @@ export const useNodeInteractions = ({
     onNodeDragStop,
     onConnect,
     onConnectStart,
-    onConnectEnd
+    onConnectEnd,
+    onEdgeClick
   };
 };

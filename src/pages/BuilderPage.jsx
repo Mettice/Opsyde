@@ -1,9 +1,12 @@
 // BuilderPage.js - Refactored
-import React, { useState, useRef, useEffect } from 'react';
-import { useNodesState, useEdgesState } from 'reactflow';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useNodesState, useEdgesState, addEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { ReactFlowProvider } from 'reactflow';
-import toast from 'react-hot-toast';
+import { toast } from 'react-toastify';
+
+
+
 
 // Components
 import FlowCanvas from '../components/FlowCanvas';
@@ -18,6 +21,11 @@ import TemplateModal from '../components/builder/TemplateModal';
 import RunCrewButton from '../components/RunCrewButton';
 import WebRunnerPanel from '../components/webrunners/WebRunnerPanel';
 import OutputPanel from '../components/webrunners/OutputPanel';
+import OutputConfigPanel from '../components/builder/OutputConfigPanel';
+import InputPanel from '../components/builder/InputPanel';
+import { sendToEmail, postToDiscord, pushToSheets, postToSlack } from '../utils/outputUtils';
+import Notification from '../components/Notification';
+import WebhookFlowModal from '../components/WebhookFlowModal';
 
 // Custom Hooks
 import { useBuilderHistory } from '../hooks/useBuilderHistory';
@@ -29,6 +37,11 @@ import { useToolTemplates } from '../hooks/useToolTemplates';
 import { generateDefaultNodes } from '../utils/nodeHelpers';
 import { flowTemplates } from '../data/flowTemplates';
 import { getSafeNodePosition } from '../utils/getSafeNodePosition';
+
+
+
+
+
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -55,7 +68,11 @@ const BuilderPage = () => {
   const [minimizeRunnerPanel, setMinimizeRunnerPanel] = useState(false);
   const [showOutputPanel, setShowOutputPanel] = useState(false);
   const [minimizeOutputPanel, setMinimizeOutputPanel] = useState(false);
+  const [notifications, setNotifications] = useState([]);
 
+  // Add inputs state
+  const [inputs, setInputs] = useState({});
+  
   // Refs
   const reactFlowWrapper = useRef(null);
   const connectingNodeId = useRef(null);
@@ -78,7 +95,8 @@ const BuilderPage = () => {
     onNodeDragStop,
     onConnect,
     onConnectStart,
-    onConnectEnd
+    onConnectEnd,
+    onEdgeClick
   } = useNodeInteractions({
     nodes,
     edges,
@@ -92,7 +110,7 @@ const BuilderPage = () => {
   const {
     exportYAML,
     exportMainPy,
-    saveProject,
+    saveProject: originalSaveProject,
     loadProject,
     exportProject
   } = useWorkflowExport({
@@ -121,6 +139,19 @@ const BuilderPage = () => {
     handleNodeEdit,
     handleNodeDelete
   });
+
+
+  const [outputConfig, setOutputConfig] = useState({
+    emailEnabled: false,
+    email: '',
+    discordEnabled: false,
+    discordWebhook: '',
+    sheetsEnabled: false,
+    sheetId: ''
+  });
+  
+  const [incomingFlow, setIncomingFlow] = useState(null);
+  const [showWebhookFlowModal, setShowWebhookFlowModal] = useState(false);
 
   // Add Agent function - kept in main component as it's simple
   const addAgent = () => {
@@ -164,6 +195,114 @@ const BuilderPage = () => {
         async: false,
         nodeId: id,
         nodeType: 'task'
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Chat Node function
+  const addChatNode = () => {
+    const id = `chat-${Date.now()}`;
+    const newNode = {
+      id,
+      type: 'chatbot',
+      position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
+      data: {
+        label: `Chatbot ${nodes.filter(n => n.type === 'chatbot' || n.type === 'chat').length + 1}`,
+        description: 'Interactive chatbot for user conversations',
+        prompt: 'Hi, how can I help you today?',
+        llmModel: 'gpt-4',
+        memory: false,
+        temperature: 0.7,
+        max_tokens: 500,
+        nodeId: id,
+        nodeType: 'chatbot',
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Delay Node function
+  const addDelayNode = () => {
+    const id = `delay-${Date.now()}`;
+    const newNode = {
+      id,
+      type: 'delay',
+      position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
+      data: {
+        label: 'Delay',
+        description: 'Pause execution for a specified duration',
+        duration: '5s',
+        nodeId: id,
+        nodeType: 'delay',
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Trigger Node function
+  const addTriggerNode = () => {
+    // First check if there's already a trigger node (connected or not)
+    const existingTriggerNodes = nodes.filter(node => node.type === 'trigger');
+    
+    if (existingTriggerNodes.length > 0) {
+      toast.warning('Only one trigger node is allowed per flow. Delete the existing trigger node first.');
+      return; // Exit the function early - don't add another trigger
+    }
+    
+    const id = `trigger-${Date.now()}`;
+    const newNode = {
+      id,
+      type: 'trigger',
+      position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      targetPosition: 'top',
+      data: {
+        label: 'Trigger',
+        description: 'Start workflow execution',
+        triggerType: 'manual',
+        runAt: '',
+        nodeId: id,
+        nodeType: 'trigger',
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Logic Node function
+  const addLogicNode = () => {
+    const id = `logic-${Date.now()}`;
+    const newNode = {
+      id,
+      type: 'logic',
+      position: getSafeNodePosition(nodes),
+      data: {
+        label: 'Logic Node',
+        name: 'Condition',
+        description: 'Evaluates a condition and routes flow',
+        condition: 'inputs.value > 10',
+        nodeId: id,
+        nodeType: 'logic',
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
@@ -224,9 +363,13 @@ const BuilderPage = () => {
     onAddAgent: addAgent,
     onAddTask: addTask,
     onAddTool: () => setShowToolTemplates(true),
+    onAddChat: addChatNode,
+    onAddDelay: addDelayNode,
+    onAddTrigger: addTriggerNode,
+    onAddLogicNode: addLogicNode,
     onExportYAML: exportYAML,
     onExportPython: exportMainPy,
-    onSaveProject: saveProject,
+    onSaveProject: originalSaveProject,
     onLoadProject: loadProject,
     onPreviewWorkflow: () => setShowPreview(true),
     onUndo: handleUndo,  // Use the handler function
@@ -293,55 +436,135 @@ const BuilderPage = () => {
     };
   }, [nodes, edges, setNodes, setEdges, addToHistory, setSelectedNode, setShowEditModal]);
 
-  // Add this function to handle running the crew
+  // Handle post-execution actions like sending to email, Discord, etc.
+  const handlePostExecution = async (logs) => {
+    const toolNodes = nodes.filter((node) => node.type === "tool");
+
+    for (const tool of toolNodes) {
+      const { exportTo, config = {} } = tool.data;
+
+      if (exportTo === "email") {
+        await sendToEmail(logs, config.to);
+      } else if (exportTo === "discord") {
+        await sendToDiscord(logs, config.webhook);
+      } else if (exportTo === "sheets") {
+        await sendToSheets(logs);
+      }
+    }
+  };
+
+  // Add this helper function to check if auto-export is configured
+  const isAutoExportConfigured = () => {
+    const { emailEnabled, email, discordEnabled, discordWebhook, sheetsEnabled, sheetId } = outputConfig;
+    return (
+      (emailEnabled && email) ||
+      (discordEnabled && discordWebhook) ||
+      (sheetsEnabled && sheetId)
+    );
+  };
+
+  // Add this function to show notifications
+  const addNotification = (message, type = 'info') => {
+    const id = Date.now();
+    setNotifications(prev => [...prev, { id, message, type }]);
+    return id;
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
+  };
+
+  // Update the runCrew function to handle the webhook flow response
   const runCrew = async () => {
+    if (isRunning) return;
+    
+    // Check for errors
+    const errors = checkWorkflowErrors();
+    if (errors.length > 0) {
+      toast.error("Please fix workflow errors before running");
+      return;
+    }
+    
+    setIsRunning(true);
+    setExecutionLogs('');
+    setShowRunnerPanel(true);
+    setMinimizeRunnerPanel(false);
+    
     try {
-      setIsRunning(true);
-      setExecutionLogs('');
-      setShowRunnerPanel(true);
-      setMinimizeRunnerPanel(false);
-      
       // Prepare the payload
       const payload = {
-        nodes: nodes.map(node => {
-          // Clean node data for API
-          const { data, ...rest } = node;
-          const cleanData = { ...data };
-          delete cleanData.onEdit;
-          delete cleanData.onDelete;
-          return { ...rest, data: cleanData };
-        }),
-        edges: edges,
-        inputs: {} // Add any global inputs here
+        nodes,
+        edges,
+        metadata: {
+          name: projectName,
+          output: outputConfig
+        }
       };
       
-      // Call the API with streaming response
+      // THIS IS THE FIX - Ensure inputs are properly formatted
+      if (inputs) {
+        if (typeof inputs === 'string') {
+          payload.inputs = { input: inputs };
+        } else if (typeof inputs === 'object' && inputs !== null) {
+          payload.inputs = inputs;
+        } else {
+          payload.inputs = {};
+        }
+      } else {
+        payload.inputs = {};
+      }
+      
+      // Send the request
       const response = await fetch(`${BACKEND_URL}/run-crew`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
       
-      // Handle streaming response
+      // Handle the response
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
+      
+      // Process the streaming response
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let logs = '';
       
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
         
         const text = decoder.decode(value);
-        setExecutionLogs(prev => prev + text);
+        logs += text;
+        setExecutionLogs(logs);
       }
       
-      // Show output panel when execution is complete
+      // Show output panel when done
       setShowOutputPanel(true);
-      setMinimizeOutputPanel(false);
+      
+      // Handle outputs based on configuration
+      if (outputConfig.emailEnabled && outputConfig.email) {
+        await sendToEmail(logs, outputConfig.email);
+        addNotification("Results sent to email", "success");
+      }
+      
+      if (outputConfig.discordEnabled && outputConfig.discordWebhook) {
+        await postToDiscord(logs, outputConfig.discordWebhook);
+        addNotification("Results posted to Discord", "success");
+      }
+      
+      if (outputConfig.sheetsEnabled) {
+        await pushToSheets(logs);
+        addNotification("Results exported to Google Sheets", "success");
+      }
+      
     } catch (error) {
-      console.error('Error running crew:', error);
-      setExecutionLogs(prev => prev + `\n❌ Error: ${error.message}`);
+      console.error("Error running workflow:", error);
+      setExecutionLogs(prev => prev + `\n\nERROR: ${error.message}`);
+      addNotification(`Error: ${error.message}`, "error");
     } finally {
       setIsRunning(false);
     }
@@ -350,50 +573,38 @@ const BuilderPage = () => {
   // Add this function to handle exports
   const handleExport = async (type, config = {}) => {
     try {
-      if (type === 'yaml' || type === 'json') {
-        // Handle file exports
-        exportProject(type);
-        return;
-      }
-      
-      // Prepare the payload
-      const payload = {
-        logs: executionLogs,
-        ...config
-      };
-      
-      // Determine the endpoint
-      let endpoint;
+      let result;
+
       switch (type) {
+        case 'yaml':
+        case 'json':
+          exportProject(type);
+          return;
+
         case 'email':
-          endpoint = `${BACKEND_URL}/send-email`;
+          result = await sendToEmail(executionLogs, config.to || outputConfig.email);
           break;
+
         case 'discord':
-          endpoint = `${BACKEND_URL}/post-discord`;
+          result = await postToDiscord(config.webhook_url || outputConfig.discordWebhook, executionLogs);
           break;
+
         case 'sheets':
-          endpoint = `${BACKEND_URL}/export-sheets`;
+          result = await pushToSheets(outputConfig.sheetId || config.sheetId, executionLogs);
           break;
+
+        case 'slack':
+          result = await postToSlack(config.webhook || '', executionLogs);
+          break;
+
         default:
           throw new Error(`Unknown export type: ${type}`);
       }
-      
-      // Call the API
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-      
-      const result = await response.json();
-      
-      // Show result in logs
-      setExecutionLogs(prev => prev + `\n${result.status}`);
-      
+
+      setExecutionLogs(prev => prev + `\n${result}`);
+
     } catch (error) {
-      console.error(`Error exporting to ${type}:`, error);
+      toast.error(`Error exporting to ${type}: ` + error.message);
       setExecutionLogs(prev => prev + `\n❌ Export Error: ${error.message}`);
     }
   };
@@ -427,6 +638,177 @@ const BuilderPage = () => {
     
     return errors;
   };
+
+  // Update the handleReplaceFlow function
+  const handleReplaceFlow = () => {
+    if (incomingFlow) {
+      // Check if the flow has origin metadata
+      const origin = incomingFlow.metadata?.origin || incomingFlow.metadata?.source;
+      
+      // Add origin to each node if it exists in the metadata
+      const nodesWithOrigin = incomingFlow.nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          origin: origin || node.data.origin || null
+        }
+      }));
+      
+      setNodes(nodesWithOrigin);
+      setEdges(incomingFlow.edges);
+      addToHistory({ nodes: nodesWithOrigin, edges: incomingFlow.edges });
+      setShowWebhookFlowModal(false);
+      setIncomingFlow(null);
+      
+      // Show success notification
+      addNotification({
+        message: `Replaced workflow with ${nodesWithOrigin.length} nodes from ${origin || 'external source'}`,
+        type: "success"
+      });
+    }
+  };
+
+  // Update the handleMergeFlow function
+  const handleMergeFlow = () => {
+    if (incomingFlow) {
+      // Create a map of old IDs to new IDs
+      const idMap = {};
+      
+      // Check if the flow has origin metadata
+      const origin = incomingFlow.metadata?.origin || incomingFlow.metadata?.source;
+      
+      // Create new nodes with unique IDs and add origin
+      const newNodes = incomingFlow.nodes.map(node => {
+        const oldId = node.id;
+        const newId = `${node.type}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        idMap[oldId] = newId;
+        
+        return {
+          ...node,
+          id: newId,
+          position: {
+            x: node.position.x + 50, // Offset slightly to avoid exact overlap
+            y: node.position.y + 50
+          },
+          data: {
+            ...node.data,
+            nodeId: newId,
+            origin: origin || node.data.origin || null
+          }
+        };
+      });
+      
+      // Update edge references to use new node IDs
+      const newEdges = incomingFlow.edges.map(edge => ({
+        ...edge,
+        id: `e-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        source: idMap[edge.source] || edge.source,
+        target: idMap[edge.target] || edge.target
+      }));
+      
+      // Merge with existing flow
+      setNodes(nodes => [...nodes, ...newNodes]);
+      setEdges(edges => [...edges, ...newEdges]);
+      addToHistory({ nodes: [...nodes, ...newNodes], edges: [...edges, ...newEdges] });
+      setShowWebhookFlowModal(false);
+      setIncomingFlow(null);
+      
+      // Show success notification
+      addNotification({
+        message: `Merged ${newNodes.length} nodes from ${origin || 'external source'} into your workflow`,
+        type: "success"
+      });
+    }
+  };
+
+  // Find the import handler function and modify it
+  const handleImportSelect = (option) => {
+    switch (option) {
+      case 'template':
+        setShowTemplateModal(true);
+        break;
+      case 'json':
+        // Trigger file input for JSON import
+        document.getElementById('json-import').click();
+        break;
+      // Comment out or conditionally show these options
+      /*
+      case 'zapier':
+        // Zapier import logic
+        break;
+      case 'make':
+        // Make.com import logic
+        break;
+      */
+      default:
+        break;
+    }
+    setShowImportDropdown(false);
+  };
+
+  // Add this validation function
+  const validateFlow = () => {
+    const errors = [];
+    
+    // Check for multiple active trigger nodes
+    const triggerNodes = nodes.filter(node => 
+      node.type === 'trigger' && 
+      edges.some(edge => edge.source === node.id)
+    );
+    
+    if (triggerNodes.length > 1) {
+      errors.push('Multiple active trigger nodes detected. Only one trigger node can be active in a flow.');
+    }
+    
+    // Add other validation rules as needed
+    
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  };
+
+  // Then create a wrapper function that adds validation
+  const enhancedSaveProject = () => {
+    const validation = validateFlow();
+    
+    if (!validation.isValid) {
+      toast.error(validation.errors[0]);
+      return;
+    }
+    
+    // Call the original function
+    originalSaveProject();
+  };
+
+  // Create a proper onConnect handler
+  const handleConnect = useCallback((params) => {
+    // Check if we're trying to connect from a trigger node
+    if (params.source) {
+      const sourceNode = nodes.find(n => n.id === params.source);
+      if (sourceNode?.type === 'trigger') {
+        // Check if there's already another trigger with connections
+        const existingTriggerWithConnections = edges.some(edge => {
+          const edgeSourceNode = nodes.find(n => n.id === edge.source);
+          return edgeSourceNode?.type === 'trigger' && edge.source !== params.source;
+        });
+        
+        if (existingTriggerWithConnections) {
+          toast.error("Only one trigger node can be active in a flow");
+          return;
+        }
+      }
+    }
+    
+    // Create a new edge using the addEdge utility
+    const newEdge = addEdge(params, edges);
+    setEdges(newEdge);
+    
+    // If you need to call your custom onConnect logic as well
+    if (onConnect) {
+      onConnect(params);
+    }
+  }, [nodes, edges, setEdges, onConnect]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -467,7 +849,13 @@ const BuilderPage = () => {
         </div>
       </header>
       
-      <Toolbar {...toolbarProps} />
+      <div className="flex items-center space-x-2 px-4 py-2 bg-gray-100">
+        <Toolbar {...toolbarProps} />
+        <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
+      </div>
+      
+      {/* Add OutputConfigPanel here */}
+      <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
       
       <div className="flex-1 relative">
         <ReactFlowProvider>
@@ -476,11 +864,12 @@ const BuilderPage = () => {
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
+            onConnect={handleConnect}
             onNodeClick={onNodeClick}
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
             onNodeDragStop={onNodeDragStop}
+            onEdgeClick={onEdgeClick}
             onTemplateApply={applyFlowTemplate}
             templates={flowTemplates}
             connectionLineComponent={ConnectionLine}
@@ -575,8 +964,28 @@ const BuilderPage = () => {
           onToggleMinimize={() => setMinimizeOutputPanel(!minimizeOutputPanel)}
         />
       )}
+
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          message={notification.message}
+          type={notification.type}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
+      {/* Webhook Flow Modal */}
+      <WebhookFlowModal
+        isOpen={showWebhookFlowModal}
+        onClose={() => setShowWebhookFlowModal(false)}
+        onReplace={handleReplaceFlow}
+        onMerge={handleMergeFlow}
+        flowData={incomingFlow}
+      />
     </div>
   );
 };
+
 
 export default BuilderPage;

@@ -8,7 +8,11 @@ export default function OutputPanel({ logs, onExport, isMinimized, onToggleMinim
   if (isMinimized) {
     return (
       <div 
-        className="fixed top-20 right-6 bg-green-600 text-white p-3 rounded-full shadow-lg cursor-pointer z-50"
+        className={`transition-all duration-300 ${
+          isMinimized 
+            ? 'fixed bottom-20 right-6 bg-green-600 text-white p-3 rounded-full shadow-lg cursor-pointer z-50' 
+            : 'fixed bottom-20 right-6 w-96 h-96 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-50 overflow-hidden'
+        }`}
         onClick={onToggleMinimize}
         title="Expand export options"
       >

@@ -60,7 +60,11 @@ export default function WebRunnerPanel({ logs, onClose, isMinimized, onToggleMin
   if (isMinimized) {
     return (
       <div 
-        className="fixed bottom-20 right-6 bg-blue-600 text-white p-3 rounded-full shadow-lg cursor-pointer z-50"
+        className={`transition-all duration-300 ${
+          isMinimized 
+            ? 'fixed bottom-20 left-6 bg-blue-600 text-white p-3 rounded-full shadow-lg cursor-pointer z-50' 
+            : 'fixed bottom-20 left-6 w-96 h-96 bg-white border border-gray-200 rounded-xl shadow-lg p-4 z-50 overflow-hidden'
+        }`}
         onClick={onToggleMinimize}
         title="Expand logs panel"
       >

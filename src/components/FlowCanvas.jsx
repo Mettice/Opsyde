@@ -9,12 +9,13 @@ import ReactFlow, {
   StraightEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import AgentNode from './AgentCard';
-import TaskNode from './TaskNode';
-import ToolNode from './ToolNode';
 import { recommendTemplates } from '../utils/recommendTemplates';
 import ConnectionLine from './ConnectionLine';
 import ConnectionGuide from './ConnectionGuide';
+import { toast } from 'react-hot-toast';
+import { nodeTypes } from '../utils/nodeTypes';
+import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
+import { validateConnection } from '../utils/validateConnection';
 
 const edgeStyles = `
   .react-flow__edge:hover .react-flow__edge-path {
@@ -29,7 +30,7 @@ const FlowCanvas = ({
   edges, 
   onNodesChange, 
   onEdgesChange, 
-  onConnect, 
+  onConnect,
   onNodeClick,
   onConnectStart,
   onConnectEnd,
@@ -37,7 +38,8 @@ const FlowCanvas = ({
   onPaneClick,
   onSelectionChange,
   onTemplateApply,
-  templates
+  onEdgeClick,
+  templates,
 }) => {
   const reactFlowWrapper = useRef(null);
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
@@ -48,16 +50,11 @@ const FlowCanvas = ({
   const [showConnectionRules, setShowConnectionRules] = useState(false);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const [showConnectionGuideModal, setShowConnectionGuideModal] = useState(false);
+  const [connectionSourceType, setConnectionSourceType] = useState(null);
 
   // Use useMemo to prevent recreation of nodeTypes on each render
-  const nodeTypes = useMemo(() => ({
-    agent: AgentNode,
-    agentNode: AgentNode,
-    task: TaskNode,
-    taskNode: TaskNode,
-    tool: ToolNode,
-    toolNode: ToolNode
-  }), []);
+  const customNodeTypes = useMemo(() => nodeTypes, []);
 
   // Define edge types
   const edgeTypes = useMemo(() => ({
@@ -66,6 +63,11 @@ const FlowCanvas = ({
     smoothstep: SmoothStepEdge,
     straight: StraightEdge,
   }), []);
+
+  // Use the imported validateConnection utility
+  const isValidConnection = useCallback((params) => {
+    return validateConnection(params, nodes, edges, toast);
+  }, [nodes, edges]);
 
   // Handle applying a flow template
   const handleApplyTemplate = useCallback((template) => {
@@ -140,18 +142,6 @@ const FlowCanvas = ({
     };
   }, [nodes, edges]);
 
-  // Add this function to your FlowCanvas component
-  const onEdgeClick = useCallback((event, edge) => {
-    // Prevent event from propagating to the canvas
-    event.stopPropagation();
-    
-    // Ask for confirmation before deleting
-    if (window.confirm('Are you sure you want to delete this connection?')) {
-      // Call the onEdgesChange handler with a remove operation
-      onEdgesChange([{ id: edge.id, type: 'remove' }]);
-    }
-  }, [onEdgesChange]);
-
   // Update the onConnectStart handler
   const handleConnectStart = useCallback((event, { nodeId, handleType }) => {
     const sourceNode = nodes.find(node => node.id === nodeId);
@@ -175,45 +165,6 @@ const FlowCanvas = ({
       onConnectEnd(event);
     }
   }, [onConnectEnd]);
-
-  // Replace the ConnectionHelpTooltip with this collapsible version
-  const ConnectionRulesWidget = () => (
-    <div className="absolute top-16 right-4 z-40">
-      {showConnectionRules ? (
-        <div className="bg-white p-3 rounded shadow-md text-sm max-w-xs">
-          <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold">Connection Rules:</h3>
-            <button 
-              onClick={() => setShowConnectionRules(false)}
-              className="text-gray-500 hover:text-gray-700"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <ul className="list-disc pl-4 space-y-1">
-            <li><span className="text-green-600 font-medium">Tools</span> → <span className="text-blue-600 font-medium">Agents</span>: Tools are resources that agents can use</li>
-            <li><span className="text-blue-600 font-medium">Agents</span> → <span className="text-yellow-600 font-medium">Tasks</span>: Agents perform tasks</li>
-            <li><span className="text-yellow-600 font-medium">Tasks</span> → <span className="text-yellow-600 font-medium">Tasks</span>: Tasks can depend on other tasks</li>
-          </ul>
-          <div className="mt-2 text-xs text-gray-600">
-            <strong>Note:</strong> Always connect from source (bottom handle) to target (top handle)
-          </div>
-        </div>
-      ) : (
-        <button 
-          onClick={() => setShowConnectionRules(true)}
-          className="bg-blue-500 text-white px-3 py-1 rounded text-sm flex items-center"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-          Connection Rules
-        </button>
-      )}
-    </div>
-  );
 
   // Create a collapsible recommendations widget
   const RecommendationsWidget = () => (
@@ -336,25 +287,134 @@ const FlowCanvas = ({
     );
   };
 
+  // Add this useEffect to listen for the custom event
+  useEffect(() => {
+    const handleShowConnectionGuide = (e) => {
+      setShowConnectionGuideModal(true);
+      // You can optionally set a specific source type if provided in the event
+      if (e.detail && e.detail.sourceType) {
+        setConnectionSourceType(e.detail.sourceType);
+      } else {
+        setConnectionSourceType(null); // Show general guide
+      }
+    };
+
+    document.addEventListener('show-connection-guide', handleShowConnectionGuide);
+    
+    return () => {
+      document.removeEventListener('show-connection-guide', handleShowConnectionGuide);
+    };
+  }, []);
+
+  // Add this function to highlight nodes by type
+  const highlightNodesByType = (nodeType) => {
+    // Create a new array of nodes with highlighted property
+    const updatedNodes = nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        highlighted: node.type === nodeType
+      }
+    }));
+    
+    onNodesChange(updatedNodes);
+    
+    // Clear the highlight after a few seconds
+    setTimeout(() => {
+      onNodesChange(nodes.map(node => ({
+        ...node,
+        data: {
+          ...node.data,
+          highlighted: false
+        }
+      })));
+    }, 3000);
+  };
+
+  // Add this inside the FlowCanvas component
+  const handleEdgeClick = useCallback((event, edge) => {
+    // Confirm before deleting
+    if (window.confirm('Are you sure you want to delete this connection?')) {
+      onEdgesChange([{ id: edge.id, type: 'remove' }]);
+      toast.success('Connection deleted');
+    }
+  }, [onEdgesChange]);
+
   return (
     <div className="h-full relative" ref={reactFlowWrapper}>
       <style>{edgeStyles}</style>
+      
+      {/* Connection Guide Modal - shown when requested or when showConnectionRules is true */}
       <ConnectionGuide 
-        isVisible={isConnecting} 
-        sourceType={connectionInfo.sourceType} 
+        isVisible={showConnectionGuideModal} 
+        sourceType={connectionSourceType}
+        onClose={() => {
+          setShowConnectionGuideModal(false);
+          setShowConnectionRules(false);
+        }}
       />
-      <ConnectionRulesWidget />
+      
+      {/* Connection guide for when actively connecting nodes */}
+      {isConnecting && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded shadow-lg z-50 text-sm max-w-md border-2 border-blue-500">
+          <div className="font-bold text-center mb-2 text-lg">
+            {connectionInfo.sourceType ? `Connecting from: ${connectionInfo.sourceType}` : 'Click and drag to connect nodes'}
+          </div>
+        </div>
+      )}
+      
       <RecommendationsWidget />
       <ConnectionDiagram 
         isVisible={showConnectionDiagram} 
         onClose={() => setShowConnectionDiagram(false)} 
       />
+      
+      {/* ReactFlow component */}
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={(params) => {
+          // Get the node types for logging
+          const sourceNode = nodes.find(n => n.id === params.source);
+          const targetNode = nodes.find(n => n.id === params.target);
+          const sourceType = sourceNode?.type || 'unknown';
+          const targetType = targetNode?.type || 'unknown';
+          
+          console.log(`Attempting connection: ${sourceType} → ${targetType}`);
+          
+          // First check if we're trying to add a second trigger node
+          if (params.source) {
+            if (sourceNode?.type === 'trigger') {
+              // Check if there's already another trigger with connections
+              const existingTriggerWithConnections = edges.some(edge => {
+                const edgeSourceNode = nodes.find(n => n.id === edge.source);
+                return edgeSourceNode?.type === 'trigger' && edge.source !== params.source;
+              });
+              
+              if (existingTriggerWithConnections) {
+                toast.error("Only one trigger node can be active in a flow");
+                return;
+              }
+            }
+          }
+
+          // Now check if the connection is valid according to our rules
+          const isValid = isValidConnection(params);
+          console.log(`Connection validation result: ${isValid ? 'VALID' : 'INVALID'} - ${sourceType} → ${targetType}`);
+          
+          if (isValid) {
+            // Only call onConnect if the connection is valid
+            if (onConnect) {
+              onConnect(params);
+            }
+          } else {
+            // Only show error for truly invalid connections
+            console.log(`Invalid connection rejected: ${sourceType} → ${targetType}`);
+            toast.error(`Invalid connection: ${sourceType} → ${targetType}`);
+          }
+        }}
         onNodeClick={(event, node) => {
           // Only trigger node click if the target is not a button or inside a button
           // and not an edit or delete button
@@ -372,7 +432,8 @@ const FlowCanvas = ({
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
         onSelectionChange={onSelectionChange}
-        nodeTypes={nodeTypes}
+        onEdgeClick={handleEdgeClick}
+        nodeTypes={customNodeTypes}
         edgeTypes={edgeTypes}
         connectionLineComponent={(props) => (
           <ConnectionLine 
@@ -395,7 +456,6 @@ const FlowCanvas = ({
           // Store the instance on the wrapper ref
           reactFlowWrapper.current.reactFlowInstance = instance;
         }}
-        onEdgeClick={onEdgeClick}
       >
         <MiniMap 
           nodeStrokeColor={(n) => {
@@ -476,7 +536,7 @@ const FlowCanvas = ({
                     
                     {(!template.type || template.nodes) && (
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2M7 7h10" />
                       </svg>
                     )}
                   </div>
@@ -489,6 +549,26 @@ const FlowCanvas = ({
         </div>
       )}
 
+      {/* Toggle button for connection rules */}
+      <button 
+        onClick={() => setShowConnectionRules(!showConnectionRules)}
+        className="absolute top-16 right-4 bg-purple-600 text-white px-3 py-1 rounded text-sm z-40"
+      >
+        {showConnectionRules ? 'Hide Rules' : 'Show Rules'}
+      </button>
+      
+      {/* Connection Rules Panel - conditionally rendered */}
+      {showConnectionRules && <ConnectionRulesPanel onClose={() => setShowConnectionRules(false)} />}
+      
+      {/* Debug button and panel */}
+      <button 
+        onClick={() => setDebugMode(!debugMode)}
+        className="absolute bottom-4 left-4 bg-gray-500 text-white px-2 py-1 rounded text-xs"
+      >
+        {debugMode ? 'Hide Debug' : 'Debug'}
+      </button>
+      
+      {/* Debug panel */}
       {debugMode && (
         <div className="absolute bottom-20 left-4 bg-white p-2 rounded shadow-md z-40 text-xs max-w-xs">
           <h3 className="font-bold mb-1">Debug Info:</h3>
@@ -507,13 +587,6 @@ const FlowCanvas = ({
           </button>
         </div>
       )}
-
-      <button 
-        onClick={() => setDebugMode(!debugMode)}
-        className="absolute bottom-4 left-4 bg-gray-500 text-white px-2 py-1 rounded text-xs"
-      >
-        {debugMode ? 'Hide Debug' : 'Debug'}
-      </button>
     </div>
   );
 };

@@ -161,6 +161,33 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
         {data.label || 'Unnamed Tool'}
       </div>
       
+      {data.origin && (
+        <div className="text-xs inline-flex items-center px-2 py-0.5 rounded-full mb-2 mt-1" 
+             style={{
+               backgroundColor: 
+                 data.origin === 'make' ? 'rgba(79, 70, 229, 0.1)' : 
+                 data.origin === 'zapier' ? 'rgba(245, 158, 11, 0.1)' : 
+                 data.origin === 'n8n' ? 'rgba(168, 85, 247, 0.1)' :
+                 data.origin === 'marketplace' ? 'rgba(16, 185, 129, 0.1)' :
+                 data.origin === 'ai' ? 'rgba(59, 130, 246, 0.1)' :
+                 'rgba(107, 114, 128, 0.1)',
+               color:
+                 data.origin === 'make' ? '#4f46e5' : 
+                 data.origin === 'zapier' ? '#f59e0b' : 
+                 data.origin === 'n8n' ? '#a855f7' :
+                 data.origin === 'marketplace' ? '#10b981' :
+                 data.origin === 'ai' ? '#3b82f6' :
+                 '#6b7280'
+             }}>
+          {data.origin === 'make' && '🧩 From Make'}
+          {data.origin === 'zapier' && '⚡ From Zapier'}
+          {data.origin === 'n8n' && '🔄 From n8n'}
+          {data.origin === 'marketplace' && '🛒 Marketplace'}
+          {data.origin === 'ai' && '🤖 AI-Suggested'}
+          {data.origin && !['make', 'zapier', 'n8n', 'marketplace', 'ai'].includes(data.origin) && `📦 From ${data.origin}`}
+        </div>
+      )}
+      
       {data.description && (
         <div 
           className="text-sm text-gray-500 mb-1 truncate"
@@ -176,7 +203,7 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
         </div>
       )}
       
-      {data.apiEndpoint && (
+      {data.toolType === 'api' && data.apiEndpoint && (
         <div className="text-xs text-gray-600 mb-1 flex items-center">
           <span className="font-medium mr-1">API:</span> 
           <span className="truncate flex-1" title={data.apiEndpoint}>
@@ -190,6 +217,34 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
             {hideApiEndpoint ? "👁️" : "🔒"}
           </button>
         </div>
+      )}
+      
+      {data.toolType === 'webhook' && (
+        <>
+          <div className="text-xs text-gray-600 mb-1">
+            <span className="font-medium">Webhook Type:</span> {data.webhookType || 'send-output'}
+          </div>
+          {data.webhookType === 'load-flow' && (
+            <div className="text-xs text-gray-600 mb-1">
+              <span className="font-medium">Flow Mode:</span> {data.flowMode || 'replace'}
+            </div>
+          )}
+          {data.webhook_url && (
+            <div className="text-xs text-gray-600 mb-1 flex items-center">
+              <span className="font-medium mr-1">URL:</span> 
+              <span className="truncate flex-1" title={data.webhook_url}>
+                {formatApiEndpoint(data.webhook_url)}
+              </span>
+              <button 
+                onClick={toggleApiVisibility}
+                className="ml-1 text-gray-500 hover:text-gray-700 text-xs p-1"
+                title={hideApiEndpoint ? "Show full URL" : "Hide URL"}
+              >
+                {hideApiEndpoint ? "👁️" : "🔒"}
+              </button>
+            </div>
+          )}
+        </>
       )}
       
       {data.parameters && (

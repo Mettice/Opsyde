@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from './HelpTooltip';
+import { toast } from 'react-hot-toast';
 
 /**
  * Modal component for editing node properties
@@ -22,7 +23,24 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     parameters: '',
     expectedOutput: '',
     async: false,
-    dependencies: []
+    dependencies: [],
+    webhookType: 'send-output',
+    flowMode: 'replace',
+    webhook_url: '',
+    secretToken: '',
+    prompt: '',
+    model: 'gpt-4',
+    enableMemory: false,
+    condition: '',
+    temperature: 0.7,
+    max_tokens: 500,
+    duration: '5s',
+    triggerType: 'manual',
+    runAt: '',
+    scheduleType: 'once',
+    scheduleDays: [],
+    scheduleWeekday: 'monday',
+    scheduleMonthDay: 1
   });
 
   // Track if form has been modified
@@ -49,8 +67,36 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
         parameters: nodeData.parameters || '',
         expectedOutput: nodeData.expectedOutput || '',
         async: nodeData.async || false,
-        dependencies: nodeData.dependencies || []
+        dependencies: nodeData.dependencies || [],
+        webhookType: nodeData.webhookType || 'send-output',
+        flowMode: nodeData.flowMode || 'replace',
+        webhook_url: nodeData.webhook_url || '',
+        secretToken: nodeData.secretToken || '',
+        prompt: nodeData.prompt || '',
+        model: nodeData.model || 'gpt-4',
+        enableMemory: nodeData.enableMemory || false,
+        condition: nodeData.condition || '',
+        temperature: nodeData.temperature || 0.7,
+        max_tokens: nodeData.max_tokens || 500,
+        duration: nodeData.duration || '5s',
+        triggerType: nodeData.triggerType || 'manual',
+        runAt: nodeData.runAt || '',
+        scheduleType: nodeData.scheduleType || 'once',
+        scheduleDays: nodeData.scheduleDays || [],
+        scheduleWeekday: nodeData.scheduleWeekday || 'monday',
+        scheduleMonthDay: nodeData.scheduleMonthDay || 1
       };
+      
+      // Parse runAt into runDate and runTime if it exists
+      if (nodeData.runAt) {
+        try {
+          const [date, time] = nodeData.runAt.split(' ');
+          cleanData.runDate = date;
+          cleanData.runTime = time;
+        } catch (e) {
+          console.error('Error parsing runAt:', e);
+        }
+      }
       
       setFormData(cleanData);
       setIsModified(false);
@@ -73,6 +119,32 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
   const formatApiKey = (key) => {
     if (!key) return '';
     return showApiKey ? key : '••••••••••••••••';
+  };
+
+  // Add these state variables at the top of your EditModal component
+  const [testInput, setTestInput] = useState('{\n  "value": 15,\n  "status": "approved",\n  "message": "Success"\n}');
+  const [testResult, setTestResult] = useState(null);
+  const [savedTestInputs, setSavedTestInputs] = useState([]);
+
+  // Add this function to save the current test input
+  const saveTestInput = () => {
+    try {
+      // Parse to validate it's valid JSON
+      const parsedInput = JSON.parse(testInput);
+      
+      // Create a name for the saved input
+      const inputName = `Test ${savedTestInputs.length + 1}`;
+      
+      // Add to saved inputs
+      setSavedTestInputs([
+        ...savedTestInputs,
+        { name: inputName, input: testInput }
+      ]);
+      
+      toast.success('Test input saved');
+    } catch (error) {
+      toast.error('Invalid JSON: ' + error.message);
+    }
   };
 
   // Return null if modal is not open
@@ -105,9 +177,63 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
       }
     }
     
+    // For logic nodes, save the test input
+    if (currentNodeType === 'logic' && testInput) {
+      try {
+        // Validate it's proper JSON
+        JSON.parse(testInput);
+        cleanedFormData.testInput = testInput;
+      } catch (e) {
+        // Invalid JSON, don't save it
+        console.warn('Invalid test input JSON, not saving:', e);
+      }
+    }
+    
     onSave(cleanedFormData);
+    onClose();
   };
   
+  const registerTrigger = useCallback(async () => {
+    if (!formData.nodeId) return;
+    
+    try {
+      // Find all nodes and edges connected to this trigger
+      const connectedNodes = findConnectedNodes(formData.nodeId);
+      const connectedEdges = findConnectedEdges(formData.nodeId);
+      
+      // Create a flow object with just the connected components
+      const flow = {
+        nodes: connectedNodes,
+        edges: connectedEdges,
+        trigger_id: formData.nodeId,
+        trigger_type: formData.triggerType
+      };
+      
+      // Register the trigger with the backend
+      const response = await fetch('/register-trigger', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          trigger_id: formData.nodeId,
+          flow: flow,
+          owner: 'current_user' // Replace with actual user ID if available
+        })
+      });
+      
+      const result = await response.json();
+      if (result.status === 'success') {
+        console.log(`Trigger registered: ${result.webhook_url}`);
+        // Optionally update the node data with the webhook URL
+      } else {
+        console.error('Failed to register trigger:', result);
+      }
+    } catch (error) {
+      console.error('Error registering trigger:', error);
+    }
+  }, [formData.nodeId, formData.triggerType]);
+
   return (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
@@ -126,7 +252,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     >
       <div className="bg-white p-6 rounded-lg w-[600px] max-h-[90vh] overflow-y-auto" onClick={(e) => { if (e) e.stopPropagation(); }}>
         <h2 className="text-xl font-bold mb-4 flex items-center">
-          Edit {currentNodeType === 'agent' ? 'Agent' : currentNodeType === 'task' ? 'Task' : 'Tool'}
+          Edit {currentNodeType === 'agent' ? 'Agent' : currentNodeType === 'task' ? 'Task' : currentNodeType === 'chatbot' ? 'Chatbot' : currentNodeType === 'delay' ? 'Delay' : currentNodeType === 'trigger' ? 'Trigger' : currentNodeType === 'logic' ? 'Logic' : 'Tool'}
           <HelpTooltip type={currentNodeType} />
         </h2>
 
@@ -311,6 +437,32 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 )}
               </div>
             </div>
+
+            {/* Condition Field for Tasks and Tools */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                🧠 Condition to Run (optional)
+                <HelpTooltip type="task" field="condition" />
+              </label>
+              <input
+                type="text"
+                value={formData.condition || ""}
+                onChange={(e) => handleInputChange('condition', e.target.value)}
+                placeholder="e.g. inputs.score > 80"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <div className="mt-2 text-xs text-gray-500 leading-snug">
+                This node will only execute if the condition is true.<br />
+                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> in your logic.
+                <br />
+                Examples:
+                <ul className="list-disc list-inside mt-1">
+                  <li><code>inputs.score &gt;= 80</code></li>
+                  <li><code>inputs.job_title === "Engineer"</code></li>
+                  <li><code>inputs.email.includes("@")</code></li>
+                </ul>
+              </div>
+            </div>
           </>
         )}
         
@@ -346,6 +498,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 <option value="calculator">Calculator</option>
                 <option value="file_io">File I/O</option>
                 <option value="custom">Custom</option>
+                <option value="webhook">Webhook</option>
               </select>
             </div>
 
@@ -391,6 +544,70 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
               </>
             )}
 
+            {formData.toolType === 'webhook' && (
+              <>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1 flex items-center">
+                    Webhook Type
+                    <HelpTooltip type="tool" field="webhookType" />
+                  </label>
+                  <select
+                    value={formData.webhookType || 'send-output'}
+                    onChange={(e) => handleInputChange('webhookType', e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="send-output">Send Output</option>
+                    <option value="load-flow">Load Flow</option>
+                  </select>
+                </div>
+
+                {formData.webhookType === 'load-flow' && (
+                  <div className="mb-4">
+                    <label className="block text-gray-700 mb-1 flex items-center">
+                      Flow Mode
+                      <HelpTooltip type="tool" field="flowMode" />
+                    </label>
+                    <select
+                      value={formData.flowMode || 'replace'}
+                      onChange={(e) => handleInputChange('flowMode', e.target.value)}
+                      className="w-full p-2 border rounded"
+                    >
+                      <option value="replace">Replace Current Flow</option>
+                      <option value="merge">Merge with Current Flow</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1 flex items-center">
+                    Webhook URL
+                    <HelpTooltip type="tool" field="webhook_url" />
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.webhook_url || ''}
+                    onChange={(e) => handleInputChange('webhook_url', e.target.value)}
+                    className="w-full p-2 border rounded"
+                    placeholder="https://example.com/webhook"
+                  />
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1 flex items-center">
+                    Secret Token (Optional)
+                    <HelpTooltip type="tool" field="secretToken" />
+                  </label>
+                  <input
+                    type="password"
+                    value={formData.secretToken || ''}
+                    onChange={(e) => handleInputChange('secretToken', e.target.value)}
+                    className="w-full p-2 border rounded"
+                    placeholder="Secret token for authentication"
+                  />
+                </div>
+              </>
+            )}
+
             <div className="mb-4">
               <label className="block text-gray-700 mb-1 flex items-center">
                 Parameters
@@ -403,6 +620,563 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 rows="2"
                 placeholder="Parameters the tool accepts (one per line)"
               />
+            </div>
+
+            {/* Condition Field for Tasks and Tools */}
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                🧠 Condition to Run (optional)
+                <HelpTooltip type="tool" field="condition" />
+              </label>
+              <input
+                type="text"
+                value={formData.condition || ""}
+                onChange={(e) => handleInputChange('condition', e.target.value)}
+                placeholder="e.g. inputs.score > 80"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <div className="mt-2 text-xs text-gray-500 leading-snug">
+                This node will only execute if the condition is true.<br />
+                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> in your logic.
+                <br />
+                Examples:
+                <ul className="list-disc list-inside mt-1">
+                  <li><code>inputs.score &gt;= 80</code></li>
+                  <li><code>inputs.job_title === "Engineer"</code></li>
+                  <li><code>inputs.email.includes("@")</code></li>
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Chat-Specific Fields */}
+        {currentNodeType === 'chatbot' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Description
+                <HelpTooltip type="chatbot" field="description" />
+              </label>
+              <input
+                type="text"
+                value={formData.description || ''}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Brief description of this chatbot's purpose"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Initial Prompt / System Message
+                <HelpTooltip type="chatbot" field="prompt" />
+              </label>
+              <textarea
+                value={formData.prompt || ''}
+                onChange={(e) => handleInputChange('prompt', e.target.value)}
+                className="w-full p-2 border rounded"
+                rows="3"
+                placeholder="Initial message or system instructions for the chatbot"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                LLM Model
+                <HelpTooltip type="chatbot" field="llmModel" />
+              </label>
+              <select
+                value={formData.llmModel || 'gpt-4'}
+                onChange={(e) => handleInputChange('llmModel', e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="claude-3-opus">Claude 3 Opus</option>
+                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                <option value="claude-3-haiku">Claude 3 Haiku</option>
+                <option value="mistral-large">Mistral Large</option>
+                <option value="mistral-medium">Mistral Medium</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Temperature
+                <HelpTooltip type="chatbot" field="temperature" />
+              </label>
+              <div className="flex items-center">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={formData.temperature || 0.7}
+                  onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
+                  className="w-full mr-2"
+                />
+                <span className="text-sm w-10 text-center">{formData.temperature || 0.7}</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Lower values (0.0) make responses more focused and deterministic.
+                Higher values (1.0) make responses more creative and varied.
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Max Tokens
+                <HelpTooltip type="chatbot" field="max_tokens" />
+              </label>
+              <input
+                type="number"
+                min="50"
+                max="4000"
+                value={formData.max_tokens || 500}
+                onChange={(e) => handleInputChange('max_tokens', parseInt(e.target.value))}
+                className="w-full p-2 border rounded"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Maximum length of the response. Higher values allow longer responses but may cost more.
+              </div>
+            </div>
+
+            <div className="mb-4 flex items-center">
+              <input
+                type="checkbox"
+                id="enableMemory"
+                checked={formData.enableMemory || false}
+                onChange={(e) => handleInputChange('enableMemory', e.target.checked)}
+                className="mr-2"
+              />
+              <label htmlFor="enableMemory" className="text-gray-700 flex items-center">
+                Enable Memory
+                <HelpTooltip type="chatbot" field="enableMemory" />
+              </label>
+            </div>
+
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                🧠 Condition to Run (optional)
+                <HelpTooltip type="chatbot" field="condition" />
+              </label>
+              <input
+                type="text"
+                value={formData.condition || ""}
+                onChange={(e) => handleInputChange('condition', e.target.value)}
+                placeholder="e.g. inputs.score > 80"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              />
+              <div className="mt-2 text-xs text-gray-500 leading-snug">
+                This node will only execute if the condition is true.<br />
+                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> in your logic.
+                <br />
+                Examples:
+                <ul className="list-disc list-inside mt-1">
+                  <li><code>inputs.score &gt;= 80</code></li>
+                  <li><code>inputs.job_title === "Engineer"</code></li>
+                  <li><code>inputs.email.includes("@")</code></li>
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Delay-Specific Fields */}
+        {currentNodeType === 'delay' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Description
+                <HelpTooltip type="delay" field="description" />
+              </label>
+              <input
+                type="text"
+                value={formData.description || ''}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Brief description of this delay's purpose"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Duration
+                <HelpTooltip type="delay" field="duration" />
+              </label>
+              <input
+                type="text"
+                value={formData.duration || '5s'}
+                onChange={(e) => handleInputChange('duration', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="e.g. 5s, 2m, 1h"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Format: 5s (seconds), 2m (minutes), 1h (hours)
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Trigger-Specific Fields */}
+        {currentNodeType === 'trigger' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Description
+                <HelpTooltip type="trigger" field="description" />
+              </label>
+              <input
+                type="text"
+                value={formData.description || ''}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Brief description of this trigger's purpose"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Trigger Type
+                <HelpTooltip type="trigger" field="triggerType" />
+              </label>
+              <select
+                value={formData.triggerType || 'manual'}
+                onChange={(e) => handleInputChange('triggerType', e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="manual">Manual</option>
+                <option value="webhook">Webhook</option>
+                <option value="schedule">Schedule</option>
+              </select>
+            </div>
+
+            {formData.triggerType === 'schedule' && (
+              <>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1 flex items-center">
+                    Schedule Type
+                  </label>
+                  <select
+                    value={formData.scheduleType || 'once'}
+                    onChange={(e) => handleInputChange('scheduleType', e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="once">Run Once</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                
+                {/* Date/Time picker for one-time schedules */}
+                {formData.scheduleType === 'once' && (
+                  <div className="mb-4">
+                    <label className="block text-gray-700 mb-1 flex items-center">
+                      Run At
+                      <HelpTooltip type="trigger" field="runAt" />
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="date"
+                        value={formData.runDate || ''}
+                        onChange={(e) => {
+                          handleInputChange('runDate', e.target.value);
+                          // Combine date and time into runAt
+                          const newDate = e.target.value;
+                          const currentTime = formData.runTime || '12:00';
+                          handleInputChange('runAt', `${newDate} ${currentTime}`);
+                        }}
+                        className="flex-1 p-2 border rounded"
+                      />
+                      <input
+                        type="time"
+                        value={formData.runTime || ''}
+                        onChange={(e) => {
+                          handleInputChange('runTime', e.target.value);
+                          // Combine date and time into runAt
+                          const currentDate = formData.runDate || new Date().toISOString().split('T')[0];
+                          const newTime = e.target.value;
+                          handleInputChange('runAt', `${currentDate} ${newTime}`);
+                        }}
+                        className="flex-1 p-2 border rounded"
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Select when this trigger should execute
+                    </div>
+                  </div>
+                )}
+                
+                {/* Weekly schedule options */}
+                {formData.scheduleType === 'weekly' && (
+                  <div className="mb-4">
+                    <label className="block text-gray-700 mb-1">
+                      Day of Week
+                    </label>
+                    <select
+                      value={formData.scheduleWeekday || 'monday'}
+                      onChange={(e) => handleInputChange('scheduleWeekday', e.target.value)}
+                      className="w-full p-2 border rounded"
+                    >
+                      <option value="monday">Monday</option>
+                      <option value="tuesday">Tuesday</option>
+                      <option value="wednesday">Wednesday</option>
+                      <option value="thursday">Thursday</option>
+                      <option value="friday">Friday</option>
+                      <option value="saturday">Saturday</option>
+                      <option value="sunday">Sunday</option>
+                    </select>
+                  </div>
+                )}
+                
+                {/* Monthly schedule options */}
+                {formData.scheduleType === 'monthly' && (
+                  <div className="mb-4">
+                    <label className="block text-gray-700 mb-1">
+                      Day of Month
+                    </label>
+                    <select
+                      value={formData.scheduleMonthDay || 1}
+                      onChange={(e) => handleInputChange('scheduleMonthDay', parseInt(e.target.value))}
+                      className="w-full p-2 border rounded"
+                    >
+                      {[...Array(31)].map((_, i) => (
+                        <option key={i+1} value={i+1}>{i+1}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                
+                {/* Daily schedule options */}
+                {formData.scheduleType === 'daily' && (
+                  <div className="mb-4">
+                    <label className="block text-gray-700 mb-1">
+                      Time Window
+                    </label>
+                    <div className="flex space-x-2 items-center">
+                      <input
+                        type="time"
+                        value={formData.scheduleStartTime || '09:00'}
+                        onChange={(e) => handleInputChange('scheduleStartTime', e.target.value)}
+                        className="flex-1 p-2 border rounded"
+                      />
+                      <span>to</span>
+                      <input
+                        type="time"
+                        value={formData.scheduleEndTime || '17:00'}
+                        onChange={(e) => handleInputChange('scheduleEndTime', e.target.value)}
+                        className="flex-1 p-2 border rounded"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {formData.triggerType === 'webhook' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1 flex items-center">
+                  Webhook URL
+                  <HelpTooltip type="trigger" field="webhook" />
+                </label>
+                <div className="bg-gray-100 p-2 rounded text-sm font-mono break-all">
+                  {`${window.location.origin}/trigger/${formData.nodeId || 'id'}`}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Send a POST request to this URL to trigger the workflow
+                </div>
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/trigger/${formData.nodeId || 'id'}`);
+                      toast.success('Webhook URL copied to clipboard');
+                    }}
+                  >
+                    Copy URL
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded ml-2"
+                    onClick={registerTrigger}
+                  >
+                    Register Webhook
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-2 py-1 rounded ml-2"
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/trigger/${formData.nodeId}`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ test: true, timestamp: new Date().toISOString() })
+                        });
+                        const result = await response.json();
+                        toast.success('Webhook test triggered successfully');
+                      } catch (error) {
+                        toast.error('Failed to test webhook');
+                        console.error(error);
+                      }
+                    }}
+                  >
+                    Test Webhook
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Logic Node Fields */}
+        {currentNodeType === 'logic' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Description
+                <HelpTooltip type="logic" field="description" />
+              </label>
+              <input
+                type="text"
+                value={formData.description || ''}
+                onChange={(e) => handleInputChange('description', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="Evaluates a condition and routes flow"
+              />
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Condition
+                <HelpTooltip type="logic" field="condition" />
+                <span 
+                  className="ml-1 text-gray-500 cursor-help text-xs"
+                  title="Use inputs.*, context.*, or env.* in conditions. You can write Python-like logic using and, or, not."
+                >
+                  ❓
+                </span>
+              </label>
+              <textarea
+                value={formData.condition || ''}
+                onChange={(e) => handleInputChange('condition', e.target.value)}
+                className="w-full p-2 border rounded font-mono"
+                placeholder="inputs.value > 10"
+                rows={3}
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Use Python-like syntax. Available variables: inputs, context, env
+              </div>
+            </div>
+            
+            <div className="bg-yellow-50 p-3 rounded border border-yellow-200 mb-4">
+              <h4 className="font-medium text-yellow-800 mb-2">Condition Examples:</h4>
+              <ul className="text-xs text-yellow-700 space-y-1">
+                <li><code className="bg-yellow-100 px-1 rounded">inputs.temperature {'>'} 70</code> - Check if temperature exceeds 70</li>
+                <li><code className="bg-yellow-100 px-1 rounded">inputs.status == "approved"</code> - Check if status is "approved"</li>
+                <li><code className="bg-yellow-100 px-1 rounded">"error" in inputs.message</code> - Check if message contains "error"</li>
+                <li><code className="bg-yellow-100 px-1 rounded">len(inputs.items) {'>'} 0</code> - Check if items list is not empty</li>
+                <li><code className="bg-yellow-100 px-1 rounded">inputs.score {'>'} 80 and inputs.status == "approved"</code> - Score AND status check</li>
+                <li><code className="bg-yellow-100 px-1 rounded">inputs.country == "France" or inputs.score {'>'} 90</code> - Either country or high score</li>
+                <li><code className="bg-yellow-100 px-1 rounded">not inputs.flagged</code> - Flag must be false or missing</li>
+              </ul>
+            </div>
+
+            {/* Add condition testing section */}
+            <div className="mt-6 border-t pt-4">
+              <h3 className="text-md font-semibold mb-2">Test Your Condition</h3>
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">
+                  Test Input (JSON)
+                </label>
+                <textarea
+                  value={testInput || '{\n  "value": 15,\n  "status": "approved",\n  "message": "Success"\n}'}
+                  onChange={(e) => setTestInput(e.target.value)}
+                  className="w-full p-2 border rounded font-mono text-sm"
+                  rows={5}
+                  placeholder='{"value": 15, "status": "approved"}'
+                />
+              </div>
+              
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-md font-semibold">Saved Inputs</h3>
+                
+                <div className="flex items-center space-x-2">
+                  <select
+                    className="text-sm border rounded p-1"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const selected = savedTestInputs.find(item => item.name === e.target.value);
+                        if (selected) {
+                          setTestInput(selected.input);
+                        }
+                      }
+                    }}
+                    value=""
+                  >
+                    <option value="">Load saved input</option>
+                    {savedTestInputs.map((item, index) => (
+                      <option key={index} value={item.name}>{item.name}</option>
+                    ))}
+                  </select>
+                  
+                  <button
+                    type="button"
+                    onClick={saveTestInput}
+                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                  >
+                    Save Input
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const inputs = JSON.parse(testInput);
+                      // Simple evaluation using Function constructor
+                      const result = new Function('inputs', `return ${formData.condition}`)(inputs);
+                      setTestResult({
+                        success: true,
+                        result: result,
+                        path: result ? 'true' : 'false'
+                      });
+                    } catch (error) {
+                      setTestResult({
+                        success: false,
+                        error: error.message
+                      });
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                >
+                  Run Test
+                </button>
+                
+                {testResult && (
+                  <div className={`ml-4 p-2 rounded ${
+                    testResult.success 
+                      ? testResult.result 
+                        ? 'bg-green-100 text-green-800 border border-green-200' 
+                        : 'bg-red-100 text-red-800 border border-red-200'
+                      : 'bg-gray-100 text-gray-800 border border-gray-200'
+                  }`}>
+                    {testResult.success 
+                      ? <>
+                          Result: <span className="font-bold">{testResult.result ? 'TRUE' : 'FALSE'}</span>
+                          <div className="text-xs mt-1">
+                            Flow will follow the <span className="font-semibold">{testResult.path}</span> path
+                          </div>
+                        </>
+                      : <>Error: {testResult.error}</>
+                    }
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
@@ -443,7 +1217,7 @@ EditModal.propTypes = {
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   nodeData: PropTypes.object,
-  nodeType: PropTypes.oneOf(['agent', 'task', 'tool']),
+  nodeType: PropTypes.oneOf(['agent', 'task', 'tool', 'chatbot', 'delay', 'trigger', 'logic']),
   availableDependencies: PropTypes.arrayOf(
     PropTypes.shape({
       label: PropTypes.string.isRequired,

@@ -1,8 +1,33 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 
-// Add this function at the top of the file, before the ConnectionLine component
-const getConnectionStyle = (sourceType, targetType) => {
+// Update the getConnectionStyle function to handle all valid connection types
+const getConnectionStyle = (sourceType, targetType, sourceHandle) => {
+  // Special styling for logic node connections
+  if (sourceType === 'logic') {
+    if (sourceHandle === 'true') {
+      return {
+        gradient: {
+          startColor: '#22c55e', // green
+          stopColor: '#22c55e',
+        },
+        stroke: '#22c55e',
+        strokeWidth: 2,
+        dashArray: null,
+      };
+    } else if (sourceHandle === 'false') {
+      return {
+        gradient: {
+          startColor: '#ef4444', // red
+          stopColor: '#ef4444',
+        },
+        stroke: '#ef4444',
+        strokeWidth: 2,
+        dashArray: null,
+      };
+    }
+  }
+  
   // Default style for when we're just starting a connection
   if (!targetType) {
     return {
@@ -16,15 +41,56 @@ const getConnectionStyle = (sourceType, targetType) => {
   }
   
   // Normalize types
-  const normalizedSourceType = sourceType?.replace('Node', '');
-  const normalizedTargetType = targetType?.replace('Node', '');
+  const normalizedSourceType = sourceType?.replace('Node', '').toLowerCase();
+  const normalizedTargetType = targetType?.replace('Node', '').toLowerCase();
   
-  // Valid connections
-  if (
-    (normalizedSourceType === 'tool' && normalizedTargetType === 'agent') ||
-    (normalizedSourceType === 'agent' && normalizedTargetType === 'task') ||
-    (normalizedSourceType === 'task' && normalizedTargetType === 'task')
-  ) {
+  // Define valid connections
+  const validConnections = [
+    // Tool → Agent (allowed)
+    { source: 'tool', target: 'agent' },
+    
+    // Agent → Task (allowed)
+    { source: 'agent', target: 'task' },
+    
+    // Task → Task (dependency, allowed)
+    { source: 'task', target: 'task' },
+    
+    // Trigger can connect to any node
+    { source: 'trigger', target: 'agent' },
+    { source: 'trigger', target: 'task' },
+    { source: 'trigger', target: 'tool' },
+    { source: 'trigger', target: 'chatbot' },
+    { source: 'trigger', target: 'logic' },
+    
+    // Logic can connect to any node
+    { source: 'logic', target: 'agent' },
+    { source: 'logic', target: 'task' },
+    { source: 'logic', target: 'tool' },
+    { source: 'logic', target: 'chatbot' },
+    { source: 'logic', target: 'logic' },
+    
+    // Chat connections
+    { source: 'chatbot', target: 'agent' },
+    { source: 'chatbot', target: 'task' },
+    { source: 'agent', target: 'chatbot' },
+    { source: 'task', target: 'chatbot' },
+    { source: 'tool', target: 'chatbot' },
+    
+    // Delay can connect to any node
+    { source: 'delay', target: 'agent' },
+    { source: 'delay', target: 'task' },
+    { source: 'delay', target: 'tool' },
+    { source: 'delay', target: 'chatbot' },
+    { source: 'delay', target: 'logic' },
+  ];
+  
+  // Check if the connection is valid
+  const isValid = validConnections.some(
+    conn => conn.source === normalizedSourceType && conn.target === normalizedTargetType
+  );
+  
+  // Return appropriate style based on validity
+  if (isValid) {
     return {
       gradient: {
         start: '#4299e1',
@@ -33,17 +99,16 @@ const getConnectionStyle = (sourceType, targetType) => {
       valid: true,
       strokeWidth: 2
     };
+  } else {
+    return {
+      gradient: {
+        start: '#f56565',
+        end: '#e53e3e'
+      },
+      valid: false,
+      strokeWidth: 2
+    };
   }
-  
-  // Invalid connections
-  return {
-    gradient: {
-      start: '#f56565',
-      end: '#e53e3e'
-    },
-    valid: false,
-    strokeWidth: 2
-  };
 };
 
 /**
@@ -67,6 +132,7 @@ const ConnectionLine = ({
   dashArray = '5,5',
   sourceType,
   targetType,
+  sourceHandle,
 }) => {
   // Ensure we have valid values
   const validatedFromX = isNaN(fromX) ? 0 : fromX;
@@ -75,7 +141,7 @@ const ConnectionLine = ({
   const validatedToY = isNaN(toY) ? validatedFromY + 50 : toY;
 
   // Get connection style based on node types
-  const connectionStyle = getConnectionStyle(sourceType, targetType);
+  const connectionStyle = getConnectionStyle(sourceType, targetType, sourceHandle);
   const connectionLineId = `connection-line-${validatedFromX}-${validatedFromY}-${validatedToX}-${validatedToY}`;
   const gradientId = `gradient-${connectionLineId}`;
 
@@ -157,6 +223,7 @@ ConnectionLine.propTypes = {
   dashArray: PropTypes.string,
   sourceType: PropTypes.string,
   targetType: PropTypes.string,
+  sourceHandle: PropTypes.string,
 };
 
 ConnectionLine.displayName = 'ConnectionLine';

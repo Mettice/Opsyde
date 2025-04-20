@@ -22,7 +22,12 @@ export function normalizeType(node) {
   if (type.includes('agent') || dataType.includes('agent')) return 'agent';
   if (type.includes('task') || dataType.includes('task')) return 'task';
   if (type.includes('tool') || dataType.includes('tool')) return 'tool';
-  return 'unknown';
+  if (type.includes('chatbot') || dataType.includes('chat')) return 'chatbot';
+  if (type.includes('logic')) return 'logic';
+  if (type.includes('trigger')) return 'trigger';
+  if (type.includes('delay')) return 'delay';
+  
+  return type || 'unknown';
 }
 
 // Generate default nodes for initial load

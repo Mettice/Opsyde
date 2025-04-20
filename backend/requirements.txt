@@ -6,3 +6,9 @@ langchain
 huggingface
 transformers
 torch
+gspread
+oauth2client
+requests
+pydantic
+python-dotenv
+simpleeval
