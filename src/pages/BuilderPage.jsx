@@ -26,6 +26,7 @@ import InputPanel from '../components/builder/InputPanel';
 import { sendToEmail, postToDiscord, pushToSheets, postToSlack } from '../utils/outputUtils';
 import Notification from '../components/Notification';
 import WebhookFlowModal from '../components/WebhookFlowModal';
+import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
 
 // Custom Hooks
 import { useBuilderHistory } from '../hooks/useBuilderHistory';
@@ -152,6 +153,9 @@ const BuilderPage = () => {
   
   const [incomingFlow, setIncomingFlow] = useState(null);
   const [showWebhookFlowModal, setShowWebhookFlowModal] = useState(false);
+
+  // Add this at the component level, outside any effects or callbacks
+  const notifiedTriggers = useRef(new Set());
 
   // Add Agent function - kept in main component as it's simple
   const addAgent = () => {
@@ -463,16 +467,31 @@ const BuilderPage = () => {
     );
   };
 
-  // Add this function to show notifications
-  const addNotification = (message, type = 'info') => {
-    const id = Date.now();
-    setNotifications(prev => [...prev, { id, message, type }]);
-    return id;
-  };
+  // Update the addNotification function to ensure unique keys
+  const addNotification = useCallback((notification) => {
+    // Generate a truly unique ID by combining timestamp with a random string
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    setNotifications(prev => [
+      ...prev,
+      {
+        id: uniqueId,
+        message: notification.message,
+        type: notification.type || 'info',
+        timestamp: new Date()
+      }
+    ]);
+    
+    // Auto-remove notification after 5 seconds
+    setTimeout(() => {
+      removeNotification(uniqueId);
+    }, 5000);
+  }, []);
 
-  const removeNotification = (id) => {
+  // Make sure the removeNotification function is properly defined
+  const removeNotification = useCallback((id) => {
     setNotifications(prev => prev.filter(notification => notification.id !== id));
-  };
+  }, []);
 
   // Update the runCrew function to handle the webhook flow response
   const runCrew = async () => {
@@ -548,23 +567,35 @@ const BuilderPage = () => {
       // Handle outputs based on configuration
       if (outputConfig.emailEnabled && outputConfig.email) {
         await sendToEmail(logs, outputConfig.email);
-        addNotification("Results sent to email", "success");
+        addNotification({
+          message: "Results sent to email",
+          type: "success"
+        });
       }
       
       if (outputConfig.discordEnabled && outputConfig.discordWebhook) {
         await postToDiscord(logs, outputConfig.discordWebhook);
-        addNotification("Results posted to Discord", "success");
+        addNotification({
+          message: "Results posted to Discord",
+          type: "success"
+        });
       }
       
       if (outputConfig.sheetsEnabled) {
         await pushToSheets(logs);
-        addNotification("Results exported to Google Sheets", "success");
+        addNotification({
+          message: "Results exported to Google Sheets",
+          type: "success"
+        });
       }
       
     } catch (error) {
       console.error("Error running workflow:", error);
       setExecutionLogs(prev => prev + `\n\nERROR: ${error.message}`);
-      addNotification(`Error: ${error.message}`, "error");
+      addNotification({
+        message: `Error: ${error.message}`,
+        type: "error"
+      });
     } finally {
       setIsRunning(false);
     }
@@ -817,6 +848,114 @@ const BuilderPage = () => {
     window.currentEdges = edges;
   }, [nodes, edges]);
 
+  // Add this to the BuilderPage component
+  const [executedTriggers, setExecutedTriggers] = useState([]);
+
+  // Then update the useEffect for fetching executed triggers
+  useEffect(() => {
+    // Function to fetch recently executed triggers
+    const fetchExecutedTriggers = async () => {
+      try {
+        const response = await fetch(`${BACKEND_URL}/executed-triggers`);
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Only process if we have triggers
+          if (data.triggers && data.triggers.length > 0) {
+            // Get only triggers executed in the last 5 minutes AND not completed
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+            const recentTriggers = data.triggers.filter(trigger => {
+              // Skip completed triggers entirely
+              if (trigger.completed) return false;
+              
+              // Check if it's recent
+              if (!trigger.last_executed) return false;
+              const executionTime = new Date(trigger.last_executed);
+              return executionTime > fiveMinutesAgo;
+            });
+            
+            // Find truly new triggers (not previously notified)
+            const newTriggers = recentTriggers.filter(trigger => {
+              const triggerKey = `${trigger.id}-${trigger.last_executed}`;
+              if (notifiedTriggers.current.has(triggerKey)) {
+                return false;
+              }
+              
+              // Add to notified set
+              notifiedTriggers.current.add(triggerKey);
+              return true;
+            });
+            
+            // Only show notifications for truly new executions
+            if (newTriggers.length > 0) {
+              // Show at most one notification to avoid flooding
+              const latestTrigger = newTriggers[0];
+              addNotification({
+                message: `Trigger "${latestTrigger.label || latestTrigger.id}" executed at ${new Date(latestTrigger.last_executed).toLocaleTimeString()}`,
+                type: "success"
+              });
+              
+              if (newTriggers.length > 1) {
+                addNotification({
+                  message: `${newTriggers.length - 1} more triggers were executed`,
+                  type: "info"
+                });
+              }
+            }
+            
+            // Update the state with all triggers
+            setExecutedTriggers(data.triggers);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching executed triggers:", error);
+      }
+    };
+    
+    // Initial fetch
+    fetchExecutedTriggers();
+    
+    // Poll for executed triggers every 10 seconds
+    const interval = setInterval(fetchExecutedTriggers, 10000);
+    
+    // Clean up on unmount
+    return () => clearInterval(interval);
+  }, [BACKEND_URL, addNotification]);
+
+  // Add state for the trigger history panel
+  const [showTriggerHistory, setShowTriggerHistory] = useState(false);
+
+  // Add this function to clean up completed triggers from the UI
+  const cleanupCompletedTriggers = useCallback(() => {
+    // Filter out completed triggers that have been shown for more than 5 minutes
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    
+    setExecutedTriggers(prev => 
+      prev.filter(trigger => 
+        !trigger.completed || 
+        !trigger.completed_at || 
+        new Date(trigger.completed_at) > fiveMinutesAgo
+      )
+    );
+  }, []);
+
+  // Call this function periodically
+  useEffect(() => {
+    const interval = setInterval(cleanupCompletedTriggers, 60000); // Every minute
+    return () => clearInterval(interval);
+  }, [cleanupCompletedTriggers]);
+
+  // Add this function to clear all notifications
+  const clearAllNotifications = useCallback(() => {
+    setNotifications([]);
+  }, []);
+
+  // Add this function to clear the notification history
+  const clearNotificationHistory = useCallback(() => {
+    // Clear the notified triggers set
+    notifiedTriggers.current.clear();
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <header className="bg-gray-800 text-white p-4">
@@ -859,6 +998,12 @@ const BuilderPage = () => {
       <div className="flex items-center space-x-2 px-4 py-2 bg-gray-100">
         <Toolbar {...toolbarProps} />
         <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
+        <button 
+          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm ml-2"
+          onClick={() => setShowTriggerHistory(true)}
+        >
+          Trigger History
+        </button>
       </div>
       
       {/* Add OutputConfigPanel here */}
@@ -973,14 +1118,33 @@ const BuilderPage = () => {
       )}
 
       {/* Notifications */}
-      {notifications.map(notification => (
-        <Notification
-          key={notification.id}
-          message={notification.message}
-          type={notification.type}
-          onClose={() => removeNotification(notification.id)}
-        />
-      ))}
+      {notifications.length > 0 && (
+        <div className="fixed bottom-4 right-4 mb-2 flex space-x-2 z-50">
+          <button
+            onClick={clearNotificationHistory}
+            className="px-3 py-1 bg-blue-200 text-blue-700 rounded hover:bg-blue-300"
+          >
+            Reset Notification History
+          </button>
+          <button
+            onClick={clearAllNotifications}
+            className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          >
+            Clear All Notifications
+          </button>
+        </div>
+      )}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50 mt-10">
+        {notifications.map(notification => (
+          <Notification
+            key={notification.id}
+            id={notification.id}
+            message={notification.message}
+            type={notification.type}
+            onClose={() => removeNotification(notification.id)}
+          />
+        ))}
+      </div>
 
       {/* Webhook Flow Modal */}
       <WebhookFlowModal
@@ -990,6 +1154,14 @@ const BuilderPage = () => {
         onMerge={handleMergeFlow}
         flowData={incomingFlow}
       />
+
+      {/* Trigger History Panel */}
+      {showTriggerHistory && (
+        <TriggerHistoryPanel 
+          isVisible={showTriggerHistory}
+          onClose={() => setShowTriggerHistory(false)}
+        />
+      )}
     </div>
   );
 };

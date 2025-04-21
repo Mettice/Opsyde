@@ -133,7 +133,9 @@ def list_triggers(owner=None):
                             "owner": trigger_data.get("owner"),
                             "last_triggered": trigger_data.get("last_triggered"),
                             "trigger_count": trigger_data.get("trigger_count", 0),
-                            "trigger_type": trigger_data.get("trigger_type", "unknown")
+                            "trigger_type": trigger_data.get("trigger_type", "unknown"),
+                            "completed": trigger_data.get("completed", False),
+                            "completed_at": trigger_data.get("completed_at", None)
                         })
                     except Exception as e:
                         logger.error(f"Error reading trigger file {trigger_file}: {str(e)}")

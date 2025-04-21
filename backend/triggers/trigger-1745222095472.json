@@ -2,7 +2,7 @@
   "flow": {
     "nodes": [
       {
-        "id": "trigger-1745221535236",
+        "id": "trigger-1745222095472",
         "type": "trigger",
         "data": {
           "label": "Trigger",
@@ -32,51 +32,53 @@
           "max_tokens": 500,
           "duration": "5s",
           "triggerType": "schedule",
-          "runAt": "2025-04-21 09:47",
+          "runAt": "2025-04-21 09:56",
           "scheduleType": "once",
           "scheduleDays": [],
           "scheduleWeekday": "monday",
           "scheduleMonthDay": 1,
           "runDate": "2025-04-21",
-          "runTime": "09:47",
-          "nodeId": "trigger-1745221535236",
+          "runTime": "09:56",
+          "nodeId": "trigger-1745222095472",
           "nodeType": "trigger"
         }
       },
       {
-        "id": "agent-1745221523278",
+        "id": "agent-1745222085449",
         "type": "agent",
         "position": {
-          "x": 300,
-          "y": 200
+          "x": 416.6302482270722,
+          "y": 280.9636931739743
         },
-        "sourcePosition": "bottom",
-        "targetPosition": "top",
+        "draggable": true,
+        "selectable": true,
+        "connectable": true,
         "data": {
-          "label": "Agent 1",
+          "label": "Agent Alpha",
           "role": "Assistant",
-          "goal": "",
-          "backstory": "",
+          "goal": "Help with research",
+          "backstory": "Default preloaded agent",
           "llmModel": "gpt-4",
-          "allowDelegation": false,
+          "allowDelegation": true,
           "verbose": true,
-          "nodeId": "agent-1745221523278",
+          "nodeId": "agent-1745222085449",
           "nodeType": "agent"
         },
-        "width": 122,
-        "height": 128,
+        "width": 157,
+        "height": 148,
         "selected": false,
         "positionAbsolute": {
-          "x": 300,
-          "y": 200
-        }
+          "x": 416.6302482270722,
+          "y": 280.9636931739743
+        },
+        "dragging": false
       },
       {
-        "id": "task-1745221525739",
+        "id": "task-1745222090399",
         "type": "task",
         "position": {
-          "x": 571.0782332340885,
-          "y": 206.6430839020922
+          "x": 684.5919333207006,
+          "y": 291.18060191994306
         },
         "sourcePosition": "bottom",
         "targetPosition": "top",
@@ -85,15 +87,15 @@
           "description": "Task description",
           "expectedOutput": "Expected output of the task",
           "async": false,
-          "nodeId": "task-1745221525739",
+          "nodeId": "task-1745222090399",
           "nodeType": "task"
         },
         "width": 288,
         "height": 173,
         "selected": false,
         "positionAbsolute": {
-          "x": 571.0782332340885,
-          "y": 206.6430839020922
+          "x": 684.5919333207006,
+          "y": 291.18060191994306
         }
       }
     ],
@@ -107,11 +109,11 @@
           "transition": "stroke 0.3s, stroke-width 0.3s"
         },
         "interactionWidth": 20,
-        "source": "trigger-1745221535236",
+        "source": "trigger-1745222095472",
         "sourceHandle": "undefined-source",
-        "target": "agent-1745221523278",
+        "target": "agent-1745222085449",
         "targetHandle": "undefined-target",
-        "id": "reactflow__edge-trigger-1745221535236undefined-source-agent-1745221523278undefined-target",
+        "id": "reactflow__edge-trigger-1745222095472undefined-source-agent-1745222085449undefined-target",
         "selected": false
       },
       {
@@ -123,22 +125,22 @@
           "transition": "stroke 0.3s, stroke-width 0.3s"
         },
         "interactionWidth": 20,
-        "source": "agent-1745221523278",
+        "source": "agent-1745222085449",
         "sourceHandle": "undefined-source",
-        "target": "task-1745221525739",
+        "target": "task-1745222090399",
         "targetHandle": "undefined-target",
-        "id": "reactflow__edge-agent-1745221523278undefined-source-task-1745221525739undefined-target",
+        "id": "reactflow__edge-agent-1745222085449undefined-source-task-1745222090399undefined-target",
         "selected": false
       }
     ],
-    "trigger_id": "trigger-1745221535236",
+    "trigger_id": "trigger-1745222095472",
     "trigger_type": "schedule"
   },
-  "created_at": "2025-04-21T09:45:55.094973",
+  "created_at": "2025-04-21T09:55:20.943224",
   "owner": "current_user",
-  "last_triggered": "2025-04-21T10:59:41.202218",
-  "trigger_count": 183,
+  "last_triggered": "2025-04-21T10:59:41.205232",
+  "trigger_count": 162,
   "trigger_type": "schedule",
   "completed": true,
-  "completed_at": "2025-04-21T09:49:03.344058"
+  "completed_at": "2025-04-21T09:58:18.686341"
 }

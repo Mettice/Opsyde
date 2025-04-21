@@ -59,67 +59,75 @@ def update_trigger_metadata(trigger_id, metadata):
 
 async def check_and_run_scheduled_triggers():
     """
-    Check for triggers that should be executed based on their schedule
+    Check all registered triggers and run those that are scheduled for now
     """
     try:
         # Get all registered triggers
         triggers = list_triggers()
         logger.info(f"Checking {len(triggers)} registered triggers")
         
-        # Log more details about the triggers
+        # Debug log to see if completed flags are present
         for trigger in triggers:
-            logger.info(f"Found trigger: {trigger.get('id')} of type {trigger.get('trigger_type')}")
+            logger.info(f"Trigger {trigger.get('id')}: completed={trigger.get('completed', False)}")
         
-        for trigger in triggers:
+        # First, filter out completed triggers
+        active_triggers = [t for t in triggers if not t.get("completed", False)]
+        logger.info(f"Found {len(active_triggers)} active triggers out of {len(triggers)} total")
+        
+        for trigger in active_triggers:
             trigger_id = trigger.get("id")
+            trigger_type = trigger.get("trigger_type")
             
-            # Get the full flow data for this trigger
-            flow_data = get_trigger_flow(trigger_id)
-            if not flow_data:
-                logger.warning(f"Could not retrieve flow data for trigger {trigger_id}")
-                continue
-                
-            # Find the trigger node in the flow
-            trigger_node = None
-            for node in flow_data.get("nodes", []):
-                if node.get("id") == trigger_id:
-                    trigger_node = node
-                    break
+            logger.info(f"Processing active trigger: {trigger_id} of type {trigger_type}")
+            
+            # Process only schedule triggers
+            if trigger_type == "schedule":
+                # Get the flow data
+                flow_data = get_trigger_flow(trigger_id)
+                if not flow_data:
+                    logger.warning(f"No flow data found for trigger {trigger_id}")
+                    continue
                     
-            if not trigger_node:
-                logger.warning(f"Could not find trigger node {trigger_id} in flow data")
-                continue
-                
-            # Get trigger configuration
-            trigger_data = trigger_node.get("data", {})
-            trigger_type = trigger_data.get("triggerType")
-            
-            logger.info(f"Processing trigger {trigger_id} of type {trigger_type}")
-            
-            # Only process scheduled triggers
-            if trigger_type != "schedule":
-                logger.info(f"Skipping non-schedule trigger: {trigger_id}")
-                continue
-                
-            # Check if this trigger should run now
-            should_run = should_trigger_run_now(trigger_data)
-            
-            if should_run:
-                logger.info(f"Executing scheduled trigger: {trigger_id}")
-                
-                # Run the flow asynchronously
-                asyncio.create_task(execute_flow(flow_data))
+                # Find the trigger node in the flow
+                trigger_node = None
+                for node in flow_data.get("nodes", []):
+                    if node.get("id") == trigger_id:
+                        trigger_node = node
+                        break
+                        
+                if not trigger_node:
+                    logger.warning(f"Trigger node not found in flow for {trigger_id}")
+                    continue
+                    
+                # Check if the trigger should run now
+                trigger_data = trigger_node.get("data", {})
+                if should_trigger_run_now(trigger_data, trigger):
+                    logger.info(f"Executing scheduled trigger: {trigger_id}")
+                    
+                    # Update the trigger metadata
+                    update_trigger_metadata(trigger_id, {
+                        "last_triggered": datetime.now().isoformat(),
+                        "trigger_count": trigger.get("trigger_count", 0) + 1
+                    })
+                    
+                    # Execute the flow
+                    await execute_flow(flow_data)
+                else:
+                    logger.info(f"Trigger {trigger_id} not scheduled to run at this time")
             else:
-                logger.info(f"Trigger {trigger_id} not scheduled to run at this time")
+                logger.debug(f"Skipping non-schedule trigger: {trigger_id}")
     except Exception as e:
-        logger.error(f"Error in trigger scheduler: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"Error checking scheduled triggers: {str(e)}")
 
-def should_trigger_run_now(trigger_data: Dict[str, Any]) -> bool:
+def should_trigger_run_now(trigger_data: Dict[str, Any], trigger_metadata: Dict[str, Any]) -> bool:
     """
-    Determine if a trigger should run based on its schedule
+    Determine if a trigger should run based on its schedule and metadata
     """
+    # First check if the trigger is already completed
+    if trigger_metadata.get("completed", False):
+        logger.info(f"Trigger is marked as completed, skipping")
+        return False
+        
     try:
         schedule_type = trigger_data.get("scheduleType", "once")
         now = datetime.now()
@@ -254,8 +262,11 @@ async def execute_flow(flow_data: Dict[str, Any]):
                 
                 if trigger_data.get("triggerType") == "schedule" and trigger_data.get("scheduleType") == "once":
                     # This is a one-time trigger that has completed
-                    # Mark it as completed in the metadata
-                    update_trigger_metadata(trigger_id, {"completed": True, "completed_at": datetime.now().isoformat()})
+                    # Mark it as completed in the root metadata (not just the node metadata)
+                    update_trigger_metadata(trigger_id, {
+                        "completed": True, 
+                        "completed_at": datetime.now().isoformat()
+                    })
                     logger.info(f"Marked one-time trigger {trigger_id} as completed")
     except Exception as e:
         logger.error(f"Error executing scheduled flow: {str(e)}")
@@ -271,8 +282,20 @@ async def scheduler_loop():
     logger.info("Starting trigger scheduler loop")
     scheduler_running = True
     
+    # Counter for cleanup (run cleanup every hour)
+    cleanup_counter = 0
+    
     while scheduler_running:
         await check_and_run_scheduled_triggers()
+        
+        # Increment counter
+        cleanup_counter += 1
+        
+        # Run cleanup every 120 iterations (every hour if sleep is 30 seconds)
+        if cleanup_counter >= 120:
+            await cleanup_completed_triggers()
+            cleanup_counter = 0
+        
         # Wait for 30 seconds before checking again
         await asyncio.sleep(30)
         
@@ -303,4 +326,42 @@ def stop_scheduler():
     """
     global scheduler_running
     scheduler_running = False
-    logger.info("Trigger scheduler stopping (may take up to 30 seconds)") 
+    logger.info("Trigger scheduler stopping (may take up to 30 seconds)")
+
+async def cleanup_completed_triggers():
+    """
+    Remove completed triggers that are older than a certain threshold
+    """
+    try:
+        # Get all triggers
+        triggers = list_triggers()
+        
+        # Current time
+        now = datetime.now()
+        
+        # Threshold for cleanup (e.g., 24 hours)
+        cleanup_threshold = 24 * 60 * 60  # 24 hours in seconds
+        
+        for trigger in triggers:
+            trigger_id = trigger.get("id")
+            completed = trigger.get("completed", False)
+            completed_at = trigger.get("completed_at")
+            
+            if completed and completed_at:
+                try:
+                    # Parse the completed_at timestamp
+                    completed_time = datetime.fromisoformat(completed_at)
+                    
+                    # Calculate time difference in seconds
+                    time_diff = (now - completed_time).total_seconds()
+                    
+                    # If the trigger was completed more than the threshold time ago, delete it
+                    if time_diff > cleanup_threshold:
+                        from .trigger_storage import delete_trigger
+                        success = delete_trigger(trigger_id)
+                        if success:
+                            logger.info(f"Cleaned up completed trigger {trigger_id} (completed {time_diff/3600:.1f} hours ago)")
+                except Exception as e:
+                    logger.error(f"Error cleaning up trigger {trigger_id}: {str(e)}")
+    except Exception as e:
+        logger.error(f"Error in cleanup_completed_triggers: {str(e)}") 

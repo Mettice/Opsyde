@@ -9,7 +9,7 @@ from crew_runner import run_crew
 from frameworks.webhook_loader import handle_webhook_flow
 from chat_runner import router as chat_router
 from frameworks.trigger_storage import register_trigger, get_trigger_flow, list_triggers, delete_trigger
-from frameworks.trigger_scheduler import start_scheduler
+from frameworks.trigger_scheduler import start_scheduler, update_trigger_metadata
 import json
 import logging
 import os
@@ -500,6 +500,174 @@ async def debug_triggers():
         }
     except Exception as e:
         logger.error(f"Error debugging triggers: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/executed-triggers")
+async def get_executed_triggers():
+    """
+    Get a list of recently executed triggers
+    """
+    try:
+        # Get all triggers
+        all_triggers = list_triggers()
+        
+        # Filter to only include triggers that have been executed
+        executed_triggers = []
+        
+        # Current time
+        now = datetime.now()
+        
+        # Only include triggers executed in the last 30 minutes
+        time_threshold = now - timedelta(minutes=30)
+        
+        for trigger in all_triggers:
+            trigger_id = trigger.get("id")
+            last_triggered = trigger.get("last_triggered")
+            
+            # Skip triggers that haven't been triggered or were triggered too long ago
+            if not last_triggered:
+                continue
+                
+            try:
+                last_triggered_time = datetime.fromisoformat(last_triggered)
+                if last_triggered_time < time_threshold:
+                    continue
+            except:
+                # If we can't parse the time, include it anyway
+                pass
+            
+            trigger_data = get_trigger_flow(trigger_id)
+            
+            # Get the trigger node data
+            trigger_node = None
+            for node in trigger_data.get("nodes", []):
+                if node.get("id") == trigger_id:
+                    trigger_node = node
+                    break
+            
+            executed_triggers.append({
+                "id": trigger_id,
+                "label": trigger_node.get("data", {}).get("label", "Unnamed Trigger") if trigger_node else "Unnamed Trigger",
+                "type": trigger.get("trigger_type"),
+                "last_executed": trigger.get("last_triggered"),
+                "execution_count": trigger.get("trigger_count", 0),
+                "completed": trigger.get("completed", False),
+                "completed_at": trigger.get("completed_at")
+            })
+        
+        # Sort by last execution time, most recent first
+        executed_triggers.sort(key=lambda t: t.get("last_executed", ""), reverse=True)
+        
+        # Return only the 10 most recent executions
+        return {
+            "status": "success",
+            "count": len(executed_triggers),
+            "triggers": executed_triggers[:10]
+        }
+    except Exception as e:
+        logger.error(f"Error getting executed triggers: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.post("/api/cleanup-triggers")
+async def cleanup_triggers():
+    """
+    Clean up all triggers that are in the past
+    """
+    try:
+        # Get all triggers
+        all_triggers = list_triggers()
+        
+        # Count of cleaned up triggers
+        cleaned_up = 0
+        
+        # Current time
+        now = datetime.now()
+        
+        for trigger in all_triggers:
+            trigger_id = trigger.get("id")
+            trigger_data = get_trigger_flow(trigger_id)
+            
+            # Find the trigger node
+            trigger_node = None
+            for node in trigger_data.get("nodes", []):
+                if node.get("id") == trigger_id:
+                    trigger_node = node
+                    break
+            
+            if not trigger_node:
+                continue
+                
+            # Get the trigger data
+            node_data = trigger_node.get("data", {})
+            
+            # Check if this is a one-time schedule trigger
+            if node_data.get("triggerType") == "schedule" and node_data.get("scheduleType") == "once":
+                # Get the run time
+                run_at = node_data.get("runAt")
+                
+                if run_at:
+                    try:
+                        # Parse the time
+                        target_time = datetime.strptime(run_at, "%Y-%m-%d %H:%M")
+                        
+                        # If the time is in the past, mark it as completed
+                        if target_time < now:
+                            update_trigger_metadata(trigger_id, {
+                                "completed": True,
+                                "completed_at": datetime.now().isoformat()
+                            })
+                            cleaned_up += 1
+                    except Exception as e:
+                        logger.error(f"Error parsing time for trigger {trigger_id}: {str(e)}")
+        
+        return {
+            "status": "success",
+            "message": f"Cleaned up {cleaned_up} triggers",
+            "cleaned_up": cleaned_up
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up triggers: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.post("/api/force-cleanup-all-triggers")
+async def force_cleanup_all_triggers():
+    """
+    Force cleanup of all triggers by marking them as completed
+    """
+    try:
+        # Get all triggers
+        all_triggers = list_triggers()
+        
+        # Count of cleaned up triggers
+        cleaned_up = 0
+        
+        for trigger in all_triggers:
+            trigger_id = trigger.get("id")
+            
+            # Mark as completed if not already
+            if not trigger.get("completed", False):
+                update_trigger_metadata(trigger_id, {
+                    "completed": True,
+                    "completed_at": datetime.now().isoformat()
+                })
+                cleaned_up += 1
+        
+        return {
+            "status": "success",
+            "message": f"Force-completed {cleaned_up} triggers",
+            "cleaned_up": cleaned_up
+        }
+    except Exception as e:
+        logger.error(f"Error force-cleaning triggers: {str(e)}")
         return {
             "status": "error",
             "message": f"Error: {str(e)}"
