@@ -961,6 +961,30 @@ async def handle_trigger_node(node_data=None):
     trigger_id = node_data.get("nodeId", "unknown")
     label = node_data.get("label", "Trigger")
     
+    # For scheduled triggers, register them for automatic execution
+    if trigger_type == "schedule":
+        try:
+            from frameworks.trigger_storage import register_trigger
+            
+            # Get the current flow context from the global data
+            # This is a safer approach than using undefined variables
+            flow = {
+                "trigger_id": trigger_id,
+                "trigger_type": trigger_type,
+                "trigger_data": node_data,
+                # We'll get the connected nodes and edges when the flow is executed
+                "metadata": {
+                    "scheduled": True,
+                    "created_at": datetime.now().isoformat()
+                }
+            }
+            
+            # Register the trigger
+            register_trigger(trigger_id, flow)
+            logger.info(f"Registered scheduled trigger: {trigger_id}")
+        except Exception as e:
+            logger.error(f"Error registering scheduled trigger: {str(e)}")
+    
     return {
         "output": f"Trigger '{label}' of type '{trigger_type}' activated",
         "type": "trigger_status",

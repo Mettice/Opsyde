@@ -1,0 +1,144 @@
+{
+  "flow": {
+    "nodes": [
+      {
+        "id": "trigger-1745221535236",
+        "type": "trigger",
+        "data": {
+          "label": "Trigger",
+          "role": "",
+          "description": "Start workflow execution",
+          "goal": "",
+          "backstory": "",
+          "llmModel": "gpt-4",
+          "allowDelegation": false,
+          "verbose": true,
+          "toolType": "api",
+          "apiEndpoint": "",
+          "apiKey": "",
+          "parameters": "",
+          "expectedOutput": "",
+          "async": false,
+          "dependencies": [],
+          "webhookType": "send-output",
+          "flowMode": "replace",
+          "webhook_url": "",
+          "secretToken": "",
+          "prompt": "",
+          "model": "gpt-4",
+          "enableMemory": false,
+          "condition": "",
+          "temperature": 0.7,
+          "max_tokens": 500,
+          "duration": "5s",
+          "triggerType": "schedule",
+          "runAt": "2025-04-21 09:47",
+          "scheduleType": "once",
+          "scheduleDays": [],
+          "scheduleWeekday": "monday",
+          "scheduleMonthDay": 1,
+          "runDate": "2025-04-21",
+          "runTime": "09:47",
+          "nodeId": "trigger-1745221535236",
+          "nodeType": "trigger"
+        }
+      },
+      {
+        "id": "agent-1745221523278",
+        "type": "agent",
+        "position": {
+          "x": 300,
+          "y": 200
+        },
+        "sourcePosition": "bottom",
+        "targetPosition": "top",
+        "data": {
+          "label": "Agent 1",
+          "role": "Assistant",
+          "goal": "",
+          "backstory": "",
+          "llmModel": "gpt-4",
+          "allowDelegation": false,
+          "verbose": true,
+          "nodeId": "agent-1745221523278",
+          "nodeType": "agent"
+        },
+        "width": 122,
+        "height": 128,
+        "selected": false,
+        "positionAbsolute": {
+          "x": 300,
+          "y": 200
+        }
+      },
+      {
+        "id": "task-1745221525739",
+        "type": "task",
+        "position": {
+          "x": 571.0782332340885,
+          "y": 206.6430839020922
+        },
+        "sourcePosition": "bottom",
+        "targetPosition": "top",
+        "data": {
+          "label": "New Task",
+          "description": "Task description",
+          "expectedOutput": "Expected output of the task",
+          "async": false,
+          "nodeId": "task-1745221525739",
+          "nodeType": "task"
+        },
+        "width": 288,
+        "height": 173,
+        "selected": false,
+        "positionAbsolute": {
+          "x": 571.0782332340885,
+          "y": 206.6430839020922
+        }
+      }
+    ],
+    "edges": [
+      {
+        "type": "default",
+        "animated": true,
+        "style": {
+          "stroke": "#555",
+          "strokeWidth": 2,
+          "transition": "stroke 0.3s, stroke-width 0.3s"
+        },
+        "interactionWidth": 20,
+        "source": "trigger-1745221535236",
+        "sourceHandle": "undefined-source",
+        "target": "agent-1745221523278",
+        "targetHandle": "undefined-target",
+        "id": "reactflow__edge-trigger-1745221535236undefined-source-agent-1745221523278undefined-target",
+        "selected": false
+      },
+      {
+        "type": "default",
+        "animated": true,
+        "style": {
+          "stroke": "#555",
+          "strokeWidth": 2,
+          "transition": "stroke 0.3s, stroke-width 0.3s"
+        },
+        "interactionWidth": 20,
+        "source": "agent-1745221523278",
+        "sourceHandle": "undefined-source",
+        "target": "task-1745221525739",
+        "targetHandle": "undefined-target",
+        "id": "reactflow__edge-agent-1745221523278undefined-source-task-1745221525739undefined-target",
+        "selected": false
+      }
+    ],
+    "trigger_id": "trigger-1745221535236",
+    "trigger_type": "schedule"
+  },
+  "created_at": "2025-04-21T09:45:55.094973",
+  "owner": "current_user",
+  "last_triggered": "2025-04-21T09:48:33.314402",
+  "trigger_count": 6,
+  "trigger_type": "schedule",
+  "completed": true,
+  "completed_at": "2025-04-21T09:48:33.324419"
+}

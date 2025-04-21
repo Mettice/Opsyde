@@ -9,10 +9,14 @@ from crew_runner import run_crew
 from frameworks.webhook_loader import handle_webhook_flow
 from chat_runner import router as chat_router
 from frameworks.trigger_storage import register_trigger, get_trigger_flow, list_triggers, delete_trigger
+from frameworks.trigger_scheduler import start_scheduler
 import json
 import logging
 import os
- 
+import threading
+import time
+from datetime import datetime, timedelta
+
 from dotenv import load_dotenv
 
 load_dotenv()  # This loads the .env file into environment variables
@@ -26,11 +30,31 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """
+    Start background services when the application starts
+    """
+    logger.info("Starting background services")
+    # Start the trigger scheduler in a background thread
+    threading.Thread(target=start_scheduler, daemon=True).start()
+    logger.info("Background services started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """
+    Clean up resources when the application shuts down
+    """
+    from frameworks.trigger_scheduler import stop_scheduler
+    logger.info("Stopping background services")
+    stop_scheduler()
+    logger.info("Background services stopped")
 
 @app.post("/run-crew")
 async def run_crew_endpoint(data: dict):
@@ -138,7 +162,7 @@ async def handle_trigger(trigger_id: str, request: Request):
         logger.error(f"Error processing trigger {trigger_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Trigger processing error: {str(e)}")
 
-@app.post("/register-trigger")
+@app.post("/api/register-trigger")
 async def handle_register_trigger(request: Request):
     """
     Register a new trigger with its associated flow
@@ -149,21 +173,41 @@ async def handle_register_trigger(request: Request):
         flow = data.get("flow")
         owner = data.get("owner", "system")
         
+        logger.info(f"Registering trigger: {trigger_id} of type {flow.get('trigger_type')}")
+        
+        # Log the trigger node data
+        trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
+        if trigger_nodes:
+            trigger_node = trigger_nodes[0]
+            trigger_data = trigger_node.get('data', {})
+            logger.info(f"Trigger details: type={trigger_data.get('triggerType')}, scheduleType={trigger_data.get('scheduleType')}, runAt={trigger_data.get('runAt')}")
+        else:
+            logger.warning(f"Could not find trigger node with ID {trigger_id} in the flow data")
+        
         if not trigger_id or not flow:
             raise HTTPException(status_code=400, detail="Missing trigger_id or flow data")
         
+        # Make sure the flow has the trigger_id set
+        flow["trigger_id"] = trigger_id
+        
+        # Register the trigger
         success = register_trigger(trigger_id, flow, owner)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to register trigger")
+        
+        # Log the successful registration
+        logger.info(f"Successfully registered trigger: {trigger_id}")
         
         return {
             "status": "success",
             "message": "Trigger registered successfully",
             "trigger_id": trigger_id,
-            "webhook_url": f"/trigger/{trigger_id}"
+            "webhook_url": f"/api/trigger/{trigger_id}" if flow.get("trigger_type") == "webhook" else None
         }
     except Exception as e:
         logger.error(f"Error registering trigger: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Registration error: {str(e)}")
 
 @app.get("/triggers")
@@ -196,4 +240,268 @@ async def handle_delete_trigger(trigger_id: str):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+@app.get("/create-test-trigger")
+async def create_test_trigger():
+    """
+    Create a test trigger for debugging
+    """
+    try:
+        trigger_id = f"test-trigger-{int(time.time())}"
+        
+        # Create a simple flow
+        flow = {
+            "trigger_id": trigger_id,
+            "trigger_type": "schedule",
+            "nodes": [
+                {
+                    "id": trigger_id,
+                    "type": "trigger",
+                    "data": {
+                        "triggerType": "schedule",
+                        "scheduleType": "once",
+                        "runAt": (datetime.now() + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M"),
+                        "label": "Test Trigger"
+                    }
+                }
+            ],
+            "edges": []
+        }
+        
+        # Register the trigger
+        success = register_trigger(trigger_id, flow, "system")
+        
+        if success:
+            logger.info(f"Successfully created test trigger: {trigger_id}")
+            return {
+                "status": "success",
+                "message": "Test trigger created successfully",
+                "trigger_id": trigger_id
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to create test trigger"
+            }
+    except Exception as e:
+        logger.error(f"Error creating test trigger: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/test")
+async def test_endpoint():
+    """Simple test endpoint"""
+    logger.info("Test endpoint called")
+    return {"status": "ok", "message": "Backend is working"}
+
+@app.get("/create-flow-trigger")
+async def create_flow_trigger():
+    """
+    Create a test trigger with a real flow
+    """
+    try:
+        trigger_id = f"flow-trigger-{int(time.time())}"
+        
+        # Create a flow with your actual nodes
+        flow = {
+            "trigger_id": trigger_id,
+            "trigger_type": "schedule",
+            "nodes": [
+                {
+                    "id": trigger_id,
+                    "type": "trigger",
+                    "data": {
+                        "triggerType": "schedule",
+                        "scheduleType": "once",
+                        "runAt": (datetime.now() + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M"),
+                        "label": "Flow Trigger"
+                    }
+                },
+                # Add your agent node
+                {
+                    "id": "agent-1",
+                    "type": "agent",
+                    "data": {
+                        "label": "Agent Alpha",
+                        "role": "Assistant",
+                        "goal": "Help with research"
+                    }
+                },
+                # Add your task node
+                {
+                    "id": "task-1",
+                    "type": "task",
+                    "data": {
+                        "label": "New Task",
+                        "description": "Task description"
+                    }
+                }
+            ],
+            "edges": [
+                {
+                    "source": trigger_id,
+                    "target": "agent-1"
+                },
+                {
+                    "source": "agent-1",
+                    "target": "task-1"
+                }
+            ]
+        }
+        
+        # Register the trigger
+        success = register_trigger(trigger_id, flow, "system")
+        
+        if success:
+            logger.info(f"Successfully created flow trigger: {trigger_id}")
+            return {
+                "status": "success",
+                "message": "Flow trigger created successfully",
+                "trigger_id": trigger_id
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to create flow trigger"
+            }
+    except Exception as e:
+        logger.error(f"Error creating flow trigger: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/cleanup-test-triggers")
+async def cleanup_test_triggers():
+    """
+    Remove all test triggers from the system
+    """
+    try:
+        triggers = list_triggers()
+        count = 0
+        
+        for trigger in triggers:
+            trigger_id = trigger.get("id")
+            # Check if it's a test trigger
+            if trigger_id.startswith("test-trigger-") or trigger_id.startswith("flow-trigger-"):
+                success = delete_trigger(trigger_id)
+                if success:
+                    count += 1
+                    logger.info(f"Deleted test trigger: {trigger_id}")
+        
+        return {
+            "status": "success",
+            "message": f"Deleted {count} test triggers"
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up test triggers: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/create-future-trigger")
+async def create_future_trigger():
+    """
+    Create a test trigger scheduled for 2 minutes in the future
+    """
+    try:
+        trigger_id = f"future-trigger-{int(time.time())}"
+        future_time = (datetime.now() + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M")
+        
+        # Create a simple flow
+        flow = {
+            "trigger_id": trigger_id,
+            "trigger_type": "schedule",
+            "nodes": [
+                {
+                    "id": trigger_id,
+                    "type": "trigger",
+                    "data": {
+                        "triggerType": "schedule",
+                        "scheduleType": "once",
+                        "runAt": future_time,
+                        "label": "Future Test Trigger"
+                    }
+                }
+            ],
+            "edges": []
+        }
+        
+        # Register the trigger
+        success = register_trigger(trigger_id, flow, "system")
+        
+        if success:
+            logger.info(f"Successfully created future trigger: {trigger_id} for {future_time}")
+            return {
+                "status": "success",
+                "message": f"Future trigger created successfully for {future_time}",
+                "trigger_id": trigger_id,
+                "scheduled_time": future_time
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Failed to create future trigger"
+            }
+    except Exception as e:
+        logger.error(f"Error creating future trigger: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
+
+@app.get("/debug-triggers")
+async def debug_triggers():
+    """
+    Show detailed information about all triggers
+    """
+    try:
+        triggers = list_triggers()
+        detailed_triggers = []
+        
+        for trigger in triggers:
+            trigger_id = trigger.get("id")
+            flow = get_trigger_flow(trigger_id)
+            
+            trigger_info = {
+                "id": trigger_id,
+                "type": trigger.get("trigger_type"),
+                "created_at": trigger.get("created_at"),
+                "last_triggered": trigger.get("last_triggered"),
+                "trigger_count": trigger.get("trigger_count"),
+                "completed": trigger.get("completed", False),
+                "completed_at": trigger.get("completed_at"),
+                "nodes_count": len(flow.get("nodes", [])) if flow else 0,
+                "edges_count": len(flow.get("edges", [])) if flow else 0
+            }
+            
+            # Get trigger node details
+            if flow:
+                trigger_nodes = [n for n in flow.get("nodes", []) if n.get("id") == trigger_id]
+                if trigger_nodes:
+                    trigger_node = trigger_nodes[0]
+                    trigger_data = trigger_node.get("data", {})
+                    trigger_info["details"] = {
+                        "label": trigger_data.get("label"),
+                        "triggerType": trigger_data.get("triggerType"),
+                        "scheduleType": trigger_data.get("scheduleType"),
+                        "runAt": trigger_data.get("runAt")
+                    }
+            
+            detailed_triggers.append(trigger_info)
+        
+        return {
+            "status": "success",
+            "count": len(detailed_triggers),
+            "triggers": detailed_triggers
+        }
+    except Exception as e:
+        logger.error(f"Error debugging triggers: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Error: {str(e)}"
+        }
     

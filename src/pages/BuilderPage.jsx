@@ -810,6 +810,13 @@ const BuilderPage = () => {
     }
   }, [nodes, edges, setEdges, onConnect]);
 
+  useEffect(() => {
+    // Store the current nodes and edges in the window object
+    // so they can be accessed by the TriggerNode component
+    window.currentNodes = nodes;
+    window.currentEdges = edges;
+  }, [nodes, edges]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <header className="bg-gray-800 text-white p-4">

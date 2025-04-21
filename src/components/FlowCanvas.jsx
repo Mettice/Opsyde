@@ -455,6 +455,9 @@ const FlowCanvas = ({
         onInit={(instance) => {
           // Store the instance on the wrapper ref
           reactFlowWrapper.current.reactFlowInstance = instance;
+          
+          // Also store it on the window object for access from other components
+          window.reactFlowInstance = instance;
         }}
       >
         <MiniMap 
