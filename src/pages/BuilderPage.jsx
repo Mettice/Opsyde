@@ -1,12 +1,12 @@
-// BuilderPage.js - Refactored
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNodesState, useEdgesState, addEdge } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { ReactFlowProvider } from 'reactflow';
 import { toast } from 'react-toastify';
-
-
-
+import { useAuth } from '../auth/AuthProvider';
+import { saveFlow, updateFlow } from '../api';
+import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 // Components
 import FlowCanvas from '../components/FlowCanvas';
@@ -38,11 +38,6 @@ import { useToolTemplates } from '../hooks/useToolTemplates';
 import { generateDefaultNodes } from '../utils/nodeHelpers';
 import { flowTemplates } from '../data/flowTemplates';
 import { getSafeNodePosition } from '../utils/getSafeNodePosition';
-
-
-
-
-
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -140,7 +135,6 @@ const BuilderPage = () => {
     handleNodeEdit,
     handleNodeDelete
   });
-
 
   const [outputConfig, setOutputConfig] = useState({
     emailEnabled: false,
@@ -359,101 +353,6 @@ const BuilderPage = () => {
     if (result) {
       setNodes(result.nodes);
       setEdges(result.edges);
-    }
-  };
-
-  // Toolbar props
-  const toolbarProps = {
-    onAddAgent: addAgent,
-    onAddTask: addTask,
-    onAddTool: () => setShowToolTemplates(true),
-    onAddChat: addChatNode,
-    onAddDelay: addDelayNode,
-    onAddTrigger: addTriggerNode,
-    onAddLogicNode: addLogicNode,
-    onExportYAML: exportYAML,
-    onExportPython: exportMainPy,
-    onSaveProject: originalSaveProject,
-    onLoadProject: loadProject,
-    onPreviewWorkflow: () => setShowPreview(true),
-    onUndo: handleUndo,  // Use the handler function
-    onRedo: handleRedo,  // Use the handler function
-    canUndo,
-    canRedo,
-    onExportProject: exportProject,
-  };
-
-  // Add this effect to ensure callbacks are attached to default nodes
-  useEffect(() => {
-    if (nodes.length > 0) {
-      // Add callbacks to existing nodes if they don't have them
-      const nodesWithCallbacks = nodes.map(node => {
-        if (!node.data.onEdit || !node.data.onDelete) {
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              onEdit: () => handleNodeEdit(node.id),
-              onDelete: () => handleNodeDelete(node.id)
-            }
-          };
-        }
-        return node;
-      });
-      
-      if (JSON.stringify(nodes) !== JSON.stringify(nodesWithCallbacks)) {
-        setNodes(nodesWithCallbacks);
-      }
-    }
-  }, [nodes, handleNodeEdit, handleNodeDelete]);
-
-  useEffect(() => {
-    const handleNodeEdit = (event) => {
-      const { nodeId } = event.detail;
-      // Your edit logic here
-      const node = nodes.find(n => n.id === nodeId);
-      if (node) {
-        setSelectedNode(node);
-        setShowEditModal(true);
-      }
-    };
-
-    const handleNodeDelete = (event) => {
-      const { nodeId } = event.detail;
-      // Your delete logic here
-      setNodes(nodes => nodes.filter(n => n.id !== nodeId));
-      setEdges(edges => edges.filter(e => e.source !== nodeId && e.target !== nodeId));
-      addToHistory({ 
-        nodes: nodes.filter(n => n.id !== nodeId), 
-        edges: edges.filter(e => e.source !== nodeId && e.target !== nodeId) 
-      });
-    };
-
-    // Add event listeners
-    document.addEventListener('node-edit', handleNodeEdit);
-    document.addEventListener('node-delete', handleNodeDelete);
-
-    // Clean up
-    return () => {
-      document.removeEventListener('node-edit', handleNodeEdit);
-      document.removeEventListener('node-delete', handleNodeDelete);
-    };
-  }, [nodes, edges, setNodes, setEdges, addToHistory, setSelectedNode, setShowEditModal]);
-
-  // Handle post-execution actions like sending to email, Discord, etc.
-  const handlePostExecution = async (logs) => {
-    const toolNodes = nodes.filter((node) => node.type === "tool");
-
-    for (const tool of toolNodes) {
-      const { exportTo, config = {} } = tool.data;
-
-      if (exportTo === "email") {
-        await sendToEmail(logs, config.to);
-      } else if (exportTo === "discord") {
-        await sendToDiscord(logs, config.webhook);
-      } else if (exportTo === "sheets") {
-        await sendToSheets(logs);
-      }
     }
   };
 
@@ -799,17 +698,34 @@ const BuilderPage = () => {
     };
   };
 
-  // Then create a wrapper function that adds validation
+  // Enhance the saveProject function
   const enhancedSaveProject = () => {
-    const validation = validateFlow();
+    // If you have validation, keep it
+    const errors = checkWorkflowErrors();
+    if (errors.length > 0) {
+      toast.error("Please fix workflow errors before saving");
+      return;
+    }
     
-    if (!validation.isValid) {
-      toast.error(validation.errors[0]);
+    // If user is logged in, save to Supabase
+    if (user) {
+      saveToSupabase();
+    } else {
+      toast.error("Please sign in to save your flow");
+      navigate('/login');
+    }
+  };
+
+  // Update the loadProject function
+  const enhancedLoadProject = () => {
+    if (!user) {
+      toast.error("Please sign in to load flows");
+      navigate('/login');
       return;
     }
     
     // Call the original function
-    originalSaveProject();
+    loadProject();
   };
 
   // Create a proper onConnect handler
@@ -956,42 +872,174 @@ const BuilderPage = () => {
     notifiedTriggers.current.clear();
   }, []);
 
+  // Add these imports at the top
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [currentFlowId, setCurrentFlowId] = useState(null);
+
+  // Add this useEffect to load flow data if available
+  useEffect(() => {
+    // Check if we have a flow to load from localStorage
+    const savedFlow = localStorage.getItem('currentFlow');
+    
+    if (savedFlow) {
+      try {
+        const flowData = JSON.parse(savedFlow);
+        setProjectName(flowData.name);
+        setNodes(flowData.nodes);
+        setEdges(flowData.edges);
+        setCurrentFlowId(flowData.id);
+        
+        // Clear localStorage after loading
+        localStorage.removeItem('currentFlow');
+        
+        // Add to history
+        addToHistory({ nodes: flowData.nodes, edges: flowData.edges });
+        
+        toast.success('Flow loaded successfully');
+      } catch (error) {
+        console.error('Error loading saved flow:', error);
+        toast.error('Failed to load saved flow');
+      }
+    }
+  }, []);
+
+  // Add this function to save to Supabase
+  const saveToSupabase = async () => {
+    if (!user) {
+      toast.error('You must be logged in to save flows');
+      navigate('/login');
+      return;
+    }
+    
+    try {
+      if (currentFlowId) {
+        // Update existing flow
+        await updateFlow(currentFlowId, projectName, nodes, edges);
+        toast.success('Flow updated successfully');
+      } else {
+        // Create new flow
+        const { data } = await saveFlow(user.id, projectName, nodes, edges);
+        if (data && data[0]) {
+          setCurrentFlowId(data[0].id);
+        }
+        toast.success('Flow saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving flow:', error);
+      toast.error('Failed to save flow');
+    }
+  };
+
+  // Then keep only the enhanced version (around line 1012)
+  const toolbarProps = {
+    onAddAgent: addAgent,
+    onAddTask: addTask,
+    onAddTool: () => setShowToolTemplates(true),
+    onAddChat: addChatNode,
+    onAddDelay: addDelayNode,
+    onAddTrigger: addTriggerNode,
+    onAddLogicNode: addLogicNode,
+    onExportYAML: exportYAML,
+    onExportPython: exportMainPy,
+    onSaveProject: enhancedSaveProject,
+    onLoadProject: enhancedLoadProject,
+    onPreviewWorkflow: () => setShowPreview(true),
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    canUndo,
+    canRedo,
+    onExportProject: exportProject,
+  };
+
+  // Add this state variable near the top with your other state variables
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
+  // Add this function to handle sign out
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
+    }
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-gray-800 text-white p-4">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-bold">Nodes Flow </h1>
-            <p className="text-sm text-gray-300">Visual AI Agent Workflow Designer</p>
+      <header className="bg-gray-800 text-white p-2 flex justify-between items-center">
+        <div className="flex items-center">
+          <h1 className="text-xl font-bold">Nodes Flow</h1>
+          <span className="mx-2 text-gray-400">|</span>
+          <p className="text-sm text-gray-300">Visual AI Agent Workflow Designer</p>
+        </div>
+        
+        <div className="absolute left-1/2 transform -translate-x-1/2">
+          <div className="bg-gray-700 rounded-md px-4 py-2 flex items-center">
+            <span className="text-gray-400 mr-2">Project:</span>
+            {editingProjectName ? (
+              <input
+                type="text"
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                onBlur={() => setEditingProjectName(false)}
+                onKeyDown={(e) => e.key === 'Enter' && setEditingProjectName(false)}
+                autoFocus
+                className="bg-gray-600 text-white px-2 py-1 rounded"
+              />
+            ) : (
+              <span className="font-medium cursor-pointer" onClick={() => setEditingProjectName(true)}>
+                {projectName}
+              </span>
+            )}
           </div>
-          
-          <div className="absolute left-1/2 transform -translate-x-1/2 flex flex-col items-center">
-            <div className="bg-gray-700 rounded-md px-4 py-2 flex items-center">
-              <span className="text-gray-400 mr-2">Project:</span>
-              {editingProjectName ? (
-                <input
-                  type="text"
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  onBlur={() => setEditingProjectName(false)}
-                  onKeyDown={(e) => e.key === 'Enter' && setEditingProjectName(false)}
-                  autoFocus
-                  className="bg-gray-600 text-white px-2 py-1 rounded"
-                />
-              ) : (
-                <span className="font-medium cursor-pointer" onClick={() => setEditingProjectName(true)}>
-                  {projectName}
-                </span>
+        </div>
+        
+        <div className="flex items-center">
+          {user ? (
+            <div className="relative">
+              <button 
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 rounded-md px-3 py-1"
+              >
+                <span className="text-sm">{user.email}</span>
+                <div className="h-6 w-6 rounded-full bg-indigo-500 flex items-center justify-center">
+                  {user.email?.charAt(0).toUpperCase()}
+                </div>
+              </button>
+              
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
+                  <Link 
+                    to="/profile"
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    My Flows
+                  </Link>
+                  <button
+                    onClick={() => setShowHelpPanel(true)}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Help
+                  </button>
+                  <button
+                    onClick={handleSignOut}
+                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  >
+                    Sign Out
+                  </button>
+                </div>
               )}
             </div>
-          </div>
-          
-          <button 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center" 
-            onClick={() => setShowHelpPanel(true)}
-          >
-            Help
-          </button>
+          ) : (
+            <button 
+              onClick={() => navigate('/login')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+            >
+              Sign In
+            </button>
+          )}
         </div>
       </header>
       
@@ -1165,6 +1213,5 @@ const BuilderPage = () => {
     </div>
   );
 };
-
 
 export default BuilderPage;

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.4",
     "autoprefixer": "^10.4.16",
     "axios": "^1.8.4",
     "file-saver": "^2.0.5",
