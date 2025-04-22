@@ -40,7 +40,14 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     scheduleType: 'once',
     scheduleDays: [],
     scheduleWeekday: 'monday',
-    scheduleMonthDay: 1
+    scheduleMonthDay: 1,
+    inputType: 'text',
+    variableName: '',
+    isRequired: false,
+    outputType: 'webhook',
+    webhookUrl: '',
+    sheetId: '',
+    email: ''
   });
 
   // Track if form has been modified
@@ -84,7 +91,14 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
         scheduleType: nodeData.scheduleType || 'once',
         scheduleDays: nodeData.scheduleDays || [],
         scheduleWeekday: nodeData.scheduleWeekday || 'monday',
-        scheduleMonthDay: nodeData.scheduleMonthDay || 1
+        scheduleMonthDay: nodeData.scheduleMonthDay || 1,
+        inputType: nodeData.inputType || 'text',
+        variableName: nodeData.variableName || '',
+        isRequired: nodeData.isRequired || false,
+        outputType: nodeData.outputType || 'webhook',
+        webhookUrl: nodeData.webhookUrl || '',
+        sheetId: nodeData.sheetId || '',
+        email: nodeData.email || ''
       };
       
       // Parse runAt into runDate and runTime if it exists
@@ -1181,6 +1195,126 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
           </>
         )}
 
+        {/* Input Node-Specific Fields */}
+        {currentNodeType === 'input' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Input Type
+                <HelpTooltip type="input" field="inputType" />
+              </label>
+              <select
+                value={formData.inputType || 'text'}
+                onChange={(e) => handleInputChange('inputType', e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="text">Text Input</option>
+                <option value="file">File Upload</option>
+                <option value="url">URL Input</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Variable Name
+                <HelpTooltip type="input" field="variableName" />
+              </label>
+              <input
+                type="text"
+                value={formData.variableName || ''}
+                onChange={(e) => handleInputChange('variableName', e.target.value)}
+                className="w-full p-2 border rounded"
+                placeholder="e.g., user_input"
+              />
+            </div>
+
+            <div className="mb-4 flex items-center">
+              <input
+                type="checkbox"
+                id="isRequired"
+                checked={formData.isRequired || false}
+                onChange={(e) => handleInputChange('isRequired', e.target.checked)}
+                className="mr-2"
+              />
+              <label htmlFor="isRequired" className="text-gray-700">Required Input</label>
+            </div>
+          </>
+        )}
+
+        {/* Output Node-Specific Fields */}
+        {currentNodeType === 'output' && (
+          <>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Output Type
+                <HelpTooltip type="output" field="outputType" />
+              </label>
+              <select
+                value={formData.outputType || 'webhook'}
+                onChange={(e) => handleInputChange('outputType', e.target.value)}
+                className="w-full p-2 border rounded"
+              >
+                <option value="webhook">Webhook</option>
+                <option value="discord">Discord</option>
+                <option value="sheets">Google Sheets</option>
+                <option value="email">Email</option>
+              </select>
+            </div>
+
+            {formData.outputType === 'webhook' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Webhook URL</label>
+                <input
+                  type="text"
+                  value={formData.webhookUrl || ''}
+                  onChange={(e) => handleInputChange('webhookUrl', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="https://example.com/webhook"
+                />
+              </div>
+            )}
+
+            {formData.outputType === 'discord' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Discord Webhook URL</label>
+                <input
+                  type="text"
+                  value={formData.webhookUrl || ''}
+                  onChange={(e) => handleInputChange('webhookUrl', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="Discord webhook URL"
+                />
+              </div>
+            )}
+
+            {formData.outputType === 'sheets' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Sheet ID</label>
+                <input
+                  type="text"
+                  value={formData.sheetId || ''}
+                  onChange={(e) => handleInputChange('sheetId', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="Google Sheet ID"
+                />
+              </div>
+            )}
+
+            {formData.outputType === 'email' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Email Address</label>
+                <input
+                  type="email"
+                  value={formData.email || ''}
+                  onChange={(e) => handleInputChange('email', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="recipient@example.com"
+                />
+              </div>
+            )}
+          </>
+        )}
+
         {/* Modal Buttons */}
         <div className="flex justify-end gap-2 mt-6">
           <button
@@ -1217,7 +1351,17 @@ EditModal.propTypes = {
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   nodeData: PropTypes.object,
-  nodeType: PropTypes.oneOf(['agent', 'task', 'tool', 'chatbot', 'delay', 'trigger', 'logic']),
+  nodeType: PropTypes.oneOf([
+    'agent', 
+    'task', 
+    'tool', 
+    'chatbot', 
+    'delay', 
+    'trigger', 
+    'logic',
+    'input',
+    'output'
+  ]),
   availableDependencies: PropTypes.arrayOf(
     PropTypes.shape({
       label: PropTypes.string.isRequired,

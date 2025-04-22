@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
@@ -58,10 +58,6 @@ const findConnectedEdges = (nodeId, allEdges) => {
 };
 
 const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
-  const editButtonRef = useRef(null);
-  const deleteButtonRef = useRef(null);
-  const cardRef = useRef(null);
-  
   // Add state to store nodes and edges from the parent component
   const [allNodes, setAllNodes] = useState([]);
   const [allEdges, setAllEdges] = useState([]);
@@ -96,30 +92,6 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
     });
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
-
-  // Add event listeners to the buttons
-  useEffect(() => {
-    const editBtn = editButtonRef.current;
-    const deleteBtn = deleteButtonRef.current;
-    
-    if (editBtn) {
-      editBtn.addEventListener('click', handleEditClick);
-    }
-    
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', handleDeleteClick);
-    }
-    
-    return () => {
-      if (editBtn) {
-        editBtn.removeEventListener('click', handleEditClick);
-      }
-      
-      if (deleteBtn) {
-        deleteBtn.removeEventListener('click', handleDeleteClick);
-      }
-    };
-  }, [handleEditClick, handleDeleteClick]);
 
   // Get icon based on trigger type
   const getTriggerIcon = () => {
@@ -297,8 +269,8 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
 
   return (
     <div 
-      ref={cardRef}
-      className={`bg-white border-2 ${selected ? 'border-purple-500' : 'border-purple-200'} p-3 rounded-lg shadow-md w-64 trigger-node ${selected ? 'selected' : ''}`}
+      className={`bg-white border-2 ${selected ? 'border-purple-500' : 'border-purple-200'} p-3 rounded-lg shadow-md w-64`}
+      onClick={(e) => e.stopPropagation()}
     >
       <h3 className="text-lg font-bold text-purple-700 mb-1">{data.label || 'Trigger'}</h3>
       
@@ -320,21 +292,23 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div className="flex mt-3 space-x-2">
         <button 
-          ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
-          aria-label="Edit trigger"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEditClick(e);
+          }}
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
         <button 
-          ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
-          aria-label="Delete trigger"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
+          }}
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>

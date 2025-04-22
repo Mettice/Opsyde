@@ -372,7 +372,37 @@ const FlowCanvas = ({
       
       {/* ReactFlow component */}
       <ReactFlow
-        nodes={nodes}
+        nodes={nodes.map(node => {
+          switch (node.type) {
+            case 'input':
+              return {
+                ...node,
+                sourcePosition: 'bottom',
+                targetPosition: 'top',
+                style: {
+                  ...node.style,
+                  zIndex: 1
+                },
+                data: {
+                  ...node.data,
+                  value: node.data.value || '',
+                  inputs: node.data.inputs || {}
+                }
+              };
+            case 'output':
+              return {
+                ...node,
+                sourcePosition: 'bottom',
+                targetPosition: 'top',     // Output nodes only receive connections from top
+                style: {
+                  ...node.style,
+                  zIndex: 1
+                }
+              };
+            default:
+              return node;
+          }
+        })}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -416,18 +446,7 @@ const FlowCanvas = ({
             toast.error(`Invalid connection: ${sourceType} → ${targetType}`);
           }
         }}
-        onNodeClick={(event, node) => {
-          // Only trigger node click if the target is not a button or inside a button
-          // and not an edit or delete button
-          if (!event.target.closest('button') && 
-              !event.target.classList.contains('edit-button') && 
-              !event.target.classList.contains('delete-button')) {
-            // This should only handle selection, not editing
-            if (onNodeClick) {
-              onNodeClick(event, node);
-            }
-          }
-        }}
+        onNodeClick={onNodeClick}
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectStop}
         onNodeDragStop={onNodeDragStop}
@@ -436,13 +455,7 @@ const FlowCanvas = ({
         onEdgeClick={handleEdgeClick}
         nodeTypes={customNodeTypes}
         edgeTypes={edgeTypes}
-        connectionLineComponent={(props) => (
-          <ConnectionLine 
-            {...props} 
-            sourceType={connectionInfo.sourceType}
-            targetType={connectionInfo.targetType}
-          />
-        )}
+        connectionLineComponent={ConnectionLine}
         connectionLineType="bezier"
         defaultEdgeOptions={{
           type: 'default',
@@ -454,13 +467,9 @@ const FlowCanvas = ({
         selectNodesOnDrag={false}
         fitView
         onInit={(instance) => {
-          // Store the instance on the wrapper ref
           reactFlowWrapper.current.reactFlowInstance = instance;
-          
-          // Also store it on the window object for access from other components
           window.reactFlowInstance = instance;
         }}
-        showControls={false}
       >
         <MiniMap 
           nodeStrokeColor={(n) => {

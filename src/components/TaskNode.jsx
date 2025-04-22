@@ -5,13 +5,11 @@ import PropTypes from 'prop-types';
 const TaskNode = React.memo(({ data, isConnectable, selected }) => {
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
-    // Ensure we have an event object
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    // Dispatch a custom event that Builder.jsx will listen for
     const event = new CustomEvent('node-edit', { 
       detail: { 
         nodeId: data.nodeId,
@@ -22,13 +20,11 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
   }, [data?.nodeId, data?.nodeType]);
 
   const handleDeleteClick = useCallback((e) => {
-    // Ensure we have an event object
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    // Dispatch a custom event that Builder.jsx will listen for
     const event = new CustomEvent('node-delete', { 
       detail: { 
         nodeId: data.nodeId,

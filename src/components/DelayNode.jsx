@@ -1,12 +1,8 @@
-import React, { useCallback, useRef, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
 const DelayNode = React.memo(({ data, isConnectable, selected }) => {
-  const editButtonRef = useRef(null);
-  const deleteButtonRef = useRef(null);
-  const cardRef = useRef(null);
-  
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
     if (e) {
@@ -38,34 +34,10 @@ const DelayNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Add event listeners to the buttons
-  useEffect(() => {
-    const editBtn = editButtonRef.current;
-    const deleteBtn = deleteButtonRef.current;
-    
-    if (editBtn) {
-      editBtn.addEventListener('click', handleEditClick);
-    }
-    
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', handleDeleteClick);
-    }
-    
-    return () => {
-      if (editBtn) {
-        editBtn.removeEventListener('click', handleEditClick);
-      }
-      
-      if (deleteBtn) {
-        deleteBtn.removeEventListener('click', handleDeleteClick);
-      }
-    };
-  }, [handleEditClick, handleDeleteClick]);
-
   return (
     <div 
-      ref={cardRef}
-      className={`bg-white border-2 ${selected ? 'border-amber-500' : 'border-amber-200'} p-3 rounded-lg shadow-md w-64 delay-node ${selected ? 'selected' : ''}`}
+      className={`bg-white border-2 ${selected ? 'border-amber-500' : 'border-amber-200'} p-3 rounded-lg shadow-md w-64`}
+      onClick={(e) => e.stopPropagation()}
     >
       {/* Target handle at top */}
       <Handle 
@@ -99,21 +71,23 @@ const DelayNode = React.memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div className="flex mt-3 space-x-2">
         <button 
-          ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
-          aria-label="Edit delay"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEditClick(e);
+          }}
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
         <button 
-          ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
-          aria-label="Delete delay"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
+          }}
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>

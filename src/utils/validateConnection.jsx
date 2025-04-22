@@ -35,7 +35,11 @@ export const validateConnection = (params, nodes, edges, toast) => {
   if (from === 'input') {
     // Input can connect to any node except trigger
     console.log("Valid connection: input → any (except trigger)");
-    return to !== 'trigger';
+    return to !== 'trigger' && to !== 'input';
+  }
+  
+  if (to === 'input') {
+    return false; // Input nodes should never receive connections
   }
   
   // === Output Node ===
@@ -43,6 +47,10 @@ export const validateConnection = (params, nodes, edges, toast) => {
     // Any node can connect to output except trigger
     console.log("Valid connection: any → output (except trigger)");
     return from !== 'trigger';
+  }
+  
+  if (from === 'output') {
+    return false; // Output nodes should never send connections
   }
   
   // === Logic Node ===

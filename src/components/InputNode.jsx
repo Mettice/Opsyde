@@ -4,9 +4,6 @@ import PropTypes from 'prop-types';
 
 const InputNode = memo(({ data, isConnectable, selected }) => {
   const [inputValue, setInputValue] = useState(data.value || '');
-  const editButtonRef = useRef(null);
-  const deleteButtonRef = useRef(null);
-  const cardRef = useRef(null);
   
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
@@ -65,36 +62,11 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
     }
   };
 
-  // Add event listeners
-  useEffect(() => {
-    const editButton = editButtonRef.current;
-    const deleteButton = deleteButtonRef.current;
-    
-    if (editButton) {
-      editButton.addEventListener('click', handleEditClick);
-    }
-    
-    if (deleteButton) {
-      deleteButton.addEventListener('click', handleDeleteClick);
-    }
-    
-    return () => {
-      if (editButton) {
-        editButton.removeEventListener('click', handleEditClick);
-      }
-      
-      if (deleteButton) {
-        deleteButton.removeEventListener('click', handleDeleteClick);
-      }
-    };
-  }, [handleEditClick, handleDeleteClick]);
-  
   const inputType = data.inputType || 'text';
   const isRequired = data.isRequired || false;
   
   return (
     <div
-      ref={cardRef}
       style={{
         background: 'white',
         border: `2px solid ${selected ? '#3b82f6' : '#c7d2fe'}`,
@@ -104,15 +76,8 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
         boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
         position: 'relative'
       }}
+      onClick={(e) => e.stopPropagation()}
     >
-      {/* Target handle */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ background: '#4f46e5', width: '12px', height: '12px', top: '-6px' }}
-        isConnectable={isConnectable}
-      />
-      
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
         <div style={{ 
@@ -207,35 +172,23 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
-          ref={editButtonRef}
           type="button"
-          style={{
-            fontSize: '0.75rem',
-            backgroundColor: '#dbeafe',
-            color: '#1d4ed8',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-            border: 'none',
-            cursor: 'pointer'
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEditClick(e);
           }}
-          aria-label="Edit input"
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
         <button
-          ref={deleteButtonRef}
           type="button"
-          style={{
-            fontSize: '0.75rem',
-            backgroundColor: '#fee2e2',
-            color: '#b91c1c',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-            border: 'none',
-            cursor: 'pointer'
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
           }}
-          aria-label="Delete input"
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>

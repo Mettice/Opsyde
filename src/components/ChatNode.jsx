@@ -5,9 +5,6 @@ import PropTypes from 'prop-types';
 const ChatNode = React.memo(({ data, isConnectable, selected }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const editButtonRef = useRef(null);
-  const deleteButtonRef = useRef(null);
-  const cardRef = useRef(null);
   
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
@@ -44,76 +41,6 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Add event listeners directly to the buttons and prevent propagation
-  useEffect(() => {
-    const editButton = editButtonRef.current;
-    const deleteButton = deleteButtonRef.current;
-    const card = cardRef.current;
-    
-    // Define stopPropagation function once to reuse
-    const stopPropagation = (e) => {
-      e.stopPropagation();
-    };
-    
-    if (editButton) {
-      editButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleEditClick(e);
-      }, true);
-      
-      editButton.addEventListener('mousedown', stopPropagation, true);
-      editButton.addEventListener('touchstart', stopPropagation, true);
-    }
-    
-    if (deleteButton) {
-      deleteButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleDeleteClick(e);
-      }, true);
-      
-      deleteButton.addEventListener('mousedown', stopPropagation, true);
-      deleteButton.addEventListener('touchstart', stopPropagation, true);
-    }
-    
-    // Prevent the card from triggering edit on click
-    if (card) {
-      const handleCardClick = (e) => {
-        if (e.target === card || card.contains(e.target)) {
-          if (!e.target.closest('button') && 
-              !e.target.classList.contains('edit-button') && 
-              !e.target.classList.contains('delete-button') &&
-              !e.target.classList.contains('react-flow__handle')) {
-            e.stopImmediatePropagation();
-          }
-        }
-      };
-      
-      card.addEventListener('click', handleCardClick, true);
-      
-      return () => {
-        card.removeEventListener('click', handleCardClick, true);
-        
-        if (editButton) {
-          editButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }, true);
-          editButton.removeEventListener('mousedown', stopPropagation, true);
-          editButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-        
-        if (deleteButton) {
-          deleteButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }, true);
-          deleteButton.removeEventListener('mousedown', stopPropagation, true);
-          deleteButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-      };
-    }
-  }, [handleEditClick, handleDeleteClick]);
-
   const sendMessage = async () => {
     if (!input.trim()) return;
     
@@ -149,7 +76,6 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
 
   return (
     <div 
-      ref={cardRef}
       className={`bg-white border-2 ${selected ? 'border-pink-500' : 'border-pink-200'} p-3 rounded-lg shadow-md w-64 min-h-[200px] chat-node ${selected ? 'selected' : ''}`}
       data-nodeid={data.id}
       style={{ display: 'flex', flexDirection: 'column' }}
@@ -216,21 +142,23 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div className="flex mt-3 space-x-2">
         <button 
-          ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
-          aria-label="Edit chatbot"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEditClick(e);
+          }}
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
         <button 
-          ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
-          aria-label="Delete chatbot"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
+          }}
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>

@@ -3,8 +3,6 @@ import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
 const LogicNode = React.memo(({ data, isConnectable, selected }) => {
-  const editButtonRef = useRef(null);
-  const deleteButtonRef = useRef(null);
   const [previewResult, setPreviewResult] = useState(null);
   
   // Create stable event handlers with useCallback
@@ -38,30 +36,6 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Add event listeners to the buttons
-  useEffect(() => {
-    const editBtn = editButtonRef.current;
-    const deleteBtn = deleteButtonRef.current;
-    
-    if (editBtn) {
-      editBtn.addEventListener('click', handleEditClick);
-    }
-    
-    if (deleteBtn) {
-      deleteBtn.addEventListener('click', handleDeleteClick);
-    }
-    
-    return () => {
-      if (editBtn) {
-        editBtn.removeEventListener('click', handleEditClick);
-      }
-      
-      if (deleteBtn) {
-        deleteBtn.removeEventListener('click', handleDeleteClick);
-      }
-    };
-  }, [handleEditClick, handleDeleteClick]);
-
   // Add this function to test the condition with sample inputs
   const testCondition = useCallback(() => {
     if (!data.condition) return;
@@ -89,7 +63,9 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
   }, [testCondition]);
 
   return (
-    <div className={`bg-white border-2 ${selected ? 'border-yellow-500' : 'border-yellow-200'} rounded-lg shadow-md p-4 w-64`}>
+    <div className={`bg-white border-2 ${selected ? 'border-yellow-500' : 'border-yellow-200'} rounded-lg shadow-md p-4 w-64`}
+         onClick={(e) => e.stopPropagation()}
+    >
       <div className="text-sm font-bold text-yellow-800 mb-2 flex items-center">
         <span className="mr-2">⚖️</span>
         {data.label || "Logic Node"}
@@ -126,21 +102,23 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
       {/* Action buttons */}
       <div className="flex mt-3 space-x-2">
         <button 
-          ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
-          aria-label="Edit logic node"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleEditClick(e);
+          }}
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
         <button 
-          ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
-          aria-label="Delete logic node"
-          data-no-drag="true"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteClick(e);
+          }}
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>

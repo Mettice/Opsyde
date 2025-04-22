@@ -338,6 +338,8 @@ const BuilderPage = () => {
       type: 'input',
       position: getSafeNodePosition(nodes),
       sourcePosition: 'bottom',
+      targetPosition: 'top',
+      style: { zIndex: 1 },
       data: {
         label: `${inputType.charAt(0).toUpperCase() + inputType.slice(1)} Input`,
         inputType: inputType,
@@ -345,24 +347,13 @@ const BuilderPage = () => {
         variableName: variableName,
         isRequired: false,
         value: '',
+        inputs: {},
         nodeId: id,
         nodeType: 'input',
         onValueChange: (value) => {
-          // Update inputs state when value changes
           setInputs(prev => ({
             ...prev,
             [variableName]: value
-          }));
-        },
-        onFileUpload: (fileName, fileData) => {
-          // Handle file upload
-          setInputs(prev => ({
-            ...prev,
-            file_upload: {
-              filename: fileName,
-              data: fileData,
-              type: fileName.split('.').pop()
-            }
           }));
         }
       }
@@ -403,7 +394,9 @@ const BuilderPage = () => {
       id,
       type: 'output',
       position: getSafeNodePosition(nodes),
-      targetPosition: 'top',
+      sourcePosition: 'bottom',  // Can connect from bottom
+      targetPosition: 'top',     // Can only receive connections on top
+      style: { zIndex: 1 },     // Ensure proper layering
       data: {
         label,
         outputType,
@@ -1276,6 +1269,38 @@ const BuilderPage = () => {
   const resetView = () => {
     setViewport({ x: 0, y: 0, zoom: 1 });
   };
+
+  // Add this near the top of BuilderPage component
+  useEffect(() => {
+    // Handler for edit events
+    const handleNodeEditEvent = (event) => {
+      const nodeId = event.detail.nodeId;
+      const node = nodes.find(n => n.id === nodeId);
+      if (node) {
+        setSelectedNode(node);
+        setShowEditModal(true);
+      }
+    };
+
+    // Handler for delete events
+    const handleNodeDeleteEvent = (event) => {
+      const nodeId = event.detail.nodeId;
+      if (window.confirm('Are you sure you want to delete this node?')) {
+        setNodes(nodes => nodes.filter(n => n.id !== nodeId));
+        setEdges(edges => edges.filter(e => e.source !== nodeId && e.target !== nodeId));
+      }
+    };
+
+    // Add event listeners
+    document.addEventListener('node-edit', handleNodeEditEvent);
+    document.addEventListener('node-delete', handleNodeDeleteEvent);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener('node-edit', handleNodeEditEvent);
+      document.removeEventListener('node-delete', handleNodeDeleteEvent);
+    };
+  }, [nodes, setNodes, setEdges]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">

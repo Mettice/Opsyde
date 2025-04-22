@@ -4,6 +4,12 @@ import { useNavigate } from 'react-router-dom';
 
 export default function TemplatesPage() {
   const navigate = useNavigate();
+  const [selectedFramework, setSelectedFramework] = useState("all");
+  const filteredTemplates = selectedFramework === "all"
+  ? allTemplates
+  : allTemplates.filter(template =>
+      template.nodes.some(node => node.data.framework === selectedFramework)
+    );
 
   const handleLoad = (template) => {
     localStorage.setItem('loadedFlow', JSON.stringify(template));
