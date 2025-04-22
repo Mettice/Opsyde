@@ -69,117 +69,108 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
   useEffect(() => {
     const editButton = editButtonRef.current;
     const deleteButton = deleteButtonRef.current;
+    const card = cardRef.current;
+    
+    const stopPropagation = (e) => {
+      e.stopPropagation();
+    };
     
     if (editButton) {
-      editButton.addEventListener('click', handleEditClick);
+      editButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleEditClick(e);
+      }, true);
+      editButton.addEventListener('mousedown', stopPropagation, true);
+      editButton.addEventListener('touchstart', stopPropagation, true);
     }
     
     if (deleteButton) {
-      deleteButton.addEventListener('click', handleDeleteClick);
+      deleteButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleDeleteClick(e);
+      }, true);
+      deleteButton.addEventListener('mousedown', stopPropagation, true);
+      deleteButton.addEventListener('touchstart', stopPropagation, true);
     }
     
-    return () => {
-      if (editButton) {
-        editButton.removeEventListener('click', handleEditClick);
-      }
+    if (card) {
+      const handleCardClick = (e) => {
+        if (e.target === card || card.contains(e.target)) {
+          if (!e.target.closest('button') && 
+              !e.target.classList.contains('edit-button') && 
+              !e.target.classList.contains('delete-button') &&
+              !e.target.classList.contains('react-flow__handle')) {
+            e.stopImmediatePropagation();
+          }
+        }
+      };
       
-      if (deleteButton) {
-        deleteButton.removeEventListener('click', handleDeleteClick);
-      }
-    };
+      card.addEventListener('click', handleCardClick, true);
+      
+      return () => {
+        card.removeEventListener('click', handleCardClick, true);
+        if (editButton) {
+          editButton.removeEventListener('click', handleEditClick);
+          editButton.removeEventListener('mousedown', stopPropagation);
+          editButton.removeEventListener('touchstart', stopPropagation);
+        }
+        if (deleteButton) {
+          deleteButton.removeEventListener('click', handleDeleteClick);
+          deleteButton.removeEventListener('mousedown', stopPropagation);
+          deleteButton.removeEventListener('touchstart', stopPropagation);
+        }
+      };
+    }
   }, [handleEditClick, handleDeleteClick]);
   
   const inputType = data.inputType || 'text';
   const isRequired = data.isRequired || false;
   
   return (
-    <div
+    <div 
       ref={cardRef}
-      style={{
-        background: 'white',
-        border: `2px solid ${selected ? '#3b82f6' : '#c7d2fe'}`,
-        borderRadius: '0.5rem',
-        padding: '0.75rem',
-        width: '16rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        position: 'relative'
-      }}
+      className={`bg-white border-2 ${selected ? 'border-indigo-500' : 'border-indigo-200'} rounded-lg p-3 w-72`}
+      data-nodeid={data.id}
     >
-      {/* Target handle */}
       <Handle
         type="target"
         position={Position.Top}
-        style={{ background: '#4f46e5', width: '12px', height: '12px', top: '-6px' }}
         isConnectable={isConnectable}
+        className="w-4 h-4 bg-indigo-500 hover:bg-indigo-400 hover:w-5 hover:h-5 transition-all -top-2"
       />
       
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <div style={{ 
-          width: '2rem', 
-          height: '2rem', 
-          borderRadius: '9999px', 
-          backgroundColor: '#e0e7ff', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          marginRight: '0.5rem',
-          color: '#4f46e5'
-        }}>
-          {inputType === 'file' ? '📁' : inputType === 'url' ? '🔗' : '📝'}
-        </div>
-        <div>
-          <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{data.label || 'Input'}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-            {inputType} input
-            {isRequired && <span style={{ color: '#ef4444', marginLeft: '0.25rem' }}>*required</span>}
-          </div>
-        </div>
+      <div className="font-semibold text-gray-800 mb-1">
+        {data.label || 'Input Node'}
       </div>
       
-      {/* Input field */}
+      <div className="text-sm text-gray-500 mb-2">
+        Type: {inputType}
+      </div>
+      
       {inputType === 'text' && (
         <textarea
           value={inputValue}
           onChange={handleInputChange}
           placeholder="Enter text input here..."
-          style={{ 
-            width: '100%', 
-            padding: '0.5rem', 
-            border: '1px solid #d1d5db', 
-            borderRadius: '0.25rem',
-            fontSize: '0.875rem',
-            marginBottom: '0.5rem'
-          }}
+          className="w-full p-2 border rounded mb-2 text-sm"
           rows={3}
           onClick={(e) => e.stopPropagation()}
         />
       )}
       
       {inputType === 'file' && (
-        <div style={{ marginBottom: '0.5rem' }}>
-          <label style={{ 
-            display: 'block',
-            width: '100%',
-            padding: '0.5rem 0.75rem',
-            backgroundColor: '#eef2ff',
-            color: '#4338ca',
-            border: '1px solid #c7d2fe',
-            borderRadius: '0.25rem',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-            textAlign: 'center'
-          }}>
+        <div className="mb-2">
+          <label className="block w-full p-2 bg-indigo-100 text-indigo-700 border rounded cursor-pointer">
             <span>Upload File</span>
             <input 
               type="file" 
-              style={{ display: 'none' }}
+              className="hidden"
               onChange={handleFileUpload}
               onClick={(e) => e.stopPropagation()}
             />
           </label>
           {data.fileName && (
-            <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#6b7280' }}>
+            <div className="text-xs text-gray-600 mt-1">
               Uploaded: {data.fileName}
             </div>
           )}
@@ -192,33 +183,16 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
           value={inputValue}
           onChange={handleInputChange}
           placeholder="Enter URL..."
-          style={{ 
-            width: '100%', 
-            padding: '0.5rem', 
-            border: '1px solid #d1d5db', 
-            borderRadius: '0.25rem',
-            fontSize: '0.875rem',
-            marginBottom: '0.5rem'
-          }}
+          className="w-full p-2 border rounded mb-2 text-sm"
           onClick={(e) => e.stopPropagation()}
         />
       )}
       
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="flex mt-2 space-x-2">
         <button
           ref={editButtonRef}
           type="button"
-          style={{
-            fontSize: '0.75rem',
-            backgroundColor: '#dbeafe',
-            color: '#1d4ed8',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-          aria-label="Edit input"
+          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
         >
           Edit
         </button>
@@ -226,27 +200,17 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
         <button
           ref={deleteButtonRef}
           type="button"
-          style={{
-            fontSize: '0.75rem',
-            backgroundColor: '#fee2e2',
-            color: '#b91c1c',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-          aria-label="Delete input"
+          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
         >
           Delete
         </button>
       </div>
-      
-      {/* Source handle */}
+
       <Handle
         type="source"
         position={Position.Bottom}
-        style={{ background: '#4f46e5', width: '12px', height: '12px', bottom: '-6px' }}
         isConnectable={isConnectable}
+        className="w-4 h-4 bg-indigo-600 hover:bg-indigo-500 hover:w-5 hover:h-5 transition-all -bottom-2"
       />
     </div>
   );

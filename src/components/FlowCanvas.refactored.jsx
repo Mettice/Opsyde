@@ -1,24 +1,18 @@
-import React, { useRef, useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useMemo, useCallback } from 'react';
 import ReactFlow, {
   MiniMap,
-  Controls,
   Background,
-  ConnectionLineType,
   BezierEdge,
   SmoothStepEdge,
   StraightEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { recommendTemplates } from '../utils/recommendTemplates';
 import ConnectionLine from './ConnectionLine';
 import ConnectionGuide from './ConnectionGuide';
-import { toast } from 'react-hot-toast';
-import { nodeTypes } from '../utils/nodeTypes';
 import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
-import { validateConnection } from '../utils/validateConnection';
 import ZoomControls from './builder/ZoomControls';
 import { useFlow } from '../context/FlowContext';
-import RecommendationsWidget from './builder/RecommendationsWidget';
+import { nodeTypes as importedNodeTypes } from '../utils/nodeTypes';
 
 const edgeStyles = `
   .react-flow__edge:hover .react-flow__edge-path {
@@ -38,12 +32,12 @@ const FlowCanvas = ({
 }) => {
   const reactFlowWrapper = useRef(null);
   
+  // Get all state and handlers from FlowContext
   const {
     nodes,
     edges,
     onNodesChange,
     onEdgesChange,
-    onConnect,
     isValidConnection,
     handleConnectStart,
     handleConnectStop,
@@ -63,12 +57,12 @@ const FlowCanvas = ({
     debugMode,
     setDebugMode,
     connectionSourceType,
-    recommendations,
-    handleApplyTemplate
+    recommendations
   } = useFlow();
 
+  
   // Use useMemo to prevent recreation of nodeTypes on each render
-  const customNodeTypes = useMemo(() => nodeTypes, []);
+  const nodeTypes = useMemo(() => importedNodeTypes, []);
 
   // Define edge types
   const edgeTypes = useMemo(() => ({
@@ -78,6 +72,47 @@ const FlowCanvas = ({
     straight: StraightEdge,
   }), []);
 
+  // Handle applying a flow template
+  const handleApplyTemplate = useCallback((template) => {
+    if (!template) return;
+    
+    console.log("Applying template:", template);
+    
+    // Check if it's a flow template (has nodes and edges)
+    if (template.nodes && template.edges) {
+      if (onTemplateApply) {
+        onTemplateApply(template);
+      }
+    } else if (template.type === 'task' || template.expectedOutput) {
+      // It's a task template
+      if (onTemplateApply) {
+        onTemplateApply({
+          ...template,
+          type: 'task'  // Ensure type is set
+        });
+      }
+    } else if (template.type === 'tool' || template.toolType) {
+      // It's a tool template
+      if (onTemplateApply) {
+        onTemplateApply({
+          ...template,
+          type: 'tool'  // Ensure type is set
+        });
+      }
+    } else if (template.type === 'agent' || template.role) {
+      // It's an agent template
+      if (onTemplateApply) {
+        onTemplateApply({
+          ...template,
+          type: 'agent'  // Ensure type is set
+        });
+      }
+    } else {
+      // Unknown template type
+      console.error("Unknown template type:", template);
+    }
+  }, [onTemplateApply]);
+
   // Handle zooming to fit all nodes
   const handleFitView = useCallback(() => {
     // We'll use the ReactFlow instance method directly from the ref
@@ -86,10 +121,69 @@ const FlowCanvas = ({
     }
   }, []);
 
-  // Add a debounce for recommendations
-  const recommendationTimeoutRef = useRef(null);
+  // Create a collapsible recommendations widget
+  const RecommendationsWidget = () => (
+    <div className="absolute top-16 left-4 z-40">
+      {showRecommendations ? (
+        <div className="bg-white p-3 rounded shadow-md text-sm max-w-xs">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">Recommended Templates:</h3>
+            <button 
+              onClick={() => setShowRecommendations(false)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+            {recommendations.length > 0 ? (
+              recommendations.map((template, idx) => (
+                <div 
+                  key={idx}
+                  className="border border-gray-200 rounded p-2 hover:bg-blue-50 cursor-pointer"
+                  onClick={() => handleApplyTemplate(template)}
+                >
+                  <div className="flex items-center">
+                    <span className="text-lg mr-2">{template.icon || (template.type === 'flow' ? '📋' : '📄')}</span>
+                    <div>
+                      <h4 className="font-medium text-sm truncate">{template.name}</h4>
+                      <p className="text-xs text-gray-600 truncate">{template.description}</p>
+                      {template.type && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded ${
+                          template.type === 'agent' ? 'bg-blue-100 text-blue-800' : 
+                          template.type === 'task' ? 'bg-yellow-100 text-yellow-800' :
+                          template.type === 'tool' ? 'bg-green-100 text-green-800' :
+                          'bg-purple-100 text-purple-800'
+                        }`}>
+                          {template.type.charAt(0).toUpperCase() + template.type.slice(1)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-center py-2">No recommendations available</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button 
+          onClick={() => setShowRecommendations(true)}
+          className="bg-purple-500 text-white px-3 py-1 rounded text-sm flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+          Recommendations
+        </button>
+      )}
+    </div>
+  );
 
-  // Add this component to FlowCanvas.jsx
+  // Connection Diagram component
   const ConnectionDiagram = ({ isVisible, onClose }) => {
     if (!isVisible) return null;
     
@@ -148,55 +242,11 @@ const FlowCanvas = ({
     );
   };
 
-  // Add this useEffect to listen for the custom event
-  useEffect(() => {
-    const handleShowConnectionGuide = (e) => {
-      setShowConnectionGuideModal(true);
-      // You can optionally set a specific source type if provided in the event
-      if (e.detail && e.detail.sourceType) {
-        setConnectionSourceType(e.detail.sourceType);
-      } else {
-        setConnectionSourceType(null); // Show general guide
-      }
-    };
-
-    document.addEventListener('show-connection-guide', handleShowConnectionGuide);
-    
-    return () => {
-      document.removeEventListener('show-connection-guide', handleShowConnectionGuide);
-    };
-  }, []);
-
-  // Add this function to highlight nodes by type
-  const highlightNodesByType = (nodeType) => {
-    // Create a new array of nodes with highlighted property
-    const updatedNodes = nodes.map(node => ({
-      ...node,
-      data: {
-        ...node.data,
-        highlighted: node.type === nodeType
-      }
-    }));
-    
-    onNodesChange(updatedNodes);
-    
-    // Clear the highlight after a few seconds
-    setTimeout(() => {
-      onNodesChange(nodes.map(node => ({
-        ...node,
-        data: {
-          ...node.data,
-          highlighted: false
-        }
-      })));
-    }, 3000);
-  };
-
   return (
     <div className="h-full relative" ref={reactFlowWrapper}>
       <style>{edgeStyles}</style>
       
-      {/* Connection Guide Modal - shown when requested or when showConnectionRules is true */}
+      {/* Connection Guide Modal */}
       <ConnectionGuide 
         isVisible={showConnectionGuideModal} 
         sourceType={connectionSourceType}
@@ -227,7 +277,46 @@ const FlowCanvas = ({
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
+        onConnect={(params) => {
+          // Get the node types for logging
+          const sourceNode = nodes.find(n => n.id === params.source);
+          const targetNode = nodes.find(n => n.id === params.target);
+          const sourceType = sourceNode?.type || 'unknown';
+          const targetType = targetNode?.type || 'unknown';
+          
+          console.log(`Attempting connection: ${sourceType} → ${targetType}`);
+          
+          // First check if we're trying to add a second trigger node
+          if (params.source) {
+            if (sourceNode?.type === 'trigger') {
+              // Check if there's already another trigger with connections
+              const existingTriggerWithConnections = edges.some(edge => {
+                const edgeSourceNode = nodes.find(n => n.id === edge.source);
+                return edgeSourceNode?.type === 'trigger' && edge.source !== params.source;
+              });
+              
+              if (existingTriggerWithConnections) {
+                toast.error("Only one trigger node can be active in a flow");
+                return;
+              }
+            }
+          }
+
+          // Now check if the connection is valid according to our rules
+          const isValid = isValidConnection(params);
+          console.log(`Connection validation result: ${isValid ? 'VALID' : 'INVALID'} - ${sourceType} → ${targetType}`);
+          
+          if (isValid) {
+            // Only call onConnect if the connection is valid
+            if (onConnect) {
+              onConnect(params);
+            }
+          } else {
+            // Only show error for truly invalid connections
+            console.log(`Invalid connection rejected: ${sourceType} → ${targetType}`);
+            toast.error(`Invalid connection: ${sourceType} → ${targetType}`);
+          }
+        }}
         onNodeClick={onNodeClick}
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectStop}
@@ -237,15 +326,30 @@ const FlowCanvas = ({
         onEdgeClick={handleEdgeClick}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        connectionLineComponent={ConnectionLine}
+        connectionLineComponent={(props) => (
+          <ConnectionLine 
+            {...props} 
+            sourceType={connectionInfo.sourceType}
+            targetType={connectionInfo.targetType}
+          />
+        )}
         connectionLineType="bezier"
         defaultEdgeOptions={{
           type: 'default',
           animated: true,
-          style: { stroke: '#555', strokeWidth: 2 },
+          style: { stroke: '#555', strokeWidth: 2, transition: 'stroke 0.3s, stroke-width 0.3s' },
           interactionWidth: 20
         }}
+        elementsSelectable={true}
+        selectNodesOnDrag={false}
         fitView
+        onInit={(instance) => {
+          // Store the instance on the wrapper ref
+          reactFlowWrapper.current.reactFlowInstance = instance;
+          
+          // Also store it on the window object for access from other components
+          window.reactFlowInstance = instance;
+        }}
         proOptions={{ hideAttribution: true }}
       >
         <MiniMap 
@@ -263,8 +367,8 @@ const FlowCanvas = ({
           }}
         />
         <ZoomControls
-          zoomIn={() => reactFlowWrapper.current?.reactFlowInstance?.zoomIn()}
-          zoomOut={() => reactFlowWrapper.current?.reactFlowInstance?.zoomOut()}
+          zoomIn={() => reactFlowWrapper.current.reactFlowInstance.zoomIn()}
+          zoomOut={() => reactFlowWrapper.current.reactFlowInstance.zoomOut()}
           resetView={handleFitView}
           fitView={handleFitView}
         />

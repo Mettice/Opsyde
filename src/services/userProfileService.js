@@ -9,8 +9,8 @@ export async function getUserProfile(userId) {
       .eq('id', userId)
       .single();
       
-    if (error) throw error;
-    return data;
+    if (data) return data;
+    return null;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     return null;

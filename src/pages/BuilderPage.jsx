@@ -33,6 +33,7 @@ import ZoomControls from '../components/builder/ZoomControls';
 import EnhancedToolbar from '../components/builder/EnhancedToolbar';
 import FlowExecutionPanel from '../components/webrunners/FlowExecutionPanel';
 import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPanel';
+import FlowCanvasWithProvider from '../components/FlowCanvasWithProvider';
 
 // Custom Hooks
 import { useBuilderHistory } from '../hooks/useBuilderHistory';
@@ -1277,6 +1278,49 @@ const BuilderPage = () => {
     setViewport({ x: 0, y: 0, zoom: 1 });
   };
 
+  // Add these handler functions near your other handlers in BuilderPage
+
+  // Handle clicking on the pane (background)
+  const handlePaneClick = useCallback(() => {
+    // Deselect any selected nodes when clicking on the pane
+    setSelectedNode(null);
+  }, []);
+
+  // Handle selection changes
+  const handleSelectionChange = useCallback(({ nodes: selectedNodes }) => {
+    if (selectedNodes.length === 1) {
+      setSelectedNode(selectedNodes[0]);
+    } else {
+      setSelectedNode(null);
+    }
+  }, []);
+
+  // Handle applying templates
+  const handleTemplateApply = useCallback((template) => {
+    if (!template) return;
+
+    if (template.nodes && template.edges) {
+      // It's a flow template
+      setNodes(template.nodes);
+      setEdges(template.edges);
+      addToHistory({ nodes: template.nodes, edges: template.edges });
+    } else {
+      // It's a single node template
+      const newNode = {
+        id: `${template.type}-${Date.now()}`,
+        type: template.type,
+        position: getSafeNodePosition(nodes),
+        data: {
+          ...template,
+          nodeId: `${template.type}-${Date.now()}`,
+          nodeType: template.type
+        }
+      };
+      setNodes(nodes => [...nodes, newNode]);
+      addToHistory({ nodes: [...nodes, newNode], edges });
+    }
+  }, [nodes, edges, setNodes, setEdges, addToHistory]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <NavHeader 
@@ -1305,41 +1349,21 @@ const BuilderPage = () => {
       
       <div className="flex-1 relative">
         <ReactFlowProvider>
-          <FlowCanvas
+          <FlowCanvasWithProvider
+            onNodeClick={onNodeClick}
+            onNodeDragStop={onNodeDragStop}
+            onPaneClick={handlePaneClick}
+            onSelectionChange={handleSelectionChange}
+            onTemplateApply={handleTemplateApply}
+            templates={flowTemplates}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={handleConnect}
-            onNodeClick={onNodeClick}
-            onConnectStart={onConnectStart}
-            onConnectEnd={onConnectEnd}
-            onNodeDragStop={onNodeDragStop}
-            onEdgeClick={onEdgeClick}
-            onTemplateApply={applyFlowTemplate}
-            templates={flowTemplates}
-            connectionLineComponent={ConnectionLine}
-            connectionLineType="bezier"
-            defaultEdgeOptions={{
-              type: 'bezier',
-              animated: true,
-              style: {
-                stroke: '#888',
-                strokeWidth: 1.5,
-                strokeDasharray: '5,5'
-              }
-            }}
-            onViewportChange={setViewport}
-            onInit={(instance) => {
-              flowInstance.current = instance;
-            }}
           />
         </ReactFlowProvider>
         
-        {/* Replace the old metrics panel with the floating one */}
         <FloatingMetricsPanel nodes={nodes} edges={edges} />
-
-        {/* Add zoom controls */}
         <ZoomControls 
           zoomIn={zoomIn}
           zoomOut={zoomOut}
