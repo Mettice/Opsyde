@@ -362,6 +362,11 @@ async def run_crew(data: Dict[str, Any]) -> AsyncGenerator[str, None]:
                     node_results[current_node] = result
                     yield f"❌ Error in trigger: {str(e)}\n\n"
 
+            elif node_type == "input":
+                result = await run_input_node(node_data, inputs, context)
+            elif node_type == "output":
+                result = await run_output_node(node_data, inputs, context)
+
             if result is not None:
                 result = ensure_dict_result(result, label)
                 node_results[current_node] = result
@@ -731,6 +736,10 @@ async def process_node(node, i, inputs, context, node_results):
                 }
         elif node_type == "logic":
             result = await run_logic_node(node_data, inputs, context)
+        elif node_type == "input":
+            result = await run_input_node(node_data, inputs, context)
+        elif node_type == "output":
+            result = await run_output_node(node_data, inputs, context)
         else:
             result = {"error": f"Unknown node type: {node_type}"}
         
@@ -992,3 +1001,121 @@ async def handle_trigger_node(node_data=None):
         "trigger_id": trigger_id,
         "timestamp": datetime.now().isoformat()
     }
+
+# Add these functions to handle input and output nodes
+
+async def run_input_node(node_data, inputs, context=None):
+    """
+    Process an input node
+    
+    Args:
+        node_data: Dictionary containing input node configuration
+        inputs: Dictionary of inputs for the workflow
+        context: Optional execution context
+        
+    Returns:
+        Dictionary containing the input node result
+    """
+    try:
+        input_type = node_data.get("inputType", "text")
+        input_key = node_data.get("inputKey", "input")
+        label = node_data.get("label", "Input Node")
+        
+        logger.info(f"Processing input node '{label}' of type '{input_type}'")
+        
+        # Get the input value from the inputs dictionary
+        input_value = None
+        if input_key in inputs:
+            input_value = inputs[input_key]
+            
+            # For file uploads, we might need special handling
+            if input_type == "file" and isinstance(input_value, dict) and "data" in input_value:
+                logger.info(f"Processing file upload: {input_value.get('filename', 'unknown')}")
+                
+                # Return the file data
+                return {
+                    "output": f"File uploaded: {input_value.get('filename', 'unknown')}",
+                    "type": "file_input",
+                    "file_data": input_value,
+                    "input_key": input_key
+                }
+        
+        # Return the input value
+        return {
+            "output": input_value or "",
+            "type": "input_result",
+            "input_type": input_type,
+            "input_key": input_key
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in input node: {str(e)}")
+        return {
+            "output": f"Error: {str(e)}",
+            "type": "error",
+            "error": str(e)
+        }
+
+async def run_output_node(node_data, inputs, context=None):
+    """
+    Process an output node
+    
+    Args:
+        node_data: Dictionary containing output node configuration
+        inputs: Dictionary of inputs for the workflow
+        context: Optional execution context
+        
+    Returns:
+        Dictionary containing the output node result
+    """
+    try:
+        output_type = node_data.get("outputType", "webhook")
+        label = node_data.get("label", "Output Node")
+        
+        logger.info(f"Processing output node '{label}' of type '{output_type}'")
+        
+        # Initialize context if it's None
+        if context is None:
+            context = {}
+            
+        # Use inputs as the input_data if not available in context
+        input_data = context.get("input_data", inputs)
+        
+        # Create output configuration based on node type
+        output_config = {
+            "emailEnabled": output_type == "email",
+            "discordEnabled": output_type == "discord",
+            "sheetsEnabled": output_type == "sheets",
+            "webhookEnabled": output_type == "webhook"
+        }
+        
+        # Add specific configuration based on output type
+        if output_type == "webhook":
+            output_config["webhookUrl"] = node_data.get("webhookUrl", "")
+        elif output_type == "discord":
+            output_config["discordWebhook"] = node_data.get("webhookUrl", "")
+        elif output_type == "sheets":
+            output_config["sheetId"] = node_data.get("sheetId", "")
+        elif output_type == "email":
+            output_config["email"] = node_data.get("email", "")
+            output_config["emailSubject"] = node_data.get("emailSubject", "Workflow Results")
+        
+        # Use the unified output router
+        from outputs.output_router import route_output
+        results = route_output(input_data, output_config)
+        
+        # Return the results
+        return {
+            "output": str(results),
+            "type": "output_result",
+            "output_type": output_type,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in output node: {str(e)}")
+        return {
+            "output": f"Error: {str(e)}",
+            "type": "error",
+            "error": str(e)
+        }

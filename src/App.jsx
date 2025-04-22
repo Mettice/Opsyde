@@ -1,14 +1,15 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import HomePage from './pages/Home';
 import BuilderPage from './pages/BuilderPage';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
-import Profile from './pages/Profile';
+import Dashboard from './pages/Dashboard';
 import NavHeader from './components/profile/NavHeader';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
+import HelpPanel from './components/HelpPanel';
 
 // Protected route component
 function ProtectedRoute({ children }) {
@@ -23,6 +24,38 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
+// Main app layout with NavHeader for non-builder pages
+function AppLayout({ children }) {
+  const location = useLocation();
+  const isBuilderPage = location.pathname === '/builder';
+  const [showHelp, setShowHelp] = useState(false);
+  const [projectName, setProjectName] = useState("Untitled Workflow");
+  const [editingProjectName, setEditingProjectName] = useState(false);
+  
+  // Don't render NavHeader for builder page as it has its own
+  if (isBuilderPage) {
+    return children;
+  }
+  
+  return (
+    <div className="app-container flex flex-col" style={{ width: '100vw', height: '100vh' }}>
+      <NavHeader 
+        showHelp={() => setShowHelp(true)} 
+        projectName={projectName}
+        editingProjectName={editingProjectName}
+        setEditingProjectName={setEditingProjectName}
+        setProjectName={setProjectName}
+        isBuilderPage={false}
+      />
+      <div className="flex-1 overflow-auto">
+        {children}
+      </div>
+      
+      {showHelp && <HelpPanel onClose={() => setShowHelp(false)} />}
+    </div>
+  );
+}
+
 function App() {
   return (
     <Router>
@@ -30,23 +63,22 @@ function App() {
         <Toaster position="top-right" />
         <Routes>
           <Route path="/" element={
-            <div className="app-container flex flex-col" style={{ width: '100vw', height: '100vh' }}>
-              <NavHeader isBuilderPage={false} />
-              <div className="flex-1 overflow-auto">
-                <HomePage />
-              </div>
-            </div>
+            <AppLayout>
+              <HomePage />
+            </AppLayout>
           } />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <AppLayout>
+                <Dashboard />
+              </AppLayout>
+            </ProtectedRoute>
+          } />
           <Route path="/profile" element={
             <ProtectedRoute>
-              <div className="app-container flex flex-col" style={{ width: '100vw', height: '100vh' }}>
-                <NavHeader isBuilderPage={false} />
-                <div className="flex-1 overflow-auto">
-                  <Profile />
-                </div>
-              </div>
+              <Navigate to="/dashboard" replace />
             </ProtectedRoute>
           } />
           <Route path="/builder" element={

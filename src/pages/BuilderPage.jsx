@@ -7,6 +7,8 @@ import { useAuth } from '../auth/AuthProvider';
 import { saveFlow, updateFlow } from '../api';
 import { useNavigate } from 'react-router-dom';
 import { Link } from 'react-router-dom';
+import NavHeader from '../components/profile/NavHeader';
+import TopActionToolbar from '../components/builder/TopActionToolbar';
 
 // Components
 import FlowCanvas from '../components/FlowCanvas';
@@ -14,7 +16,7 @@ import HelpPanel from '../components/HelpPanel';
 import PreviewMode from '../components/PreviewMode';
 import EditModal from '../components/EditModal';
 import ToolTemplates from '../components/templates/ToolsTemplates';
-import Toolbar from '../components/builder/Toolbar';
+import InputPanel from '../components/builder/InputPanel';
 import GraphMetricsPanel from '../components/builder/GraphMetricsPanel';
 import ConnectionLine from '../components/builder/ConnectionLine';
 import TemplateModal from '../components/builder/TemplateModal';
@@ -22,11 +24,13 @@ import RunCrewButton from '../components/RunCrewButton';
 import WebRunnerPanel from '../components/webrunners/WebRunnerPanel';
 import OutputPanel from '../components/webrunners/OutputPanel';
 import OutputConfigPanel from '../components/builder/OutputConfigPanel';
-import InputPanel from '../components/builder/InputPanel';
 import { sendToEmail, postToDiscord, pushToSheets, postToSlack } from '../utils/outputUtils';
 import Notification from '../components/Notification';
 import WebhookFlowModal from '../components/WebhookFlowModal';
 import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
+import FloatingMetricsPanel from '../components/builder/FloatingMetricsPanel';
+import ZoomControls from '../components/builder/ZoomControls';
+import EnhancedToolbar from '../components/builder/EnhancedToolbar';
 
 // Custom Hooks
 import { useBuilderHistory } from '../hooks/useBuilderHistory';
@@ -150,6 +154,12 @@ const BuilderPage = () => {
 
   // Add this at the component level, outside any effects or callbacks
   const notifiedTriggers = useRef(new Set());
+
+  // Add this state near the top of your component with other state declarations
+  const [viewport, setViewport] = useState({ x: 0, y: 0, zoom: 1 });
+
+  // Also add a flowInstance ref to use with the fitView function
+  const flowInstance = useRef(null);
 
   // Add Agent function - kept in main component as it's simple
   const addAgent = () => {
@@ -301,6 +311,97 @@ const BuilderPage = () => {
         nodeType: 'logic',
         onEdit: () => handleNodeEdit(id),
         onDelete: () => handleNodeDelete(id)
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Input Node function
+  const addInputNode = (inputType = 'text') => {
+    const id = `input-${Date.now()}`;
+    const variableName = inputType === 'text' ? 'text_input' : 
+                         inputType === 'file' ? 'file_upload' : 'url_input';
+    
+    const newNode = {
+      id,
+      type: 'input',
+      position: getSafeNodePosition(nodes),
+      sourcePosition: 'bottom',
+      data: {
+        label: `${inputType.charAt(0).toUpperCase() + inputType.slice(1)} Input`,
+        inputType: inputType,
+        inputKey: variableName,
+        variableName: variableName,
+        isRequired: false,
+        value: '',
+        nodeId: id,
+        nodeType: 'input',
+        onValueChange: (value) => {
+          // Update inputs state when value changes
+          setInputs(prev => ({
+            ...prev,
+            [variableName]: value
+          }));
+        },
+        onFileUpload: (fileName, fileData) => {
+          // Handle file upload
+          setInputs(prev => ({
+            ...prev,
+            file_upload: {
+              filename: fileName,
+              data: fileData,
+              type: fileName.split('.').pop()
+            }
+          }));
+        }
+      }
+    };
+    
+    setNodes(nodes => [...nodes, newNode]);
+    addToHistory({ nodes: [...nodes, newNode], edges });
+  };
+
+  // Add Output Node function
+  const addOutputNode = (outputType = 'webhook') => {
+    const id = `output-${Date.now()}`;
+    let label, configField;
+    
+    switch (outputType) {
+      case 'webhook':
+        label = 'Webhook Output';
+        configField = 'webhookUrl';
+        break;
+      case 'discord':
+        label = 'Discord Output';
+        configField = 'webhookUrl';
+        break;
+      case 'sheets':
+        label = 'Sheets Output';
+        configField = 'sheetId';
+        break;
+      case 'email':
+        label = 'Email Output';
+        configField = 'email';
+        break;
+      default:
+        label = 'Output Node';
+        configField = 'webhookUrl';
+    }
+    
+    const newNode = {
+      id,
+      type: 'output',
+      position: getSafeNodePosition(nodes),
+      targetPosition: 'top',
+      data: {
+        label,
+        outputType,
+        [configField]: '',
+        description: `Send output to ${outputType}`,
+        nodeId: id,
+        nodeType: 'output'
       }
     };
     
@@ -931,7 +1032,7 @@ const BuilderPage = () => {
     }
   };
 
-  // Then keep only the enhanced version (around line 1012)
+  // Then define toolbarProps AFTER all functions are defined
   const toolbarProps = {
     onAddAgent: addAgent,
     onAddTask: addTask,
@@ -940,16 +1041,18 @@ const BuilderPage = () => {
     onAddDelay: addDelayNode,
     onAddTrigger: addTriggerNode,
     onAddLogicNode: addLogicNode,
-    onExportYAML: exportYAML,
-    onExportPython: exportMainPy,
+    onAddInputNode: addInputNode,
+    onAddOutputNode: addOutputNode,
     onSaveProject: enhancedSaveProject,
     onLoadProject: enhancedLoadProject,
+    onExportYAML: exportYAML,
+    onExportPython: exportMainPy,
+    onExportProject: exportProject,
     onPreviewWorkflow: () => setShowPreview(true),
-    onUndo: handleUndo,
-    onRedo: handleRedo,
     canUndo,
     canRedo,
-    onExportProject: exportProject,
+    onUndo: handleUndo,
+    onRedo: handleRedo
   };
 
   // Add this state variable near the top with your other state variables
@@ -966,85 +1069,34 @@ const BuilderPage = () => {
     }
   };
 
+  // Inside your component, add zoom functions
+  const zoomIn = () => {
+    setViewport((prev) => ({ ...prev, zoom: prev.zoom * 1.2 }));
+  };
+
+  const zoomOut = () => {
+    setViewport((prev) => ({ ...prev, zoom: prev.zoom * 0.8 }));
+  };
+
+  const resetView = () => {
+    setViewport({ x: 0, y: 0, zoom: 1 });
+  };
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-gray-800 text-white p-2 flex justify-between items-center">
-        <div className="flex items-center">
-          <h1 className="text-xl font-bold">Nodes Flow</h1>
-          <span className="mx-2 text-gray-400">|</span>
-          <p className="text-sm text-gray-300">Visual AI Agent Workflow Designer</p>
-        </div>
-        
-        <div className="absolute left-1/2 transform -translate-x-1/2">
-          <div className="bg-gray-700 rounded-md px-4 py-2 flex items-center">
-            <span className="text-gray-400 mr-2">Project:</span>
-            {editingProjectName ? (
-              <input
-                type="text"
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
-                onBlur={() => setEditingProjectName(false)}
-                onKeyDown={(e) => e.key === 'Enter' && setEditingProjectName(false)}
-                autoFocus
-                className="bg-gray-600 text-white px-2 py-1 rounded"
-              />
-            ) : (
-              <span className="font-medium cursor-pointer" onClick={() => setEditingProjectName(true)}>
-                {projectName}
-              </span>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex items-center">
-          {user ? (
-            <div className="relative">
-              <button 
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 rounded-md px-3 py-1"
-              >
-                <span className="text-sm">{user.email}</span>
-                <div className="h-6 w-6 rounded-full bg-indigo-500 flex items-center justify-center">
-                  {user.email?.charAt(0).toUpperCase()}
-                </div>
-              </button>
-              
-              {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10">
-                  <Link 
-                    to="/profile"
-                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    My Flows
-                  </Link>
-                  <button
-                    onClick={() => setShowHelpPanel(true)}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Help
-                  </button>
-                  <button
-                    onClick={handleSignOut}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button 
-              onClick={() => navigate('/login')}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-            >
-              Sign In
-            </button>
-          )}
-        </div>
-      </header>
+      <NavHeader 
+        showHelp={() => setShowHelpPanel(true)} 
+        projectName={projectName}
+        editingProjectName={editingProjectName}
+        setEditingProjectName={setEditingProjectName}
+        setProjectName={setProjectName}
+        isBuilderPage={true}
+      />
+      
+      {/* Replace TopActionToolbar with EnhancedToolbar */}
+      <EnhancedToolbar toolbarProps={toolbarProps} />
       
       <div className="flex items-center space-x-2 px-4 py-2 bg-gray-100">
-        <Toolbar {...toolbarProps} />
         <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
         <button 
           className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm ml-2"
@@ -1054,7 +1106,6 @@ const BuilderPage = () => {
         </button>
       </div>
       
-      {/* Add OutputConfigPanel here */}
       <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
       
       <div className="flex-1 relative">
@@ -1083,19 +1134,23 @@ const BuilderPage = () => {
                 strokeDasharray: '5,5'
               }
             }}
+            onViewportChange={setViewport}
+            onInit={(instance) => {
+              flowInstance.current = instance;
+            }}
           />
         </ReactFlowProvider>
         
-        {/* Add the metrics panel */}
-        {showMetrics && <GraphMetricsPanel nodes={nodes} edges={edges} />}
-        
-        {/* Toggle metrics button */}
-        <button 
-          className="absolute top-4 right-4 bg-gray-700 text-white px-3 py-1 rounded text-sm z-40"
-          onClick={() => setShowMetrics(!showMetrics)}
-        >
-          {showMetrics ? 'Hide Metrics' : 'Show Metrics'}
-        </button>
+        {/* Replace the old metrics panel with the floating one */}
+        <FloatingMetricsPanel nodes={nodes} edges={edges} />
+
+        {/* Add zoom controls */}
+        <ZoomControls 
+          zoomIn={zoomIn}
+          zoomOut={zoomOut}
+          resetView={resetView}
+          fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
+        />
       </div>
       
       {showEditModal && selectedNode && (

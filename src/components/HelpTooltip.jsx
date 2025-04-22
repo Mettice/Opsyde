@@ -62,64 +62,63 @@ const helpContent = {
 };
 
 const HelpTooltip = ({ type, field }) => {
-  const [isVisible, setIsVisible] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
-  const buttonRef = useRef(null);
-
-  const content = field 
-    ? helpContent[type]?.fields?.[field]
-    : helpContent[type]?.content;
+  const [showTooltip, setShowTooltip] = useState(false);
+  const tooltipRef = useRef(null);
   
-  const title = helpContent[type]?.title || type;
-
-  // Update tooltip position when it becomes visible
+  // Close tooltip when clicking outside
   useEffect(() => {
-    if (isVisible && buttonRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      
-      // Position the tooltip below the button
-      const top = buttonRect.bottom + window.scrollY + 5; // 5px gap
-      
-      // Center horizontally, but ensure it stays within viewport
-      let left = buttonRect.left + (buttonRect.width / 2) + window.scrollX - 128; // 128 = half of tooltip width
-      
-      // Adjust if too close to left edge
-      if (left < 10) left = 10;
-      
-      // Adjust if too close to right edge (assuming tooltip width is 256px)
-      if (left + 256 > window.innerWidth - 10) {
-        left = window.innerWidth - 266; // 10px from right edge
+    function handleClickOutside(event) {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
+        setShowTooltip(false);
       }
-      
-      setTooltipPosition({ top, left });
     }
-  }, [isVisible]);
-
-  if (!content) return null;
-
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+  
+  // Get tooltip content based on type
+  const getTooltipContent = () => {
+    switch (type) {
+      case 'agent':
+        return "An AI agent with a specific role, goals, and capabilities. Agents can use tools and perform tasks.";
+      case 'task':
+        return "A specific job or assignment that an agent can perform. Tasks have expected inputs and outputs.";
+      case 'tool':
+        return "A capability that extends what agents can do, such as API calls, web searches, or calculations.";
+      case 'export':
+        if (field === 'yaml') {
+          return "Export your workflow as a YAML configuration file for CrewAI.";
+        } else if (field === 'python') {
+          return "Generate a complete Python script with all agents, tasks, and tools defined.";
+        }
+        return "Export your workflow to use it in other systems.";
+      case 'preview':
+        return "Preview and simulate how your workflow will execute step by step.";
+      default:
+        return "Click for more information";
+    }
+  };
+  
   return (
-    <span className="inline-block">
-      <button
-        ref={buttonRef}
-        className="w-4 h-4 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-xs font-bold ml-1"
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
-        onClick={() => setIsVisible(!isVisible)}
-        aria-label={`Help for ${field || type}`}
+    <span ref={tooltipRef} className="relative ml-1">
+      {/* Use a span instead of a button */}
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowTooltip(!showTooltip);
+        }}
+        className="inline-flex items-center justify-center w-4 h-4 bg-gray-200 text-gray-700 rounded-full text-xs cursor-pointer hover:bg-gray-300"
       >
         ?
-      </button>
+      </span>
       
-      {isVisible && (
-        <div 
-          className="fixed z-50 w-64 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-sm text-left"
-          style={{
-            top: `${tooltipPosition.top}px`,
-            left: `${tooltipPosition.left}px`,
-          }}
-        >
-          <div className="font-semibold mb-1">{field ? `${title}: ${field}` : title}</div>
-          <p className="text-gray-600">{content}</p>
+      {showTooltip && (
+        <div className="absolute z-50 w-64 p-2 bg-gray-800 text-white text-xs rounded shadow-lg -right-2 top-6">
+          <div className="absolute -top-1 right-2 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+          {getTooltipContent()}
         </div>
       )}
     </span>

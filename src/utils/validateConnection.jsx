@@ -31,6 +31,20 @@ export const validateConnection = (params, nodes, edges, toast) => {
     return false;
   }
   
+  // === Input Node ===
+  if (from === 'input') {
+    // Input can connect to any node except trigger
+    console.log("Valid connection: input → any (except trigger)");
+    return to !== 'trigger';
+  }
+  
+  // === Output Node ===
+  if (to === 'output') {
+    // Any node can connect to output except trigger
+    console.log("Valid connection: any → output (except trigger)");
+    return from !== 'trigger';
+  }
+  
   // === Logic Node ===
   if (from === 'logic') {
     // Logic nodes can connect to anything except triggers
@@ -72,23 +86,23 @@ export const validateConnection = (params, nodes, edges, toast) => {
   
   // === Tool Node ===
   if (from === 'tool') {
-    // Tool can connect to agent or chatbot
-    console.log("Valid connection: tool → agent/chatbot");
-    return to === 'agent' || to === 'chatbot' || to === 'chat';
+    // Tool can connect to agent, chatbot, or output
+    console.log("Valid connection: tool → agent/chatbot/output");
+    return to === 'agent' || to === 'chatbot' || to === 'chat' || to === 'output';
   }
   
   // === Agent Node ===
   if (from === 'agent') {
-    // Agent can connect to task, chatbot, or delay
-    console.log("Valid connection: agent → task/chatbot/delay");
-    return to === 'task' || to === 'chatbot' || to === 'chat' || to === 'delay';
+    // Agent can connect to task, chatbot, delay, or output
+    console.log("Valid connection: agent → task/chatbot/delay/output");
+    return to === 'task' || to === 'chatbot' || to === 'chat' || to === 'delay' || to === 'output';
   }
   
   // === Task Node ===
   if (from === 'task') {
-    // Task can connect to task, chatbot, or delay
-    console.log("Valid connection: task → task/chatbot/delay");
-    return to === 'task' || to === 'chatbot' || to === 'chat' || to === 'delay';
+    // Task can connect to task, chatbot, delay, or output
+    console.log("Valid connection: task → task/chatbot/delay/output");
+    return to === 'task' || to === 'chatbot' || to === 'chat' || to === 'delay' || to === 'output';
   }
   
   // If we get here, the connection is not valid

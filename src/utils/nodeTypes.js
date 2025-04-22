@@ -5,6 +5,8 @@ import ChatNode from '../components/ChatNode';
 import DelayNode from '../components/DelayNode';
 import TriggerNode from '../components/TriggerNode';
 import LogicNode from '../components/LogicNode';
+import InputNode from '../components/InputNode';
+import OutputNode from '../components/OutputNode';
 
 export const nodeTypes = {
   agent: AgentCard,
@@ -14,7 +16,9 @@ export const nodeTypes = {
   chat: ChatNode,
   delay: DelayNode,
   trigger: TriggerNode,
-  logic: LogicNode
+  logic: LogicNode,
+  input: InputNode,
+  output: OutputNode
 }; 
 
 
