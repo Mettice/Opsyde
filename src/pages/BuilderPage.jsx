@@ -31,6 +31,8 @@ import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
 import FloatingMetricsPanel from '../components/builder/FloatingMetricsPanel';
 import ZoomControls from '../components/builder/ZoomControls';
 import EnhancedToolbar from '../components/builder/EnhancedToolbar';
+import FlowExecutionPanel from '../components/webrunners/FlowExecutionPanel';
+import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPanel';
 
 // Custom Hooks
 import { useBuilderHistory } from '../hooks/useBuilderHistory';
@@ -42,6 +44,8 @@ import { useToolTemplates } from '../hooks/useToolTemplates';
 import { generateDefaultNodes } from '../utils/nodeHelpers';
 import { flowTemplates } from '../data/flowTemplates';
 import { getSafeNodePosition } from '../utils/getSafeNodePosition';
+import { runFlow } from '../utils/flowExecutionEngine';
+import { nodeExecutors } from '../utils/nodeExecutors';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -63,7 +67,7 @@ const BuilderPage = () => {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showMetrics, setShowMetrics] = useState(true);
   const [isRunning, setIsRunning] = useState(false);
-  const [executionLogs, setExecutionLogs] = useState('');
+  const [executionLogs, setExecutionLogs] = useState([]);
   const [showRunnerPanel, setShowRunnerPanel] = useState(false);
   const [minimizeRunnerPanel, setMinimizeRunnerPanel] = useState(false);
   const [showOutputPanel, setShowOutputPanel] = useState(false);
@@ -160,6 +164,11 @@ const BuilderPage = () => {
 
   // Also add a flowInstance ref to use with the fitView function
   const flowInstance = useRef(null);
+
+  // Add this state
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [showExecutionPanel, setShowExecutionPanel] = useState(false);
+  const [minimizeExecutionPanel, setMinimizeExecutionPanel] = useState(false);
 
   // Add Agent function - kept in main component as it's simple
   const addAgent = () => {
@@ -493,9 +502,66 @@ const BuilderPage = () => {
     setNotifications(prev => prev.filter(notification => notification.id !== id));
   }, []);
 
-  // Update the runCrew function to handle the webhook flow response
+  // Add these state variables
+  const [executionMode, setExecutionMode] = useState('hybrid'); // 'local', 'backend', or 'hybrid'
+  const [textLogs, setTextLogs] = useState('');
+  const [structuredLogs, setStructuredLogs] = useState([]);
+
+  // Add this function to check for flow validation issues
+  const validateFlow = () => {
+    const issues = [];
+    
+    // Check for nodes without connections
+    const isolatedNodes = nodes.filter(node => {
+      const hasConnections = edges.some(edge => 
+        edge.source === node.id || edge.target === node.id
+      );
+      return !hasConnections && node.type !== 'trigger'; // Triggers can be isolated
+    });
+    
+    if (isolatedNodes.length > 0) {
+      issues.push({
+        type: 'warning',
+        message: `${isolatedNodes.length} node(s) are not connected to the flow`,
+        nodes: isolatedNodes
+      });
+    }
+    
+    // Check for missing required inputs
+    const inputNodes = nodes.filter(node => node.type === 'input');
+    const missingRequiredInputs = inputNodes.filter(node => {
+      return node.data?.isRequired && 
+             (!inputs[node.data.variableName] || inputs[node.data.variableName] === '');
+    });
+    
+    if (missingRequiredInputs.length > 0) {
+      issues.push({
+        type: 'error',
+        message: `${missingRequiredInputs.length} required input(s) are missing values`,
+        nodes: missingRequiredInputs
+      });
+    }
+    
+    // Check for output nodes without incoming connections
+    const outputNodes = nodes.filter(node => node.type === 'output');
+    const disconnectedOutputs = outputNodes.filter(node => {
+      return !edges.some(edge => edge.target === node.id);
+    });
+    
+    if (disconnectedOutputs.length > 0) {
+      issues.push({
+        type: 'warning',
+        message: `${disconnectedOutputs.length} output node(s) have no incoming connections`,
+        nodes: disconnectedOutputs
+      });
+    }
+    
+    return issues;
+  };
+
+  // Update the runCrew function to use the enhanced validation
   const runCrew = async () => {
-    if (isRunning) return;
+    if (isExecuting) return;
     
     // Check for errors
     const errors = checkWorkflowErrors();
@@ -504,100 +570,243 @@ const BuilderPage = () => {
       return;
     }
     
-    setIsRunning(true);
-    setExecutionLogs('');
-    setShowRunnerPanel(true);
-    setMinimizeRunnerPanel(false);
+    // Run the enhanced validation
+    const validationIssues = validateFlow();
+    
+    // Show warnings but allow execution to continue
+    validationIssues.forEach(issue => {
+      if (issue.type === 'warning') {
+        toast.warning(issue.message);
+        
+        // Highlight the nodes with issues
+        setNodes(nodes => 
+          nodes.map(n => 
+            issue.nodes.some(node => node.id === n.id)
+              ? { 
+                  ...n, 
+                  style: { 
+                    ...n.style, 
+                    borderColor: '#f59e0b', // Amber color for warnings
+                    borderWidth: 2,
+                    boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.5)'
+                  } 
+                } 
+              : n
+          )
+        );
+      } else if (issue.type === 'error') {
+        toast.error(issue.message);
+        
+        // Highlight the nodes with errors
+        setNodes(nodes => 
+          nodes.map(n => 
+            issue.nodes.some(node => node.id === n.id)
+              ? { 
+                  ...n, 
+                  style: { 
+                    ...n.style, 
+                    borderColor: '#ef4444', // Red color for errors
+                    borderWidth: 2,
+                    boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.5)'
+                  } 
+                } 
+              : n
+          )
+        );
+        
+        // Don't continue execution if there are errors
+        return;
+      }
+    });
+    
+    // Continue with execution if there are no errors
+    if (validationIssues.some(issue => issue.type === 'error')) {
+      return;
+    }
+    
+    setIsExecuting(true);
+    setTextLogs('');
+    setStructuredLogs([]);
+    setShowExecutionPanel(true);
+    setMinimizeExecutionPanel(false);
     
     try {
-      // Prepare the payload
-      const payload = {
-        nodes,
-        edges,
-        metadata: {
-          name: projectName,
-          output: outputConfig
-        }
-      };
+      if (executionMode === 'local' || executionMode === 'hybrid') {
+        // Frontend execution for visualization
+        
+        // Highlight the node being executed
+        const handleNodeStart = (node) => {
+          // Update node styling to show it's being executed
+          setNodes(nodes => 
+            nodes.map(n => 
+              n.id === node.id 
+                ? { 
+                    ...n, 
+                    style: { 
+                      ...n.style, 
+                      borderColor: '#3b82f6', 
+                      borderWidth: 2,
+                      boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5)'
+                    } 
+                  } 
+                : n
+            )
+          );
+        };
+        
+        // Update node styling when execution completes
+        const handleNodeComplete = (node, result) => {
+          // Update node styling based on result
+          setNodes(nodes => 
+            nodes.map(n => 
+              n.id === node.id 
+                ? { 
+                    ...n, 
+                    style: { 
+                      ...n.style, 
+                      borderColor: result && result.error ? '#ef4444' : '#10b981', 
+                      borderWidth: 2,
+                      boxShadow: result && result.error 
+                        ? '0 0 0 2px rgba(239, 68, 68, 0.5)' 
+                        : '0 0 0 2px rgba(16, 185, 129, 0.5)'
+                    } 
+                  } 
+                : n
+            )
+          );
+        };
+        
+        // Run the flow
+        const { logs } = await runFlow(
+          nodes, 
+          edges, 
+          inputs, 
+          nodeExecutors,
+          handleNodeStart,
+          handleNodeComplete,
+          (state, logs) => {
+            console.log('Flow execution completed:', state);
+            // Reset node styling after a delay
+            setTimeout(() => {
+              setNodes(nodes => 
+                nodes.map(n => ({ 
+                  ...n, 
+                  style: { 
+                    ...n.style, 
+                    borderColor: undefined, 
+                    borderWidth: undefined,
+                    boxShadow: undefined
+                  } 
+                }))
+              );
+            }, 2000);
+          }
+        );
+        
+        // Update logs
+        setStructuredLogs(logs);
+      }
       
-      // THIS IS THE FIX - Ensure inputs are properly formatted
-      if (inputs) {
-        if (typeof inputs === 'string') {
-          payload.inputs = { input: inputs };
-        } else if (typeof inputs === 'object' && inputs !== null) {
-          payload.inputs = inputs;
+      if (executionMode === 'backend' || executionMode === 'hybrid') {
+        // Backend execution for actual processing
+        
+        // Prepare the payload
+        const payload = {
+          nodes,
+          edges,
+          metadata: {
+            name: projectName,
+            output: outputConfig
+          }
+        };
+        
+        // Ensure inputs are properly formatted
+        if (inputs) {
+          if (typeof inputs === 'string') {
+            payload.inputs = { input: inputs };
+          } else if (typeof inputs === 'object' && inputs !== null) {
+            payload.inputs = inputs;
+          } else {
+            payload.inputs = {};
+          }
         } else {
           payload.inputs = {};
         }
-      } else {
-        payload.inputs = {};
-      }
-      
-      // Send the request
-      const response = await fetch(`${BACKEND_URL}/run-crew`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      // Handle the response
-      if (!response.ok) {
-        throw new Error(`Server responded with ${response.status}`);
-      }
-      
-      // Process the streaming response
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let logs = '';
-      
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
         
-        const text = decoder.decode(value);
-        logs += text;
-        setExecutionLogs(logs);
-      }
-      
-      // Show output panel when done
-      setShowOutputPanel(true);
-      
-      // Handle outputs based on configuration
-      if (outputConfig.emailEnabled && outputConfig.email) {
-        await sendToEmail(logs, outputConfig.email);
-        addNotification({
-          message: "Results sent to email",
-          type: "success"
+        // Send the request
+        const response = await fetch(`${BACKEND_URL}/run-crew`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
         });
+        
+        // Handle the response
+        if (!response.ok) {
+          throw new Error(`Server responded with ${response.status}`);
+        }
+        
+        // Process the streaming response
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let logs = '';
+        
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          
+          const text = decoder.decode(value);
+          logs += text;
+          setTextLogs(logs);
+        }
+        
+        // Show output panel when done
+        setShowOutputPanel(true);
+        
+        // Handle outputs based on configuration
+        if (outputConfig.emailEnabled && outputConfig.email) {
+          await sendToEmail(logs, outputConfig.email);
+          addNotification({
+            message: "Results sent to email",
+            type: "success"
+          });
+        }
+        
+        if (outputConfig.discordEnabled && outputConfig.discordWebhook) {
+          await postToDiscord(logs, outputConfig.discordWebhook);
+          addNotification({
+            message: "Results posted to Discord",
+            type: "success"
+          });
+        }
+        
+        if (outputConfig.sheetsEnabled) {
+          await pushToSheets(logs);
+          addNotification({
+            message: "Results exported to Google Sheets",
+            type: "success"
+          });
+        }
       }
       
-      if (outputConfig.discordEnabled && outputConfig.discordWebhook) {
-        await postToDiscord(logs, outputConfig.discordWebhook);
-        addNotification({
-          message: "Results posted to Discord",
-          type: "success"
-        });
-      }
-      
-      if (outputConfig.sheetsEnabled) {
-        await pushToSheets(logs);
-        addNotification({
-          message: "Results exported to Google Sheets",
-          type: "success"
-        });
-      }
+      // Show success message
+      toast.success('Flow executed successfully');
       
     } catch (error) {
-      console.error("Error running workflow:", error);
-      setExecutionLogs(prev => prev + `\n\nERROR: ${error.message}`);
+      console.error('Error executing flow:', error);
+      toast.error(`Error executing flow: ${error.message}`);
+      
+      if (executionMode === 'backend' || executionMode === 'hybrid') {
+        setTextLogs(prev => prev + `\n\nERROR: ${error.message}`);
+      }
+      
       addNotification({
         message: `Error: ${error.message}`,
         type: "error"
       });
     } finally {
-      setIsRunning(false);
+      setIsExecuting(false);
     }
   };
 
@@ -775,28 +984,6 @@ const BuilderPage = () => {
         break;
     }
     setShowImportDropdown(false);
-  };
-
-  // Add this validation function
-  const validateFlow = () => {
-    const errors = [];
-    
-    // Check for multiple active trigger nodes
-    const triggerNodes = nodes.filter(node => 
-      node.type === 'trigger' && 
-      edges.some(edge => edge.source === node.id)
-    );
-    
-    if (triggerNodes.length > 1) {
-      errors.push('Multiple active trigger nodes detected. Only one trigger node can be active in a flow.');
-    }
-    
-    // Add other validation rules as needed
-    
-    return {
-      isValid: errors.length === 0,
-      errors
-    };
   };
 
   // Enhance the saveProject function
@@ -1052,7 +1239,15 @@ const BuilderPage = () => {
     canUndo,
     canRedo,
     onUndo: handleUndo,
-    onRedo: handleRedo
+    onRedo: handleRedo,
+    onToggleExecutionMode: () => {
+      setExecutionMode(prev => {
+        if (prev === 'local') return 'backend';
+        if (prev === 'backend') return 'hybrid';
+        return 'local';
+      });
+    },
+    executionMode
   };
 
   // Add this state variable near the top with your other state variables
@@ -1195,7 +1390,7 @@ const BuilderPage = () => {
       {/* Run Crew Button */}
       <RunCrewButton 
         onClick={runCrew}
-        isRunning={isRunning}
+        isRunning={isExecuting}
         hasErrors={checkWorkflowErrors().length > 0}
         nodeCount={nodes.length}
       />
@@ -1263,6 +1458,18 @@ const BuilderPage = () => {
         <TriggerHistoryPanel 
           isVisible={showTriggerHistory}
           onClose={() => setShowTriggerHistory(false)}
+        />
+      )}
+
+      {/* Flow Execution Panel */}
+      {showExecutionPanel && (
+        <UnifiedExecutionPanel
+          logs={textLogs}
+          structuredLogs={structuredLogs}
+          isMinimized={minimizeExecutionPanel}
+          onToggleMinimize={() => setMinimizeExecutionPanel(!minimizeExecutionPanel)}
+          onClose={() => setShowExecutionPanel(false)}
+          executionMode={executionMode}
         />
       )}
     </div>

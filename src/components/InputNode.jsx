@@ -41,7 +41,6 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
-    // Update the node data if needed
     if (data.onValueChange) {
       data.onValueChange(e.target.value);
     }
@@ -66,136 +65,121 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
     }
   };
 
-  // Add event listeners directly to the buttons and prevent propagation
+  // Add event listeners
   useEffect(() => {
     const editButton = editButtonRef.current;
     const deleteButton = deleteButtonRef.current;
-    const card = cardRef.current;
-    
-    const stopPropagation = (e) => {
-      e.stopPropagation();
-    };
     
     if (editButton) {
-      editButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleEditClick(e);
-      }, true);
-      
-      editButton.addEventListener('mousedown', stopPropagation, true);
-      editButton.addEventListener('touchstart', stopPropagation, true);
+      editButton.addEventListener('click', handleEditClick);
     }
     
     if (deleteButton) {
-      deleteButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleDeleteClick(e);
-      }, true);
-      
-      deleteButton.addEventListener('mousedown', stopPropagation, true);
-      deleteButton.addEventListener('touchstart', stopPropagation, true);
+      deleteButton.addEventListener('click', handleDeleteClick);
     }
     
-    if (card) {
-      const handleCardClick = (e) => {
-        if (e.target === card || card.contains(e.target)) {
-          if (!e.target.closest('button') && 
-              !e.target.classList.contains('edit-button') && 
-              !e.target.classList.contains('delete-button') &&
-              !e.target.classList.contains('react-flow__handle')) {
-            e.stopImmediatePropagation();
-          }
-        }
-      };
+    return () => {
+      if (editButton) {
+        editButton.removeEventListener('click', handleEditClick);
+      }
       
-      card.addEventListener('click', handleCardClick, true);
-      
-      return () => {
-        card.removeEventListener('click', handleCardClick, true);
-        
-        if (editButton) {
-          editButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }, true);
-          editButton.removeEventListener('mousedown', stopPropagation, true);
-          editButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-        
-        if (deleteButton) {
-          deleteButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }, true);
-          deleteButton.removeEventListener('mousedown', stopPropagation, true);
-          deleteButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-      };
-    }
+      if (deleteButton) {
+        deleteButton.removeEventListener('click', handleDeleteClick);
+      }
+    };
   }, [handleEditClick, handleDeleteClick]);
-
-  if (!data) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded">
-        Error: InputNode requires the 'data' prop
-      </div>
-    );
-  }
-
+  
   const inputType = data.inputType || 'text';
-  const inputKey = data.inputKey || 'input';
   const isRequired = data.isRequired || false;
-  const variableName = data.variableName || inputKey;
-
+  
   return (
-    <div 
+    <div
       ref={cardRef}
-      className={`bg-white border-2 ${selected ? 'border-indigo-500' : 'border-indigo-200'} shadow-md rounded p-3 w-72`}
-      data-nodeid={data.id}
+      style={{
+        background: 'white',
+        border: `2px solid ${selected ? '#3b82f6' : '#c7d2fe'}`,
+        borderRadius: '0.5rem',
+        padding: '0.75rem',
+        width: '16rem',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+        position: 'relative'
+      }}
     >
-      {/* Node content */}
-      <div className="font-semibold text-gray-800 mb-1 flex items-center">
-        <span className="mr-2">📥</span>
-        {data.label || 'Input Node'}
-        {isRequired && (
-          <span className="ml-1 text-xs text-red-500 font-normal">*required</span>
-        )}
-      </div>
+      {/* Target handle */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        style={{ background: '#4f46e5', width: '12px', height: '12px', top: '-6px' }}
+        isConnectable={isConnectable}
+      />
       
-      <div className="text-xs text-gray-600 mb-2">
-        <span className="font-medium">Type:</span> {inputType.charAt(0).toUpperCase() + inputType.slice(1)}
-      </div>
-      
-      <div className="text-xs text-gray-600 mb-2">
-        <span className="font-medium">Variable:</span> {`{{${variableName}}}`}
-      </div>
-      
-      {inputType === 'text' && (
-        <div className="mb-2">
-          <textarea
-            value={inputValue}
-            onChange={handleInputChange}
-            placeholder={`Enter ${data.label || 'text'} here...`}
-            className="w-full p-2 border border-gray-300 rounded text-sm"
-            rows={3}
-            onClick={(e) => e.stopPropagation()}
-          />
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <div style={{ 
+          width: '2rem', 
+          height: '2rem', 
+          borderRadius: '9999px', 
+          backgroundColor: '#e0e7ff', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          marginRight: '0.5rem',
+          color: '#4f46e5'
+        }}>
+          {inputType === 'file' ? '📁' : inputType === 'url' ? '🔗' : '📝'}
         </div>
+        <div>
+          <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{data.label || 'Input'}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+            {inputType} input
+            {isRequired && <span style={{ color: '#ef4444', marginLeft: '0.25rem' }}>*required</span>}
+          </div>
+        </div>
+      </div>
+      
+      {/* Input field */}
+      {inputType === 'text' && (
+        <textarea
+          value={inputValue}
+          onChange={handleInputChange}
+          placeholder="Enter text input here..."
+          style={{ 
+            width: '100%', 
+            padding: '0.5rem', 
+            border: '1px solid #d1d5db', 
+            borderRadius: '0.25rem',
+            fontSize: '0.875rem',
+            marginBottom: '0.5rem'
+          }}
+          rows={3}
+          onClick={(e) => e.stopPropagation()}
+        />
       )}
       
       {inputType === 'file' && (
-        <div className="mb-2">
-          <label className="block w-full px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded cursor-pointer text-sm text-center hover:bg-indigo-100">
+        <div style={{ marginBottom: '0.5rem' }}>
+          <label style={{ 
+            display: 'block',
+            width: '100%',
+            padding: '0.5rem 0.75rem',
+            backgroundColor: '#eef2ff',
+            color: '#4338ca',
+            border: '1px solid #c7d2fe',
+            borderRadius: '0.25rem',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+            textAlign: 'center'
+          }}>
             <span>Upload File</span>
             <input 
               type="file" 
-              className="hidden" 
+              style={{ display: 'none' }}
               onChange={handleFileUpload}
               onClick={(e) => e.stopPropagation()}
             />
           </label>
           {data.fileName && (
-            <div className="mt-1 text-xs text-gray-600">
+            <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#6b7280' }}>
               Uploaded: {data.fileName}
             </div>
           )}
@@ -203,26 +187,38 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
       )}
       
       {inputType === 'url' && (
-        <div className="mb-2">
-          <input
-            type="url"
-            value={inputValue}
-            onChange={handleInputChange}
-            placeholder="Enter URL..."
-            className="w-full p-2 border border-gray-300 rounded text-sm"
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
+        <input
+          type="url"
+          value={inputValue}
+          onChange={handleInputChange}
+          placeholder="Enter URL..."
+          style={{ 
+            width: '100%', 
+            padding: '0.5rem', 
+            border: '1px solid #d1d5db', 
+            borderRadius: '0.25rem',
+            fontSize: '0.875rem',
+            marginBottom: '0.5rem'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        />
       )}
       
       {/* Action buttons */}
-      <div className="flex mt-2 space-x-2">
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
           ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
+          style={{
+            fontSize: '0.75rem',
+            backgroundColor: '#dbeafe',
+            color: '#1d4ed8',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '0.25rem',
+            border: 'none',
+            cursor: 'pointer'
+          }}
           aria-label="Edit input"
-          data-no-drag="true"
         >
           Edit
         </button>
@@ -230,46 +226,36 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
         <button
           ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
+          style={{
+            fontSize: '0.75rem',
+            backgroundColor: '#fee2e2',
+            color: '#b91c1c',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '0.25rem',
+            border: 'none',
+            cursor: 'pointer'
+          }}
           aria-label="Delete input"
-          data-no-drag="true"
         >
           Delete
         </button>
       </div>
       
-      {/* Source handle at bottom */}
+      {/* Source handle */}
       <Handle
         type="source"
         position={Position.Bottom}
+        style={{ background: '#4f46e5', width: '12px', height: '12px', bottom: '-6px' }}
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-indigo-600 hover:bg-indigo-500 hover:w-5 hover:h-5 transition-all -bottom-2"
-        id={`${data.id}-source`}
-        title="Connect to any node"
-      >
-        <div className="absolute -bottom-5 text-xs text-gray-500 whitespace-nowrap">→ Output</div>
-      </Handle>
+      />
     </div>
   );
 });
 
 InputNode.propTypes = {
-  data: PropTypes.shape({
-    id: PropTypes.string,
-    label: PropTypes.string,
-    inputType: PropTypes.string,
-    inputKey: PropTypes.string,
-    value: PropTypes.string,
-    fileName: PropTypes.string,
-    nodeId: PropTypes.string,
-    nodeType: PropTypes.string,
-    isRequired: PropTypes.bool,
-    variableName: PropTypes.string,
-    onValueChange: PropTypes.func,
-    onFileUpload: PropTypes.func
-  }).isRequired,
+  data: PropTypes.object.isRequired,
   isConnectable: PropTypes.bool,
-  selected: PropTypes.bool,
+  selected: PropTypes.bool
 };
 
 InputNode.displayName = 'InputNode';

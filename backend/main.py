@@ -672,4 +672,35 @@ async def force_cleanup_all_triggers():
             "status": "error",
             "message": f"Error: {str(e)}"
         }
+
+@app.post("/execute-node")
+async def execute_node(request: Request):
+    """
+    Execute a single node
+    """
+    try:
+        data = await request.json()
+        node_type = data.get("nodeType")
+        node_data = data.get("nodeData", {})
+        inputs = data.get("inputs", {})
+        
+        logger.info(f"Executing node of type {node_type}")
+        
+        # Call the appropriate function based on node type
+        if node_type == "agent":
+            from crew_runner import run_agent_node
+            result = await run_agent_node(node_data, inputs)
+        elif node_type == "task":
+            from crew_runner import run_task_node
+            result = await run_task_node(node_data, inputs)
+        elif node_type == "tool":
+            from crew_runner import run_tool_node
+            result = await run_tool_node(node_data, inputs)
+        else:
+            return {"error": f"Unknown node type: {node_type}"}
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error executing node: {str(e)}")
+        return {"error": str(e)}
     

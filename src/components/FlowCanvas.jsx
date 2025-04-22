@@ -16,6 +16,7 @@ import { toast } from 'react-hot-toast';
 import { nodeTypes } from '../utils/nodeTypes';
 import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
 import { validateConnection } from '../utils/validateConnection';
+import ZoomControls from './builder/ZoomControls';
 
 const edgeStyles = `
   .react-flow__edge:hover .react-flow__edge-path {
@@ -459,6 +460,7 @@ const FlowCanvas = ({
           // Also store it on the window object for access from other components
           window.reactFlowInstance = instance;
         }}
+        showControls={false}
       >
         <MiniMap 
           nodeStrokeColor={(n) => {
@@ -474,7 +476,12 @@ const FlowCanvas = ({
             return '#fff';
           }}
         />
-        <Controls />
+        <ZoomControls
+          zoomIn={() => reactFlowWrapper.current.reactFlowInstance.zoomIn()}
+          zoomOut={() => reactFlowWrapper.current.reactFlowInstance.zoomOut()}
+          resetView={handleFitView}
+          fitView={handleFitView}
+        />
         <Background variant="dots" gap={12} size={1} />
       </ReactFlow>
       

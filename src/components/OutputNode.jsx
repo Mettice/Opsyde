@@ -1,4 +1,4 @@
-import React, { useState, useCallback, memo, useRef, useEffect } from 'react';
+import React, { useCallback, memo, useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
@@ -38,166 +38,126 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Add event listeners directly to the buttons and prevent propagation
+  // Add event listeners
   useEffect(() => {
     const editButton = editButtonRef.current;
     const deleteButton = deleteButtonRef.current;
-    const card = cardRef.current;
-    
-    const stopPropagation = (e) => {
-      e.stopPropagation();
-    };
     
     if (editButton) {
-      editButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleEditClick(e);
-      }, true);
-      
-      editButton.addEventListener('mousedown', stopPropagation, true);
-      editButton.addEventListener('touchstart', stopPropagation, true);
+      editButton.addEventListener('click', handleEditClick);
     }
     
     if (deleteButton) {
-      deleteButton.addEventListener('click', (e) => {
-        e.stopPropagation();
-        handleDeleteClick(e);
-      }, true);
-      
-      deleteButton.addEventListener('mousedown', stopPropagation, true);
-      deleteButton.addEventListener('touchstart', stopPropagation, true);
+      deleteButton.addEventListener('click', handleDeleteClick);
     }
     
-    if (card) {
-      const handleCardClick = (e) => {
-        if (e.target === card || card.contains(e.target)) {
-          if (!e.target.closest('button') && 
-              !e.target.classList.contains('edit-button') && 
-              !e.target.classList.contains('delete-button') &&
-              !e.target.classList.contains('react-flow__handle')) {
-            e.stopImmediatePropagation();
-          }
-        }
-      };
+    return () => {
+      if (editButton) {
+        editButton.removeEventListener('click', handleEditClick);
+      }
       
-      card.addEventListener('click', handleCardClick, true);
-      
-      return () => {
-        card.removeEventListener('click', handleCardClick, true);
-        
-        if (editButton) {
-          editButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }, true);
-          editButton.removeEventListener('mousedown', stopPropagation, true);
-          editButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-        
-        if (deleteButton) {
-          deleteButton.removeEventListener('click', (e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }, true);
-          deleteButton.removeEventListener('mousedown', stopPropagation, true);
-          deleteButton.removeEventListener('touchstart', stopPropagation, true);
-        }
-      };
-    }
+      if (deleteButton) {
+        deleteButton.removeEventListener('click', handleDeleteClick);
+      }
+    };
   }, [handleEditClick, handleDeleteClick]);
-
-  if (!data) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded">
-        Error: OutputNode requires the 'data' prop
-      </div>
-    );
-  }
-
+  
   const outputType = data.outputType || 'webhook';
   
-  // Get icon based on output type
-  const getIcon = () => {
-    switch (outputType) {
-      case 'webhook':
-        return '🔗';
-      case 'discord':
-        return '💬';
-      case 'sheets':
-        return '📊';
-      case 'email':
-        return '📧';
-      default:
-        return '📤';
-    }
-  };
-
   return (
-    <div 
+    <div
       ref={cardRef}
-      className={`bg-white border-2 ${selected ? 'border-teal-500' : 'border-teal-200'} shadow-md rounded p-3 w-72`}
-      data-nodeid={data.id}
+      style={{
+        background: 'white',
+        border: `2px solid ${selected ? '#3b82f6' : '#99f6e4'}`,
+        borderRadius: '0.5rem',
+        padding: '0.75rem',
+        width: '16rem',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+        position: 'relative'
+      }}
     >
-      {/* Target handle at top */}
+      {/* Target handle */}
       <Handle
         type="target"
         position={Position.Top}
+        style={{ background: '#0d9488', width: '12px', height: '12px', top: '-6px' }}
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-teal-500 hover:bg-teal-400 hover:w-5 hover:h-5 transition-all -top-2"
-        id={`${data.id}-target`}
-        title="Connect from any node"
-      >
-        <div className="absolute -top-5 text-xs text-gray-500 whitespace-nowrap">← Input</div>
-      </Handle>
+      />
       
-      {/* Node content */}
-      <div className="font-semibold text-gray-800 mb-1 flex items-center">
-        <span className="mr-2">{getIcon()}</span>
-        {data.label || 'Output Node'}
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <div style={{ 
+          width: '2rem', 
+          height: '2rem', 
+          borderRadius: '9999px', 
+          backgroundColor: '#ccfbf1', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          marginRight: '0.5rem',
+          color: '#0d9488'
+        }}>
+          {outputType === 'discord' ? '💬' : 
+           outputType === 'sheets' ? '📊' : 
+           outputType === 'email' ? '📧' : '📤'}
+        </div>
+        <div>
+          <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{data.label || 'Output'}</div>
+          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{outputType} output</div>
+        </div>
       </div>
       
-      <div className="text-xs text-gray-600 mb-2">
-        <span className="font-medium">Type:</span> {outputType.charAt(0).toUpperCase() + outputType.slice(1)}
+      {/* Output details */}
+      <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem' }}>
+        <span style={{ fontWeight: '500' }}>Type:</span> {outputType.charAt(0).toUpperCase() + outputType.slice(1)}
       </div>
       
       {outputType === 'webhook' && data.webhookUrl && (
-        <div className="text-xs text-gray-600 mb-2 truncate" title={data.webhookUrl}>
-          <span className="font-medium">URL:</span> {data.webhookUrl}
+        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontWeight: '500' }}>URL:</span> {data.webhookUrl}
         </div>
       )}
       
       {outputType === 'discord' && data.webhookUrl && (
-        <div className="text-xs text-gray-600 mb-2 truncate" title={data.webhookUrl}>
-          <span className="font-medium">Webhook:</span> {data.webhookUrl}
+        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontWeight: '500' }}>Webhook:</span> {data.webhookUrl}
         </div>
       )}
       
       {outputType === 'sheets' && data.sheetId && (
-        <div className="text-xs text-gray-600 mb-2 truncate" title={data.sheetId}>
-          <span className="font-medium">Sheet ID:</span> {data.sheetId}
+        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontWeight: '500' }}>Sheet ID:</span> {data.sheetId}
         </div>
       )}
       
       {outputType === 'email' && data.email && (
-        <div className="text-xs text-gray-600 mb-2 truncate" title={data.email}>
-          <span className="font-medium">Email:</span> {data.email}
+        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontWeight: '500' }}>Email:</span> {data.email}
         </div>
       )}
       
       {data.description && (
-        <div className="text-xs text-gray-600 mb-2">
-          <span className="font-medium">Description:</span> {data.description}
+        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem' }}>
+          <span style={{ fontWeight: '500' }}>Description:</span> {data.description}
         </div>
       )}
       
       {/* Action buttons */}
-      <div className="flex mt-2 space-x-2">
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button
           ref={editButtonRef}
           type="button"
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded edit-button"
+          style={{
+            fontSize: '0.75rem',
+            backgroundColor: '#dbeafe',
+            color: '#1d4ed8',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '0.25rem',
+            border: 'none',
+            cursor: 'pointer'
+          }}
           aria-label="Edit output"
-          data-no-drag="true"
         >
           Edit
         </button>
@@ -205,9 +165,16 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
         <button
           ref={deleteButtonRef}
           type="button"
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded delete-button"
+          style={{
+            fontSize: '0.75rem',
+            backgroundColor: '#fee2e2',
+            color: '#b91c1c',
+            padding: '0.25rem 0.5rem',
+            borderRadius: '0.25rem',
+            border: 'none',
+            cursor: 'pointer'
+          }}
           aria-label="Delete output"
-          data-no-drag="true"
         >
           Delete
         </button>
@@ -217,19 +184,9 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
 });
 
 OutputNode.propTypes = {
-  data: PropTypes.shape({
-    id: PropTypes.string,
-    label: PropTypes.string,
-    outputType: PropTypes.string,
-    webhookUrl: PropTypes.string,
-    sheetId: PropTypes.string,
-    email: PropTypes.string,
-    description: PropTypes.string,
-    nodeId: PropTypes.string,
-    nodeType: PropTypes.string,
-  }).isRequired,
+  data: PropTypes.object.isRequired,
   isConnectable: PropTypes.bool,
-  selected: PropTypes.bool,
+  selected: PropTypes.bool
 };
 
 OutputNode.displayName = 'OutputNode';

@@ -368,6 +368,39 @@ export default function EnhancedToolbar({ toolbarProps }) {
             </svg>
           </button>
         </div>
+        
+        {/* Execution mode toggle */}
+        <div className="ml-2">
+          <button
+            onClick={toolbarProps.onToggleExecutionMode}
+            className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm flex items-center"
+            title={
+              toolbarProps.executionMode === 'local' 
+                ? 'Local Mode: Visualize flow execution in the browser' 
+                : toolbarProps.executionMode === 'backend' 
+                  ? 'Backend Mode: Execute with AI services on the server'
+                  : 'Hybrid Mode: Visualize locally while executing on the server'
+            }
+          >
+            <span className="mr-1">
+              {toolbarProps.executionMode === 'local' 
+                ? '💻' 
+                : toolbarProps.executionMode === 'backend' 
+                  ? '🌐' 
+                  : '⚡'}
+            </span>
+            <span className="mr-1">
+              {toolbarProps.executionMode === 'local' 
+                ? 'Local' 
+                : toolbarProps.executionMode === 'backend' 
+                  ? 'Backend' 
+                  : 'Hybrid'}
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   );
