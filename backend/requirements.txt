@@ -12,4 +12,6 @@ requests
 pydantic
 python-dotenv
 simpleeval
-pypdf
+
+docx2txt
+pymupdf

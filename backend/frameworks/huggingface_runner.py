@@ -1,130 +1,148 @@
 import requests
+from datetime import datetime
+import logging
+import json
+
+logger = logging.getLogger(__name__)
+
+def extract_skills(text):
+    """Extract skills from text using simple keyword matching"""
+    skills = []
+    common_skills = ["Python", "JavaScript", "Java", "C++", "SQL", "HTML", "CSS", 
+                    "Machine Learning", "AI", "Data Analysis", "Project Management"]
+    for skill in common_skills:
+        if skill.lower() in text.lower():
+            skills.append(skill)
+    return skills
+
+def extract_experience(text):
+    """Extract years of experience from text"""
+    import re
+    # Look for patterns like "X years" or "X+ years"
+    matches = re.findall(r'(\d+)\+?\s*(?:year|yr)s?', text.lower())
+    if matches:
+        return max(int(match) for match in matches)
+    return 0
+
+def extract_education(text):
+    """Extract education information from text"""
+    education = []
+    degrees = ["Bachelor", "Master", "PhD", "BSc", "MSc", "MBA"]
+    for degree in degrees:
+        if degree.lower() in text.lower():
+            education.append(degree)
+    return education
 
 def run_huggingface_tool(tool_data):
-    """
-    Process a request using HuggingFace models
-    
-    Args:
-        tool_data: Dictionary containing tool configuration and inputs
-        
-    Returns:
-        Dictionary with the result from HuggingFace
-    """
     try:
         # Extract tool configuration
         label = tool_data.get("label", "Unknown Tool")
-        inputs = tool_data.get("inputs", {})
+        inputs = tool_data.get("inputs") or {}
         
-        # Handle file uploads if present
-        extracted_text = ""
-        if "file_upload" in inputs and isinstance(inputs["file_upload"], dict):
-            file_data = inputs["file_upload"].get("data", "")
-            file_type = inputs["file_upload"].get("type", "")
-            
-            # Extract text from PDF
-            if file_type == "application/pdf" and file_data:
-                import base64
-                import io
-                from PyPDF2 import PdfReader
-                
-                try:
-                    # Remove header if present (data:application/pdf;base64,)
-                    if "," in file_data:
-                        file_data = file_data.split(",", 1)[1]
-                    
-                    # Decode base64 data
-                    pdf_bytes = base64.b64decode(file_data)
-                    pdf_file = io.BytesIO(pdf_bytes)
-                    
-                    # Extract text from PDF
-                    pdf_reader = PdfReader(pdf_file)
-                    extracted_text = ""
-                    for page in pdf_reader.pages:
-                        page_text = page.extract_text()
-                        if page_text:
-                            extracted_text += page_text + "\n"
-                    
-                    # Log success and details for debugging
-                    print(f"Successfully extracted {len(extracted_text)} characters from PDF")
-                    print(f"PDF has {len(pdf_reader.pages)} pages")
-                    if not extracted_text:
-                        print("Warning: No text was extracted from the PDF")
-                        # Fallback for scanned PDFs or images
-                        extracted_text = "This appears to be a scanned document or image-based PDF. Text extraction is limited."
-                except Exception as e:
-                    print(f"Error extracting PDF text: {str(e)}")
-                    extracted_text = f"Error extracting text from PDF: {str(e)}"
+        logger.info(f"Processing HuggingFace tool '{label}'")
+        logger.debug(f"Tool inputs: {json.dumps(inputs, default=str)}")
         
-        # CV Parser specific logic
-        if label == "CV Parser" or "CV" in label or "Resume" in label:
-            # Use the extracted text to generate realistic CV data
-            # For now, we'll use a simple keyword-based approach
-            
-            # Extract skills based on common programming languages and technologies
-            skills = []
-            skill_keywords = ["Python", "Java", "JavaScript", "C++", "C#", "SQL", 
-                             "Machine Learning", "Data Analysis", "AI", "React", 
-                             "Angular", "Vue", "Node.js", "Django", "Flask"]
-            
-            for skill in skill_keywords:
-                if skill.lower() in extracted_text.lower():
-                    skills.append(skill)
-            
-            # Extract education level
-            education = "Unknown"
-            if "bachelor" in extracted_text.lower() or "b.s." in extracted_text.lower() or "b.a." in extracted_text.lower():
-                education = "Bachelor's Degree"
-            elif "master" in extracted_text.lower() or "m.s." in extracted_text.lower() or "m.a." in extracted_text.lower():
-                education = "Master's Degree"
-            elif "phd" in extracted_text.lower() or "ph.d" in extracted_text.lower() or "doctorate" in extracted_text.lower():
-                education = "PhD"
-            
-            # Extract experience (simple estimate based on years mentioned)
-            import re
-            experience_years = 0
-            year_pattern = r'(\d{4})\s*-\s*(\d{4}|present|current)'
-            matches = re.findall(year_pattern, extracted_text, re.IGNORECASE)
-            
-            for match in matches:
-                start_year = int(match[0])
-                end_year = 2023  # Default to current year
-                if match[1].isdigit():
-                    end_year = int(match[1])
-                experience_years += (end_year - start_year)
-            
-            # Cap at reasonable value
-            experience_years = min(experience_years, 20)
-            
-            # Extract name (first line often contains the name)
-            name = "Unknown"
-            lines = extracted_text.strip().split('\n')
-            if lines and len(lines[0]) < 50:  # Assume first line is name if it's short
-                name = lines[0].strip()
-            
+        # Get file data from inputs - simplified version
+        file_data = None
+        
+        # Check for file_upload in two places only
+        if isinstance(inputs, dict):
+            if "file_upload" in inputs:
+                file_data = inputs["file_upload"]
+                logger.info("Found file_upload at top level")
+            elif "value" in inputs and isinstance(inputs["value"], dict) and "file_upload" in inputs["value"]:
+                file_data = inputs["value"]["file_upload"]
+                logger.info("Found file_upload in value")
+        
+        # Validate file data structure
+        if not isinstance(file_data, dict):
+            logger.error("File data not found or invalid format")
             return {
-                "output": f"Processed CV with real text extraction. Found {len(skills)} skills and approximately {experience_years} years of experience.",
-                "type": "huggingface_result",
-                "candidate_name": name,
-                "skills": skills if skills else ["No skills detected"],
-                "experience_years": experience_years,
-                "education": education,
-                "extracted_text_preview": extracted_text[:500] + "..." if len(extracted_text) > 500 else extracted_text
+                "output": "Missing or invalid file data",
+                "type": "error",
+                "error": "File data must be a dictionary with content and filename"
+            }
+            
+        # Extract file content and metadata
+        content = file_data.get("content")
+        filename = file_data.get("filename")
+        
+        # Validate required fields
+        if not content or not filename:
+            logger.error("Missing required file data fields")
+            return {
+                "output": "Missing required file data (content or filename)",
+                "type": "error",
+                "error": "File must have both content and filename"
             }
         
-        # Generic HuggingFace model call for other tools
-        else:
-            model = tool_data.get("model", "gpt2")
-            
+        logger.info(f"Processing file: {filename}")
+        
+        # Detect PDF files
+        is_pdf = (
+            filename.lower().endswith('.pdf') or
+            "application/pdf" in file_data.get("type", "").lower()
+        )
+        
+        if not is_pdf:
             return {
-                "output": f"Processed with HuggingFace model {model}",
-                "type": "huggingface_result",
-                "model": model
+                "output": "Invalid file type. Please upload a PDF file.",
+                "type": "error",
+                "error": "Only PDF files are supported"
+            }
+        
+        # Process PDF file
+        try:
+            import base64
+            import io
+            from PyPDF2 import PdfReader
+            
+            # Handle base64 content
+            if isinstance(content, str) and "base64," in content:
+                content = content.split("base64,")[1]
+            
+            # Decode and read PDF
+            pdf_bytes = base64.b64decode(content)
+            pdf_file = io.BytesIO(pdf_bytes)
+            pdf_reader = PdfReader(pdf_file)
+            
+            # Extract text
+            extracted_text = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    extracted_text += page_text + "\n"
+            
+            # Extract information
+            skills = extract_skills(extracted_text)
+            experience = extract_experience(extracted_text)
+            education = extract_education(extracted_text)
+            
+            result = {
+                "output": "CV processed successfully",
+                "type": "cv_result",
+                "filename": filename,
+                "skills": skills,
+                "experience_years": experience,
+                "education": education,
+                "extracted_text": extracted_text[:500] + "..." # Preview
+            }
+            
+            logger.info(f"Successfully processed CV: {filename}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error processing PDF: {str(e)}")
+            return {
+                "output": f"Error processing PDF: {str(e)}",
+                "type": "error",
+                "error": str(e)
             }
             
     except Exception as e:
+        logger.error(f"Error in CV parser: {str(e)}")
         return {
-            "output": f"Error in HuggingFace tool: {str(e)}",
+            "output": f"Error: {str(e)}",
             "type": "error",
             "error": str(e)
         }
-
