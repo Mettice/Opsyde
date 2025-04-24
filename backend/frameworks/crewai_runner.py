@@ -1,6 +1,6 @@
 import logging
-from typing import Dict, Any
-import json
+from typing import Dict, Any, List
+from frameworks.openrouter_runner import run_openrouter_chat
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -13,74 +13,135 @@ logger = logging.getLogger(__name__)
 #     logger.warning("CrewAI library not installed. Using simulated implementation.")
 #     Agent, Task, Crew = None, None, None
 
-def run_crewai_workflow(agent_data: Dict[str, Any], task_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+def run_agent_chat(data: Dict[str, Any], inputs: Dict[str, Any]) -> str:
     """
-    Execute a CrewAI workflow with an agent performing a task.
+    Run an agent chat interaction
+    """
+    prompt = data.get("prompt", "You are a helpful AI assistant.")
+    model = data.get("llmModel", "gpt-4")
+    temperature = data.get("temperature", 0.7)
+    max_tokens = data.get("max_tokens", 500)
+    role = data.get("role", "Assistant")
+    goal = data.get("goal", "")
+    backstory = data.get("backstory", "")
     
-    Args:
-        agent_data: Dictionary containing agent configuration
-        task_data: Dictionary containing task configuration
-        inputs: Dictionary of inputs for the task
-        
-    Returns:
-        Dictionary containing the result of the task execution
+    # Construct system message
+    system_message = f"""Role: {role}
+Goal: {goal}
+Backstory: {backstory}
+
+{prompt}"""
+
+    # Format input message
+    input_message = ""
+    for key, val in inputs.items():
+        input_message += f"{key}: {val}\n"
+    
+    if not input_message:
+        input_message = "Hello, how can I help you?"
+
+    # Create messages array
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": input_message}
+    ]
+
+    try:
+        # Run the chat model
+        result = run_openrouter_chat(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Agent chat error: {str(e)}")
+        return f"I apologize, but I encountered an error: {str(e)}"
+
+def run_task_chat(data: Dict[str, Any], inputs: Dict[str, Any]) -> str:
+    """
+    Run a task chat interaction
+    """
+    prompt = data.get("prompt", "")
+    model = data.get("llmModel", "gpt-4")
+    temperature = data.get("temperature", 0.7)
+    max_tokens = data.get("max_tokens", 500)
+    description = data.get("description", "")
+    expected_output = data.get("expectedOutput", "")
+    
+    # Construct system message
+    system_message = f"""Task Description: {description}
+Expected Output: {expected_output}
+
+{prompt}
+
+Please complete this task based on the provided input."""
+
+    # Format input message
+    input_message = ""
+    for key, val in inputs.items():
+        input_message += f"{key}: {val}\n"
+    
+    if not input_message:
+        input_message = "Please proceed with the task."
+
+    # Create messages array
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": input_message}
+    ]
+
+    try:
+        # Run the chat model
+        result = run_openrouter_chat(
+            messages=messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Task chat error: {str(e)}")
+        return f"I apologize, but I encountered an error: {str(e)}"
+
+def run_crewai_workflow(crew_config: Dict[str, Any], framework: str = "crewai") -> Dict[str, Any]:
+    """
+    Run a CrewAI workflow with the specified configuration
     """
     try:
-        # 🛡️ Default fallbacks
-        if not agent_data or not isinstance(agent_data, dict):
-            logger.warning("Agent data is not valid")
-            agent_data = {"role": "Assistant", "label": "Agent", "description": "Default agent"}
-
-        if not task_data or not isinstance(task_data, dict):
-            logger.warning("Task data is not valid")
-            task_data = {"label": "Task", "description": "Default task"}
-
-        if not inputs:
-            inputs = {}
-        elif isinstance(inputs, str):
-            try:
-                inputs = json.loads(inputs)
-            except Exception:
-                inputs = {"input": inputs}
+        agents = crew_config.get("agents", [])
+        tasks = crew_config.get("tasks", [])
+        inputs = crew_config.get("inputs", {})
         
-        # Log execution details
-        logger.info(f"Agent '{agent_data.get('label', 'Unknown')}' ({agent_data.get('role', 'Assistant')}) executing task '{task_data.get('label', 'Unknown')}'")
-        logger.info(f"Task description: {task_data.get('description', 'No description')}")
-        logger.info(f"Task inputs: {inputs}")
+        results = []
         
-        # Simulated implementation (use this if CrewAI is not installed)
-        agent_name = agent_data.get("label", "Unknown Agent")
-        agent_role = agent_data.get("role", "Assistant")
-        agent_goal = agent_data.get("goal", "Help with tasks")
+        # Process agents
+        for agent in agents:
+            agent_result = run_agent_chat(agent, inputs)
+            results.append({
+                "type": "agent_result",
+                "agent_id": agent.get("nodeId"),
+                "output": agent_result
+            })
         
-        task_name = task_data.get("label", "Unknown Task")
-        task_description = task_data.get("description", "Perform a task")
-        expected_output = task_data.get("expectedOutput", "Task result")
+        # Process tasks
+        for task in tasks:
+            task_result = run_task_chat(task, inputs)
+            results.append({
+                "type": "task_result",
+                "task_id": task.get("nodeId"),
+                "output": task_result
+            })
         
-        # Simulate task execution
-        result_text = f"Agent '{agent_name}' ({agent_role}) completed task '{task_name}' with the following result:\n"
-        result_text += f"Based on the goal '{agent_goal}', I've analyzed the task '{task_description}'.\n"
-        
-        # Process inputs
-        if inputs:
-            result_text += "Using the provided inputs:\n"
-            for key, value in inputs.items():
-                result_text += f"- {key}: {value}\n"
-        
-        # Generate a simulated output based on the expected output
-        result_text += f"\nTask result: {expected_output}\n"
-        
-        # Return a dictionary instead of a string
         return {
-            "output": result_text,
-            "type": "task_result",
-            "agent_name": agent_name,
-            "agent_role": agent_role,
-            "task_name": task_name
+            "output": "Workflow completed successfully",
+            "type": "workflow_result",
+            "results": results
         }
         
     except Exception as e:
-        logger.error(f"Error executing {task_data.get('label', 'task') if isinstance(task_data, dict) else 'task'}: {str(e)}")
+        logger.error(f"CrewAI workflow error: {str(e)}")
         return {
             "output": f"Error: {str(e)}",
             "type": "error",

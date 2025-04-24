@@ -1,0 +1,110 @@
+{
+  "nodes": [
+    {
+      "id": "input-1",
+      "type": "input",
+      "data": {
+        "label": "Upload CV",
+        "inputType": "file",
+        "variableName": "file_upload",
+        "inputKey": "file_upload",
+        "type": "file"
+      },
+      "position": { "x": 100, "y": 100 }
+    },
+    {
+      "id": "tool-1",
+      "type": "tool",
+      "data": {
+        "label": "CV Parser",
+        "toolType": "custom",
+        "customTool": "cv_parser",
+        "framework": "cv_parser"
+      },
+      "position": { "x": 300, "y": 100 }
+    },
+    {
+      "id": "agent-1",
+      "type": "agent",
+      "data": {
+        "label": "CV Screening Agent",
+        "role": "Recruitment Assistant",
+        "goal": "Analyze CVs and provide insights",
+        "backstory": "Expert in CV analysis and candidate evaluation"
+      },
+      "position": { "x": 500, "y": 100 }
+    },
+    {
+      "id": "task-1",
+      "type": "task",
+      "data": {
+        "label": "Score CV",
+        "description": "Score the CV based on skills and experience"
+      },
+      "position": { "x": 700, "y": 50 }
+    },
+    {
+      "id": "task-2",
+      "type": "task",
+      "data": {
+        "label": "Generate Questions",
+        "description": "Generate interview questions based on CV"
+      },
+      "position": { "x": 700, "y": 150 }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "input-1",
+      "target": "tool-1",
+      "type": "bezier",
+      "animated": true,
+      "data": {
+        "label": "file_upload",
+        "variableName": "file_upload",
+        "dataType": "file",
+        "sourceType": "input",
+        "targetType": "tool"
+      }
+    },
+    {
+      "id": "edge-2",
+      "source": "tool-1",
+      "target": "agent-1",
+      "type": "bezier",
+      "animated": true,
+      "data": {
+        "label": "cv_parser_result",
+        "toolType": "cv_parser",
+        "outputType": "file",
+        "sourceType": "tool",
+        "targetType": "agent"
+      }
+    },
+    {
+      "id": "edge-3",
+      "source": "agent-1",
+      "target": "task-1",
+      "type": "bezier",
+      "animated": true,
+      "data": {
+        "label": "agent_output",
+        "sourceType": "agent",
+        "targetType": "task"
+      }
+    },
+    {
+      "id": "edge-4",
+      "source": "agent-1",
+      "target": "task-2",
+      "type": "bezier",
+      "animated": true,
+      "data": {
+        "label": "agent_output",
+        "sourceType": "agent",
+        "targetType": "task"
+      }
+    }
+  ]
+} 

@@ -1,5 +1,5 @@
 # backend/main.py
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from email_runner import send_email
@@ -10,12 +10,15 @@ from frameworks.webhook_loader import handle_webhook_flow
 from chat_runner import router as chat_router
 from frameworks.trigger_storage import register_trigger, get_trigger_flow, list_triggers, delete_trigger
 from frameworks.trigger_scheduler import start_scheduler, update_trigger_metadata
+from frameworks.cv_parser_runner import run_cv_parser_tool
 import json
 import logging
 import os
 import threading
 import time
 from datetime import datetime, timedelta
+import asyncio
+import base64
 
 from dotenv import load_dotenv
 
@@ -703,4 +706,49 @@ async def execute_node(request: Request):
     except Exception as e:
         logger.error(f"Error executing node: {str(e)}")
         return {"error": str(e)}
+
+@app.post("/api/workflow/execute")
+async def execute_workflow(
+    workflow_data: dict,
+    file: UploadFile = File(None)
+):
+    try:
+        # If a file is uploaded, add it to the workflow data
+        if file:
+            # Read file content
+            content = await file.read()
+            
+            # Create file data structure with consistent format
+            file_data = {
+                "filename": file.filename,
+                "content": f"data:{file.content_type};base64,{base64.b64encode(content).decode('utf-8')}",  # Full data URL format
+                "type": file.content_type,
+                "size": len(content),
+                "lastModified": int(time.time() * 1000)  # Current timestamp in milliseconds
+            }
+            
+            # Add file data to workflow inputs
+            if "inputs" not in workflow_data:
+                workflow_data["inputs"] = {}
+            workflow_data["inputs"]["file_upload"] = file_data
+
+        # Execute workflow
+        results = []
+        async for result in run_crew(workflow_data):
+            results.append(result)
+            
+        return {"results": results}
+        
+    except Exception as e:
+        logger.error(f"Error executing workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/parse-cv")
+async def parse_cv(file_data: dict):
+    try:
+        # Run CV parser directly
+        result = run_cv_parser_tool({"inputs": file_data})
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
     

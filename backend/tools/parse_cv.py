@@ -161,3 +161,61 @@ def decode_document(binary_data, filename):
     except Exception as e:
         logger.error(f"Error parsing document: {str(e)}")
         return f"⚠️ Error parsing document: {str(e)}"
+
+async def run_cv_parser_tool(input_data: dict) -> dict:
+    try:
+        # Extract file data from consistent structure
+        file_data = None
+        if "value" in input_data:
+            file_data = input_data["value"]
+        elif "file_upload" in input_data:
+            file_data = input_data["file_upload"]
+        elif "inputs" in input_data and "file_upload" in input_data["inputs"]:
+            file_data = input_data["inputs"]["file_upload"]
+        
+        if not file_data or not file_data.get("content"):
+            raise ValueError("Missing required file data (content or filename)")
+            
+        # Extract base64 content from data URL
+        content = file_data["content"]
+        if content.startswith("data:"):
+            # Remove data URL prefix
+            content = content.split(",", 1)[1]
+            
+        # Decode base64 content
+        try:
+            decoded_content = base64.b64decode(content)
+        except Exception as e:
+            raise ValueError(f"Invalid base64 content: {str(e)}")
+            
+        # Process file based on type
+        if file_data["type"] == "application/pdf":
+            # Extract text from PDF
+            text = extract_text_from_pdf(decoded_content)
+        else:
+            # For other file types, try to decode as text
+            try:
+                text = decoded_content.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("File content could not be decoded as text")
+                
+        # Parse CV text
+        parsed_data = parse_cv_text(text)
+        
+        return {
+            "success": True,
+            "data": parsed_data,
+            "metadata": {
+                "filename": file_data.get("filename"),
+                "type": file_data.get("type"),
+                "size": file_data.get("size"),
+                "lastModified": file_data.get("lastModified")
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in CV parser: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
