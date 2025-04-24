@@ -47,7 +47,9 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     outputType: 'webhook',
     webhookUrl: '',
     sheetId: '',
-    email: ''
+    email: '',
+    framework: '',
+    agentConfig: ''
   });
 
   // Track if form has been modified
@@ -98,7 +100,9 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
         outputType: nodeData.outputType || 'webhook',
         webhookUrl: nodeData.webhookUrl || '',
         sheetId: nodeData.sheetId || '',
-        email: nodeData.email || ''
+        email: nodeData.email || '',
+        framework: nodeData.framework || '',
+        agentConfig: nodeData.agentConfig || ''
       };
       
       // Parse runAt into runDate and runTime if it exists
@@ -489,7 +493,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 <HelpTooltip type="tool" field="description" />
               </label>
               <textarea
-                value={formData.description}
+                value={formData.description || ''}
                 onChange={(e) => handleInputChange('description', e.target.value)}
                 className="w-full p-2 border rounded"
                 rows="2"
@@ -497,25 +501,88 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
               />
             </div>
 
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-1 flex items-center">
-                Tool Type
-                <HelpTooltip type="tool" field="toolType" />
-              </label>
-              <select
-                value={formData.toolType}
-                onChange={(e) => handleInputChange('toolType', e.target.value)}
-                className="w-full p-2 border rounded"
-              >
-                <option value="api">API</option>
-                <option value="search">Search</option>
-                <option value="calculator">Calculator</option>
-                <option value="file_io">File I/O</option>
-                <option value="custom">Custom</option>
-                <option value="webhook">Webhook</option>
-              </select>
-            </div>
+            {/* Tool configuration based on framework */}
+            {formData.framework === 'cv_parser' && (
+              <div className="mb-4">
+                <div className="text-sm text-gray-600 mb-2">
+                  CV Parser will extract information from uploaded PDF documents
+                </div>
+              </div>
+            )}
 
+            {formData.framework === 'openrouter' && (
+              <>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1">Model</label>
+                  <select
+                    value={formData.model || 'gpt-4'}
+                    onChange={(e) => handleInputChange('model', e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="gpt-4">GPT-4</option>
+                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    <option value="claude-3-opus">Claude 3 Opus</option>
+                    <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                  </select>
+                </div>
+
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-1">Temperature</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={formData.temperature || 0.7}
+                    onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </>
+            )}
+
+            {formData.framework === 'huggingface' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Model Name</label>
+                <input
+                  type="text"
+                  value={formData.model || ''}
+                  onChange={(e) => handleInputChange('model', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  placeholder="e.g., bert-base-uncased"
+                />
+              </div>
+            )}
+
+            {formData.framework === 'crewai' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Agent Configuration</label>
+                <textarea
+                  value={formData.agentConfig || ''}
+                  onChange={(e) => handleInputChange('agentConfig', e.target.value)}
+                  className="w-full p-2 border rounded"
+                  rows="4"
+                  placeholder="Configure agent properties..."
+                />
+              </div>
+            )}
+
+            {formData.framework === 'langchain' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 mb-1">Chain Type</label>
+                <select
+                  value={formData.chainType || 'llm'}
+                  onChange={(e) => handleInputChange('chainType', e.target.value)}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="llm">LLM Chain</option>
+                  <option value="sequential">Sequential Chain</option>
+                  <option value="router">Router Chain</option>
+                </select>
+              </div>
+            )}
+
+            {/* API Configuration if needed */}
             {formData.toolType === 'api' && (
               <>
                 <div className="mb-4">
@@ -525,7 +592,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                   </label>
                   <input
                     type="text"
-                    value={formData.apiEndpoint}
+                    value={formData.apiEndpoint || ''}
                     onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
                     className="w-full p-2 border rounded"
                     placeholder="https://api.example.com/endpoint"
@@ -534,69 +601,25 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
 
                 <div className="mb-4">
                   <label className="block text-gray-700 mb-1 flex items-center">
-                    <span>API Key (optional)</span>
+                    API Key
                     <HelpTooltip type="tool" field="apiKey" />
-                    <button 
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="ml-2 text-gray-500 hover:text-gray-700 text-xs p-1"
-                      title={showApiKey ? "Hide API key" : "Show API key"}
-                    >
-                      {showApiKey ? "🔒" : "👁️"}
-                    </button>
                   </label>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? "text" : "password"}
-                      value={formatApiKey(formData.apiKey)}
-                      onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                      placeholder={showApiKey ? "" : "••••••••••••••••"}
-                    />
-                  </div>
+                  <input
+                    type="password"
+                    value={formData.apiKey || ''}
+                    onChange={(e) => handleInputChange('apiKey', e.target.value)}
+                    className="w-full p-2 border rounded"
+                    placeholder="Enter API key"
+                  />
                 </div>
               </>
             )}
 
+            {/* Webhook Configuration if needed */}
             {formData.toolType === 'webhook' && (
               <>
                 <div className="mb-4">
-                  <label className="block text-gray-700 mb-1 flex items-center">
-                    Webhook Type
-                    <HelpTooltip type="tool" field="webhookType" />
-                  </label>
-                  <select
-                    value={formData.webhookType || 'send-output'}
-                    onChange={(e) => handleInputChange('webhookType', e.target.value)}
-                    className="w-full p-2 border rounded"
-                  >
-                    <option value="send-output">Send Output</option>
-                    <option value="load-flow">Load Flow</option>
-                  </select>
-                </div>
-
-                {formData.webhookType === 'load-flow' && (
-                  <div className="mb-4">
-                    <label className="block text-gray-700 mb-1 flex items-center">
-                      Flow Mode
-                      <HelpTooltip type="tool" field="flowMode" />
-                    </label>
-                    <select
-                      value={formData.flowMode || 'replace'}
-                      onChange={(e) => handleInputChange('flowMode', e.target.value)}
-                      className="w-full p-2 border rounded"
-                    >
-                      <option value="replace">Replace Current Flow</option>
-                      <option value="merge">Merge with Current Flow</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1 flex items-center">
-                    Webhook URL
-                    <HelpTooltip type="tool" field="webhook_url" />
-                  </label>
+                  <label className="block text-gray-700 mb-1">Webhook URL</label>
                   <input
                     type="text"
                     value={formData.webhook_url || ''}
@@ -605,30 +628,17 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                     placeholder="https://example.com/webhook"
                   />
                 </div>
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1 flex items-center">
-                    Secret Token (Optional)
-                    <HelpTooltip type="tool" field="secretToken" />
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.secretToken || ''}
-                    onChange={(e) => handleInputChange('secretToken', e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="Secret token for authentication"
-                  />
-                </div>
               </>
             )}
 
+            {/* Parameters Section */}
             <div className="mb-4">
               <label className="block text-gray-700 mb-1 flex items-center">
                 Parameters
                 <HelpTooltip type="tool" field="parameters" />
               </label>
               <textarea
-                value={formData.parameters}
+                value={formData.parameters || ''}
                 onChange={(e) => handleInputChange('parameters', e.target.value)}
                 className="w-full p-2 border rounded"
                 rows="2"
@@ -636,7 +646,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
               />
             </div>
 
-            {/* Condition Field for Tasks and Tools */}
+            {/* Condition Field */}
             <div className="mb-6">
               <label className="block text-sm font-semibold text-gray-800 mb-1">
                 🧠 Condition to Run (optional)
@@ -649,17 +659,6 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 placeholder="e.g. inputs.score > 80"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
-              <div className="mt-2 text-xs text-gray-500 leading-snug">
-                This node will only execute if the condition is true.<br />
-                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> in your logic.
-                <br />
-                Examples:
-                <ul className="list-disc list-inside mt-1">
-                  <li><code>inputs.score &gt;= 80</code></li>
-                  <li><code>inputs.job_title === "Engineer"</code></li>
-                  <li><code>inputs.email.includes("@")</code></li>
-                </ul>
-              </div>
             </div>
           </>
         )}

@@ -1,9 +1,13 @@
 import React, { useState, useCallback } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+import registry from '../data/tool_registry.json';
 
 const TaskNode = React.memo(({ data, isConnectable, selected }) => {
-  // Create stable event handlers with useCallback
+  const [showDependencies, setShowDependencies] = useState(false);
+  const framework = data.framework || 'crewai';
+  const frameworkConfig = registry.frameworks[framework]?.config || {};
+
   const handleEditClick = useCallback((e) => {
     if (e) {
       e.stopPropagation();
@@ -13,11 +17,15 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     const event = new CustomEvent('node-edit', { 
       detail: { 
         nodeId: data.nodeId,
-        nodeType: data.nodeType || 'task'
+        nodeType: data.nodeType || 'task',
+        data: {
+          ...data,
+          framework: framework
+        }
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [data, framework]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -34,114 +42,67 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Handle rendering with an error message if data is missing
-  if (!data) {
-    return (
-      <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded">
-        Error: TaskNode requires the 'data' prop
-      </div>
-    );
-  }
-
-  const [showDependencies, setShowDependencies] = useState(false);
-  
-  // Add this to the TaskNode component to better display dependencies
   const formatDependencyLabel = (dependency) => {
     if (!dependency) return '';
-    
-    // If it's just a string, return it
     if (typeof dependency === 'string') return dependency;
-    
-    // If it has a label property, use that
     if (dependency.label) return dependency.label;
-    
-    // If it has a name property, use that
     if (dependency.name) return dependency.name;
-    
-    // Otherwise, return the type if available
     return dependency.type || 'Unknown';
   };
 
   return (
-    <div 
-      className={`bg-yellow-50 border-2 ${selected ? 'border-blue-500' : 'border-yellow-200'} shadow-md rounded p-3 w-72`}
-      data-nodeid={data.id} // Add data attribute for debugging
-    >
+    <div className={`bg-yellow-50 border-2 ${selected ? 'border-blue-500' : 'border-yellow-200'} shadow-md rounded p-3 w-72`}>
       {/* Target handle at top */}
       <Handle 
         type="target" 
         position={Position.Top} 
         isConnectable={isConnectable} 
         className="w-3 h-3 bg-yellow-500 hover:bg-yellow-400 hover:w-4 hover:h-4 transition-all"
-        id={`${data.id}-target`}
-        title="Connect from: Agent, Task"
       />
       
-      {/* Node content */}
-      <div 
-        className="font-semibold text-gray-800 mb-1"
-        title={data.label || 'Unnamed Task'}
-      >
-        {data.label || 'Unnamed Task'}
-        {data.origin && (
-          <div className="text-xs inline-flex items-center px-2 py-0.5 rounded-full mb-2 mt-1" 
-               style={{
-                 backgroundColor: 
-                   data.origin === 'make' ? 'rgba(79, 70, 229, 0.1)' : 
-                   data.origin === 'zapier' ? 'rgba(245, 158, 11, 0.1)' : 
-                   data.origin === 'n8n' ? 'rgba(168, 85, 247, 0.1)' :
-                   data.origin === 'marketplace' ? 'rgba(16, 185, 129, 0.1)' :
-                   data.origin === 'ai' ? 'rgba(59, 130, 246, 0.1)' :
-                   'rgba(107, 114, 128, 0.1)',
-                 color:
-                   data.origin === 'make' ? '#4f46e5' : 
-                   data.origin === 'zapier' ? '#f59e0b' : 
-                   data.origin === 'n8n' ? '#a855f7' :
-                   data.origin === 'marketplace' ? '#10b981' :
-                   data.origin === 'ai' ? '#3b82f6' :
-                   '#6b7280'
-               }}>
-            {data.origin === 'make' && '🧩 From Make'}
-            {data.origin === 'zapier' && '⚡ From Zapier'}
-            {data.origin === 'n8n' && '🔄 From n8n'}
-            {data.origin === 'marketplace' && '🛒 Marketplace'}
-            {data.origin === 'ai' && '🤖 AI-Suggested'}
-            {data.origin && !['make', 'zapier', 'n8n', 'marketplace', 'ai'].includes(data.origin) && `📦 From ${data.origin}`}
+      {/* Node header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">📋</span>
+          <div>
+            <h3 className="font-semibold text-lg">{data.label || 'Task'}</h3>
+            <div className="text-xs text-gray-500">{data.type || 'Sequential'}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Task Details */}
+      <div className="space-y-2 text-sm">
+        {data.description && (
+          <div>
+            <span className="font-medium">Description:</span> {data.description}
+          </div>
+        )}
+        {data.expectedOutput && (
+          <div>
+            <span className="font-medium">Expected Output:</span> {data.expectedOutput}
           </div>
         )}
       </div>
-      
-      {data.description && (
-        <div 
-          className="text-sm text-gray-600 mb-1 truncate"
-          title={data.description}
-        >
-          <span className="font-medium">Description:</span> {data.description}
+
+      {/* Task Info */}
+      <div className="mt-2 space-y-1 text-xs text-gray-600">
+        <div>
+          <span className="font-medium">Priority:</span> {data.priority || 'Medium'}
         </div>
-      )}
-      
-      {data.expectedOutput && (
-        <div 
-          className="text-sm text-gray-600 mb-1 truncate"
-          title={data.expectedOutput}
-        >
-          <span className="font-medium">Output:</span> {data.expectedOutput}
-        </div>
-      )}
-      
+      </div>
+
+      {/* Async Badge */}
       {data.async && (
-        <div className="text-xs bg-yellow-100 px-2 py-1 rounded inline-block mb-2" title="This task runs asynchronously">
-          Async
+        <div className="mt-2">
+          <span className="text-xs bg-yellow-100 px-2 py-1 rounded">Async</span>
         </div>
       )}
-      
-      {/* New dependency section */}
+
+      {/* Dependencies Section */}
       <div className="mt-2">
         <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowDependencies(!showDependencies);
-          }}
+          onClick={() => setShowDependencies(!showDependencies)}
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded mb-2"
         >
           {showDependencies ? 'Hide Dependencies' : 'Show Dependencies'}
@@ -161,12 +122,12 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
           </div>
         )}
       </div>
-      
-      {/* Action buttons */}
+
+      {/* Action Buttons */}
       <div className="flex mt-2 space-x-2">
         <button 
           type="button"
-          onClick={handleEditClick} 
+          onClick={handleEditClick}
           onMouseDown={(e) => { if (e) e.stopPropagation(); }}
           onPointerDown={(e) => { if (e) e.stopPropagation(); }}
           onTouchStart={(e) => { if (e) e.stopPropagation(); }}
@@ -195,29 +156,28 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         position={Position.Bottom} 
         isConnectable={isConnectable}
         className="w-3 h-3 bg-yellow-600 hover:bg-yellow-500 hover:w-4 hover:h-4 transition-all"
-        id={`${data.id}-source`}
-        title="Connect to: Task"
       />
     </div>
   );
 });
 
-// Define PropTypes for type safety and documentation
 TaskNode.propTypes = {
   data: PropTypes.shape({
-    id: PropTypes.string,
+    nodeId: PropTypes.string,
     label: PropTypes.string,
     description: PropTypes.string,
     expectedOutput: PropTypes.string,
     async: PropTypes.bool,
-    nodeId: PropTypes.string,
-    nodeType: PropTypes.string,
+    type: PropTypes.string,
+    priority: PropTypes.string,
+    dependencies: PropTypes.array,
+    framework: PropTypes.string,
+    nodeType: PropTypes.string
   }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,
 };
 
-// Add a display name for better debugging
 TaskNode.displayName = 'TaskNode';
 
 export default TaskNode;

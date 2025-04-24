@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ZoomControls({ zoomIn, zoomOut, resetView, fitView }) {
   return (
-    <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-md z-40 flex">
+    <div className="absolute bottom-20 left-4 bg-white rounded-lg shadow-md z-40 flex flex-col">
       <button 
         onClick={zoomIn}
         className="p-2 hover:bg-gray-100 text-gray-700 border-r border-gray-200"

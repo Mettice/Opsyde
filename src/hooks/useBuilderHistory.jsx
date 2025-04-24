@@ -19,26 +19,40 @@ export const useBuilderHistory = (initialState = { nodes: [], edges: [] }) => {
         return;
       }
       
-      // Create deep copies to avoid reference issues
-      const newWorkflowCopy = {
-        nodes: JSON.parse(JSON.stringify(newWorkflow.nodes.map(node => {
-          // Clean up node data before storing in history
-          const nodeCopy = { ...node };
-          if (nodeCopy.data) {
-            delete nodeCopy.data.onEdit;
-            delete nodeCopy.data.onDelete;
-          }
-          return nodeCopy;
-        }))),
-        edges: JSON.parse(JSON.stringify(newWorkflow.edges))
-      };
-      
-      const newHist = history.slice(0, historyIndex + 1);
-      newHist.push(newWorkflowCopy);
-      
-      setHistory(newHist);
-      setHistoryIndex(newHist.length - 1);
-      debounceTimeoutRef.current = null;
+      try {
+        // Create deep copies to avoid reference issues
+        const newWorkflowCopy = {
+          nodes: newWorkflow.nodes.map(node => {
+            // Clean up node data before storing in history
+            const nodeCopy = { ...node };
+            if (nodeCopy.data) {
+              const cleanData = { ...nodeCopy.data };
+              // Remove any functions or circular references
+              Object.keys(cleanData).forEach(key => {
+                if (typeof cleanData[key] === 'function' || 
+                    key === 'onEdit' || 
+                    key === 'onDelete' ||
+                    key === 'onValueChange') {
+                  delete cleanData[key];
+                }
+              });
+              nodeCopy.data = cleanData;
+            }
+            return nodeCopy;
+          }),
+          edges: newWorkflow.edges.map(edge => ({ ...edge }))
+        };
+        
+        const newHist = history.slice(0, historyIndex + 1);
+        newHist.push(newWorkflowCopy);
+        
+        setHistory(newHist);
+        setHistoryIndex(newHist.length - 1);
+      } catch (error) {
+        console.error('Error adding to history:', error);
+      } finally {
+        debounceTimeoutRef.current = null;
+      }
     }, 300);
   }, [history, historyIndex]);
 

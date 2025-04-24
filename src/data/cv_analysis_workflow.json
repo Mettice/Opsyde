@@ -1,0 +1,79 @@
+{
+  "nodes": [
+    {
+      "id": "file-input-1",
+      "type": "input",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "Upload CV",
+        "inputType": "file",
+        "variableName": "cv_file",
+        "description": "Upload a CV in PDF format"
+      }
+    },
+    {
+      "id": "cv-parser-1",
+      "type": "tool",
+      "position": { "x": 400, "y": 100 },
+      "data": {
+        "label": "CV Parser",
+        "toolType": "cv_parser",
+        "framework": "cv_parser",
+        "description": "Extracts information from CV"
+      }
+    },
+    {
+      "id": "agent-1",
+      "type": "agent",
+      "position": { "x": 700, "y": 100 },
+      "data": {
+        "label": "CV Analyst",
+        "role": "Assistant",
+        "model": "gpt-4",
+        "description": "Analyzes CV content and provides recommendations",
+        "instructions": "Review the CV analysis and provide detailed insights about the candidate's qualifications, experience, and suitability."
+      }
+    },
+    {
+      "id": "task-1",
+      "type": "task",
+      "position": { "x": 1000, "y": 100 },
+      "data": {
+        "label": "Generate Assessment",
+        "description": "Create a comprehensive candidate assessment report including:\n- Key skills and expertise\n- Years of relevant experience\n- Educational background\n- Overall suitability for technical roles\n- Specific recommendations",
+        "output": "A detailed assessment report of the candidate"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "file-input-1",
+      "target": "cv-parser-1",
+      "data": {
+        "label": "CV File"
+      }
+    },
+    {
+      "id": "edge-2",
+      "source": "cv-parser-1",
+      "target": "agent-1",
+      "data": {
+        "label": "Parsed CV Data"
+      }
+    },
+    {
+      "id": "edge-3",
+      "source": "agent-1",
+      "target": "task-1",
+      "data": {
+        "label": "Analysis Request"
+      }
+    }
+  ],
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  }
+} 

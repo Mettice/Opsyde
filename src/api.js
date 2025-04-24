@@ -1,4 +1,7 @@
 import { supabase } from './utils/supabaseClient';
+import axios from 'axios';
+
+const API_URL = window.REACT_APP_API_URL || 'http://localhost:8000';
 
 // Save a flow to Supabase
 export async function saveFlow(userId, name, nodes, edges) {
@@ -90,4 +93,92 @@ export async function deleteFlow(flowId) {
     console.error('Error deleting flow:', error);
     throw error;
   }
-} 
+}
+
+export const executeWorkflow = async (workflowData, file = null) => {
+  try {
+    // If there's a file, read it as base64 first
+    let fileData = null;
+    if (file) {
+      fileData = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result.split(',')[1]; // Remove data URL prefix
+          resolve({
+            filename: file.name,
+            content: base64,
+            type: file.type
+          });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Add file data to workflow inputs
+    if (fileData) {
+      workflowData.inputs = workflowData.inputs || {};
+      workflowData.inputs.file_upload = fileData;
+    }
+
+    // Send the workflow data
+    const response = await axios.post(`${API_URL}/api/workflow/execute`, workflowData, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error executing workflow:', error);
+    throw error;
+  }
+};
+
+export const parseCV = async (file) => {
+  try {
+    // Create FormData
+    const formData = new FormData();
+    
+    // Read file as base64
+    const base64File = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1]; // Remove data URL prefix
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    // Create the file data structure
+    const fileData = {
+      inputs: {  // Add inputs wrapper to match backend
+        file_data: {
+          filename: file.name,
+          content: base64File,
+          type: file.type
+        }
+      }
+    };
+
+    // Send to CV parser endpoint directly
+    const response = await fetch(`${API_URL}/api/parse-cv`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(fileData)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to parse CV');
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Error parsing CV:', error);
+    throw error;
+  }
+}; 

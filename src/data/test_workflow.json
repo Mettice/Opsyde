@@ -1,0 +1,99 @@
+{
+  "nodes": [
+    {
+      "id": "input-1",
+      "type": "input",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "Task Input",
+        "inputType": "text",
+        "variableName": "user_input",
+        "description": "Enter your question or task"
+      }
+    },
+    {
+      "id": "openrouter-1",
+      "type": "tool",
+      "position": { "x": 400, "y": 100 },
+      "data": {
+        "label": "Process Input",
+        "toolType": "openrouter",
+        "framework": "openrouter",
+        "description": "Process user input with AI",
+        "model": "openai/gpt-3.5-turbo",
+        "parameters": {
+          "temperature": 0.7,
+          "max_tokens": 500
+        }
+      }
+    },
+    {
+      "id": "logic-1",
+      "type": "logic",
+      "position": { "x": 700, "y": 100 },
+      "data": {
+        "label": "Check Priority",
+        "condition": "inputs.priority > 7",
+        "description": "Check if task is high priority"
+      }
+    },
+    {
+      "id": "discord-1",
+      "type": "output",
+      "position": { "x": 1000, "y": 0 },
+      "data": {
+        "label": "Send to Discord",
+        "outputType": "discord",
+        "webhookUrl": "YOUR_DISCORD_WEBHOOK",
+        "description": "Send high priority tasks to Discord"
+      }
+    },
+    {
+      "id": "email-1",
+      "type": "output",
+      "position": { "x": 1000, "y": 200 },
+      "data": {
+        "label": "Send Email",
+        "outputType": "email",
+        "email": "test@example.com",
+        "description": "Send regular tasks via email"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "input-1",
+      "target": "openrouter-1",
+      "data": {
+        "label": "User Input"
+      }
+    },
+    {
+      "id": "edge-2",
+      "source": "openrouter-1",
+      "target": "logic-1",
+      "data": {
+        "label": "Processed Result"
+      }
+    },
+    {
+      "id": "edge-3",
+      "source": "logic-1",
+      "target": "discord-1",
+      "sourceHandle": "true",
+      "data": {
+        "label": "High Priority"
+      }
+    },
+    {
+      "id": "edge-4",
+      "source": "logic-1",
+      "target": "email-1",
+      "sourceHandle": "false",
+      "data": {
+        "label": "Normal Priority"
+      }
+    }
+  ]
+} 

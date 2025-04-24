@@ -49,14 +49,32 @@ export const useNodeInteractions = ({
 
   // Handle node click for selection
   const onNodeClick = useCallback((event, node) => {
-    console.log('Node clicked:', node);
-    // Only for selection, not editing
+    // Prevent event object from being logged
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    
+    // Only log the node data we need, without the event object
+    if (node) {
+      console.log('Node clicked:', {
+        id: node.id,
+        type: node.type,
+        label: node.data?.label
+      });
+    }
   }, []);
 
   // Handle node drag stop
   const onNodeDragStop = useCallback((event, node) => {
+    // Prevent event object from being logged
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+    
     if (!node || !node.id) {
-      console.warn("Node drag stopped with invalid node:", node);
+      console.warn('Invalid node in drag stop:', { id: node?.id, type: node?.type });
       return;
     }
 
@@ -73,8 +91,21 @@ export const useNodeInteractions = ({
       return;
     }
     
+    // Update node position
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.id === node.id) {
+          return {
+            ...n,
+            position: node.position,
+          };
+        }
+        return n;
+      })
+    );
+    
     addToHistory({ nodes, edges });
-  }, [nodes, edges, addToHistory]);
+  }, [nodes, edges, addToHistory, setNodes]);
 
   // Connection handlers
   const onConnectStart = useCallback((_, { nodeId }) => {
@@ -90,20 +121,47 @@ export const useNodeInteractions = ({
 
     if (!isValid) return;
 
+    const sourceNode = nodes.find(n => n.id === params.source);
+    const targetNode = nodes.find(n => n.id === params.target);
+
+    // Generate a unique edge ID
     const edgeId = `edge-${Date.now()}`;
+
+    // Determine edge label and data based on node types
+    let edgeLabel = params.label || '';
+    let edgeData = {};
+
+    if (sourceNode.type === 'input' && targetNode.type === 'tool') {
+      edgeLabel = 'file_upload';
+      edgeData = {
+        variableName: 'file_upload',
+        dataType: 'file'
+      };
+    } else if (sourceNode.type === 'tool') {
+      const toolType = sourceNode.data?.toolType || 'unknown';
+      edgeLabel = toolType === 'custom' ? 'file_upload' : toolType;
+      edgeData = {
+        toolType: toolType,
+        outputType: toolType === 'custom' ? 'file' : 'text'
+      };
+    }
 
     const newEdge = {
       ...params,
       id: edgeId,
       type: "bezier",
       animated: true,
+      label: edgeLabel,
+      data: {
+        ...edgeData,
+        sourceType: sourceNode.type,
+        targetType: targetNode.type,
+        label: edgeLabel
+      },
       style: {
         stroke: '#888',
         strokeWidth: 1.5,
         strokeDasharray: '5,5'
-      },
-      data: {
-        label: `${params.source} → ${params.target}`
       }
     };
 
@@ -119,6 +177,12 @@ export const useNodeInteractions = ({
 
   // Edge click handler
   const onEdgeClick = useCallback((event, edge) => {
+    // Prevent event object from being logged
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
     // Confirm before deleting
     if (window.confirm('Are you sure you want to delete this connection?')) {
       setEdges((eds) => eds.filter((e) => e.id !== edge.id));

@@ -1,8 +1,37 @@
 import React, { useState } from 'react';
+import ExecutionLog from '../ExecutionLog';
 
 export default function FlowExecutionPanel({ logs, isMinimized, onToggleMinimize, onClose }) {
   const [activeTab, setActiveTab] = useState('logs');
   
+  const renderLogContent = (log) => {
+    // Check if this is a CV parser result
+    if (log.result?.type === "cv_result" && log.result?.data) {
+      return (
+        <div className="mt-2 bg-white rounded-lg shadow">
+          <CVResultsDisplay results={log.result.data} />
+        </div>
+      );
+    }
+
+    // Handle other types of results
+    if (log.status === 'error') {
+      return <span className="text-red-600">{log.error}</span>;
+    }
+    
+    if (log.status === 'started') {
+      return <span className="text-blue-600">Started execution</span>;
+    }
+
+    // For completed status with output
+    if (log.result?.output) {
+      return <span className="text-green-600">{log.result.output}</span>;
+    }
+
+    // Default case
+    return <span className="text-green-600">Completed successfully</span>;
+  };
+
   if (isMinimized) {
     return (
       <div 
@@ -16,7 +45,7 @@ export default function FlowExecutionPanel({ logs, isMinimized, onToggleMinimize
   }
   
   return (
-    <div className="fixed top-20 right-6 w-[400px] bg-white border shadow-lg rounded-lg p-0 z-50 flex flex-col h-[70vh]">
+    <div className="fixed top-20 right-6 w-[600px] bg-white border shadow-lg rounded-lg p-0 z-50 flex flex-col h-[70vh]">
       <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-3 flex justify-between items-center rounded-t-lg">
         <h2 className="text-lg font-bold text-white">📊 Flow Execution</h2>
         <div className="flex space-x-2">
@@ -56,49 +85,11 @@ export default function FlowExecutionPanel({ logs, isMinimized, onToggleMinimize
         </button>
       </div>
       
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto">
         {activeTab === 'logs' ? (
-          <div className="space-y-3">
-            {logs.length === 0 ? (
-              <div className="text-center py-10 text-gray-500">
-                No execution logs yet. Run the flow to see logs here.
-              </div>
-            ) : (
-              logs.map((log, index) => (
-                <div 
-                  key={index} 
-                  className={`p-3 rounded-lg border ${
-                    log.status === 'error' ? 'bg-red-50 border-red-200' : 
-                    log.status === 'started' ? 'bg-blue-50 border-blue-200' : 
-                    'bg-green-50 border-green-200'
-                  }`}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="font-medium">
-                      {log.nodeId} ({log.type})
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </div>
-                  </div>
-                  
-                  <div className="text-sm mt-1">
-                    {log.status === 'error' ? (
-                      <span className="text-red-600">{log.error}</span>
-                    ) : log.status === 'started' ? (
-                      <span className="text-blue-600">Started execution</span>
-                    ) : (
-                      <span className="text-green-600">
-                        {log.result?.output || 'Completed successfully'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <ExecutionLog logs={logs} />
         ) : (
-          <div className="space-y-4">
+          <div className="p-4">
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-medium text-gray-700 mb-2">Execution Summary</h3>
               <div className="grid grid-cols-2 gap-2">

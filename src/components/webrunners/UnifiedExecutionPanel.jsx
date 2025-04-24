@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import CVResultsDisplay from '../CVResultsDisplay';
 
 export default function UnifiedExecutionPanel({ 
   logs, 
@@ -61,6 +62,41 @@ export default function UnifiedExecutionPanel({
   
   const parsedTextLogs = parseTextLogs(logs);
   const displayLogs = viewMode === 'structured' ? structuredLogs : parsedTextLogs;
+
+  const renderLogContent = (log) => {
+    // Handle CV parser results
+    if (log.result?.type === "cv_result" && log.result?.data) {
+      return (
+        <div className="mt-2 bg-white rounded-lg p-4">
+          <CVResultsDisplay results={log.result.data} />
+        </div>
+      );
+    }
+
+    // Handle errors
+    if (log.status === 'error') {
+      return <span className="text-red-600">{log.error || 'An error occurred'}</span>;
+    }
+
+    // Handle started status
+    if (log.status === 'started') {
+      return <span className="text-blue-600">Started execution</span>;
+    }
+
+    // Handle normal results
+    if (log.result) {
+      if (typeof log.result === 'object') {
+        return (
+          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
+            {JSON.stringify(log.result, null, 2)}
+          </pre>
+        );
+      }
+      return <span className="text-green-600">{log.result}</span>;
+    }
+
+    return <span className="text-green-600">Completed successfully</span>;
+  };
 
   if (isMinimized) {
     return (
@@ -180,16 +216,8 @@ export default function UnifiedExecutionPanel({
                     </div>
                   </div>
                   
-                  <div className="text-sm mt-1">
-                    {log.status === 'error' ? (
-                      <span className="text-red-600">{log.error}</span>
-                    ) : log.status === 'started' ? (
-                      <span className="text-blue-600">Started execution</span>
-                    ) : (
-                      <span className="text-green-600">
-                        {log.result?.output || 'Completed successfully'}
-                      </span>
-                    )}
+                  <div className="mt-2">
+                    {renderLogContent(log)}
                   </div>
                 </div>
               ))

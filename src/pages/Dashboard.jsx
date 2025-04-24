@@ -8,6 +8,7 @@ import FlowList from '../components/profile/FlowList';
 import ProfileSection from '../components/profile/ProfileSection';
 import EditProfileModal from '../components/profile/EditProfileModal';
 import { toast } from 'react-hot-toast';
+import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -26,6 +27,12 @@ export default function Dashboard() {
     totalFlows: 0,
     lastActive: 'Never',
     completedFlows: 0
+  });
+  const [showTriggerHistory, setShowTriggerHistory] = useState(false);
+  const [triggerStats, setTriggerStats] = useState({
+    total: 0,
+    completed: 0,
+    active: 0
   });
 
   useEffect(() => {
@@ -68,6 +75,7 @@ export default function Dashboard() {
     }
 
     loadData();
+    fetchTriggerStats();
   }, [user, navigate]);
 
   const handleDeleteFlow = async (flowId) => {
@@ -112,6 +120,22 @@ export default function Dashboard() {
     }
   };
 
+  const fetchTriggerStats = async () => {
+    try {
+      const response = await fetch(`${window.BACKEND_URL || 'http://localhost:8000'}/executed-triggers`);
+      if (response.ok) {
+        const data = await response.json();
+        setTriggerStats({
+          total: data.count || 0,
+          completed: data.triggers?.filter(t => t.completed)?.length || 0,
+          active: data.triggers?.filter(t => !t.completed)?.length || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching trigger stats:', error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-full">
@@ -136,7 +160,7 @@ export default function Dashboard() {
       />
       
       {/* Stats Section */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 my-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 my-8">
         <StatsCard 
           title="Total Flows" 
           value={stats.totalFlows} 
@@ -169,6 +193,35 @@ export default function Dashboard() {
           } 
           color="bg-purple-100" 
         />
+        
+        {/* New Trigger Stats Card */}
+        <StatsCard 
+          title="Active Triggers" 
+          value={triggerStats.active}
+          icon={
+            <svg className="h-6 w-6 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          } 
+          color="bg-yellow-100"
+          onClick={() => setShowTriggerHistory(true)}
+        />
+      </div>
+      
+      {/* Trigger History Section */}
+      <div className="mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold text-gray-800">Recent Triggers</h2>
+          <button
+            onClick={() => setShowTriggerHistory(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700"
+          >
+            <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            View Trigger History
+          </button>
+        </div>
       </div>
       
       {/* Flows Section */}
@@ -195,6 +248,12 @@ export default function Dashboard() {
         onClose={() => setShowEditModal(false)}
         profile={profileData}
         onSave={handleProfileUpdate}
+      />
+
+      {/* Trigger History Modal */}
+      <TriggerHistoryPanel 
+        isVisible={showTriggerHistory}
+        onClose={() => setShowTriggerHistory(false)}
       />
     </div>
   );

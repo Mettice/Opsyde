@@ -17,6 +17,8 @@ import { nodeTypes } from '../utils/nodeTypes';
 import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
 import { validateConnection } from '../utils/validateConnection';
 import ZoomControls from './builder/ZoomControls';
+import FloatingMetricsPanel from "./builder/FloatingMetricsPanel";
+import CVResultsDisplay from './CVResultsDisplay';
 
 const edgeStyles = `
   .react-flow__edge:hover .react-flow__edge-path {
@@ -25,6 +27,23 @@ const edgeStyles = `
     cursor: pointer;
   }
 `;
+
+const renderNodeResult = (result) => {
+  if (!result) return null;
+
+  if (result.type === "cv_result" && result.data) {
+    return <CVResultsDisplay results={result.data} />;
+  }
+
+  // Default rendering for other result types
+  return (
+    <div className="node-output">
+      <pre className="text-sm overflow-auto max-h-60">
+        {JSON.stringify(result, null, 2)}
+      </pre>
+    </div>
+  );
+};
 
 const FlowCanvas = ({ 
   nodes, 
@@ -53,6 +72,7 @@ const FlowCanvas = ({
   const [debugMode, setDebugMode] = useState(false);
   const [showConnectionGuideModal, setShowConnectionGuideModal] = useState(false);
   const [connectionSourceType, setConnectionSourceType] = useState(null);
+  const flowInstance = useRef(null);
 
   // Use useMemo to prevent recreation of nodeTypes on each render
   const customNodeTypes = useMemo(() => nodeTypes, []);
@@ -372,37 +392,13 @@ const FlowCanvas = ({
       
       {/* ReactFlow component */}
       <ReactFlow
-        nodes={nodes.map(node => {
-          switch (node.type) {
-            case 'input':
-              return {
-                ...node,
-                sourcePosition: 'bottom',
-                targetPosition: 'top',
-                style: {
-                  ...node.style,
-                  zIndex: 1
-                },
-                data: {
-                  ...node.data,
-                  value: node.data.value || '',
-                  inputs: node.data.inputs || {}
-                }
-              };
-            case 'output':
-              return {
-                ...node,
-                sourcePosition: 'bottom',
-                targetPosition: 'top',     // Output nodes only receive connections from top
-                style: {
-                  ...node.style,
-                  zIndex: 1
-                }
-              };
-            default:
-              return node;
+        nodes={nodes.map(node => ({
+          ...node,
+          data: {
+            ...node.data,
+            resultDisplay: node.data?.result ? renderNodeResult(node.data.result) : null
           }
-        })}
+        }))}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -466,9 +462,9 @@ const FlowCanvas = ({
         elementsSelectable={true}
         selectNodesOnDrag={false}
         fitView
-        onInit={(instance) => {
-          reactFlowWrapper.current.reactFlowInstance = instance;
-          window.reactFlowInstance = instance;
+        onInit={(reactFlowInstance) => {
+          flowInstance.current = reactFlowInstance;
+          reactFlowWrapper.current.reactFlowInstance = reactFlowInstance;
         }}
       >
         <MiniMap 
@@ -486,10 +482,30 @@ const FlowCanvas = ({
           }}
         />
         <ZoomControls
-          zoomIn={() => reactFlowWrapper.current.reactFlowInstance.zoomIn()}
-          zoomOut={() => reactFlowWrapper.current.reactFlowInstance.zoomOut()}
-          resetView={handleFitView}
-          fitView={handleFitView}
+          zoomIn={() => {
+            console.log('Zoom In clicked', flowInstance.current);
+            if (flowInstance.current) {
+              flowInstance.current.zoomIn();
+            }
+          }}
+          zoomOut={() => {
+            console.log('Zoom Out clicked', flowInstance.current);
+            if (flowInstance.current) {
+              flowInstance.current.zoomOut();
+            }
+          }}
+          resetView={() => {
+            console.log('Reset View clicked', flowInstance.current);
+            if (flowInstance.current) {
+              flowInstance.current.setViewport({ x: 0, y: 0, zoom: 1 });
+            }
+          }}
+          fitView={() => {
+            console.log('Fit View clicked', flowInstance.current);
+            if (flowInstance.current) {
+              flowInstance.current.fitView({ padding: 0.2 });
+            }
+          }}
         />
         <Background variant="dots" gap={12} size={1} />
       </ReactFlow>
@@ -568,17 +584,6 @@ const FlowCanvas = ({
         </div>
       )}
 
-      {/* Toggle button for connection rules */}
-      <button 
-        onClick={() => setShowConnectionRules(!showConnectionRules)}
-        className="absolute top-16 right-4 bg-purple-600 text-white px-3 py-1 rounded text-sm z-40"
-      >
-        {showConnectionRules ? 'Hide Rules' : 'Show Rules'}
-      </button>
-      
-      {/* Connection Rules Panel - conditionally rendered */}
-      {showConnectionRules && <ConnectionRulesPanel onClose={() => setShowConnectionRules(false)} />}
-      
       {/* Debug button and panel */}
       <button 
         onClick={() => setDebugMode(!debugMode)}
@@ -606,6 +611,22 @@ const FlowCanvas = ({
           </button>
         </div>
       )}
+
+      <FloatingMetricsPanel 
+        nodes={nodes} 
+        edges={edges} 
+        onHighlightNodes={(nodeType) => {
+          // Your highlight logic here
+          const updatedNodes = nodes.map(node => ({
+            ...node,
+            data: {
+              ...node.data,
+              highlighted: node.type === nodeType
+            }
+          }));
+          onNodesChange(updatedNodes);
+        }}
+      />
     </div>
   );
 };

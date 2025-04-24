@@ -171,7 +171,7 @@ const BuilderPage = () => {
   const [minimizeExecutionPanel, setMinimizeExecutionPanel] = useState(false);
 
   // Add Agent function - kept in main component as it's simple
-  const addAgent = () => {
+  const addAgent = (framework = 'openrouter') => {
     const id = `agent-${Date.now()}`;
     const newNode = {
       id,
@@ -188,7 +188,8 @@ const BuilderPage = () => {
         allowDelegation: false,
         verbose: true,
         nodeId: id,
-        nodeType: 'agent'
+        nodeType: 'agent',
+        framework: framework
       }
     };
     

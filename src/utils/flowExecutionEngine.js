@@ -98,6 +98,25 @@ export const collectInputData = (nodeId, edges, executionState, globalInputs = {
   return inputs;
 };
 
+// Add this helper function at the top of the file
+function removeCircularReferences(obj) {
+  const seen = new WeakSet();
+  
+  return JSON.parse(JSON.stringify(obj, (key, value) => {
+    if (key === '_owner' || key === '_store' || key.startsWith('__react')) {
+      return undefined; // Remove React-specific circular references
+    }
+    
+    if (typeof value === 'object' && value !== null) {
+      if (seen.has(value)) {
+        return undefined; // Remove circular reference
+      }
+      seen.add(value);
+    }
+    return value;
+  }));
+}
+
 /**
  * Execute a node based on its type
  * @param {Object} node - Node object
@@ -119,7 +138,23 @@ export const executeNodeByType = async (node, inputs, executors) => {
   }
   
   try {
-    return await executor(node, inputs);
+    const result = await executor(node, inputs);
+    
+    // Clean the result before returning
+    const cleanedResult = removeCircularReferences(result);
+    
+    // Special handling for CV parser results
+    if (node.data?.customTool === 'cv_parser' && cleanedResult?.type === 'cv_result') {
+      return {
+        type: 'cv_result',
+        data: cleanedResult.data,
+        nodeId: node.id,
+        nodeType: nodeType,
+        nodeName: node.data?.label || 'CV Parser'
+      };
+    }
+    
+    return cleanedResult;
   } catch (error) {
     console.error(`Error executing node ${node.id} of type ${nodeType}:`, error);
     toast.error(`Error in ${node.data?.label || nodeType} node: ${error.message}`);
@@ -188,8 +223,11 @@ export const runFlow = async (
       // Execute the node
       const result = await executeNodeByType(node, nodeInputs, executors);
       
+      // Clean the result before storing
+      const cleanedResult = removeCircularReferences(result);
+      
       // Store the result
-      executionState[nodeId] = result;
+      executionState[nodeId] = cleanedResult;
       
       // Log successful execution
       logs.push({
@@ -198,12 +236,12 @@ export const runFlow = async (
         type: node.type || (node.data && node.data.nodeType),
         typeDescription: getNodeTypeDescription(node),
         status: 'completed',
-        result,
+        result: cleanedResult,
         timestamp: new Date().toISOString()
       });
       
       // Notify that node execution is complete
-      onNodeComplete(node, result);
+      onNodeComplete(node, cleanedResult);
       
     } catch (error) {
       console.error(`Error executing node ${nodeId}:`, error);

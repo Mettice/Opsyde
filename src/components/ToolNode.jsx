@@ -55,6 +55,34 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
       endpoint;
   };
 
+  const toolType = data.toolType || 'unknown';
+  const customTool = data.customTool;
+  const result = data.result || {};
+
+  const renderResults = () => {
+    // Simple result preview
+    return (
+      <div className="mt-2 text-sm">
+        {result.error ? (
+          <div className="text-red-500">{result.error}</div>
+        ) : (
+          <div className="text-gray-600">
+            {result.type === 'cv_result' ? (
+              <div className="bg-blue-50 p-2 rounded">
+                <p>CV Analysis Complete</p>
+                <p className="text-xs">View results in execution panel</p>
+              </div>
+            ) : (
+              <pre className="whitespace-pre-wrap">
+                {typeof result === 'object' ? JSON.stringify(result, null, 2) : result}
+              </pre>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Handle rendering with an error message if data is missing
   if (!data) {
     return (
@@ -184,6 +212,15 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
         </div>
       )}
       
+      {renderResults()}
+      
+      {/* Display the rendered result */}
+      {data.resultDisplay && (
+        <div className="mt-4">
+          {data.resultDisplay}
+        </div>
+      )}
+      
       {/* Action buttons */}
       <div className="flex mt-2 space-x-2">
         <button 
@@ -235,6 +272,7 @@ ToolNode.propTypes = {
     parameters: PropTypes.oneOfType([PropTypes.string, PropTypes.array]),
     nodeId: PropTypes.string,
     nodeType: PropTypes.string,
+    resultDisplay: PropTypes.node
   }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,

@@ -1,0 +1,339 @@
+{
+  "frameworks": {
+    "cv_parser": {
+      "name": "CV Parser",
+      "icon": "📄",
+      "description": "Parse and analyze CV/resume documents",
+      "config": {
+        "inputType": "file",
+        "outputType": "json"
+      }
+    },
+    "crewai": {
+      "name": "CrewAI",
+      "icon": "👥",
+      "description": "Create and manage AI agent teams",
+      "config": {
+        "llm": {
+          "models": ["gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"],
+          "default": "gpt-4",
+          "customizable": true
+        },
+        "temperature": {
+          "default": 0.7,
+          "min": 0,
+          "max": 1,
+          "step": 0.1,
+          "customizable": true,
+          "description": "Lower values (0.0) make responses more focused and deterministic. Higher values (1.0) make responses more creative and varied."
+        },
+        "maxTokens": {
+          "default": 4000,
+          "min": 100,
+          "max": 8000,
+          "step": 100,
+          "customizable": true,
+          "description": "Maximum length of the response. Higher values allow longer responses but may cost more."
+        },
+        "agentRoles": {
+          "values": ["researcher", "writer", "analyst", "critic", "executor"],
+          "customizable": false
+        }
+      }
+    },
+    "openrouter": {
+      "name": "OpenRouter",
+      "icon": "🔄",
+      "description": "Route requests to various LLM providers",
+      "config": {
+        "llm": {
+          "models": [
+            "gpt-4",
+            "gpt-3.5-turbo",
+            "claude-3-opus",
+            "claude-3-sonnet",
+            "mistral-large",
+            "mistral-medium"
+          ],
+          "default": "gpt-4",
+          "customizable": true
+        },
+        "temperature": {
+          "default": 0.7,
+          "min": 0,
+          "max": 1,
+          "step": 0.1,
+          "customizable": true
+        },
+        "maxTokens": {
+          "default": 4000,
+          "min": 100,
+          "max": 8000,
+          "step": 100,
+          "customizable": true
+        },
+        "apiEndpoint": {
+          "value": "https://openrouter.ai/api/v1",
+          "customizable": false
+        }
+      }
+    },
+    "huggingface": {
+      "name": "HuggingFace",
+      "icon": "🤗",
+      "description": "Access HuggingFace models and pipelines",
+      "config": {
+        "tasks": {
+          "values": ["text-generation", "summarization", "question-answering", "translation"],
+          "default": "text-generation",
+          "customizable": true
+        },
+        "apiEndpoint": {
+          "value": "https://api-inference.huggingface.co/models/",
+          "customizable": false
+        }
+      }
+    },
+    "langchain": {
+      "name": "LangChain",
+      "icon": "⛓️",
+      "description": "Build LLM-powered applications",
+      "config": {
+        "chainTypes": {
+          "values": ["llm", "sequential", "router", "qa"],
+          "default": "llm",
+          "customizable": true
+        },
+        "llm": {
+          "models": ["gpt-4", "gpt-3.5-turbo", "claude-3-opus"],
+          "default": "gpt-4",
+          "customizable": true
+        }
+      }
+    },
+    "llamaindex": {
+      "name": "LlamaIndex",
+      "icon": "🦙",
+      "description": "Index and query structured data",
+      "config": {
+        "indexTypes": {
+          "values": ["vector", "list", "tree", "keyword"],
+          "default": "vector",
+          "customizable": true
+        },
+        "llm": {
+          "models": ["gpt-4", "gpt-3.5-turbo"],
+          "default": "gpt-4",
+          "customizable": true
+        }
+      }
+    },
+    "autogen": {
+      "name": "AutoGen",
+      "icon": "🤖",
+      "description": "Automated agent interactions",
+      "config": {
+        "agentTypes": {
+          "values": ["assistant", "userproxy", "groupchat"],
+          "default": "assistant",
+          "customizable": true
+        },
+        "llm": {
+          "models": ["gpt-4", "gpt-3.5-turbo"],
+          "default": "gpt-4",
+          "customizable": true
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "CV Parser",
+      "description": "Extract information from CV/resume documents",
+      "framework": "cv_parser",
+      "type": "custom",
+      "customTool": "cv_parser",
+      "category": "Document Analysis",
+      "parameters": {
+        "file": {
+          "type": "file",
+          "description": "PDF file to analyze",
+          "required": true
+        }
+      }
+    },
+    {
+      "name": "Agent Team",
+      "description": "Create a team of AI agents",
+      "framework": "crewai",
+      "type": "agent",
+      "category": "AI",
+      "parameters": {
+        "agents": {
+          "type": "list",
+          "description": "List of agent configurations",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Agent name"
+              },
+              "role": {
+                "type": "select",
+                "inherit": "agentRoles.values",
+                "description": "Agent role"
+              },
+              "goal": {
+                "type": "text",
+                "description": "What is this agent trying to achieve?"
+              },
+              "backstory": {
+                "type": "textarea",
+                "description": "Background information that shapes the agent's perspective"
+              }
+            }
+          }
+        },
+        "tasks": {
+          "type": "list",
+          "description": "List of tasks to perform",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "text",
+                "description": "Task description"
+              },
+              "expectedOutput": {
+                "type": "text",
+                "description": "Expected output from the task"
+              },
+              "async": {
+                "type": "boolean",
+                "description": "Whether the task can run asynchronously",
+                "default": false
+              }
+            }
+          }
+        },
+        "llmModel": {
+          "type": "select",
+          "inherit": "llm.models",
+          "default": "llm.default",
+          "description": "Language model to use",
+          "control": {
+            "type": "dropdown",
+            "label": "LLM Model",
+            "tooltip": "Select the language model to use for this agent team"
+          }
+        },
+        "temperature": {
+          "type": "range",
+          "inherit": "temperature",
+          "description": "Controls randomness in the output",
+          "control": {
+            "type": "slider",
+            "label": "Temperature",
+            "tooltip": "Lower values (0.0) make responses more focused and deterministic. Higher values (1.0) make responses more creative and varied."
+          }
+        },
+        "maxTokens": {
+          "type": "number",
+          "inherit": "maxTokens",
+          "description": "Maximum length of the response",
+          "control": {
+            "type": "input",
+            "label": "Max Tokens",
+            "tooltip": "Maximum length of the response. Higher values allow longer responses but may cost more."
+          }
+        }
+      }
+    },
+    {
+      "name": "Text Generation",
+      "description": "Generate text using language models",
+      "framework": "openrouter",
+      "type": "llm",
+      "category": "AI",
+      "parameters": {
+        "prompt": "Input text prompt",
+        "model": {
+          "type": "select",
+          "inherit": "llm.models",
+          "default": "llm.default"
+        },
+        "temperature": {
+          "type": "range",
+          "inherit": "temperature"
+        },
+        "maxTokens": {
+          "type": "number",
+          "inherit": "maxTokens"
+        }
+      }
+    },
+    {
+      "name": "Document QA",
+      "description": "Answer questions about documents",
+      "framework": "llamaindex",
+      "type": "qa",
+      "category": "Document Analysis",
+      "parameters": {
+        "document": "Document to analyze",
+        "question": "Question to answer",
+        "indexType": {
+          "type": "select",
+          "inherit": "indexTypes.values",
+          "default": "indexTypes.default"
+        },
+        "llmModel": {
+          "type": "select",
+          "inherit": "llm.models",
+          "default": "llm.default"
+        }
+      }
+    },
+    {
+      "name": "Code Assistant",
+      "description": "Get help with coding tasks",
+      "framework": "autogen",
+      "type": "assistant",
+      "category": "Development",
+      "parameters": {
+        "task": "Coding task description",
+        "language": "Programming language",
+        "agentType": {
+          "type": "select",
+          "inherit": "agentTypes.values",
+          "default": "agentTypes.default"
+        },
+        "llmModel": {
+          "type": "select",
+          "inherit": "llm.models",
+          "default": "llm.default"
+        }
+      }
+    },
+    {
+      "name": "Chain Builder",
+      "description": "Build custom LLM chains",
+      "framework": "langchain",
+      "type": "chain",
+      "category": "AI",
+      "parameters": {
+        "chainType": {
+          "type": "select",
+          "inherit": "chainTypes.values",
+          "default": "chainTypes.default"
+        },
+        "llmModel": {
+          "type": "select",
+          "inherit": "llm.models",
+          "default": "llm.default"
+        },
+        "components": "Chain components"
+      }
+    }
+  ]
+}

@@ -3,6 +3,48 @@ import { sendToEmail, postToDiscord, pushToSheets, postToSlack } from './outputU
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
+// Helper function to remove circular references
+function removeCircularReferences(obj) {
+  const seen = new WeakSet();
+  return JSON.parse(JSON.stringify(obj, (key, value) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) return;
+      seen.add(value);
+    }
+    return value;
+  }));
+}
+
+// Add this helper at the top of the file
+function cleanDataForBackend(obj) {
+  if (!obj) return obj;
+  
+  // Handle DOM elements and React components
+  if (obj instanceof Element || (obj && obj.$$typeof)) {
+    return undefined;
+  }
+  
+  // Handle arrays
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanDataForBackend(item));
+  }
+  
+  // Handle objects
+  if (typeof obj === 'object') {
+    const cleaned = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // Skip React-specific properties and DOM elements
+      if (key.startsWith('_') || key.startsWith('__react')) {
+        continue;
+      }
+      cleaned[key] = cleanDataForBackend(value);
+    }
+    return cleaned;
+  }
+  
+  return obj;
+}
+
 /**
  * Execute an agent node by calling the backend
  */
@@ -14,7 +56,10 @@ export const executeAgentNode = async (node, inputs) => {
   console.log(`Executing agent node: ${label} (${role})`, inputs);
   
   try {
-    // Call the backend to execute the agent
+    // Clean the data before sending to backend
+    const cleanedData = cleanDataForBackend(data);
+    const cleanedInputs = cleanDataForBackend(inputs);
+    
     const response = await fetch(`${BACKEND_URL}/execute-node`, {
       method: 'POST',
       headers: {
@@ -22,8 +67,8 @@ export const executeAgentNode = async (node, inputs) => {
       },
       body: JSON.stringify({
         nodeType: 'agent',
-        nodeData: data,
-        inputs
+        nodeData: cleanedData,
+        inputs: cleanedInputs
       })
     });
     
@@ -31,8 +76,7 @@ export const executeAgentNode = async (node, inputs) => {
       throw new Error(`Server responded with ${response.status}`);
     }
     
-    const result = await response.json();
-    return result;
+    return await response.json();
   } catch (error) {
     console.error('Error executing agent node:', error);
     return {
@@ -85,14 +129,23 @@ export const executeTaskNode = async (node, inputs) => {
 /**
  * Execute a tool node by calling the backend
  */
-export const executeToolNode = async (node, inputs) => {
+export const executeToolNode = async (node, inputs, retries = 3) => {
   const data = node.data || {};
   const label = data.label || 'Tool';
   const toolType = data.toolType || 'unknown';
+  const customTool = data.customTool;
   
-  console.log(`Executing tool node: ${label} (${toolType})`, inputs);
+  console.log(`Executing tool node: ${label}`, {
+    toolType,
+    customTool,
+    inputs
+  });
   
   try {
+    // Clean the data before sending to backend
+    const cleanedData = cleanDataForBackend(data);
+    const cleanedInputs = cleanDataForBackend(inputs);
+    
     // Call the backend to execute the tool
     const response = await fetch(`${BACKEND_URL}/execute-node`, {
       method: 'POST',
@@ -101,23 +154,42 @@ export const executeToolNode = async (node, inputs) => {
       },
       body: JSON.stringify({
         nodeType: 'tool',
-        nodeData: data,
-        inputs
+        nodeData: cleanedData,
+        inputs: cleanedInputs
       })
     });
     
     if (!response.ok) {
-      throw new Error(`Server responded with ${response.status}`);
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || `Server responded with ${response.status}`);
     }
     
     const result = await response.json();
+    
+    // Check if result contains an error
+    if (result.type === 'error') {
+      if (retries > 0) {
+        console.log(`Retrying tool node (${retries} attempts remaining)`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        return executeToolNode(node, inputs, retries - 1);
+      }
+      throw new Error(result.error || 'Tool execution failed');
+    }
+    
     return result;
   } catch (error) {
-    console.error('Error executing tool node:', error);
+    console.error('Error executing tool node:', {
+      error: error.message,
+      nodeId: node.id,
+      toolType,
+      customTool
+    });
     return {
       output: `Error executing tool: ${error.message}`,
+      type: 'error',
       error: true,
-      message: error.message
+      message: error.message,
+      nodeId: node.id
     };
   }
 };

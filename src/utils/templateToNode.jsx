@@ -36,6 +36,7 @@ export const templateToNode = (template) => {
         label: template.label || template.name,
         parameters: template.parameters ? template.parameters.split('\n') : [],
         toolType: template.toolType || 'custom',
+        customTool: template.customTool,
         icon: template.icon || '🔧',
         description: template.description || '',
         apiEndpoint: template.apiEndpoint || '',

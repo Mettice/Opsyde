@@ -48,7 +48,9 @@ export const useToolTemplates = ({
       data: {
         ...template,
         nodeId: id,
-        nodeType: 'tool'
+        nodeType: 'tool',
+        toolType: template.toolType === 'custom' ? 'custom' : (template.toolType || 'api'),
+        customTool: template.toolType === 'custom' ? template.name.toLowerCase().replace(/\s+/g, '_') : undefined
       }
     };
     
@@ -58,9 +60,18 @@ export const useToolTemplates = ({
 
   // Handle selecting a tool from the registry
   const handleToolFromRegistry = useCallback((toolData) => {
-    const id = `tool-${Date.now()}`;
+    // Format parameters to be either a string or array
+    let parameters = '';
+    if (Array.isArray(toolData.parameters)) {
+      parameters = toolData.parameters;
+    } else if (typeof toolData.parameters === 'string') {
+      parameters = toolData.parameters;
+    } else if (typeof toolData.parameters === 'object' && toolData.parameters !== null) {
+      parameters = Object.keys(toolData.parameters).join('\n');
+    }
+
     const newNode = {
-      id,
+      id: `tool-${Date.now()}`,
       type: 'tool',
       position: getSafeNodePosition(nodes),
       sourcePosition: 'bottom',
@@ -68,14 +79,20 @@ export const useToolTemplates = ({
       data: {
         label: toolData.name,
         description: toolData.description,
-        toolType: toolData.type || 'api',
-        parameters: Array.isArray(toolData.parameters) ? toolData.parameters.join('\n') : '',
+        toolType: toolData.type === 'custom' ? 'custom' : (toolData.type || 'api'),
+        customTool: toolData.type === 'custom' ? toolData.name.toLowerCase().replace(/\s+/g, '_') : undefined,
+        framework: typeof toolData.framework === 'string' ? toolData.framework : toolData.framework?.id || 'openrouter',
+        frameworkConfig: typeof toolData.framework === 'object' ? toolData.framework : {},
         category: toolData.category,
-        nodeId: id,
-        nodeType: 'tool'
+        parameters: parameters,
+        nodeId: `tool-${Date.now()}`,
+        nodeType: 'tool',
+        apiEndpoint: toolData.apiEndpoint || '',
+        value: {}
       }
     };
-    
+
+    console.log('Adding new tool node:', newNode);
     setNodes(nodes => [...nodes, newNode]);
     addToHistory({ nodes: [...nodes, newNode], edges });
   }, [nodes, edges, setNodes, addToHistory]);

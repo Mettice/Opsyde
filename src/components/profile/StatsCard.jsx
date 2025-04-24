@@ -1,15 +1,24 @@
 import React from 'react';
 
-export default function StatsCard({ title, value, icon, color }) {
+const StatsCard = ({ title, value, icon, color, onClick }) => {
+  const cardClass = onClick ? 'cursor-pointer hover:shadow-lg transition-shadow' : '';
+  
   return (
-    <div className="bg-white rounded-lg shadow-md p-4 flex items-center">
-      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
-        {icon}
-      </div>
-      <div className="ml-4">
-        <h3 className="text-sm font-medium text-gray-500">{title}</h3>
-        <p className="text-2xl font-semibold">{value}</p>
+    <div 
+      className={`${color} rounded-lg p-6 ${cardClass}`}
+      onClick={onClick}
+    >
+      <div className="flex items-center">
+        <div className="flex-shrink-0">{icon}</div>
+        <div className="ml-5 w-0 flex-1">
+          <dl>
+            <dt className="text-sm font-medium text-gray-500 truncate">{title}</dt>
+            <dd className="text-lg font-semibold text-gray-900">{value}</dd>
+          </dl>
+        </div>
       </div>
     </div>
   );
-} 
+};
+
+export default StatsCard; 
