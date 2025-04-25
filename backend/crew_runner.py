@@ -625,6 +625,7 @@ async def run_task_node(node_data, inputs, context=None):
         task_description = node_data.get("description", "No description")
         
         logger.info(f"Executing task '{task_name}': {task_description}")
+        logger.info(f"Task inputs: {json.dumps(inputs, default=str)}")
         
         # Get the agent from node_data or context
         agent_data = node_data.get("agent") or (context or {}).get("current_agent")
@@ -639,8 +640,64 @@ async def run_task_node(node_data, inputs, context=None):
             memory_enabled = agent_data.get("enableMemory", False)
             prompt_override = agent_data.get("prompt", "")
             
-            # Combine prompt override with task description if provided
-            full_prompt = f"{prompt_override}\n\n{task_description}" if prompt_override else task_description
+            # Special handling for interview questions task
+            if "Generate Interview Questions" in task_name:
+                # Try to find CV data in inputs
+                cv_data = None
+                
+                # Log the inputs we're working with
+                logger.info(f"Looking for CV data in inputs: {json.dumps(inputs, default=str)}")
+                
+                # First try to get it from cv_result
+                for key, value in inputs.items():
+                    if isinstance(value, dict):
+                        if value.get("type") == "cv_result":
+                            cv_data = value.get("data", {})
+                            logger.info(f"Found CV data in cv_result type: {json.dumps(cv_data, default=str)}")
+                            break
+                        elif "data" in value and isinstance(value["data"], dict):
+                            data = value["data"]
+                            if all(k in data for k in ["experience_years", "skills", "education"]):
+                                cv_data = data
+                                logger.info(f"Found CV data in nested data: {json.dumps(cv_data, default=str)}")
+                                break
+                
+                # If no CV data found, return an error
+                if not cv_data:
+                    error_msg = "No CV data found in inputs. Make sure the CV Parser tool is connected and executed before this task."
+                    logger.error(error_msg)
+                    return {
+                        "output": error_msg,
+                        "type": "error",
+                        "error": error_msg,
+                        "task_name": task_name,
+                        "agent": agent_name
+                    }
+                
+                # Format CV summary with safe gets
+                cv_summary = f"""
+Experience: {cv_data.get('experience_years', 'N/A')} years
+Skills: {', '.join(cv_data.get('skills', []) or [])}
+Education: {', '.join(f"{edu.get('degree', 'Unknown')} in {edu.get('field', 'Unknown')}" for edu in cv_data.get('education', []) or [])}
+"""
+                
+                # Create specialized prompt for interview questions
+                full_prompt = f"""
+Below is a candidate's CV summary. Based on their real experience, generate 5 tailored interview questions that assess their skills and background.
+
+CV Summary:
+{cv_summary}
+
+Your response should be in this format:
+1.
+2.
+3.
+4.
+5.
+"""
+            else:
+                # Regular task handling
+                full_prompt = f"{prompt_override}\n\n{task_description}" if prompt_override else task_description
             
             try:
                 # Initialize OpenAI client with new syntax

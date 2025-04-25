@@ -300,13 +300,20 @@ export const executeToolNode = async (node, inputs, retries = 3) => {
     if (customTool === 'cv_parser' && result.data) {
       // Clean the CV parser results to remove any circular references
       const cleanedData = removeCircularReferences(result.data);
-      return {
+      const output = {
         type: 'cv_result',
         data: cleanedData,
         nodeId: node.id,
         nodeType: 'tool',
-        toolType: 'cv_parser'
+        toolType: 'cv_parser',
+        // Add a formatted output for display
+        output: `CV Parsed Successfully:\n- Experience: ${cleanedData.experience_years} years\n- Skills: ${cleanedData.skills.join(', ')}\n- Education: ${cleanedData.education.map(e => `${e.degree} in ${e.field}`).join(', ')}`
       };
+      
+      // Log the structured output
+      console.log('CV Parser output:', output);
+      
+      return output;
     }
     
     return result;

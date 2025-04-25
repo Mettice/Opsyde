@@ -96,18 +96,31 @@ export const collectInputData = (nodeId, edges, executionState, globalInputs = {
         };
       }
       
-      // Handle different output formats
-      if (typeof sourceOutput === 'object' && sourceOutput !== null) {
-        // If the output is an object with an 'output' field, use that
-        if (sourceOutput.output !== undefined) {
-          inputs[inputKey] = sourceOutput.output;
+      // Special handling for CV parser results
+      if (sourceOutput.type === 'cv_result' && sourceOutput.data) {
+        // Store CV data under both the edge label and a consistent key
+        inputs[inputKey] = sourceOutput;
+        inputs.cv_result = sourceOutput;
+        // Also store the data directly for backward compatibility
+        inputs.cv_data = sourceOutput.data;
+      } else {
+        // Handle different output formats
+        if (typeof sourceOutput === 'object' && sourceOutput !== null) {
+          // If it has a data field and is from a tool, preserve the structure
+          if (sourceOutput.data && sourceOutput.type) {
+            inputs[inputKey] = sourceOutput;
+          }
+          // If the output is an object with an 'output' field, use that
+          else if (sourceOutput.output !== undefined) {
+            inputs[inputKey] = sourceOutput;
+          } else {
+            // Otherwise use the whole object
+            inputs[inputKey] = sourceOutput;
+          }
         } else {
-          // Otherwise use the whole object
+          // For primitive values
           inputs[inputKey] = sourceOutput;
         }
-      } else {
-        // For primitive values
-        inputs[inputKey] = sourceOutput;
       }
     }
   });
