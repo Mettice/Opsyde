@@ -10,7 +10,11 @@ const helpContent = {
       backstory: 'Background information that shapes the agent\'s perspective and approach.',
       llmModel: 'The large language model that powers the agent. Different models have different capabilities and costs.',
       allowDelegation: 'When enabled, the agent can delegate subtasks to other agents in the crew.',
-      verbose: 'When enabled, the agent provides detailed logs of its thinking process.'
+      verbose: 'When enabled, the agent provides detailed logs of its thinking process.',
+      temperature: 'Controls randomness in the agent\'s responses. Higher values (e.g., 0.8) make output more random, lower values (e.g., 0.2) make it more focused and deterministic.',
+      max_tokens: 'Maximum number of tokens the agent can generate in a single response. Higher values allow for longer responses but may increase costs.',
+      enableMemory: 'When enabled, the agent can remember previous interactions and use that context in future tasks.',
+      prompt: 'Optional custom prompt to override the default agent behavior. This will be prepended to the task description.'
     }
   },
   task: {

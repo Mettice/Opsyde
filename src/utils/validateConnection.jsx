@@ -17,6 +17,42 @@ export const validateConnection = (params, nodes, edges, toast) => {
   const from = sourceNode.type;
   const to = targetNode.type;
   
+  // === Agent to Task Assignment ===
+  if (from === 'agent' && to === 'task') {
+    console.log('Validating agent-task connection:', {
+      agent: sourceNode.data,
+      task: targetNode.data
+    });
+
+    // Check if task already has an agent assigned
+    const existingAgentEdge = edges.find(edge => {
+      const edgeSourceNode = nodes.find(n => n.id === edge.source);
+      return edge.target === target && edgeSourceNode?.type === 'agent';
+    });
+
+    if (existingAgentEdge) {
+      toast?.error("Task already has an agent assigned. Remove existing connection first.");
+      return false;
+    }
+
+    // Update the task node's data with agent information
+    const taskNodeIndex = nodes.findIndex(n => n.id === target);
+    if (taskNodeIndex !== -1) {
+      nodes[taskNodeIndex] = {
+        ...nodes[taskNodeIndex],
+        data: {
+          ...nodes[taskNodeIndex].data,
+          agentId: sourceNode.id,
+          agentName: sourceNode.data?.label || 'Unknown Agent',
+          agentRole: sourceNode.data?.role || 'Assistant'
+        }
+      };
+    }
+
+    console.log('Updated task data:', nodes[taskNodeIndex]?.data);
+    return true;
+  }
+  
   // Check for existing connections if needed
   const hasExistingConnection = edges.some(
     edge => edge.source === source && edge.target === target

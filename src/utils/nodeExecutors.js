@@ -56,8 +56,31 @@ export const executeAgentNode = async (node, inputs) => {
   console.log(`Executing agent node: ${label} (${role})`, inputs);
   
   try {
+    // Create a complete agent data structure
+    const agentData = {
+      nodeId: node.id,
+      label,
+      role,
+      llmModel: data.llmModel || 'gpt-4',
+      temperature: data.temperature || 0.7,
+      maxTokens: data.max_tokens || 4000,
+      useMemory: data.enableMemory || false,
+      prompt: data.prompt || '',
+      type: 'agent'
+    };
+
     // Clean the data before sending to backend
-    const cleanedData = cleanDataForBackend(data);
+    const cleanedData = cleanDataForBackend({
+      ...data,
+      ...agentData,
+      // Remove any React-specific or circular references
+      onEdit: undefined,
+      onDelete: undefined,
+      onValueChange: undefined,
+      ref: undefined,
+      component: undefined
+    });
+
     const cleanedInputs = cleanDataForBackend(inputs);
     
     const response = await fetch(`${BACKEND_URL}/execute-node`, {
@@ -76,11 +99,27 @@ export const executeAgentNode = async (node, inputs) => {
       throw new Error(`Server responded with ${response.status}`);
     }
     
-    return await response.json();
+    const result = await response.json();
+    
+    // Return a complete agent status object
+    return {
+      output: `Agent ${label} ready for tasks`,
+      type: 'agent_status',
+      agent_name: label,
+      agent_role: role,
+      agent_id: node.id,
+      llmModel: agentData.llmModel,
+      temperature: agentData.temperature,
+      maxTokens: agentData.maxTokens,
+      useMemory: agentData.useMemory,
+      prompt: agentData.prompt,
+      status: 'ready'
+    };
   } catch (error) {
     console.error('Error executing agent node:', error);
     return {
       output: `Error executing agent: ${error.message}`,
+      type: 'error',
       error: true,
       message: error.message
     };
@@ -94,9 +133,59 @@ export const executeTaskNode = async (node, inputs) => {
   const data = node.data || {};
   const label = data.label || 'Task';
   
-  console.log(`Executing task node: ${label}`, inputs);
+  // Find agent data from inputs
+  const agentData = inputs.agent;
+  
+  // Debug task data
+  console.log('Task node execution:', {
+    taskId: node.id,
+    label: label,
+    agentData: agentData,
+    data: data,
+    inputs: inputs
+  });
+  
+  // Check for assigned agent
+  if (!agentData || !agentData.type === 'agent_status') {
+    const error = `Task '${label}' requires an agent`;
+    console.error('No agent assigned to task:', {
+      taskId: node.id,
+      label: label,
+      data: data
+    });
+    return {
+      output: error,
+      type: 'error',
+      error: 'No agent assigned',
+      nodeId: node.id,
+      nodeType: 'task'
+    };
+  }
+  
+  console.log(`Executing task node: ${label} with agent:`, agentData);
   
   try {
+    // Clean the data before sending to backend
+    const cleanedData = cleanDataForBackend({
+      ...data,
+      label,
+      description: data.description || '',
+      expectedOutput: data.expectedOutput || '',
+      agent: {
+        type: 'agent_status',
+        agent_name: agentData.agent_name,
+        agent_role: agentData.agent_role,
+        agent_id: agentData.agent_id,
+        llmModel: agentData.llmModel || 'gpt-4',
+        temperature: agentData.temperature || 0.7,
+        maxTokens: agentData.maxTokens || 4000,
+        useMemory: agentData.useMemory || false,
+        prompt: agentData.prompt || ''
+      }
+    });
+    
+    const cleanedInputs = cleanDataForBackend(inputs);
+    
     // Call the backend to execute the task
     const response = await fetch(`${BACKEND_URL}/execute-node`, {
       method: 'POST',
@@ -105,8 +194,8 @@ export const executeTaskNode = async (node, inputs) => {
       },
       body: JSON.stringify({
         nodeType: 'task',
-        nodeData: data,
-        inputs
+        nodeData: cleanedData,
+        inputs: cleanedInputs
       })
     });
     
@@ -115,13 +204,33 @@ export const executeTaskNode = async (node, inputs) => {
     }
     
     const result = await response.json();
-    return result;
+    
+    return {
+      ...result,
+      output: result.output || `Task '${label}' executed by ${agentData.agent_name}`,
+      type: 'task_result',
+      task_name: label,
+      agent: agentData.agent_name,
+      agent_settings: {
+        llm_model: agentData.llmModel,
+        temperature: agentData.temperature,
+        max_tokens: agentData.maxTokens,
+        memory_enabled: agentData.useMemory
+      },
+      nodeId: node.id
+    };
   } catch (error) {
-    console.error('Error executing task node:', error);
+    console.error('Error executing task node:', {
+      error: error.message,
+      nodeId: node.id,
+      label: label
+    });
     return {
       output: `Error executing task: ${error.message}`,
+      type: 'error',
       error: true,
-      message: error.message
+      message: error.message,
+      nodeId: node.id
     };
   }
 };
@@ -132,18 +241,24 @@ export const executeTaskNode = async (node, inputs) => {
 export const executeToolNode = async (node, inputs, retries = 3) => {
   const data = node.data || {};
   const label = data.label || 'Tool';
-  const toolType = data.toolType || 'unknown';
-  const customTool = data.customTool;
+  const toolType = data.toolType?.toLowerCase() || 'unknown';
+  const customTool = data.customTool || (toolType === 'custom' ? 'cv_parser' : undefined);
   
-  console.log(`Executing tool node: ${label}`, {
+  console.log(`Executing tool node:`, {
+    label,
     toolType,
     customTool,
+    data,
     inputs
   });
   
   try {
     // Clean the data before sending to backend
-    const cleanedData = cleanDataForBackend(data);
+    const cleanedData = cleanDataForBackend({
+      ...data,
+      toolType: customTool || toolType,
+      customTool: customTool
+    });
     const cleanedInputs = cleanDataForBackend(inputs);
     
     // Call the backend to execute the tool
@@ -154,7 +269,12 @@ export const executeToolNode = async (node, inputs, retries = 3) => {
       },
       body: JSON.stringify({
         nodeType: 'tool',
-        nodeData: cleanedData,
+        nodeData: {
+          ...cleanedData,
+          // Ensure we pass both toolType and customTool
+          toolType: customTool || toolType,
+          customTool: customTool
+        },
         inputs: cleanedInputs
       })
     });
@@ -174,6 +294,19 @@ export const executeToolNode = async (node, inputs, retries = 3) => {
         return executeToolNode(node, inputs, retries - 1);
       }
       throw new Error(result.error || 'Tool execution failed');
+    }
+    
+    // Special handling for CV parser results
+    if (customTool === 'cv_parser' && result.data) {
+      // Clean the CV parser results to remove any circular references
+      const cleanedData = removeCircularReferences(result.data);
+      return {
+        type: 'cv_result',
+        data: cleanedData,
+        nodeId: node.id,
+        nodeType: 'tool',
+        toolType: 'cv_parser'
+      };
     }
     
     return result;

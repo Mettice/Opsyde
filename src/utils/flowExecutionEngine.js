@@ -79,6 +79,23 @@ export const collectInputData = (nodeId, edges, executionState, globalInputs = {
       // Use the edge label as the input key if available
       const inputKey = edge.label || `input_from_${sourceId}`;
       
+      // Special handling for agent data
+      if (sourceOutput.type === 'agent_status') {
+        // Store agent data in a consistent format
+        inputs.agent = {
+          type: 'agent_status',
+          agent_name: sourceOutput.agent_name,
+          agent_role: sourceOutput.agent_role,
+          agent_id: sourceOutput.agent_id,
+          llmModel: sourceOutput.llmModel,
+          temperature: sourceOutput.temperature,
+          maxTokens: sourceOutput.maxTokens,
+          useMemory: sourceOutput.useMemory,
+          prompt: sourceOutput.prompt,
+          status: sourceOutput.status
+        };
+      }
+      
       // Handle different output formats
       if (typeof sourceOutput === 'object' && sourceOutput !== null) {
         // If the output is an object with an 'output' field, use that

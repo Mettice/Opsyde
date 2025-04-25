@@ -70,8 +70,12 @@ export const useToolTemplates = ({
       parameters = Object.keys(toolData.parameters).join('\n');
     }
 
+    // Create a unique ID for the tool
+    const toolId = `tool-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+    // Create the new node
     const newNode = {
-      id: `tool-${Date.now()}`,
+      id: toolId,
       type: 'tool',
       position: getSafeNodePosition(nodes),
       sourcePosition: 'bottom',
@@ -79,20 +83,27 @@ export const useToolTemplates = ({
       data: {
         label: toolData.name,
         description: toolData.description,
-        toolType: toolData.type === 'custom' ? 'custom' : (toolData.type || 'api'),
-        customTool: toolData.type === 'custom' ? toolData.name.toLowerCase().replace(/\s+/g, '_') : undefined,
+        toolType: toolData.type || 'custom',
+        customTool: toolData.customTool || (toolData.type === 'custom' ? toolData.name.toLowerCase().replace(/\s+/g, '_') : undefined),
         framework: typeof toolData.framework === 'string' ? toolData.framework : toolData.framework?.id || 'openrouter',
         frameworkConfig: typeof toolData.framework === 'object' ? toolData.framework : {},
         category: toolData.category,
         parameters: parameters,
-        nodeId: `tool-${Date.now()}`,
+        nodeId: toolId,
         nodeType: 'tool',
         apiEndpoint: toolData.apiEndpoint || '',
         value: {}
       }
     };
 
-    console.log('Adding new tool node:', newNode);
+    console.log('Adding new tool node:', {
+      id: newNode.id,
+      type: newNode.type,
+      toolType: newNode.data.toolType,
+      customTool: newNode.data.customTool,
+      framework: newNode.data.framework
+    });
+
     setNodes(nodes => [...nodes, newNode]);
     addToHistory({ nodes: [...nodes, newNode], edges });
   }, [nodes, edges, setNodes, addToHistory]);
@@ -135,12 +146,39 @@ export const useToolTemplates = ({
           };
         });
         
+        // Rehydrate agent assignments
+        const rehydratedNodes = newNodes.map(node => {
+          if (node.type === 'task') {
+            // Find any edge where this task is the target
+            const agentEdge = newEdges.find(edge => {
+              const sourceNode = newNodes.find(n => n.id === edge.source);
+              return edge.target === node.id && sourceNode?.type === 'agent';
+            });
+
+            if (agentEdge) {
+              const agentNode = newNodes.find(n => n.id === agentEdge.source);
+              if (agentNode) {
+                return {
+                  ...node,
+                  data: {
+                    ...node.data,
+                    agentId: agentNode.id,
+                    agentName: agentNode.data?.label || 'Unknown Agent',
+                    agentRole: agentNode.data?.role || 'Assistant'
+                  }
+                };
+              }
+            }
+          }
+          return node;
+        });
+        
         // Set the new nodes and edges
-        setNodes(newNodes);
+        setNodes(rehydratedNodes);
         setEdges(newEdges);
         
         // Add to history
-        addToHistory({ nodes: newNodes, edges: newEdges });
+        addToHistory({ nodes: rehydratedNodes, edges: newEdges });
       } catch (error) {
         console.error("Error applying flow template:", error);
         alert("Failed to apply flow template. Please try again.");
@@ -176,7 +214,7 @@ export const useToolTemplates = ({
         console.error("Error creating node from template:", error, template);
       }
     }
-  }, [handleNodeEdit, handleNodeDelete, setNodes, setEdges, nodes, edges, addToHistory]);
+  }, [handleNodeEdit, handleNodeDelete, setNodes, setEdges, addToHistory]);
 
   return {
     addTool,

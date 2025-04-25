@@ -29,7 +29,7 @@ export const useNodeInteractions = ({
       
       setSelectedNode({
         ...node,
-        type: normalizedType // Use the normalized type
+        type: normalizedType
       });
       setShowEditModal(true);
     }
@@ -37,10 +37,28 @@ export const useNodeInteractions = ({
   
   // Node delete handler
   const handleNodeDelete = useCallback((nodeId) => {
+    // When deleting an agent, remove its ID from any tasks it was assigned to
+    const node = nodes.find(n => n.id === nodeId);
+    if (node?.type === 'agent') {
+      setNodes(nodes => nodes.map(n => {
+        if (n.type === 'task' && n.data?.agentId === nodeId) {
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              agentId: undefined,
+              agentName: undefined,
+              agentRole: undefined
+            }
+          };
+        }
+        return n;
+      }));
+    }
+
     setNodes((nodes) => nodes.filter(node => node.id !== nodeId));
     setEdges((edges) => edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId));
     
-    // Add to history
     addToHistory({ 
       nodes: nodes.filter(node => node.id !== nodeId), 
       edges: edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId) 
@@ -117,63 +135,65 @@ export const useNodeInteractions = ({
   }, []);
 
   const onConnect = useCallback((params) => {
-    const isValid = validateConnection(params, nodes, edges, toast);
-
-    if (!isValid) return;
-
     const sourceNode = nodes.find(n => n.id === params.source);
     const targetNode = nodes.find(n => n.id === params.target);
 
-    // Generate a unique edge ID
-    const edgeId = `edge-${Date.now()}`;
-
-    // Determine edge label and data based on node types
-    let edgeLabel = params.label || '';
-    let edgeData = {};
-
-    if (sourceNode.type === 'input' && targetNode.type === 'tool') {
-      edgeLabel = 'file_upload';
-      edgeData = {
-        variableName: 'file_upload',
-        dataType: 'file'
-      };
-    } else if (sourceNode.type === 'tool') {
-      const toolType = sourceNode.data?.toolType || 'unknown';
-      edgeLabel = toolType === 'custom' ? 'file_upload' : toolType;
-      edgeData = {
-        toolType: toolType,
-        outputType: toolType === 'custom' ? 'file' : 'text'
-      };
+    if (!sourceNode || !targetNode) {
+      console.error('Source or target node not found');
+      return;
     }
 
+    // Handle agent to task assignment
+    if (sourceNode.type === 'agent' && targetNode.type === 'task') {
+      console.log('Assigning agent to task:', {
+        agent: sourceNode.data,
+        task: targetNode.data
+      });
+
+      // Update the task node with agent information
+      setNodes(nodes => nodes.map(node => {
+        if (node.id === targetNode.id) {
+          const updatedNode = {
+            ...node,
+            data: {
+              ...node.data,
+              agentId: sourceNode.id,
+              agentName: sourceNode.data?.label || 'Unknown Agent',
+              agentRole: sourceNode.data?.role || 'Assistant'
+            }
+          };
+          console.log('Updated task node:', updatedNode);
+          return updatedNode;
+        }
+        return node;
+      }));
+    }
+
+    // Check if connection is valid
+    const isValid = validateConnection(params, nodes, edges, toast);
+    if (!isValid) return;
+
+    // Generate edge ID and add edge
+    const edgeId = `edge-${Date.now()}`;
     const newEdge = {
       ...params,
       id: edgeId,
-      type: "bezier",
+      type: 'bezier',
       animated: true,
-      label: edgeLabel,
       data: {
-        ...edgeData,
         sourceType: sourceNode.type,
-        targetType: targetNode.type,
-        label: edgeLabel
-      },
-      style: {
-        stroke: '#888',
-        strokeWidth: 1.5,
-        strokeDasharray: '5,5'
+        targetType: targetNode.type
       }
     };
 
-    setEdges((eds) => addEdge(newEdge, eds));
-
-    toast.success("Connection added!");
+    setEdges(eds => addEdge(newEdge, eds));
+    toast.success('Connection added!');
 
     addToHistory({
       nodes,
       edges: [...edges, newEdge]
     });
-  }, [nodes, edges, setEdges, addToHistory]);
+  }, [nodes, edges, setNodes, setEdges, addToHistory]);
 
   // Edge click handler
   const onEdgeClick = useCallback((event, edge) => {

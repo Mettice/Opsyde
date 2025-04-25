@@ -630,14 +630,77 @@ async def run_task_node(node_data, inputs, context=None):
         agent_data = node_data.get("agent") or (context or {}).get("current_agent")
         
         if agent_data and agent_data.get("type") == "agent_status":
-            # Use the agent to execute the task
-            result = {
-                "output": f"Task '{task_name}' executed by {agent_data.get('agent_name')}",
-                "type": "task_result",
-                "task_name": task_name,
-                "agent": agent_data.get("agent_name"),
-                "result": f"Processed task using {agent_data.get('agent_role')}"
-            }
+            # Get agent settings with defaults
+            agent_name = agent_data.get("agent_name", "Assistant")
+            agent_role = agent_data.get("agent_role", "You are a helpful assistant")
+            llm_model = agent_data.get("llmModel", "gpt-4")
+            temperature = agent_data.get("temperature", 0.7)
+            max_tokens = agent_data.get("max_tokens", 4000)
+            memory_enabled = agent_data.get("enableMemory", False)
+            prompt_override = agent_data.get("prompt", "")
+            
+            # Combine prompt override with task description if provided
+            full_prompt = f"{prompt_override}\n\n{task_description}" if prompt_override else task_description
+            
+            try:
+                # Initialize OpenAI client with new syntax
+                from openai import AsyncOpenAI
+                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                
+                # Prepare messages for the chat completion
+                messages = [
+                    {"role": "system", "content": agent_role},
+                    {"role": "user", "content": full_prompt}
+                ]
+                
+                # Add memory context if enabled
+                if memory_enabled and context and "memory" in context:
+                    messages.insert(1, {
+                        "role": "system",
+                        "content": f"Previous context:\n{context['memory']}"
+                    })
+                
+                # Make the API call with new syntax
+                response = await client.chat.completions.create(
+                    model=llm_model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                
+                # Extract the response with new syntax
+                answer = response.choices[0].message.content.strip()
+                
+                # Return the result with metadata
+                result = {
+                    "output": answer,
+                    "type": "task_result",
+                    "task_name": task_name,
+                    "agent": agent_name,
+                    "result": answer,
+                    "full_prompt": full_prompt,
+                    "used_memory": memory_enabled,
+                    "agent_settings": {
+                        "llm_model": llm_model,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "memory_enabled": memory_enabled
+                    }
+                }
+                
+                # Update memory context if enabled
+                if memory_enabled and context is not None:
+                    context["memory"] = context.get("memory", "") + f"\nTask: {task_description}\nResponse: {answer}"
+                
+            except Exception as e:
+                logger.error(f"OpenAI API error: {str(e)}")
+                result = {
+                    "output": f"Error calling OpenAI API: {str(e)}",
+                    "type": "error",
+                    "error": str(e),
+                    "task_name": task_name,
+                    "agent": agent_name
+                }
         else:
             # No agent found, return error
             result = {
@@ -838,14 +901,20 @@ async def run_tool_node(node_data, inputs, context=None):
         tool_type_raw = node_data.get("toolType", "").lower()
         custom_tool = node_data.get("customTool", "").lower()
 
-        # Normalize custom tool handling
-        tool_type = custom_tool if tool_type_raw == "custom" and custom_tool else tool_type_raw
-        
-        logger.info(f"Running tool node: {tool_type} (custom: {custom_tool})")
+        # Normalize tool type handling
+        if tool_type_raw == "custom":
+            # For custom tools, use the customTool value as the tool_type
+            tool_type = custom_tool
+            logger.info(f"Running custom tool: {tool_type}")
+        else:
+            tool_type = tool_type_raw
+            logger.info(f"Running standard tool: {tool_type}")
+
         logger.info(f"Tool inputs: {json.dumps(inputs, default=str)}")
 
         # Handle CV parser tool
         if tool_type == "cv_parser":
+            logger.info("Executing CV parser tool")
             return await run_cv_parser_tool(node_data, inputs)
             
         # Handle other tool types...
@@ -874,14 +943,12 @@ async def run_tool_node(node_data, inputs, context=None):
         elif tool_type == "readiness_check":
             return await run_readiness_check(node_data, inputs)
         else:
-            return {
-                "error": f"Unknown tool type: {tool_type}",
-                "type": "error"
-            }
+            raise ValueError(f"Unknown tool type: {tool_type}")
+
     except Exception as e:
-        logger.error(f"Error running tool node: {str(e)}")
+        logger.error(f"Error in tool node execution: {str(e)}")
         return {
-            "error": str(e),
+            "error": f"Error executing tool: {str(e)}",
             "type": "error"
         }
 

@@ -1,35 +1,27 @@
 import React, { useState } from 'react';
 import ExecutionLog from '../ExecutionLog';
+import CVResultsDisplay from '../CVResultsDisplay';
 
 export default function FlowExecutionPanel({ logs, isMinimized, onToggleMinimize, onClose }) {
   const [activeTab, setActiveTab] = useState('logs');
   
   const renderLogContent = (log) => {
-    // Check if this is a CV parser result
-    if (log.result?.type === "cv_result" && log.result?.data) {
-      return (
-        <div className="mt-2 bg-white rounded-lg shadow">
-          <CVResultsDisplay results={log.result.data} />
-        </div>
-      );
-    }
-
-    // Handle other types of results
     if (log.status === 'error') {
-      return <span className="text-red-600">{log.error}</span>;
+      return <div className="text-red-500">{log.error}</div>;
     }
-    
+
     if (log.status === 'started') {
-      return <span className="text-blue-600">Started execution</span>;
+      return <div className="text-blue-500">Started execution...</div>;
     }
 
-    // For completed status with output
-    if (log.result?.output) {
-      return <span className="text-green-600">{log.result.output}</span>;
+    if (log.status === 'completed') {
+      if (log.result?.type === 'cv_result') {
+        return <CVResultsDisplay results={log.result.data} />;
+      }
+      return <pre className="whitespace-pre-wrap">{JSON.stringify(log.result, null, 2)}</pre>;
     }
 
-    // Default case
-    return <span className="text-green-600">Completed successfully</span>;
+    return null;
   };
 
   if (isMinimized) {

@@ -169,6 +169,7 @@ const BuilderPage = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [showExecutionPanel, setShowExecutionPanel] = useState(false);
   const [minimizeExecutionPanel, setMinimizeExecutionPanel] = useState(false);
+  const [executionState, setExecutionState] = useState({});
 
   // Add Agent function - kept in main component as it's simple
   const addAgent = (framework = 'openrouter') => {
@@ -199,7 +200,7 @@ const BuilderPage = () => {
 
   // Add Task function - kept in main component as it's simple
   const addTask = () => {
-    const id = `task-${Date.now()}`;
+    const id = `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
     const newNode = {
       id,
       type: 'task',
@@ -212,10 +213,15 @@ const BuilderPage = () => {
         expectedOutput: 'Expected output of the task',
         async: false,
         nodeId: id,
-        nodeType: 'task'
+        nodeType: 'task',
+        // Initialize agent fields
+        agentId: null,
+        agentName: null,
+        agentRole: null
       }
     };
     
+    console.log('Created new task node:', newNode);
     setNodes(nodes => [...nodes, newNode]);
     addToHistory({ nodes: [...nodes, newNode], edges });
   };
@@ -553,252 +559,92 @@ const BuilderPage = () => {
     return issues;
   };
 
-  // Update the runCrew function to use the enhanced validation
+  // Helper function to remove circular references and DOM elements
+  const cleanDataForFlow = (obj) => {
+    const seen = new WeakSet();
+    
+    return JSON.parse(JSON.stringify(obj, (key, value) => {
+      // Skip React-specific properties
+      if (key.startsWith('_') || key.startsWith('__react')) {
+        return undefined;
+      }
+      
+      // Handle DOM elements and React components
+      if (value instanceof Element || (value && value.$$typeof)) {
+        return undefined;
+      }
+      
+      // Handle circular references
+      if (typeof value === 'object' && value !== null) {
+        if (seen.has(value)) {
+          return undefined;
+        }
+        seen.add(value);
+      }
+      
+      return value;
+    }));
+  };
+
   const runCrew = async () => {
-    if (isExecuting) return;
-    
-    // Check for errors
-    const errors = checkWorkflowErrors();
-    if (errors.length > 0) {
-      toast.error("Please fix workflow errors before running");
-      return;
-    }
-    
-    // Run the enhanced validation
-    const validationIssues = validateFlow();
-    
-    // Show warnings but allow execution to continue
-    validationIssues.forEach(issue => {
-      if (issue.type === 'warning') {
-        toast.warning(issue.message);
-        
-        // Highlight the nodes with issues
-        setNodes(nodes => 
-          nodes.map(n => 
-            issue.nodes.some(node => node.id === n.id)
-              ? { 
-                  ...n, 
-                  style: { 
-                    ...n.style, 
-                    borderColor: '#f59e0b', // Amber color for warnings
-                    borderWidth: 2,
-                    boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.5)'
-                  } 
-                } 
-              : n
-          )
-        );
-      } else if (issue.type === 'error') {
-        toast.error(issue.message);
-        
-        // Highlight the nodes with errors
-        setNodes(nodes => 
-          nodes.map(n => 
-            issue.nodes.some(node => node.id === n.id)
-              ? { 
-                  ...n, 
-                  style: { 
-                    ...n.style, 
-                    borderColor: '#ef4444', // Red color for errors
-                    borderWidth: 2,
-                    boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.5)'
-                  } 
-                } 
-              : n
-          )
-        );
-        
-        // Don't continue execution if there are errors
-        return;
-      }
-    });
-    
-    // Continue with execution if there are no errors
-    if (validationIssues.some(issue => issue.type === 'error')) {
-      return;
-    }
-    
-    setIsExecuting(true);
-    setTextLogs('');
-    setStructuredLogs([]);
-    setShowExecutionPanel(true);
-    setMinimizeExecutionPanel(false);
-    
     try {
-      if (executionMode === 'local' || executionMode === 'hybrid') {
-        // Frontend execution for visualization
-        
-        // Highlight the node being executed
-        const handleNodeStart = (node) => {
-          // Update node styling to show it's being executed
-          setNodes(nodes => 
-            nodes.map(n => 
-              n.id === node.id 
-                ? { 
-                    ...n, 
-                    style: { 
-                      ...n.style, 
-                      borderColor: '#3b82f6', 
-                      borderWidth: 2,
-                      boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.5)'
-                    } 
-                  } 
-                : n
-            )
-          );
-        };
-        
-        // Update node styling when execution completes
-        const handleNodeComplete = (node, result) => {
-          // Update node styling based on result
-          setNodes(nodes => 
-            nodes.map(n => 
-              n.id === node.id 
-                ? { 
-                    ...n, 
-                    style: { 
-                      ...n.style, 
-                      borderColor: result && result.error ? '#ef4444' : '#10b981', 
-                      borderWidth: 2,
-                      boxShadow: result && result.error 
-                        ? '0 0 0 2px rgba(239, 68, 68, 0.5)' 
-                        : '0 0 0 2px rgba(16, 185, 129, 0.5)'
-                    } 
-                  } 
-                : n
-            )
-          );
-        };
-        
-        // Run the flow
-        const { logs } = await runFlow(
-          nodes, 
-          edges, 
-          inputs, 
-          nodeExecutors,
-          handleNodeStart,
-          handleNodeComplete,
-          (state, logs) => {
-            console.log('Flow execution completed:', state);
-            // Reset node styling after a delay
-            setTimeout(() => {
-              setNodes(nodes => 
-                nodes.map(n => ({ 
-                  ...n, 
-                  style: { 
-                    ...n.style, 
-                    borderColor: undefined, 
-                    borderWidth: undefined,
-                    boxShadow: undefined
-                  } 
-                }))
-              );
-            }, 2000);
-          }
-        );
-        
-        // Update logs
-        setStructuredLogs(logs);
-      }
+      setIsExecuting(true);
+      setExecutionLogs([]);
+      setShowExecutionPanel(true);
       
-      if (executionMode === 'backend' || executionMode === 'hybrid') {
-        // Backend execution for actual processing
-        
-        // Prepare the payload
-        const payload = {
-          nodes,
-          edges,
-          metadata: {
-            name: projectName,
-            output: outputConfig
-          }
-        };
-        
-        // Ensure inputs are properly formatted
-        if (inputs) {
-          if (typeof inputs === 'string') {
-            payload.inputs = { input: inputs };
-          } else if (typeof inputs === 'object' && inputs !== null) {
-            payload.inputs = inputs;
-          } else {
-            payload.inputs = {};
-          }
-        } else {
-          payload.inputs = {};
+      // Clean the nodes and edges data
+      const cleanedNodes = nodes.map(node => cleanDataForFlow({
+        ...node,
+        data: {
+          ...node.data,
+          onEdit: undefined,
+          onDelete: undefined,
+          onValueChange: undefined,
+          ref: undefined,
+          component: undefined
         }
-        
-        // Send the request
-        const response = await fetch(`${BACKEND_URL}/run-crew`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        });
-        
-        // Handle the response
-        if (!response.ok) {
-          throw new Error(`Server responded with ${response.status}`);
-        }
-        
-        // Process the streaming response
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let logs = '';
-        
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          
-          const text = decoder.decode(value);
-          logs += text;
-          setTextLogs(logs);
-        }
-        
-        // Show output panel when done
-        setShowOutputPanel(true);
-        
-        // Handle outputs based on configuration
-        if (outputConfig.emailEnabled && outputConfig.email) {
-          await sendToEmail(logs, outputConfig.email);
-          addNotification({
-            message: "Results sent to email",
-            type: "success"
-          });
-        }
-        
-        if (outputConfig.discordEnabled && outputConfig.discordWebhook) {
-          await postToDiscord(logs, outputConfig.discordWebhook);
-          addNotification({
-            message: "Results posted to Discord",
-            type: "success"
-          });
-        }
-        
-        if (outputConfig.sheetsEnabled) {
-          await pushToSheets(logs);
-          addNotification({
-            message: "Results exported to Google Sheets",
-            type: "success"
-          });
-        }
-      }
+      }));
       
-      // Show success message
-      toast.success('Flow executed successfully');
+      const cleanedEdges = edges.map(edge => cleanDataForFlow(edge));
+
+      // Execute the flow
+      const result = await runFlow(
+        cleanedNodes,
+        cleanedEdges,
+        inputs,
+        nodeExecutors,
+        (node) => {
+          setStructuredLogs(prev => [...prev, {
+            nodeId: node.id,
+            nodeName: node.data?.label || node.id,
+            type: node.type,
+            status: 'started',
+            timestamp: new Date().toISOString()
+          }]);
+        },
+        (node, result) => {
+          setStructuredLogs(prev => [...prev, {
+            nodeId: node.id,
+            nodeName: node.data?.label || node.id,
+            type: node.type,
+            status: 'completed',
+            result: cleanDataForFlow(result),
+            timestamp: new Date().toISOString()
+          }]);
+        }
+      );
+
+      console.log('Flow execution completed:', result);
+      setExecutionState(result.state);
+      setStructuredLogs(prev => [...prev, ...result.logs]);
       
     } catch (error) {
       console.error('Error executing flow:', error);
-      toast.error(`Error executing flow: ${error.message}`);
-      
-      if (executionMode === 'backend' || executionMode === 'hybrid') {
-        setTextLogs(prev => prev + `\n\nERROR: ${error.message}`);
-      }
-      
-      addNotification({
-        message: `Error: ${error.message}`,
-        type: "error"
-      });
+      setStructuredLogs(prev => [...prev, {
+        type: 'error',
+        error: error.message,
+        timestamp: new Date().toISOString()
+      }]);
     } finally {
       setIsExecuting(false);
     }
@@ -1159,24 +1005,55 @@ const BuilderPage = () => {
   const navigate = useNavigate();
   const [currentFlowId, setCurrentFlowId] = useState(null);
 
-  // Add this useEffect to load flow data if available
+  // Add this function after the other utility functions
+  const rehydrateAgentAssignments = useCallback((nodes, edges) => {
+    return nodes.map(node => {
+      if (node.type === 'task') {
+        // Find any edge where this task is the target
+        const agentEdge = edges.find(edge => {
+          const sourceNode = nodes.find(n => n.id === edge.source);
+          return edge.target === node.id && sourceNode?.type === 'agent';
+        });
+
+        if (agentEdge) {
+          const agentNode = nodes.find(n => n.id === agentEdge.source);
+          if (agentNode) {
+            return {
+              ...node,
+              data: {
+                ...node.data,
+                agentId: agentNode.id,
+                agentName: agentNode.data?.label || 'Unknown Agent',
+                agentRole: agentNode.data?.role || 'Assistant'
+              }
+            };
+          }
+        }
+      }
+      return node;
+    });
+  }, []);
+
+  // Modify the flow loading useEffect
   useEffect(() => {
-    // Check if we have a flow to load from localStorage
     const savedFlow = localStorage.getItem('currentFlow');
     
     if (savedFlow) {
       try {
         const flowData = JSON.parse(savedFlow);
         setProjectName(flowData.name);
-        setNodes(flowData.nodes);
+        
+        // Rehydrate agent assignments before setting nodes
+        const rehydratedNodes = rehydrateAgentAssignments(flowData.nodes, flowData.edges);
+        setNodes(rehydratedNodes);
         setEdges(flowData.edges);
         setCurrentFlowId(flowData.id);
         
         // Clear localStorage after loading
         localStorage.removeItem('currentFlow');
         
-        // Add to history
-        addToHistory({ nodes: flowData.nodes, edges: flowData.edges });
+        // Add to history with rehydrated nodes
+        addToHistory({ nodes: rehydratedNodes, edges: flowData.edges });
         
         toast.success('Flow loaded successfully');
       } catch (error) {
@@ -1184,34 +1061,7 @@ const BuilderPage = () => {
         toast.error('Failed to load saved flow');
       }
     }
-  }, []);
-
-  // Add this function to save to Supabase
-  const saveToSupabase = async () => {
-    if (!user) {
-      toast.error('You must be logged in to save flows');
-      navigate('/login');
-      return;
-    }
-    
-    try {
-      if (currentFlowId) {
-        // Update existing flow
-        await updateFlow(currentFlowId, projectName, nodes, edges);
-        toast.success('Flow updated successfully');
-      } else {
-        // Create new flow
-        const { data } = await saveFlow(user.id, projectName, nodes, edges);
-        if (data && data[0]) {
-          setCurrentFlowId(data[0].id);
-        }
-        toast.success('Flow saved successfully');
-      }
-    } catch (error) {
-      console.error('Error saving flow:', error);
-      toast.error('Failed to save flow');
-    }
-  };
+  }, [rehydrateAgentAssignments]);
 
   // Then define toolbarProps AFTER all functions are defined
   const toolbarProps = {
@@ -1302,6 +1152,53 @@ const BuilderPage = () => {
       document.removeEventListener('node-delete', handleNodeDeleteEvent);
     };
   }, [nodes, setNodes, setEdges]);
+
+  // Add this helper function at the top of the file, after the imports
+  const cleanNodesForSave = (nodes) => {
+    return nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        // Remove React-specific properties and functions
+        onEdit: undefined,
+        onDelete: undefined,
+        onValueChange: undefined,
+        // Remove any DOM elements or React components
+        ref: undefined,
+        component: undefined
+      }
+    }));
+  };
+
+  // Modify the saveToSupabase function
+  const saveToSupabase = async () => {
+    if (!user) {
+      toast.error('You must be logged in to save flows');
+      navigate('/login');
+      return;
+    }
+    
+    try {
+      // Clean the nodes before saving
+      const cleanedNodes = cleanNodesForSave(nodes);
+      
+      if (currentFlowId) {
+        // Update existing flow
+        await updateFlow(currentFlowId, projectName, cleanedNodes, edges);
+        toast.success('Flow updated successfully');
+      } else {
+        // Create new flow
+        const { data } = await saveFlow(user.id, projectName, cleanedNodes, edges);
+        if (data && data[0]) {
+          setCurrentFlowId(data[0].id);
+        }
+        toast.success('Flow saved successfully');
+      }
+    } catch (error) {
+      console.error('Error saving flow:', error);
+      toast.error('Failed to save flow');
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -1494,7 +1391,10 @@ const BuilderPage = () => {
           structuredLogs={structuredLogs}
           isMinimized={minimizeExecutionPanel}
           onToggleMinimize={() => setMinimizeExecutionPanel(!minimizeExecutionPanel)}
-          onClose={() => setShowExecutionPanel(false)}
+          onClose={() => {
+            setShowExecutionPanel(false);
+            setStructuredLogs([]);
+          }}
           executionMode={executionMode}
         />
       )}

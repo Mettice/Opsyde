@@ -68,34 +68,73 @@ export default function UnifiedExecutionPanel({
     if (log.result?.type === "cv_result" && log.result?.data) {
       return (
         <div className="mt-2 bg-white rounded-lg p-4">
+          <div className="mb-2 text-sm text-gray-500">
+            {log.agent ? `Processed by agent: ${log.agent}` : ''}
+          </div>
           <CVResultsDisplay results={log.result.data} />
         </div>
       );
     }
 
+    // Handle task results
+    if (log.type === 'task_result' || log.result?.type === 'task_result') {
+      return (
+        <div className="mt-2">
+          <div className="text-sm text-gray-600 mb-2">
+            {log.agent ? `Executed by agent: ${log.agent}` : ''}
+          </div>
+          {log.agent_settings && (
+            <div className="text-xs text-gray-500 mb-2">
+              <div>Model: {log.agent_settings.llm_model}</div>
+              <div>Temperature: {log.agent_settings.temperature}</div>
+              <div>Max Tokens: {log.agent_settings.max_tokens}</div>
+              <div>Memory: {log.agent_settings.memory_enabled ? 'Enabled' : 'Disabled'}</div>
+            </div>
+          )}
+          {typeof log.result === 'object' ? (
+            <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
+              {JSON.stringify(log.result, null, 2)}
+            </pre>
+          ) : (
+            <span className="text-gray-800">{log.result || log.output}</span>
+          )}
+        </div>
+      );
+    }
+
     // Handle errors
-    if (log.status === 'error') {
-      return <span className="text-red-600">{log.error || 'An error occurred'}</span>;
+    if (log.status === 'error' || log.type === 'error') {
+      return (
+        <div className="mt-2 text-red-600 bg-red-50 p-3 rounded">
+          <span className="font-medium">Error: </span>
+          {log.error || log.message || 'An error occurred'}
+        </div>
+      );
     }
 
     // Handle started status
     if (log.status === 'started') {
-      return <span className="text-blue-600">Started execution</span>;
+      return (
+        <div className="mt-2 text-blue-600">
+          Started execution
+          {log.agent ? ` with agent ${log.agent}` : ''}
+        </div>
+      );
     }
 
     // Handle normal results
     if (log.result) {
       if (typeof log.result === 'object') {
         return (
-          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
+          <pre className="mt-2 whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
             {JSON.stringify(log.result, null, 2)}
           </pre>
         );
       }
-      return <span className="text-green-600">{log.result}</span>;
+      return <span className="mt-2 text-gray-800">{log.result}</span>;
     }
 
-    return <span className="text-green-600">Completed successfully</span>;
+    return <span className="mt-2 text-green-600">Completed successfully</span>;
   };
 
   if (isMinimized) {

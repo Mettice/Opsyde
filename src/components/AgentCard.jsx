@@ -5,7 +5,7 @@ import { Handle, Position } from 'reactflow';
 const AgentCard = React.memo(({ data, selected, isConnectable }) => {
   // Get framework ID if an object is passed, otherwise use the string value
   const frameworkId = typeof data.framework === 'object' ? data.framework.id || 'openrouter' : data.framework || 'openrouter';
-
+  
   const handleEditClick = useCallback((e) => {
     // Stop event propagation
     e?.stopPropagation();
@@ -45,7 +45,11 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
     role: data.role || '',
     goal: data.goal || '',
     backstory: data.backstory || '',
-    llmModel: data.llmModel || ''
+    llmModel: data.llmModel || 'gpt-4',
+    temperature: data.temperature || 0.7,
+    max_tokens: data.max_tokens || 4000,
+    enableMemory: data.enableMemory || false,
+    prompt: data.prompt || ''
   };
 
   return (
@@ -104,12 +108,27 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
         )}
       </div>
 
-      {/* Model Info */}
-      {safeData.llmModel && (
-        <div className="mt-2 text-xs text-gray-600">
+      {/* Agent Settings */}
+      <div className="mt-3 text-xs text-gray-600 space-y-1.5 bg-white p-2 rounded border border-blue-100">
+        <div>
           <span className="font-medium">Model:</span> {safeData.llmModel}
         </div>
-      )}
+        <div>
+          <span className="font-medium">Temperature:</span> {safeData.temperature}
+        </div>
+        <div>
+          <span className="font-medium">Max Tokens:</span> {safeData.max_tokens}
+        </div>
+        <div>
+          <span className="font-medium">Memory:</span> {safeData.enableMemory ? 'Enabled' : 'Disabled'}
+        </div>
+        {safeData.prompt && (
+          <div>
+            <span className="font-medium">Custom Prompt:</span>
+            <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{safeData.prompt}</div>
+          </div>
+        )}
+      </div>
 
       {/* Action Buttons */}
       <div className="flex mt-3 space-x-2">
@@ -161,7 +180,11 @@ AgentCard.propTypes = {
     role: PropTypes.string,
     goal: PropTypes.string,
     backstory: PropTypes.string,
-    llmModel: PropTypes.string
+    llmModel: PropTypes.string,
+    temperature: PropTypes.number,
+    max_tokens: PropTypes.number,
+    enableMemory: PropTypes.bool,
+    prompt: PropTypes.string
   }).isRequired,
   selected: PropTypes.bool,
   isConnectable: PropTypes.bool

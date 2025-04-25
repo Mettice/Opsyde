@@ -139,7 +139,7 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
           // Get base64 content without data URL prefix
           const base64Content = e.target.result.split(',')[1];
 
-          // Create file data structure
+          // Create clean file data structure without DOM elements or React components
           const fileData = {
             value: {
               file_upload: {
@@ -155,13 +155,18 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
           };
 
           // Log the structure being sent
-          console.log('[DEBUG] Sending file data structure:', fileData);
+          console.log('[DEBUG] Sending file data structure:', {
+            filename: file.name,
+            type: file.type,
+            size: file.size,
+            lastModified: file.lastModified
+          });
 
           // Update node data
           setValue(fileData);
           setUploadStatus('File uploaded successfully');
 
-          // Call onValueChange with the complete structure
+          // Call onValueChange with just the file data
           if (data.onValueChange) {
             data.onValueChange(fileData);
           }

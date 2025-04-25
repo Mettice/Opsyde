@@ -123,6 +123,24 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
   
   // Generic handler for input changes
   const handleInputChange = useCallback((field, value) => {
+    // Handle number inputs
+    if (field === 'temperature' || field === 'max_tokens') {
+      // Convert to number and handle invalid values
+      const numValue = parseFloat(value);
+      if (!isNaN(numValue)) {
+        if (field === 'temperature') {
+          // Clamp temperature between 0 and 1
+          value = Math.min(Math.max(numValue, 0), 1);
+        } else if (field === 'max_tokens') {
+          // Ensure max_tokens is a positive integer
+          value = Math.max(Math.round(numValue), 1);
+        }
+      } else {
+        // Use default values for invalid input
+        value = field === 'temperature' ? 0.7 : 4000;
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -345,38 +363,102 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
               >
                 <option value="gpt-4">GPT-4</option>
                 <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                <option value="claude-3-opus">Claude 3 Opus</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                <option value="claude-3-haiku">Claude 3 Haiku</option>
+                <option value="claude-2">Claude 2</option>
+                <option value="claude-instant">Claude Instant</option>
               </select>
             </div>
 
-            <div className="mb-4 flex items-center">
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Temperature
+                <HelpTooltip type="agent" field="temperature" />
+              </label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={formData.temperature}
+                  onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
+                  className="flex-1"
+                />
+                <span className="text-sm text-gray-600">{formData.temperature}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Lower values (0.0) make responses more focused and deterministic. Higher values (1.0) make responses more creative and varied.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Max Tokens
+                <HelpTooltip type="agent" field="max_tokens" />
+              </label>
               <input
-                type="checkbox"
-                id="allowDelegation"
-                checked={formData.allowDelegation}
-                onChange={(e) => handleInputChange('allowDelegation', e.target.checked)}
-                className="mr-2"
+                type="number"
+                min="1"
+                max="8000"
+                value={formData.max_tokens}
+                onChange={(e) => handleInputChange('max_tokens', parseInt(e.target.value))}
+                className="w-full p-2 border rounded"
               />
-              <label htmlFor="allowDelegation" className="text-gray-700 flex items-center">
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum length of the response. Higher values allow longer responses but may cost more.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.enableMemory}
+                  onChange={(e) => handleInputChange('enableMemory', e.target.checked)}
+                  className="mr-2"
+                />
+                Enable Memory
+                <HelpTooltip type="agent" field="enableMemory" />
+              </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.allowDelegation}
+                  onChange={(e) => handleInputChange('allowDelegation', e.target.checked)}
+                  className="mr-2"
+                />
                 Allow Delegation
                 <HelpTooltip type="agent" field="allowDelegation" />
               </label>
             </div>
 
-            <div className="mb-4 flex items-center">
-              <input
-                type="checkbox"
-                id="verbose"
-                checked={formData.verbose}
-                onChange={(e) => handleInputChange('verbose', e.target.checked)}
-                className="mr-2"
-              />
-              <label htmlFor="verbose" className="text-gray-700 flex items-center">
+            <div className="mb-4">
+              <label className="flex items-center text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.verbose}
+                  onChange={(e) => handleInputChange('verbose', e.target.checked)}
+                  className="mr-2"
+                />
                 Verbose Output
                 <HelpTooltip type="agent" field="verbose" />
               </label>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1 flex items-center">
+                Custom Prompt
+                <HelpTooltip type="agent" field="prompt" />
+              </label>
+              <textarea
+                value={formData.prompt}
+                onChange={(e) => handleInputChange('prompt', e.target.value)}
+                className="w-full p-2 border rounded"
+                rows="3"
+                placeholder="Optional: Override the default agent behavior with a custom prompt"
+              />
             </div>
           </>
         )}

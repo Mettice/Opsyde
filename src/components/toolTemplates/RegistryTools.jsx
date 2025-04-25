@@ -30,7 +30,9 @@ const RegistryTools = ({ onToolSelect }) => {
         framework: framework,
         parameters: tool.parameters,
         category: tool.category,
-        config: registry.frameworks[framework]?.config || {}
+        config: registry.frameworks[framework]?.config || {},
+        toolType: 'custom',
+        customTool: tool.name.toLowerCase().replace(/\s+/g, '_')
       });
     }
   };
