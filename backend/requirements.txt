@@ -1,23 +1,56 @@
-fastapi==0.110.0
-uvicorn[standard]==0.29.0
-crewai
-openai
-langchain
-huggingface
-transformers
-torch
-gspread
-oauth2client
-requests
+# Core
+fastapi
+uvicorn[standard]
 pydantic
 python-dotenv
-simpleeval
+sqlalchemy
+alembic
 
+# AI/ML
+openai
+langchain
+anthropic
+huggingface_hub
+transformers
+torch
+litellm
+crewai==0.11.2
+pyautogen
+llama-index
+chromadb
+
+# Vector DB
+faiss-cpu
+redis
+
+# Document Processing
+python-docx
+PyPDF2
+spacy
 docx2txt
 pymupdf
+pdfminer.six
+pdf2image
+pytesseract
+pillow
+pypdf
+pdfplumber
 
-spacy==3.7.2
+# Utils
+requests
+aiohttp
+python-multipart
+simpleeval
+gspread
+oauth2client
+python-jose[cryptography]
+passlib[bcrypt]
+httpx<0.28.1  # Specific version to avoid conflicts
+google-api-python-client
+
+# Monitoring
+prometheus-client
+python-json-logger
+
+# Install spaCy model
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
-
-PyPDF2>=3.0.0
-python-docx>=0.8.11

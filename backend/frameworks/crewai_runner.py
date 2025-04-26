@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, List
 from frameworks.openrouter_runner import run_openrouter_chat
+from crewai import Agent, Task, Crew, Process
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -238,6 +239,54 @@ def run_agents(agents, tasks, tools=None, memory=None, inputs=None):
         logger.error(f"Error in CrewAI runner: {str(e)}")
         return {
             "output": f"Error: {str(e)}",
+            "type": "error",
+            "error": str(e)
+        }
+
+async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        # Extract configuration
+        agent_role = config.get("agent_role", "researcher")
+        llm_provider = config.get("llm_provider", "openai")
+        goal = config.get("goal", "")
+        backstory = config.get("backstory", "")
+        allow_delegation = config.get("allow_delegation", False)
+
+        # Create agent
+        agent = Agent(
+            role=agent_role,
+            goal=goal,
+            backstory=backstory,
+            allow_delegation=allow_delegation,
+            llm=get_llm_for_provider(llm_provider, config)
+        )
+
+        # Create and execute task
+        task = Task(
+            description=inputs.get("task", ""),
+            agent=agent
+        )
+
+        # Create crew with single agent
+        crew = Crew(
+            agents=[agent],
+            tasks=[task],
+            process=Process.sequential
+        )
+
+        result = await crew.kickoff()
+
+        return {
+            "type": "crewai_result",
+            "output": result,
+            "metadata": {
+                "agent_role": agent_role,
+                "llm_provider": llm_provider
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error in CrewAI tool: {str(e)}")
+        return {
             "type": "error",
             "error": str(e)
         }

@@ -49,7 +49,8 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
     sheetId: '',
     email: '',
     framework: '',
-    agentConfig: ''
+    agentConfig: '',
+    frameworkConfig: {}
   });
 
   // Track if form has been modified
@@ -102,7 +103,8 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
         sheetId: nodeData.sheetId || '',
         email: nodeData.email || '',
         framework: nodeData.framework || '',
-        agentConfig: nodeData.agentConfig || ''
+        agentConfig: nodeData.agentConfig || '',
+        frameworkConfig: nodeData.frameworkConfig || {}
       };
       
       // Parse runAt into runDate and runTime if it exists
@@ -114,6 +116,14 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
         } catch (e) {
           console.error('Error parsing runAt:', e);
         }
+      }
+      
+      // Set framework-specific configuration
+      if (nodeData.framework && nodeData.frameworkConfig) {
+        cleanData.frameworkConfig = {
+          ...cleanData.frameworkConfig,
+          ...nodeData.frameworkConfig
+        };
       }
       
       setFormData(cleanData);
@@ -269,6 +279,804 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
       console.error('Error registering trigger:', error);
     }
   }, [formData.nodeId, formData.triggerType]);
+
+  // Update FRAMEWORK_OPTIONS constant
+  const FRAMEWORK_OPTIONS = [
+    { value: 'openai', label: 'OpenAI' },
+    { value: 'huggingface', label: 'HuggingFace' },
+    { value: 'langchain', label: 'LangChain' },
+    { value: 'autogen', label: 'AutoGen' },
+    { value: 'crewai', label: 'CrewAI' },
+    { value: 'llamaindex', label: 'LlamaIndex' },
+    { value: 'openrouter', label: 'OpenRouter' },
+    { value: 'webhook', label: 'Webhook' }
+  ];
+
+  // Update framework fields state
+  const [frameworkFields, setFrameworkFields] = useState({
+    openai: {
+      model: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 4000,
+      prompt: ''
+    },
+    huggingface: {
+      model: '',
+      task: '',
+      parameters: {}
+    },
+    langchain: {
+      llm: 'gpt-4',
+      chain_type: 'stuff',
+      memory: false
+    },
+    autogen: {
+      model: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 4000
+    },
+    crewai: {
+      llm: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 4000,
+      agent_role: 'researcher'
+    },
+    llamaindex: {
+      model: 'gpt-4',
+      index_type: 'vector',
+      query_mode: 'default'
+    },
+    openrouter: {
+      model: 'gpt-4',
+      temperature: 0.7,
+      max_tokens: 4000
+    },
+    webhook: {
+      url: '',
+      method: 'POST',
+      headers: {},
+      body: {}
+    }
+  });
+
+  // Add framework change handler
+  const handleFrameworkChange = (framework) => {
+    handleInputChange('framework', framework);
+    // Reset framework-specific config when framework changes
+    handleInputChange('frameworkConfig', frameworkFields[framework]);
+  };
+
+  // Update renderFrameworkFields to handle all framework-specific fields
+  const renderFrameworkFields = () => {
+    switch (formData.framework) {
+      case 'openai':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Model</label>
+              <select
+                value={formData.frameworkConfig?.model || 'gpt-4'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  model: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="claude-3-opus">Claude 3 Opus</option>
+                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Temperature</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={formData.frameworkConfig?.temperature || 0.7}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    temperature: parseFloat(e.target.value)
+                  })}
+                  className="flex-1"
+                />
+                <span className="text-sm w-12 text-right">
+                  {(formData.frameworkConfig?.temperature || 0.7).toFixed(1)}
+                </span>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Prompt Template</label>
+              <textarea
+                value={formData.frameworkConfig?.prompt || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  prompt: e.target.value
+                })}
+                placeholder="Enter your prompt template. Use {{parameter}} for dynamic values."
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="4"
+              />
+            </div>
+          </>
+        );
+      
+      case 'huggingface':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Model ID</label>
+              <input
+                type="text"
+                value={formData.frameworkConfig?.model || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  model: e.target.value
+                })}
+                placeholder="e.g., gpt2, bert-base-uncased"
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Task</label>
+              <select
+                value={formData.frameworkConfig?.task || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  task: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="">Select Task</option>
+                <option value="text-generation">Text Generation</option>
+                <option value="text-classification">Text Classification</option>
+                <option value="question-answering">Question Answering</option>
+                <option value="document-analysis">Document Analysis</option>
+                <option value="code-generation">Code Generation</option>
+              </select>
+            </div>
+          </>
+        );
+      
+      case 'langchain':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">LLM Provider</label>
+              <select
+                value={formData.frameworkConfig?.llm_provider || 'openai'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  llm_provider: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="huggingface">HuggingFace</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Chain Type</label>
+              <select
+                value={formData.frameworkConfig?.chain_type || 'stuff'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  chain_type: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="stuff">Stuff</option>
+                <option value="map_reduce">Map Reduce</option>
+                <option value="refine">Refine</option>
+                <option value="map_rerank">Map Rerank</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Memory Type</label>
+              <select
+                value={formData.frameworkConfig?.memory_type || 'buffer'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  memory_type: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="none">No Memory</option>
+                <option value="buffer">Buffer Memory</option>
+                <option value="summary">Summary Memory</option>
+                <option value="conversation">Conversation Memory</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Prompt Template</label>
+              <textarea
+                value={formData.frameworkConfig?.prompt_template || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  prompt_template: e.target.value
+                })}
+                placeholder="Enter your LangChain prompt template"
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="4"
+              />
+            </div>
+          </>
+        );
+      
+      case 'autogen':
+        return (
+          <div className="framework-config p-4 bg-gray-50 rounded-lg">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Chat Type</label>
+              <select
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                value={formData.frameworkConfig?.chatType || 'single'}
+                onChange={(e) => handleFrameworkConfigChange('chatType', e.target.value)}
+              >
+                <option value="single">Single Agent</option>
+                <option value="group">Group Chat</option>
+              </select>
+            </div>
+
+            {formData.frameworkConfig?.chatType === 'group' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700">Group Agents</label>
+                <div className="mt-1 space-y-2">
+                  {(formData.frameworkConfig?.agents || []).map((agent, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <select
+                        className="block w-1/3 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        value={agent.type}
+                        onChange={(e) => handleAgentTypeChange(index, e.target.value)}
+                      >
+                        <option value="assistant">Assistant</option>
+                        <option value="researcher">Researcher</option>
+                        <option value="coder">Coder</option>
+                      </select>
+                      <input
+                        type="text"
+                        className="block w-1/2 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Agent Name"
+                        value={agent.name}
+                        onChange={(e) => handleAgentNameChange(index, e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="inline-flex items-center p-1 border border-transparent rounded-full shadow-sm text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        onClick={() => removeAgent(index)}
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                    onClick={addAgent}
+                  >
+                    Add Agent
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Model</label>
+              <select
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                value={formData.frameworkConfig?.llmModel || 'gpt-4'}
+                onChange={(e) => handleFrameworkConfigChange('llmModel', e.target.value)}
+              >
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="claude-3-opus">Claude 3 Opus</option>
+                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Temperature</label>
+              <input
+                type="number"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                min="0"
+                max="1"
+                step="0.1"
+                value={formData.frameworkConfig?.temperature || 0.7}
+                onChange={(e) => handleFrameworkConfigChange('temperature', parseFloat(e.target.value))}
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700">Max Rounds</label>
+              <input
+                type="number"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                min="1"
+                max="50"
+                value={formData.frameworkConfig?.maxRounds || 10}
+                onChange={(e) => handleFrameworkConfigChange('maxRounds', parseInt(e.target.value))}
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                  checked={formData.frameworkConfig?.allowHumanInput || false}
+                  onChange={(e) => handleFrameworkConfigChange('allowHumanInput', e.target.checked)}
+                />
+                <span className="ml-2 text-sm text-gray-700">Allow Human Input</span>
+              </label>
+            </div>
+          </div>
+        );
+      
+      case 'crewai':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Agent Role</label>
+              <select
+                value={formData.frameworkConfig?.agent_role || 'researcher'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  agent_role: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="researcher">Researcher</option>
+                <option value="writer">Writer</option>
+                <option value="analyst">Analyst</option>
+                <option value="critic">Critic</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">LLM Provider</label>
+              <select
+                value={formData.frameworkConfig?.llm_provider || 'openai'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  llm_provider: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Goal</label>
+              <textarea
+                value={formData.frameworkConfig?.goal || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  goal: e.target.value
+                })}
+                placeholder="Enter the agent's goal"
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="3"
+              />
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Backstory</label>
+              <textarea
+                value={formData.frameworkConfig?.backstory || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  backstory: e.target.value
+                })}
+                placeholder="Enter the agent's backstory"
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="3"
+              />
+            </div>
+            <div className="form-group">
+              <label className="flex items-center text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.frameworkConfig?.allow_delegation || false}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    allow_delegation: e.target.checked
+                  })}
+                  className="mr-2"
+                />
+                Allow Task Delegation
+              </label>
+            </div>
+          </>
+        );
+      
+      case 'llamaindex':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Index Type</label>
+              <select
+                value={formData.frameworkConfig?.index_type || 'vector'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  index_type: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="vector">Vector Store</option>
+                <option value="list">List Index</option>
+                <option value="tree">Tree Index</option>
+                <option value="keyword">Keyword Index</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">LLM Provider</label>
+              <select
+                value={formData.frameworkConfig?.llm_provider || 'openai'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  llm_provider: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="local">Local LLM</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Query Mode</label>
+              <select
+                value={formData.frameworkConfig?.query_mode || 'default'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  query_mode: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="default">Default</option>
+                <option value="embedding">Embedding</option>
+                <option value="hybrid">Hybrid Search</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Response Mode</label>
+              <select
+                value={formData.frameworkConfig?.response_mode || 'compact'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  response_mode: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="compact">Compact</option>
+                <option value="tree_summarize">Tree Summarize</option>
+                <option value="accumulate">Accumulate</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="flex items-center text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.frameworkConfig?.use_node_postprocessing || false}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    use_node_postprocessing: e.target.checked
+                  })}
+                  className="mr-2"
+                />
+                Enable Node Postprocessing
+              </label>
+            </div>
+          </>
+        );
+      
+      case 'openrouter':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Model</label>
+              <select
+                value={formData.frameworkConfig?.model || 'openai/gpt-4'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  model: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <optgroup label="OpenAI Models">
+                  <option value="openai/gpt-4">GPT-4</option>
+                  <option value="openai/gpt-4-32k">GPT-4-32k</option>
+                  <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                </optgroup>
+                <optgroup label="Anthropic Models">
+                  <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
+                  <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
+                  <option value="anthropic/claude-2">Claude 2</option>
+                </optgroup>
+                <optgroup label="Meta Models">
+                  <option value="meta-llama/llama-2-70b-chat">Llama 2 70B Chat</option>
+                  <option value="meta-llama/llama-2-13b-chat">Llama 2 13B Chat</option>
+                </optgroup>
+                <optgroup label="Mistral Models">
+                  <option value="mistralai/mistral-7b">Mistral 7B</option>
+                  <option value="mistralai/mixtral-8x7b">Mixtral 8x7B</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Temperature</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={formData.frameworkConfig?.temperature || 0.7}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    temperature: parseFloat(e.target.value)
+                  })}
+                  className="flex-1"
+                />
+                <span className="text-sm w-12 text-right">
+                  {(formData.frameworkConfig?.temperature || 0.7).toFixed(1)}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                0 = deterministic, 1 = balanced, 2 = more creative
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Max Tokens</label>
+              <input
+                type="number"
+                min="1"
+                max="32000"
+                value={formData.frameworkConfig?.max_tokens || 2000}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  max_tokens: parseInt(e.target.value)
+                })}
+                className="w-full p-2 border rounded"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Maximum number of tokens to generate (varies by model)
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Top P</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={formData.frameworkConfig?.top_p || 0.7}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    top_p: parseFloat(e.target.value)
+                  })}
+                  className="flex-1"
+                />
+                <span className="text-sm w-12 text-right">
+                  {(formData.frameworkConfig?.top_p || 0.7).toFixed(2)}
+                </span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Nucleus sampling threshold (lower = more focused)
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Top K</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={formData.frameworkConfig?.top_k || 40}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  top_k: parseInt(e.target.value)
+                })}
+                className="w-full p-2 border rounded"
+              />
+              <div className="text-xs text-gray-500 mt-1">
+                Number of tokens to consider for each step
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Prompt Template</label>
+              <textarea
+                value={formData.frameworkConfig?.prompt_template || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  prompt_template: e.target.value
+                })}
+                placeholder="Enter your prompt template. Use {{parameter}} for variables."
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="4"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="flex items-center text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.frameworkConfig?.stream || false}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    stream: e.target.checked
+                  })}
+                  className="mr-2"
+                />
+                Enable Streaming
+              </label>
+              <div className="text-xs text-gray-500 mt-1">
+                Stream tokens as they're generated (faster initial response)
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="flex items-center text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={formData.frameworkConfig?.include_provider_info || true}
+                  onChange={(e) => handleInputChange('frameworkConfig', {
+                    ...formData.frameworkConfig,
+                    include_provider_info: e.target.checked
+                  })}
+                  className="mr-2"
+                />
+                Include Provider Info
+              </label>
+              <div className="text-xs text-gray-500 mt-1">
+                Include model provider details in response
+              </div>
+            </div>
+          </>
+        );
+      
+      case 'webhook':
+        return (
+          <>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Webhook URL</label>
+              <input
+                type="text"
+                value={formData.frameworkConfig?.url || ''}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  url: e.target.value
+                })}
+                placeholder="https://api.example.com/endpoint"
+                className="w-full p-2 border rounded"
+              />
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Method</label>
+              <select
+                value={formData.frameworkConfig?.method || 'POST'}
+                onChange={(e) => handleInputChange('frameworkConfig', {
+                  ...formData.frameworkConfig,
+                  method: e.target.value
+                })}
+                className="w-full p-2 border rounded"
+              >
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="block text-sm text-gray-700">Headers</label>
+              <textarea
+                value={JSON.stringify(formData.frameworkConfig?.headers || {}, null, 2)}
+                onChange={(e) => {
+                  try {
+                    const headers = JSON.parse(e.target.value);
+                    handleInputChange('frameworkConfig', {
+                      ...formData.frameworkConfig,
+                      headers
+                    });
+                  } catch (err) {
+                    // Handle invalid JSON
+                  }
+                }}
+                placeholder='{"Content-Type": "application/json"}'
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="3"
+              />
+            </div>
+          </>
+        );
+      
+      default:
+        return null;
+    }
+  };
+
+  
+  // Update renderToolFields to remove duplicates
+  const renderToolFields = () => {
+    return (
+      <div className="space-y-4">
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-700">
+            Framework
+            <span className="ml-1 text-xs text-gray-500">(Required)</span>
+          </label>
+          <select
+            value={formData.framework || ''}
+            onChange={(e) => handleFrameworkChange(e.target.value)}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          >
+            <option value="">Select Framework</option>
+            <option value="openai">OpenAI</option>
+            <option value="huggingface">HuggingFace</option>
+            <option value="langchain">LangChain</option>
+            <option value="autogen">AutoGen</option>
+            <option value="crewai">CrewAI</option>
+            <option value="llamaindex">LlamaIndex</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="webhook">Webhook</option>
+          </select>
+        </div>
+
+        {formData.framework && (
+          <div className="framework-config p-4 bg-gray-50 rounded-lg">
+            {renderFrameworkFields()}
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-700">
+            Parameters
+            <span className="ml-1 text-xs text-gray-500">(Variables available in prompt template)</span>
+          </label>
+          <textarea
+            value={formData.parameters || ''}
+            onChange={(e) => handleInputChange('parameters', e.target.value)}
+            placeholder="Enter parameters in JSON format"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"
+            rows="4"
+          />
+          <div className="mt-1 text-xs text-gray-500">
+            Example: {"{\n  \"location\": \"string\",\n  \"temperature\": \"number\"\n}"}
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="block text-sm font-medium text-gray-700">
+            🧠 Condition to Run
+            <span className="ml-1 text-xs text-gray-500">(Optional)</span>
+          </label>
+          <input
+            type="text"
+            value={formData.condition || ''}
+            onChange={(e) => handleInputChange('condition', e.target.value)}
+            placeholder="e.g. inputs.score > 80"
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+          />
+          <div className="mt-1 text-xs text-gray-500">
+            This node will only execute if the condition is true.<br />
+            Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> to reference input values.
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div 
@@ -537,199 +1345,54 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 )}
               </div>
             </div>
-
-            {/* Condition Field for Tasks and Tools */}
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-800 mb-1">
-                🧠 Condition to Run (optional)
-                <HelpTooltip type="task" field="condition" />
-              </label>
-              <input
-                type="text"
-                value={formData.condition || ""}
-                onChange={(e) => handleInputChange('condition', e.target.value)}
-                placeholder="e.g. inputs.score > 80"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-              <div className="mt-2 text-xs text-gray-500 leading-snug">
-                This node will only execute if the condition is true.<br />
-                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> in your logic.
-                <br />
-                Examples:
-                <ul className="list-disc list-inside mt-1">
-                  <li><code>inputs.score &gt;= 80</code></li>
-                  <li><code>inputs.job_title === "Engineer"</code></li>
-                  <li><code>inputs.email.includes("@")</code></li>
-                </ul>
-              </div>
-            </div>
           </>
         )}
         
         {/* Tool-Specific Fields */}
         {currentNodeType === 'tool' && (
-          <>
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-1 flex items-center">
-                Description
-                <HelpTooltip type="tool" field="description" />
-              </label>
-              <textarea
-                value={formData.description || ''}
-                onChange={(e) => handleInputChange('description', e.target.value)}
+          <div className="tool-section space-y-4">
+            <div className="form-group">
+              <label className="block text-gray-700 mb-1">Framework</label>
+              <select
+                value={formData.framework}
+                onChange={(e) => handleFrameworkChange(e.target.value)}
                 className="w-full p-2 border rounded"
-                rows="2"
-                placeholder="What does this tool do?"
-              />
+              >
+                <option value="">Select Framework</option>
+                {FRAMEWORK_OPTIONS.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            {/* Tool configuration based on framework */}
-            {formData.framework === 'cv_parser' && (
-              <div className="mb-4">
-                <div className="text-sm text-gray-600 mb-2">
-                  CV Parser will extract information from uploaded PDF documents
-                </div>
+            {formData.framework && (
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <h3 className="text-sm font-semibold mb-3">{formData.framework.toUpperCase()} Configuration</h3>
+                {renderFrameworkFields()}
               </div>
             )}
 
-            {formData.framework === 'openrouter' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1">Model</label>
-                  <select
-                    value={formData.model || 'gpt-4'}
-                    onChange={(e) => handleInputChange('model', e.target.value)}
-                    className="w-full p-2 border rounded"
-                  >
-                    <option value="gpt-4">GPT-4</option>
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                    <option value="claude-3-opus">Claude 3 Opus</option>
-                    <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                  </select>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1">Temperature</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.1"
-                    value={formData.temperature || 0.7}
-                    onChange={(e) => handleInputChange('temperature', parseFloat(e.target.value))}
-                    className="w-full p-2 border rounded"
-                  />
-                </div>
-              </>
-            )}
-
-            {formData.framework === 'huggingface' && (
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-1">Model Name</label>
-                <input
-                  type="text"
-                  value={formData.model || ''}
-                  onChange={(e) => handleInputChange('model', e.target.value)}
-                  className="w-full p-2 border rounded"
-                  placeholder="e.g., bert-base-uncased"
-                />
-              </div>
-            )}
-
-            {formData.framework === 'crewai' && (
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-1">Agent Configuration</label>
-                <textarea
-                  value={formData.agentConfig || ''}
-                  onChange={(e) => handleInputChange('agentConfig', e.target.value)}
-                  className="w-full p-2 border rounded"
-                  rows="4"
-                  placeholder="Configure agent properties..."
-                />
-              </div>
-            )}
-
-            {formData.framework === 'langchain' && (
-              <div className="mb-4">
-                <label className="block text-gray-700 mb-1">Chain Type</label>
-                <select
-                  value={formData.chainType || 'llm'}
-                  onChange={(e) => handleInputChange('chainType', e.target.value)}
-                  className="w-full p-2 border rounded"
-                >
-                  <option value="llm">LLM Chain</option>
-                  <option value="sequential">Sequential Chain</option>
-                  <option value="router">Router Chain</option>
-                </select>
-              </div>
-            )}
-
-            {/* API Configuration if needed */}
-            {formData.toolType === 'api' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1 flex items-center">
-                    API Endpoint
-                    <HelpTooltip type="tool" field="apiEndpoint" />
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.apiEndpoint || ''}
-                    onChange={(e) => handleInputChange('apiEndpoint', e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="https://api.example.com/endpoint"
-                  />
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1 flex items-center">
-                    API Key
-                    <HelpTooltip type="tool" field="apiKey" />
-                  </label>
-                  <input
-                    type="password"
-                    value={formData.apiKey || ''}
-                    onChange={(e) => handleInputChange('apiKey', e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="Enter API key"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Webhook Configuration if needed */}
-            {formData.toolType === 'webhook' && (
-              <>
-                <div className="mb-4">
-                  <label className="block text-gray-700 mb-1">Webhook URL</label>
-                  <input
-                    type="text"
-                    value={formData.webhook_url || ''}
-                    onChange={(e) => handleInputChange('webhook_url', e.target.value)}
-                    className="w-full p-2 border rounded"
-                    placeholder="https://example.com/webhook"
-                  />
-                </div>
-              </>
-            )}
-
-            {/* Parameters Section */}
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-1 flex items-center">
+            {/* Common fields for all tools */}
+            <div className="form-group mt-4 pt-4 border-t border-gray-200">
+              <label className="block text-sm text-gray-700">
                 Parameters
-                <HelpTooltip type="tool" field="parameters" />
+                <span className="ml-1 text-xs text-gray-500">(Variables available in prompt template)</span>
               </label>
               <textarea
-                value={formData.parameters || ''}
+                value={formData.parameters}
                 onChange={(e) => handleInputChange('parameters', e.target.value)}
-                className="w-full p-2 border rounded"
-                rows="2"
-                placeholder="Parameters the tool accepts (one per line)"
+                placeholder="Enter parameters in JSON format"
+                className="w-full p-2 border rounded font-mono text-sm"
+                rows="4"
               />
+              <div className="text-xs text-gray-500 mt-1">
+                Example: {"{\n  \"location\": \"string\",\n  \"temperature\": \"number\"\n}"}
+              </div>
             </div>
 
-            {/* Condition Field */}
-            <div className="mb-6">
+            <div className="form-group">
               <label className="block text-sm font-semibold text-gray-800 mb-1">
                 🧠 Condition to Run (optional)
                 <HelpTooltip type="tool" field="condition" />
@@ -741,8 +1404,12 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
                 placeholder="e.g. inputs.score > 80"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
+              <div className="mt-2 text-xs text-gray-500">
+                This node will only execute if the condition is true.<br />
+                Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> to reference input values.
+              </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Chat-Specific Fields */}

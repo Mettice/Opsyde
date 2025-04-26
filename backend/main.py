@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from email_runner import send_email
 from sheets_runner import push_to_sheet
 from discord_runner import post_to_discord
-from crew_runner import run_crew
+from crew_runner import run_crew, UnifiedRunner
 from frameworks.webhook_loader import handle_webhook_flow
 from chat_runner import router as chat_router
 from frameworks.trigger_storage import register_trigger, get_trigger_flow, list_triggers, delete_trigger
@@ -29,6 +29,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+runner = UnifiedRunner()
 
 # Add CORS middleware
 app.add_middleware(
@@ -38,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount the chat router
+app.include_router(chat_router)
 
 @app.on_event("startup")
 async def startup_event():
@@ -132,14 +136,6 @@ async def discord_output(request: Request):
 async def load_webhook_flow(request: Request):
     """Receive a flow definition from an external webhook"""
     return await handle_webhook_flow(request)
-
-@app.post("/chat")
-async def chat_endpoint(request: Request):
-    data = await request.json()
-    # Call your chat_runner function directly
-    from chat_runner import run_chat_node
-    result = run_chat_node(data, {})
-    return {"response": result}
 
 @app.post("/trigger/{trigger_id}")
 async def handle_trigger(trigger_id: str, request: Request):
@@ -751,4 +747,67 @@ async def parse_cv(file_data: dict):
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# New unified API endpoints
+@app.post("/api/run-tool")
+async def run_tool(request: Request):
+    try:
+        body = await request.json()
+        logger.info(f"Running tool: {json.dumps(body)}")
+        return await runner.run_tool_node(body["tool"], inputs=body.get("inputs", {}))
+    except Exception as e:
+        logger.error(f"Error running tool: {str(e)}")
+        return {"error": True, "message": str(e)}
+
+@app.post("/api/run-agent-task")
+async def run_agent_task(request: Request):
+    try:
+        body = await request.json()
+        logger.info(f"Running agent task: {json.dumps(body)}")
+        return await runner.run_agent_task_node(
+            body["agent"], 
+            body["task"], 
+            inputs=body.get("inputs", {})
+        )
+    except Exception as e:
+        logger.error(f"Error running agent task: {str(e)}")
+        return {"error": True, "message": str(e)}
+
+@app.post("/api/run-agent")
+async def run_agent(request: Request):
+    try:
+        body = await request.json()
+        logger.info(f"Running agent: {json.dumps(body)}")
+        # If no task is given, create dummy task
+        return await runner.run_agent_task_node(
+            body["agent"],
+            {"description": "Self-initiative", "expected_output": "Result"},
+            inputs=body.get("inputs", {})
+        )
+    except Exception as e:
+        logger.error(f"Error running agent: {str(e)}")
+        return {"error": True, "message": str(e)}
+
+@app.post("/api/run-trigger")
+async def run_trigger(request: Request):
+    try:
+        body = await request.json()
+        logger.info(f"Running trigger: {json.dumps(body)}")
+        return await runner.run_trigger_node(body["input"])
+    except Exception as e:
+        logger.error(f"Error running trigger: {str(e)}")
+        return {"error": True, "message": str(e)}
+
+@app.post("/api/run-output")
+async def run_output(request: Request):
+    try:
+        body = await request.json()
+        logger.info(f"Running output: {json.dumps(body)}")
+        return await runner.run_output_node(
+            body["output"], 
+            body.get("result", {})
+        )
+    except Exception as e:
+        logger.error(f"Error running output: {str(e)}")
+        return {"error": True, "message": str(e)}
     

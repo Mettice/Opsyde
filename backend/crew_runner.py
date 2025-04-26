@@ -1,10 +1,14 @@
 import asyncio
 import json
 import logging
-from typing import Dict, List, Any, AsyncGenerator
+from typing import Dict, List, Any, AsyncGenerator, Optional, Union
 import requests
 import os
 from datetime import datetime
+from openai import AsyncOpenAI
+import base64
+import inspect
+import aiohttp
 
 # Framework-specific tools
 from frameworks.huggingface_runner import run_huggingface_tool
@@ -94,7 +98,7 @@ async def run_crew(data: Dict[str, Any]) -> AsyncGenerator[str, None]:
                 continue
 
             # Execute node
-            result = await process_node(node, len(node_results), inputs, context, node_results)
+            result = await process_node(node, node_results, inputs, context, node_results)
             
             # Format result for output
             output = {
@@ -450,72 +454,422 @@ async def run_logic_node(node_data, inputs, context):
             "message": f"Error in condition: {str(e)}"
         }
 
-async def process_node(node, i, inputs, context, node_results):
-    """Process a node in the workflow"""
-    node_id = node.get("id")
-    node_type = node.get("type", "unknown").lower()  # Normalize node type
-    node_data = node.get("data", {})
-    
-    logger.info(f"Processing node: {node_id} of type {node_type}")
-    
-    try:
-        # Get inputs for this node from connected nodes
-        node_inputs = get_node_inputs(node_id, context.get("edges", []), node_results, inputs)
-        
-        # Check if any input contains an error
-        if any(isinstance(input, dict) and input.get("type") == "error" for input in node_inputs.values()):
-            logger.warning(f"Skipping node {node_id} due to previous error in inputs")
-            return {
-                "output": "Skipping node due to previous error",
-                "type": "error",
-                "error": "Previous node failed",
-                "node_id": node_id
-            }
-        
-        if node_type in ["agent", "ai_agent"]:
-            result = await run_agent_node(node_data, node_inputs, context)
-            # Store agent result in context for tasks
-            context["current_agent"] = result
-        elif node_type == "task":
-            # Get agent from inputs or context
-            agent_data = node_inputs.get("agent") or node_inputs.get("connected_agents", [None])[0]
-            if agent_data and agent_data.get("type") == "agent_status":
-                node_data["agent"] = agent_data
-            result = await run_task_node(node_data, node_inputs, context)
-        elif node_type == "tool":
-            result = await run_tool_node(node_data, node_inputs, context)
-        elif node_type == "chat":
-            result = await run_chat_node(node_data, node_inputs, context)
-        elif node_type == "delay":
-            result = await run_delay_node(node_data)
-        elif node_type in ["input", "file_input"]:  # Handle both input types
-            result = await run_input_node(node_data, node_inputs, context)
-        elif node_type == "trigger":
-            result = await handle_trigger_node(node_data)
-        elif node_type == "logic":
-            result = await run_logic_node(node_data, node_inputs, context)
-        elif node_type == "output":
-            result = await run_output_node(node_data, node_inputs, context)
-        else:
-            result = {
-                "output": f"Unknown node type: {node_type}",
-                "type": "error"
-            }
-        
-        node_results[node_id] = result
-        return result
-    except Exception as e:
-        logger.error(f"Error processing {node_type} node: {str(e)}")
-        error_result = {
-            "output": f"Node execution failed: {str(e)}",
-            "type": "error",
-            "error": str(e),
-            "node_id": node_id
-        }
-        node_results[node_id] = error_result
-        return error_result
+class UnifiedRunner:
+    def __init__(self):
+        self.client = AsyncOpenAI()
+        self.frameworks = {}
+        self._register_frameworks()
+        logger.info("UnifiedRunner initialized with frameworks: %s", list(self.frameworks.keys()))
 
-def run_crewai_workflow(crew_config, framework="crewai"):
+    def _register_frameworks(self):
+        """Dynamically register available frameworks"""
+        try:
+            # Register HuggingFace framework
+            from frameworks.huggingface_runner import run_huggingface_tool
+            self.frameworks["huggingface"] = run_huggingface_tool
+            logger.info("Registered HuggingFace framework")
+            
+            # Register OpenAI framework
+            self.frameworks["openai"] = self.run_openai_tool
+            logger.info("Registered OpenAI framework")
+            
+            # Register other frameworks as needed
+            # Example:
+            # from frameworks.some_runner import run_some_tool
+            # self.frameworks["some_framework"] = run_some_tool
+            
+        except ImportError as e:
+            logger.warning(f"Failed to register framework: {str(e)}")
+            
+    async def run_openai_tool(self, tool_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Execute OpenAI-based tool"""
+        try:
+            # Extract tool settings
+            model = tool_data.get("model", "gpt-4")
+            temperature = float(tool_data.get("temperature", 0.7))
+            max_tokens = int(tool_data.get("max_tokens", 4000))
+            
+            # Build prompt from tool data and inputs
+            prompt = tool_data.get("prompt", "")
+            if inputs:
+                prompt = f"{prompt}\n\nInputs:\n{json.dumps(inputs, indent=2)}"
+            
+            # Execute with OpenAI
+            completion = await self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            return {
+                "type": "tool_result",
+                "output": completion.choices[0].message.content,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in OpenAI tool: {str(e)}")
+            return {"type": "error", "error": str(e)}
+
+    def _format_error(self, error_type: str, message: str, node_id: str = None, node_type: str = None, details: Dict = None) -> Dict[str, Any]:
+        """Format error response consistently"""
+        return {
+            "type": "error",
+            "error": {
+                "type": error_type,
+                "message": message,
+                "node_id": node_id,
+                "node_type": node_type,
+                "details": details or {},
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+
+    async def run_tool_node(self, tool_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Execute tool with proper framework handling"""
+        try:
+            # Get tool settings
+            framework = tool_data.get("framework", "").lower()
+            if not framework:
+                return self._format_error(
+                    "missing_framework",
+                    "Tool framework is required",
+                    tool_data.get("node_id"),
+                    "tool"
+                )
+                
+            logger.info(f"Executing {framework} tool with data: {tool_data}")
+            
+            # Get framework configuration
+            framework_config = tool_data.get("frameworkConfig", {})
+            if not framework_config:
+                return self._format_error(
+                    "missing_config",
+                    f"Configuration required for {framework} framework",
+                    tool_data.get("node_id"),
+                    "tool"
+                )
+
+            # Execute based on framework type
+            if framework == "openai":
+                return await self._run_openai_tool(framework_config, inputs)
+            elif framework == "huggingface":
+                return await self._run_huggingface_tool(framework_config, inputs)
+            elif framework == "webhook":
+                return await self._run_webhook_tool(framework_config, inputs)
+            else:
+                return self._format_error(
+                    "unsupported_framework",
+                    f"Unsupported framework: {framework}",
+                    tool_data.get("node_id"),
+                    "tool"
+                )
+            
+        except Exception as e:
+            logger.error(f"Error in tool node: {str(e)}")
+            return self._format_error(
+                "execution_error",
+                str(e),
+                tool_data.get("node_id"),
+                "tool",
+                {"traceback": str(e.__traceback__)}
+            )
+
+    async def _run_openai_tool(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute OpenAI-based tool"""
+        try:
+            # Extract configuration
+            model = config.get("model", "gpt-4")
+            temperature = float(config.get("temperature", 0.7))
+            max_tokens = int(config.get("max_tokens", 4000))
+            prompt_template = config.get("prompt", "")
+
+            # Build prompt with parameters
+            prompt = prompt_template
+            if inputs:
+                # Replace parameter placeholders
+                for key, value in inputs.items():
+                    placeholder = f"{{{{{key}}}}}"
+                    prompt = prompt.replace(placeholder, str(value))
+
+            # Execute with OpenAI
+            completion = await self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
+            return {
+                "type": "tool_result",
+                "output": completion.choices[0].message.content,
+                "framework": "openai",
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Error in OpenAI tool: {str(e)}")
+            return self._format_error(
+                "openai_error",
+                str(e),
+                None,
+                "tool",
+                {"config": config}
+            )
+
+    async def _run_huggingface_tool(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute HuggingFace-based tool"""
+        try:
+            # Extract configuration
+            model = config.get("model")
+            task = config.get("task")
+            
+            if not model or not task:
+                return self._format_error(
+                    "invalid_config",
+                    "Model and task are required for HuggingFace tools",
+                    None,
+                    "tool"
+                )
+
+            # Import HuggingFace runner
+            from frameworks.huggingface_runner import run_huggingface_tool
+            
+            # Prepare tool data for HuggingFace runner
+            hf_data = {
+                "model": model,
+                "task": task,
+                "inputs": inputs
+            }
+
+            # Execute with HuggingFace
+            result = await run_huggingface_tool(hf_data)
+
+            return {
+                "type": "tool_result",
+                "output": result.get("output"),
+                "framework": "huggingface",
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Error in HuggingFace tool: {str(e)}")
+            return self._format_error(
+                "huggingface_error",
+                str(e),
+                None,
+                "tool",
+                {"config": config}
+            )
+
+    async def _run_webhook_tool(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute webhook-based tool"""
+        try:
+            # Extract configuration
+            url = config.get("url")
+            method = config.get("method", "POST").upper()
+            headers = config.get("headers", {})
+            
+            if not url:
+                return self._format_error(
+                    "invalid_config",
+                    "URL is required for webhook tools",
+                    None,
+                    "tool"
+                )
+
+            # Make HTTP request
+            async with aiohttp.ClientSession() as session:
+                async with session.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    json=inputs
+                ) as response:
+                    result = await response.json()
+
+            return {
+                "type": "tool_result",
+                "output": result,
+                "framework": "webhook",
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Error in webhook tool: {str(e)}")
+            return self._format_error(
+                "webhook_error",
+                str(e),
+                None,
+                "tool",
+                {"config": config}
+            )
+
+    async def run_trigger_node(self, input_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Handle trigger node execution including file uploads"""
+        try:
+            logger.info("Executing trigger node with input_data: %s", input_data)
+            
+            # Handle file upload if present
+            if "file" in input_data:
+                file_data = input_data["file"]
+                if isinstance(file_data, str):
+                    # Handle base64 encoded file
+                    file_content = base64.b64decode(file_data).decode('utf-8')
+                    inputs["file_content"] = file_content
+                else:
+                    # Handle direct file content
+                    inputs["file_content"] = file_data
+                    
+            return {
+                "type": "trigger_result",
+                "inputs": inputs,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in trigger node: {str(e)}")
+            return {"type": "error", "error": str(e)}
+
+    async def run_agent_task_node(self, agent_data: Dict[str, Any], task_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Execute agent task with proper settings"""
+        try:
+            # Validate inputs
+            if not agent_data:
+                return self._format_error(
+                    "missing_agent",
+                    "Agent data is required",
+                    task_data.get("node_id"),
+                    "task"
+                )
+            if not task_data:
+                return self._format_error(
+                    "missing_task",
+                    "Task data is required",
+                    task_data.get("node_id"),
+                    "task"
+                )
+                
+            logger.info(f"Executing agent task with agent_data: {agent_data}, task_data: {task_data}")
+                
+            # Build settings
+            settings = {
+                "model": agent_data.get("llm_model", "gpt-4"),
+                "temperature": float(agent_data.get("temperature", 0.7)),
+                "max_tokens": int(agent_data.get("max_tokens", 4000)),
+                "memory_enabled": bool(agent_data.get("memory_enabled", False))
+            }
+            
+            # Build prompt
+            task_desc = task_data.get("description", "")
+            prompt_override = agent_data.get("prompt_override", "")
+            cv_data = inputs.get("cv_data", {})
+            
+            prompt = f"""Task: {task_desc}
+            
+CV Data:
+{json.dumps(cv_data, indent=2)}
+
+{prompt_override if prompt_override else 'Please complete the task based on the CV data provided.'}"""
+
+            # Execute with OpenAI
+            completion = await self.client.chat.completions.create(
+                model=settings["model"],
+                messages=[{"role": "user", "content": prompt}],
+                temperature=settings["temperature"],
+                max_tokens=settings["max_tokens"]
+            )
+            
+            return {
+                "type": "agent_result",
+                "output": completion.choices[0].message.content,
+                "settings": settings,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in agent task: {str(e)}")
+            return self._format_error(
+                "execution_error",
+                str(e),
+                task_data.get("node_id"),
+                "task",
+                {"agent_data": agent_data, "task_data": task_data, "traceback": str(e.__traceback__)}
+            )
+
+    async def run_output_node(self, output_data: Dict[str, Any], result: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Handle output node execution"""
+        try:
+            logger.info(f"Executing output node with data: {output_data}")
+            
+            # For now, just echo back the output with result
+            return {
+                "type": "output_result",
+                "output_node": output_data,
+                "result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in output node: {str(e)}")
+            return {"type": "error", "error": str(e)}
+
+async def process_node(node: Dict[str, Any], inputs: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Process a single node in the workflow"""
+    try:
+        # Check both nodeType and type fields
+        node_type = node.get("nodeType") or node.get("type")
+        if not node_type:
+            return {"error": "Missing node type", "type": "error"}
+
+        # Initialize UnifiedRunner if not already done
+        if not hasattr(process_node, "runner"):
+            process_node.runner = UnifiedRunner()
+
+        # Route based on node type
+        if node_type == "tool":
+            return await process_node.runner.run_tool_node(node, inputs)
+        elif node_type == "trigger":
+            return await process_node.runner.run_trigger_node(node, inputs)
+        elif node_type == "agent":
+            task = find_agent_for_task(node.get("id"), context.get("edges", []), context.get("nodes", []))
+            if task:
+                return await process_node.runner.run_agent_task_node(node, task, inputs)
+        elif node_type == "output":
+            return await process_node.runner.run_output_node(node, inputs)
+        elif node_type in ["chat", "chatbot"]:  # Handle both chat and chatbot node types
+            # Ensure we have the chat node data
+            chat_data = node.get("data", {})
+            if not chat_data:
+                return {"error": "Missing chat node data", "type": "error"}
+            # Add the node type to the chat data for proper handling
+            chat_data["nodeType"] = "chat"
+            return await run_chat_node(chat_data, inputs)
+        elif node_type == "delay":
+            return await run_delay_node(node, inputs)
+        elif node_type == "logic":
+            return await run_logic_node(node, inputs, context)
+        else:
+            return {"error": f"No executor found for node type: {node_type}", "type": "error"}
+
+    except Exception as e:
+        logger.error(f"Error processing node: {str(e)}")
+        return {"error": str(e), "type": "error"}
+
+# Create a global instance of the UnifiedRunner
+runner = UnifiedRunner()
+
+def safe_get(obj, key, default=None):
+    """Safely get a value from a dictionary, handling None cases"""
+    if obj is None:
+        return default
+    try:
+        return obj.get(key, default)
+    except (AttributeError, TypeError):
+        return default
+
+async def run_crewai_workflow(crew_config, framework="crewai"):
     """
     A framework-agnostic function to run agent workflows using different frameworks.
     
@@ -575,482 +929,3 @@ def run_crewai_workflow(crew_config, framework="crewai"):
             "error": str(e),
             "framework": framework
         }
-
-def safe_get(obj, key, default=None):
-    """Safely get a value from a dictionary, handling None cases"""
-    if obj is None:
-        return default
-    try:
-        return obj.get(key, default)
-    except (AttributeError, TypeError):
-        return default
-
-async def run_agent_node(node_data, inputs, context=None):
-    """
-    Execute an agent node
-    
-    Args:
-        node_data: Dictionary containing agent configuration
-        inputs: Dictionary of inputs for the agent
-        context: Optional execution context
-        
-    Returns:
-        Dictionary containing the agent execution result
-    """
-    try:
-        agent_name = safe_get(node_data, "label", "Unknown Agent")
-        agent_role = safe_get(node_data, "role", "Assistant")
-        
-        logger.info(f"Executing agent '{agent_name}' with role '{agent_role}'")
-        
-        # Return a dictionary with agent information
-        return {
-            "output": f"Agent {agent_name} ready for tasks",
-            "type": "agent_status",
-            "agent_name": agent_name,
-            "agent_role": agent_role
-        }
-    except Exception as e:
-        logger.error(f"Error in agent node: {str(e)}")
-        return {
-            "output": f"Error: {str(e)}",
-            "type": "error",
-            "error": str(e)
-        }
-
-async def run_task_node(node_data, inputs, context=None):
-    """Execute a task node"""
-    try:
-        task_name = node_data.get("label", "Unknown Task")
-        task_description = node_data.get("description", "No description")
-        
-        logger.info(f"Executing task '{task_name}': {task_description}")
-        logger.info(f"Task inputs: {json.dumps(inputs, default=str)}")
-        
-        # Get the agent from node_data or context
-        agent_data = node_data.get("agent") or (context or {}).get("current_agent")
-        
-        if agent_data and agent_data.get("type") == "agent_status":
-            # Get agent settings with defaults
-            agent_name = agent_data.get("agent_name", "Assistant")
-            agent_role = agent_data.get("agent_role", "You are a helpful assistant")
-            llm_model = agent_data.get("llmModel", "gpt-4")
-            temperature = agent_data.get("temperature", 0.7)
-            max_tokens = agent_data.get("max_tokens", 4000)
-            memory_enabled = agent_data.get("enableMemory", False)
-            prompt_override = agent_data.get("prompt", "")
-            
-            # Special handling for interview questions task
-            if "Generate Interview Questions" in task_name:
-                # Try to find CV data in inputs
-                cv_data = None
-                
-                # Log the inputs we're working with
-                logger.info(f"Looking for CV data in inputs: {json.dumps(inputs, default=str)}")
-                
-                # First try to get it from cv_result
-                for key, value in inputs.items():
-                    if isinstance(value, dict):
-                        if value.get("type") == "cv_result":
-                            cv_data = value.get("data", {})
-                            logger.info(f"Found CV data in cv_result type: {json.dumps(cv_data, default=str)}")
-                            break
-                        elif "data" in value and isinstance(value["data"], dict):
-                            data = value["data"]
-                            if all(k in data for k in ["experience_years", "skills", "education"]):
-                                cv_data = data
-                                logger.info(f"Found CV data in nested data: {json.dumps(cv_data, default=str)}")
-                                break
-                
-                # If no CV data found, return an error
-                if not cv_data:
-                    error_msg = "No CV data found in inputs. Make sure the CV Parser tool is connected and executed before this task."
-                    logger.error(error_msg)
-                    return {
-                        "output": error_msg,
-                        "type": "error",
-                        "error": error_msg,
-                        "task_name": task_name,
-                        "agent": agent_name
-                    }
-                
-                # Format CV summary with safe gets
-                cv_summary = f"""
-Experience: {cv_data.get('experience_years', 'N/A')} years
-Skills: {', '.join(cv_data.get('skills', []) or [])}
-Education: {', '.join(f"{edu.get('degree', 'Unknown')} in {edu.get('field', 'Unknown')}" for edu in cv_data.get('education', []) or [])}
-"""
-                
-                # Create specialized prompt for interview questions
-                full_prompt = f"""
-Below is a candidate's CV summary. Based on their real experience, generate 5 tailored interview questions that assess their skills and background.
-
-CV Summary:
-{cv_summary}
-
-Your response should be in this format:
-1.
-2.
-3.
-4.
-5.
-"""
-            else:
-                # Regular task handling
-                full_prompt = f"{prompt_override}\n\n{task_description}" if prompt_override else task_description
-            
-            try:
-                # Initialize OpenAI client with new syntax
-                from openai import AsyncOpenAI
-                client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-                
-                # Prepare messages for the chat completion
-                messages = [
-                    {"role": "system", "content": agent_role},
-                    {"role": "user", "content": full_prompt}
-                ]
-                
-                # Add memory context if enabled
-                if memory_enabled and context and "memory" in context:
-                    messages.insert(1, {
-                        "role": "system",
-                        "content": f"Previous context:\n{context['memory']}"
-                    })
-                
-                # Make the API call with new syntax
-                response = await client.chat.completions.create(
-                    model=llm_model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens
-                )
-                
-                # Extract the response with new syntax
-                answer = response.choices[0].message.content.strip()
-                
-                # Return the result with metadata
-                result = {
-                    "output": answer,
-                    "type": "task_result",
-                    "task_name": task_name,
-                    "agent": agent_name,
-                    "result": answer,
-                    "full_prompt": full_prompt,
-                    "used_memory": memory_enabled,
-                    "agent_settings": {
-                        "llm_model": llm_model,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                        "memory_enabled": memory_enabled
-                    }
-                }
-                
-                # Update memory context if enabled
-                if memory_enabled and context is not None:
-                    context["memory"] = context.get("memory", "") + f"\nTask: {task_description}\nResponse: {answer}"
-                
-            except Exception as e:
-                logger.error(f"OpenAI API error: {str(e)}")
-                result = {
-                    "output": f"Error calling OpenAI API: {str(e)}",
-                    "type": "error",
-                    "error": str(e),
-                    "task_name": task_name,
-                    "agent": agent_name
-                }
-        else:
-            # No agent found, return error
-            result = {
-                "output": f"Task '{task_name}' requires an agent",
-                "type": "error",
-                "error": "No agent available for task execution"
-            }
-            
-        return result
-    except Exception as e:
-        logger.error(f"Error in task node: {str(e)}")
-        return {
-            "output": f"Error: {str(e)}",
-            "type": "error",
-            "error": str(e)
-        }
-
-def debug_node_data(prefix, data):
-    """Debug helper to track data flow"""
-    try:
-        logger.info(f"\n{'='*20} {prefix} {'='*20}")
-        if data is None:
-            logger.info("Data is None")
-            return
-        if isinstance(data, dict):
-            for key, value in data.items():
-                logger.info(f"{key}: {type(value)}")
-                if isinstance(value, dict):
-                    logger.info(f"{key} contents: {json.dumps(value, default=str)[:200]}")
-        else:
-            logger.info(f"Data type: {type(data)}")
-            logger.info(f"Data: {str(data)[:200]}")
-        logger.info("="*50)
-    except Exception as e:
-        logger.error(f"Debug error: {str(e)}")
-
-async def run_input_node(node_data, inputs, context=None):
-    """Process an input node"""
-    try:
-        logger.info(f"\n{'='*20} INPUT NODE START {'='*20}")
-        logger.info(f"Processing input node: {node_data.get('label', 'Unnamed Input')}")
-        
-        if not node_data:
-            logger.error("No node data provided")
-            return {
-                "output": "No input data provided",
-                "type": "error",
-                "error": "Missing node data"
-            }
-
-        # Get input type and variable name
-        input_type = node_data.get('inputType', 'text')
-        var_name = node_data.get('variableName', '')
-        
-        logger.info(f"Input type: {input_type}")
-        logger.info(f"Variable name: {var_name}")
-
-        # Handle file upload input
-        if input_type == 'file':
-            # Check inputs structure
-            logger.info("File input detected, checking data structure...")
-            logger.info(f"Available inputs: {list(inputs.keys())}")
-            
-            # Try to find file data in various locations
-            file_data = None
-            
-            # Check in direct inputs
-            if var_name in inputs:
-                logger.info(f"Found data in direct inputs under {var_name}")
-                file_data = inputs[var_name]
-            
-            # Check in value.file_upload structure
-            elif var_name in inputs and isinstance(inputs[var_name], dict):
-                value_data = inputs[var_name].get('value', {})
-                if isinstance(value_data, dict) and 'file_upload' in value_data:
-                    logger.info("Found data in value.file_upload structure")
-                    file_data = value_data['file_upload']
-            
-            # Check in file_upload directly
-            elif 'file_upload' in inputs:
-                logger.info("Found data in file_upload")
-                file_data = inputs['file_upload']
-
-            if not file_data:
-                logger.error("No file data found in inputs")
-                return {
-                    "output": "No file data provided",
-                    "type": "error",
-                    "error": "Missing file data"
-                }
-
-            logger.info(f"File data structure: {json.dumps(file_data, default=str)[:200]}...")
-            
-            # Return standardized file data structure
-            return {
-                "output": f"File input processed: {file_data.get('filename', 'unnamed')}",
-                "type": "file_input",
-                "file_data": file_data,
-                "variable_name": var_name
-            }
-
-        # Handle text input
-        else:
-            text_value = ""
-            if var_name in inputs:
-                input_data = inputs[var_name]
-                if isinstance(input_data, dict) and 'value' in input_data:
-                    if isinstance(input_data['value'], dict):
-                        text_value = input_data['value'].get('text_input', '')
-                    else:
-                        text_value = str(input_data['value'])
-                else:
-                    text_value = str(input_data)
-
-            return {
-                "output": f"Text input processed: {text_value[:100]}...",
-                "type": "text_input",
-                "text": text_value,
-                "variable_name": var_name
-            }
-
-    except Exception as e:
-        logger.error(f"Error executing {node_data.get('label', 'Input')}: {str(e)}")
-        logger.exception(e)
-        return {
-            "output": str(e),
-            "type": "error",
-            "error": str(e)
-        }
-
-async def run_output_node(node_data, inputs, context=None):
-    """
-    Process an output node
-    
-    Args:
-        node_data: Dictionary containing output node configuration
-        inputs: Dictionary of inputs for the workflow
-        context: Optional execution context
-        
-    Returns:
-        Dictionary containing the output node result
-    """
-    try:
-        output_type = node_data.get("outputType", "webhook")
-        label = node_data.get("label", "Output Node")
-        
-        logger.info(f"Processing output node '{label}' of type '{output_type}'")
-        
-        # Initialize context if it's None
-        if context is None:
-            context = {}
-            
-        # Use inputs as the input_data if not available in context
-        input_data = context.get("input_data", inputs)
-        
-        # Create output configuration based on node type
-        output_config = {
-            "emailEnabled": output_type == "email",
-            "discordEnabled": output_type == "discord",
-            "sheetsEnabled": output_type == "sheets",
-            "webhookEnabled": output_type == "webhook"
-        }
-        
-        # Add specific configuration based on output type
-        if output_type == "webhook":
-            output_config["webhookUrl"] = node_data.get("webhookUrl", "")
-        elif output_type == "discord":
-            output_config["discordWebhook"] = node_data.get("webhookUrl", "")
-        elif output_type == "sheets":
-            output_config["sheetId"] = node_data.get("sheetId", "")
-        elif output_type == "email":
-            output_config["email"] = node_data.get("email", "")
-            output_config["emailSubject"] = node_data.get("emailSubject", "Workflow Results")
-        
-        # Use the unified output router
-        from outputs.output_router import route_output
-        results = route_output(input_data, output_config)
-        
-        # Return the results
-        return {
-            "output": str(results),
-            "type": "output_result",
-            "output_type": output_type,
-            "results": results
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in output node: {str(e)}")
-        return {
-            "output": f"Error: {str(e)}",
-            "type": "error",
-            "error": str(e)
-        }
-
-async def run_tool_node(node_data, inputs, context=None):
-    """Run a tool node with the given data"""
-    try:
-        tool_type_raw = node_data.get("toolType", "").lower()
-        custom_tool = node_data.get("customTool", "").lower()
-
-        # Normalize tool type handling
-        if tool_type_raw == "custom":
-            # For custom tools, use the customTool value as the tool_type
-            tool_type = custom_tool
-            logger.info(f"Running custom tool: {tool_type}")
-        else:
-            tool_type = tool_type_raw
-            logger.info(f"Running standard tool: {tool_type}")
-
-        logger.info(f"Tool inputs: {json.dumps(inputs, default=str)}")
-
-        # Handle CV parser tool
-        if tool_type == "cv_parser":
-            logger.info("Executing CV parser tool")
-            return await run_cv_parser_tool(node_data, inputs)
-            
-        # Handle other tool types...
-        elif tool_type == "huggingface":
-            return await run_huggingface_tool(node_data, inputs)
-        elif tool_type == "llamaindex":
-            return await run_llamaindex_tool(node_data, inputs)
-        elif tool_type == "autogen":
-            return await run_autogen_tool(node_data, inputs)
-        elif tool_type == "openrouter":
-            return await run_openrouter_tool(node_data, inputs)
-        elif tool_type == "crewai":
-            return run_crewai_workflow(node_data)
-        elif tool_type == "api":
-            return await run_api_tool(node_data, inputs)
-        elif tool_type == "clearbit":
-            return await run_clearbit_tool(node_data, inputs)
-        elif tool_type == "lead_scorer":
-            return await run_lead_scorer(node_data, inputs)
-        elif tool_type == "log_lead":
-            return await run_log_lead_to_sheet(node_data, inputs)
-        elif tool_type == "crm_logger":
-            return await run_crm_logger_tool(node_data, inputs)
-        elif tool_type == "discord_notifier":
-            return await run_discord_notifier(node_data, inputs)
-        elif tool_type == "readiness_check":
-            return await run_readiness_check(node_data, inputs)
-        else:
-            raise ValueError(f"Unknown tool type: {tool_type}")
-
-    except Exception as e:
-        logger.error(f"Error in tool node execution: {str(e)}")
-        return {
-            "error": f"Error executing tool: {str(e)}",
-            "type": "error"
-        }
-
-async def handle_trigger_node(node_data=None):
-    """
-    Local trigger handler to avoid dependency issues
-    """
-    logger.info("Using local handle_trigger_node function")  # Debug line
-    
-    # Safety check for None input
-    if node_data is None:
-        node_data = {}
-    
-    trigger_type = node_data.get("triggerType", "manual")
-    trigger_id = node_data.get("nodeId", "unknown")
-    label = node_data.get("label", "Trigger")
-    
-    # For scheduled triggers, register them for automatic execution
-    if trigger_type == "schedule":
-        try:
-            from frameworks.trigger_storage import register_trigger
-            
-            # Get the current flow context from the global data
-            # This is a safer approach than using undefined variables
-            flow = {
-                "trigger_id": trigger_id,
-                "trigger_type": trigger_type,
-                "trigger_data": node_data,
-                # We'll get the connected nodes and edges when the flow is executed
-                "metadata": {
-                    "scheduled": True,
-                    "created_at": datetime.now().isoformat()
-                }
-            }
-            
-            # Register the trigger
-            register_trigger(trigger_id, flow)
-            logger.info(f"Registered scheduled trigger: {trigger_id}")
-        except Exception as e:
-            logger.error(f"Error registering scheduled trigger: {str(e)}")
-    
-    return {
-        "output": f"Trigger '{label}' of type '{trigger_type}' activated",
-        "type": "trigger_status",
-        "trigger_type": trigger_type,
-        "trigger_id": trigger_id,
-        "timestamp": datetime.now().isoformat()
-    }
