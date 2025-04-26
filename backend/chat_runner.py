@@ -4,6 +4,10 @@ from typing import Dict, Any
 from datetime import datetime
 import os
 from openai import AsyncOpenAI
+import json
+import markdown
+from frameworks.openrouter_runner import run_openrouter_chat
+from frameworks.huggingface_runner import run_huggingface_chat
 
 logger = logging.getLogger(__name__)
 
@@ -13,54 +17,60 @@ router = APIRouter(prefix="/api", tags=["chat"])
 # Initialize OpenAI client
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-@router.post("/run-chat")
-async def chat_endpoint(request: dict):
-    """
-    Handle chat requests by routing them to run_chat_node
-    """
+def format_markdown_response(text: str) -> str:
+    """Format text with markdown support"""
     try:
-        data = request.get("chat", {})
-        inputs = request.get("inputs", {})
-        node_id = request.get("node_id")
-        
-        if node_id:
-            data["nodeId"] = node_id
-            
-        result = await run_chat_node(data, inputs)
-        
-        # If result is already a dict with type/output format, return as is
-        if isinstance(result, dict) and "type" in result:
-            return result
-            
-        # Otherwise wrap the string result in our standard format
+        # Convert markdown to HTML
+        html = markdown.markdown(text)
+        # Return both raw markdown and HTML for flexibility
         return {
-            "type": "chat_result",
-            "output": result,
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "node_type": "chat",
-                "node_id": node_id
-            }
+            "raw": text,
+            "html": html,
+            "markdown": text
         }
-        
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {str(e)}")
+        logger.warning(f"Markdown formatting failed: {str(e)}")
         return {
-            "type": "error",
-            "error": str(e),
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "node_type": "chat",
-                "node_id": request.get("node_id")
-            }
+            "raw": text,
+            "html": text,
+            "markdown": text
         }
+
+async def call_openai(messages: list, model: str, temperature: float, max_tokens: int) -> str:
+    """Call OpenAI API"""
+    response = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+    return response.choices[0].message.content
+
+async def call_openrouter(messages: list, model: str, temperature: float, max_tokens: int) -> str:
+    """Call OpenRouter API"""
+    return await run_openrouter_chat(
+        messages=messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
+
+async def call_huggingface(messages: list, model: str, temperature: float, max_tokens: int) -> str:
+    """Call HuggingFace API"""
+    return await run_huggingface_chat(
+        messages=messages,
+        model=model,
+        temperature=temperature,
+        max_tokens=max_tokens
+    )
 
 async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Simulates a chatbot node (e.g., summarize chat, respond, etc.)
+    Run chat node with support for multiple frameworks
     """
     try:
         # Extract chat configuration
+        framework = data.get("framework", "openai")
         prompt = data.get("prompt", "How can I assist you?")
         model = data.get("llmModel", "gpt-3.5-turbo")
         memory = data.get("memory", False)
@@ -71,8 +81,16 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
         # Format the input message
         input_message = ""
         for key, val in inputs.items():
-            if isinstance(val, dict) and "value" in val:
-                input_message += f"{key}: {val['value']}\n"
+            if isinstance(val, dict):
+                if "value" in val:
+                    input_message += f"{key}: {val['value']}\n"
+                elif "file_upload" in val:
+                    file_data = val["file_upload"]
+                    if isinstance(file_data, dict):
+                        if "text_input" in file_data:
+                            input_message += f"{key}: {file_data['text_input']}\n"
+                        elif "content" in file_data:
+                            input_message += f"{key}: [File Content]\n"
             else:
                 input_message += f"{key}: {val}\n"
         
@@ -95,16 +113,23 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
             except Exception as e:
                 logger.warning(f"Memory retrieval failed: {str(e)}")
 
-        # Call OpenAI API
-        response = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        
-        # Extract the response text
-        result = response.choices[0].message.content
+        # Call appropriate framework
+        if framework == "openai":
+            result = await call_openai(messages, model, temperature, max_tokens)
+        elif framework == "openrouter":
+            result = await call_openrouter(messages, model, temperature, max_tokens)
+        elif framework == "huggingface":
+            result = await call_huggingface(messages, model, temperature, max_tokens)
+        else:
+            return {
+                "type": "error",
+                "error": f"Unsupported framework: {framework}",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "chat",
+                    "session_id": session_id
+                }
+            }
         
         # Store in memory if enabled
         if memory:
@@ -115,12 +140,16 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
             except Exception as e:
                 logger.warning(f"Memory storage failed: {str(e)}")
         
+        # Format the response with markdown support
+        formatted_response = format_markdown_response(result)
+        
         return {
             "type": "chat_result",
-            "output": result,
+            "output": formatted_response,
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "node_type": "chat",
+                "framework": framework,
                 "model": model,
                 "memory_enabled": memory,
                 "session_id": session_id
@@ -136,5 +165,27 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
                 "timestamp": datetime.now().isoformat(),
                 "node_type": "chat",
                 "session_id": data.get("nodeId", "default")
+            }
+        }
+
+@router.post("/run-chat")
+async def run_chat_endpoint(data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Endpoint to run chat node
+    """
+    try:
+        inputs = data.get("inputs", {})
+        node_data = data.get("node_data", {})
+        
+        result = await run_chat_node(node_data, inputs)
+        return result
+    except Exception as e:
+        logger.error(f"Error in chat endpoint: {str(e)}")
+        return {
+            "type": "error",
+            "error": str(e),
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "node_type": "chat"
             }
         }

@@ -1,10 +1,17 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import 'github-markdown-css/github-markdown.css';
 
 const ChatNode = React.memo(({ data, isConnectable, selected }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState('');
   
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
@@ -65,6 +72,43 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
     }
   };
 
+  useEffect(() => {
+    if (data.messages) {
+      setMessages(data.messages);
+    }
+  }, [data.messages]);
+
+  const renderMessage = (message) => {
+    return (
+      <div className={`chat-message ${message.role} markdown-body`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            code({node, inline, className, children, ...props}) {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline && match ? (
+                <SyntaxHighlighter
+                  style={vscDarkPlus}
+                  language={match[1]}
+                  PreTag="div"
+                  {...props}
+                >
+                  {String(children).replace(/\n$/, '')}
+                </SyntaxHighlighter>
+              ) : (
+                <code className={className} {...props}>
+                  {children}
+                </code>
+              );
+            }
+          }}
+        >
+          {message.text}
+        </ReactMarkdown>
+      </div>
+    );
+  };
+
   // Handle rendering with an error message if data is missing
   if (!data) {
     return (
@@ -100,15 +144,16 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
         </div>
       )}
       
-      <div className="h-32 overflow-y-auto text-sm bg-gray-50 p-2 rounded mb-2">
-        {messages.length === 0 ? (
-          <div className="text-gray-400 text-center py-2">No messages yet</div>
-        ) : (
-          messages.map((m, i) => (
-            <div key={i} className={`mb-2 ${m.from === "bot" ? "text-blue-600" : "text-gray-800"}`}>
-              <strong>{m.from === "bot" ? "🤖 Bot:" : "👤 You:"}</strong> {m.text}
-            </div>
-          ))
+      <div className="chat-messages space-y-2 max-h-60 overflow-y-auto">
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`message ${msg.from === "bot" ? "assistant" : "user"}`}>
+            {renderMessage(msg)}
+          </div>
+        ))}
+        {isStreaming && (
+          <div className="message assistant">
+            {renderMessage({ text: currentMessage, from: "bot" })}
+          </div>
         )}
       </div>
       

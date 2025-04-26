@@ -47,6 +47,7 @@ python-jose[cryptography]
 passlib[bcrypt]
 httpx<0.28.1  # Specific version to avoid conflicts
 google-api-python-client
+markdown>=3.4.0
 
 # Monitoring
 prometheus-client

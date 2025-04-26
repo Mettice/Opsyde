@@ -2,8 +2,46 @@ import requests
 from datetime import datetime
 import logging
 import json
+import os
+import asyncio
+import aiohttp
+from typing import Dict, Any, List, AsyncGenerator
 
 logger = logging.getLogger(__name__)
+
+# Define supported models with their configurations
+SUPPORTED_MODELS = {
+    'meta-llama/Llama-2-70b-chat-hf': {
+        'type': 'chat',
+        'max_length': 4096,
+        'supports_streaming': True
+    },
+    'mistralai/Mistral-7B-Instruct-v0.2': {
+        'type': 'chat',
+        'max_length': 8192,
+        'supports_streaming': True
+    },
+    'tiiuae/falcon-180B-chat': {
+        'type': 'chat',
+        'max_length': 2048,
+        'supports_streaming': True
+    },
+    'google/flan-t5-xxl': {
+        'type': 'text',
+        'max_length': 512,
+        'supports_streaming': False
+    },
+    'bigscience/bloom': {
+        'type': 'text',
+        'max_length': 2048,
+        'supports_streaming': True
+    },
+    'microsoft/phi-2': {
+        'type': 'chat',
+        'max_length': 2048,
+        'supports_streaming': True
+    }
+}
 
 def extract_skills(text):
     """Extract skills from text using simple keyword matching"""
@@ -33,7 +71,8 @@ def extract_education(text):
             education.append(degree)
     return education
 
-def run_huggingface_tool(tool_data):
+async def run_huggingface_tool(tool_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Run a HuggingFace tool with proper error handling"""
     try:
         # Extract tool configuration
         label = tool_data.get("label", "Unknown Tool")
@@ -42,10 +81,8 @@ def run_huggingface_tool(tool_data):
         logger.info(f"Processing HuggingFace tool '{label}'")
         logger.debug(f"Tool inputs: {json.dumps(inputs, default=str)}")
         
-        # Get file data from inputs - simplified version
+        # Get file data from inputs
         file_data = None
-        
-        # Check for file_upload in two places only
         if isinstance(inputs, dict):
             if "file_upload" in inputs:
                 file_data = inputs["file_upload"]
@@ -58,7 +95,6 @@ def run_huggingface_tool(tool_data):
         if not isinstance(file_data, dict):
             logger.error("File data not found or invalid format")
             return {
-                "output": "Missing or invalid file data",
                 "type": "error",
                 "error": "File data must be a dictionary with content and filename"
             }
@@ -71,78 +107,283 @@ def run_huggingface_tool(tool_data):
         if not content or not filename:
             logger.error("Missing required file data fields")
             return {
-                "output": "Missing required file data (content or filename)",
                 "type": "error",
                 "error": "File must have both content and filename"
             }
         
         logger.info(f"Processing file: {filename}")
         
-        # Detect PDF files
-        is_pdf = (
-            filename.lower().endswith('.pdf') or
-            "application/pdf" in file_data.get("type", "").lower()
-        )
-        
-        if not is_pdf:
-            return {
-                "output": "Invalid file type. Please upload a PDF file.",
-                "type": "error",
-                "error": "Only PDF files are supported"
-            }
-        
-        # Process PDF file
+        # Process file based on type
         try:
-            import base64
-            import io
-            from PyPDF2 import PdfReader
+            if filename.lower().endswith('.pdf'):
+                result = await process_pdf(content)
+            elif filename.lower().endswith(('.doc', '.docx')):
+                result = await process_document(content)
+            elif filename.lower().endswith(('.txt', '.md')):
+                result = await process_text(content)
+            else:
+                return {
+                    "type": "error",
+                    "error": f"Unsupported file type: {filename}"
+                }
             
-            # Handle base64 content
-            if isinstance(content, str) and "base64," in content:
-                content = content.split("base64,")[1]
-            
-            # Decode and read PDF
-            pdf_bytes = base64.b64decode(content)
-            pdf_file = io.BytesIO(pdf_bytes)
-            pdf_reader = PdfReader(pdf_file)
-            
-            # Extract text
-            extracted_text = ""
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    extracted_text += page_text + "\n"
-            
-            # Extract information
-            skills = extract_skills(extracted_text)
-            experience = extract_experience(extracted_text)
-            education = extract_education(extracted_text)
-            
-            result = {
-                "output": "CV processed successfully",
-                "type": "cv_result",
-                "filename": filename,
-                "skills": skills,
-                "experience_years": experience,
-                "education": education,
-                "extracted_text": extracted_text[:500] + "..." # Preview
+            return {
+                "type": "tool_result",
+                "output": result,
+                "metadata": {
+                    "filename": filename,
+                    "timestamp": datetime.now().isoformat()
+                }
             }
-            
-            logger.info(f"Successfully processed CV: {filename}")
-            return result
             
         except Exception as e:
-            logger.error(f"Error processing PDF: {str(e)}")
+            logger.error(f"Error processing file: {str(e)}")
             return {
-                "output": f"Error processing PDF: {str(e)}",
                 "type": "error",
-                "error": str(e)
+                "error": f"File processing error: {str(e)}"
             }
             
     except Exception as e:
-        logger.error(f"Error in CV parser: {str(e)}")
+        logger.error(f"Error in HuggingFace tool: {str(e)}")
         return {
-            "output": f"Error: {str(e)}",
             "type": "error",
             "error": str(e)
         }
+
+async def process_pdf(content: str) -> Dict[str, Any]:
+    """Process PDF content"""
+    try:
+        import base64
+        import io
+        from PyPDF2 import PdfReader
+        
+        # Decode base64 content
+        pdf_bytes = base64.b64decode(content)
+        pdf_file = io.BytesIO(pdf_bytes)
+        pdf_reader = PdfReader(pdf_file)
+        
+        # Extract text
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        
+        # Extract metadata
+        info = pdf_reader.metadata
+        
+        return {
+            "text": text,
+            "metadata": {
+                "pages": len(pdf_reader.pages),
+                "title": info.get('/Title', ''),
+                "author": info.get('/Author', ''),
+                "creation_date": info.get('/CreationDate', '')
+            }
+        }
+    except Exception as e:
+        raise Exception(f"PDF processing error: {str(e)}")
+
+async def process_document(content: str) -> Dict[str, Any]:
+    """Process Word document content"""
+    try:
+        import base64
+        import io
+        from docx import Document
+        
+        # Decode base64 content
+        doc_bytes = base64.b64decode(content)
+        doc_file = io.BytesIO(doc_bytes)
+        doc = Document(doc_file)
+        
+        # Extract text
+        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
+        
+        return {
+            "text": text,
+            "metadata": {
+                "paragraphs": len(doc.paragraphs)
+            }
+        }
+    except Exception as e:
+        raise Exception(f"Document processing error: {str(e)}")
+
+async def process_text(content: str) -> Dict[str, Any]:
+    """Process plain text content"""
+    try:
+        import base64
+        
+        # Decode base64 content
+        text = base64.b64decode(content).decode('utf-8')
+        
+        return {
+            "text": text,
+            "metadata": {
+                "length": len(text),
+                "lines": len(text.splitlines())
+            }
+        }
+    except Exception as e:
+        raise Exception(f"Text processing error: {str(e)}")
+
+async def stream_huggingface_response(
+    messages: List[Dict[str, str]],
+    model: str,
+    temperature: float = 0.7,
+    max_tokens: int = 500
+) -> AsyncGenerator[str, None]:
+    """Stream responses from HuggingFace's API"""
+    try:
+        api_token = os.getenv("HUGGINGFACE_API_KEY")
+        if not api_token:
+            raise ValueError("HUGGINGFACE_API_KEY not found in environment variables")
+
+        # Format messages for streaming
+        formatted_messages = format_messages_for_model(messages, model)
+
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json"
+        }
+
+        data = {
+            "inputs": formatted_messages,
+            "parameters": {
+                "temperature": temperature,
+                "max_new_tokens": max_tokens,
+                "return_full_text": False,
+                "do_sample": True,
+                "stream": True
+            }
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"https://api-inference.huggingface.co/models/{model}",
+                headers=headers,
+                json=data
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"HuggingFace API error: {response.status} - {error_text}")
+
+                async for chunk in response.content:
+                    if chunk:
+                        try:
+                            chunk_data = json.loads(chunk)
+                            if isinstance(chunk_data, list):
+                                text = chunk_data[0].get("generated_text", "")
+                            elif isinstance(chunk_data, dict):
+                                text = chunk_data.get("generated_text", "")
+                            else:
+                                text = str(chunk_data)
+                            
+                            yield text
+                        except json.JSONDecodeError:
+                            logger.warning(f"Failed to decode chunk: {chunk}")
+                            continue
+
+    except Exception as e:
+        logger.error(f"Error in HuggingFace streaming: {str(e)}")
+        raise
+
+def format_messages_for_model(messages: List[Dict[str, str]], model: str) -> str:
+    """Format messages based on the model type"""
+    model_config = SUPPORTED_MODELS.get(model)
+    if not model_config:
+        raise ValueError(f"Unsupported model: {model}")
+
+    if model_config['type'] == 'chat':
+        formatted_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                formatted_messages.append(f"<|system|>\n{msg['content']}</s>")
+            elif msg["role"] == "user":
+                formatted_messages.append(f"<|user|>\n{msg['content']}</s>")
+            elif msg["role"] == "assistant":
+                formatted_messages.append(f"<|assistant|>\n{msg['content']}</s>")
+        return "\n".join(formatted_messages) + "\n<|assistant|>\n"
+    else:
+        # For non-chat models, concatenate all messages
+        return " ".join(msg["content"] for msg in messages)
+
+async def run_huggingface_chat(
+    messages: List[Dict[str, str]],
+    model: str,
+    temperature: float = 0.7,
+    max_tokens: int = 500,
+    stream: bool = False
+) -> str:
+    """
+    Run a chat completion using HuggingFace's API with streaming support
+    """
+    try:
+        # Validate model
+        if model not in SUPPORTED_MODELS:
+            raise ValueError(f"Unsupported model: {model}. Available models: {list(SUPPORTED_MODELS.keys())}")
+
+        # Check if streaming is supported
+        if stream and not SUPPORTED_MODELS[model]['supports_streaming']:
+            logger.warning(f"Streaming not supported for {model}, falling back to non-streaming mode")
+            stream = False
+
+        # Get API token
+        api_token = os.getenv("HUGGINGFACE_API_KEY")
+        if not api_token:
+            raise ValueError("HUGGINGFACE_API_KEY not found in environment variables")
+
+        # Format messages
+        formatted_messages = format_messages_for_model(messages, model)
+
+        # Prepare headers
+        headers = {
+            "Authorization": f"Bearer {api_token}",
+            "Content-Type": "application/json"
+        }
+
+        # Prepare request data
+        data = {
+            "inputs": formatted_messages,
+            "parameters": {
+                "temperature": temperature,
+                "max_new_tokens": min(max_tokens, SUPPORTED_MODELS[model]['max_length']),
+                "return_full_text": False,
+                "do_sample": True
+            }
+        }
+
+        if stream:
+            full_response = ""
+            async for chunk in stream_huggingface_response(messages, model, temperature, max_tokens):
+                full_response += chunk
+            return full_response
+
+        # Non-streaming request
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"https://api-inference.huggingface.co/models/{model}",
+                headers=headers,
+                json=data
+            ) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    raise Exception(f"HuggingFace API error: {response.status} - {error_text}")
+
+                result = await response.json()
+
+                # Handle different response formats
+                if isinstance(result, list):
+                    text = result[0].get("generated_text", "")
+                elif isinstance(result, dict):
+                    text = result.get("generated_text", "")
+                else:
+                    text = str(result)
+
+                # Clean up the response
+                text = text.strip()
+                if text.endswith("</s>"):
+                    text = text[:-4]
+
+                return text
+
+    except Exception as e:
+        logger.error(f"Error in HuggingFace chat: {str(e)}")
+        raise

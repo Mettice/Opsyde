@@ -1023,58 +1023,170 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
           >
             <option value="">Select Framework</option>
-            <option value="openai">OpenAI</option>
-            <option value="huggingface">HuggingFace</option>
-            <option value="langchain">LangChain</option>
-            <option value="autogen">AutoGen</option>
-            <option value="crewai">CrewAI</option>
-            <option value="llamaindex">LlamaIndex</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="webhook">Webhook</option>
+            {FRAMEWORK_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
 
         {formData.framework && (
-          <div className="framework-config p-4 bg-gray-50 rounded-lg">
+          <div className="framework-config p-4 bg-gray-50 rounded-lg border">
+            <h3 className="text-sm font-semibold mb-3">{formData.framework.toUpperCase()} Configuration</h3>
             {renderFrameworkFields()}
           </div>
         )}
 
-        <div className="form-group">
-          <label className="block text-sm font-medium text-gray-700">
+        {/* Common fields for all tools */}
+        <div className="form-group mt-4 pt-4 border-t border-gray-200">
+          <label className="block text-sm text-gray-700">
             Parameters
             <span className="ml-1 text-xs text-gray-500">(Variables available in prompt template)</span>
           </label>
           <textarea
-            value={formData.parameters || ''}
+            value={formData.parameters}
             onChange={(e) => handleInputChange('parameters', e.target.value)}
             placeholder="Enter parameters in JSON format"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"
+            className="w-full p-2 border rounded font-mono text-sm"
             rows="4"
           />
-          <div className="mt-1 text-xs text-gray-500">
+          <div className="text-xs text-gray-500 mt-1">
             Example: {"{\n  \"location\": \"string\",\n  \"temperature\": \"number\"\n}"}
           </div>
         </div>
 
         <div className="form-group">
-          <label className="block text-sm font-medium text-gray-700">
-            🧠 Condition to Run
-            <span className="ml-1 text-xs text-gray-500">(Optional)</span>
+          <label className="block text-sm font-semibold text-gray-800 mb-1">
+            🧠 Condition to Run (optional)
+            <HelpTooltip type="tool" field="condition" />
           </label>
           <input
             type="text"
-            value={formData.condition || ''}
+            value={formData.condition || ""}
             onChange={(e) => handleInputChange('condition', e.target.value)}
             placeholder="e.g. inputs.score > 80"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
           />
-          <div className="mt-1 text-xs text-gray-500">
+          <div className="mt-2 text-xs text-gray-500">
             This node will only execute if the condition is true.<br />
             Use <code className="bg-gray-100 px-1 py-0.5 rounded">inputs.*</code> to reference input values.
           </div>
         </div>
       </div>
+    );
+  };
+
+  const renderChatFields = () => {
+    return (
+      <>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Framework
+          </label>
+          <select
+            className="w-full border rounded px-3 py-2"
+            value={formData.framework || "openai"}
+            onChange={(e) => setFormData({ ...formData, framework: e.target.value })}
+          >
+            <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="huggingface">HuggingFace</option>
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Model
+          </label>
+          <select
+            className="w-full border rounded px-3 py-2"
+            value={formData.llmModel || "gpt-3.5-turbo"}
+            onChange={(e) => setFormData({ ...formData, llmModel: e.target.value })}
+          >
+            {formData.framework === "openai" && (
+              <>
+                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              </>
+            )}
+            {formData.framework === "openrouter" && (
+              <>
+                <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
+                <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
+                <option value="google/gemini-pro">Gemini Pro</option>
+              </>
+            )}
+            {formData.framework === "huggingface" && (
+              <>
+                <option value="meta-llama/Llama-2-70b-chat-hf">Llama 2 70B</option>
+                <option value="mistralai/Mistral-7B-Instruct-v0.2">Mistral 7B</option>
+                <option value="google/flan-t5-xxl">Flan T5 XXL</option>
+              </>
+            )}
+          </select>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            System Prompt
+          </label>
+          <textarea
+            className="w-full border rounded px-3 py-2"
+            rows={4}
+            value={formData.prompt || ""}
+            onChange={(e) => setFormData({ ...formData, prompt: e.target.value })}
+            placeholder="Enter the system prompt for the chatbot..."
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Temperature
+          </label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value={formData.temperature || 0.7}
+            onChange={(e) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+            className="w-full"
+          />
+          <div className="text-sm text-gray-500 text-right">
+            {formData.temperature || 0.7}
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Max Tokens
+          </label>
+          <input
+            type="number"
+            className="w-full border rounded px-3 py-2"
+            value={formData.max_tokens || 500}
+            onChange={(e) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
+            min="100"
+            max="4000"
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={formData.memory || false}
+              onChange={(e) => setFormData({ ...formData, memory: e.target.checked })}
+              className="rounded"
+            />
+            <span className="text-sm font-medium text-gray-700">
+              Enable Conversation Memory
+            </span>
+          </label>
+        </div>
+      </>
     );
   };
 

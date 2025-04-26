@@ -461,8 +461,66 @@ class UnifiedRunner:
         self._register_frameworks()
         logger.info("UnifiedRunner initialized with frameworks: %s", list(self.frameworks.keys()))
 
+    async def run_agent_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run an agent node"""
+        try:
+            # Extract agent configuration
+            agent_name = node_data.get('label', 'Unnamed Agent')
+            role = node_data.get('role', '')
+            goal = node_data.get('goal', '')
+            backstory = node_data.get('backstory', '')
+            llm_model = node_data.get('llmModel', 'gpt-4')
+            temperature = float(node_data.get('temperature', 0.7))
+            max_tokens = int(node_data.get('max_tokens', 500))
+            allow_delegation = bool(node_data.get('allowDelegation', False))
+            memory_enabled = bool(node_data.get('enableMemory', False))
+            
+            # Create agent result
+            result = {
+                "type": "agent_status",
+                "agent_name": agent_name,
+                "role": role,
+                "goal": goal,
+                "llm_model": llm_model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "allow_delegation": allow_delegation,
+                "memory_enabled": memory_enabled,
+                "status": "initialized",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Add any inputs to the result
+            if inputs:
+                result["inputs"] = inputs
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in agent node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "agent_name": node_data.get('label', 'Unnamed Agent'),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def _register_node_runners(self):
+        """Register all node runners"""
+        self.node_runners = {
+            'agent': self.run_agent_node,
+            'task': self.run_task_node,
+            'tool': self.run_tool_node,
+            'chat': self.run_chat_node,
+            'trigger': self.run_trigger_node,
+            'input': self.run_input_node,
+            'output': self.run_output_node,
+            'delay': self.run_delay_node,
+            'logic': self.run_logic_node
+        }
+
     def _register_frameworks(self):
-        """Dynamically register available frameworks"""
+        """Register available frameworks"""
         try:
             # Register HuggingFace framework
             from frameworks.huggingface_runner import run_huggingface_tool
@@ -473,14 +531,12 @@ class UnifiedRunner:
             self.frameworks["openai"] = self.run_openai_tool
             logger.info("Registered OpenAI framework")
             
-            # Register other frameworks as needed
-            # Example:
-            # from frameworks.some_runner import run_some_tool
-            # self.frameworks["some_framework"] = run_some_tool
+            # Register node runners after frameworks
+            self._register_node_runners()
             
         except ImportError as e:
             logger.warning(f"Failed to register framework: {str(e)}")
-            
+
     async def run_openai_tool(self, tool_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
         """Execute OpenAI-based tool"""
         try:
@@ -706,31 +762,37 @@ class UnifiedRunner:
                 {"config": config}
             )
 
-    async def run_trigger_node(self, input_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
-        """Handle trigger node execution including file uploads"""
+    async def run_trigger_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a trigger node"""
         try:
-            logger.info("Executing trigger node with input_data: %s", input_data)
+            trigger_type = node_data.get('triggerType', 'manual')
+            trigger_id = node_data.get('nodeId')
             
-            # Handle file upload if present
-            if "file" in input_data:
-                file_data = input_data["file"]
-                if isinstance(file_data, str):
-                    # Handle base64 encoded file
-                    file_content = base64.b64decode(file_data).decode('utf-8')
-                    inputs["file_content"] = file_content
-                else:
-                    # Handle direct file content
-                    inputs["file_content"] = file_data
-                    
-            return {
+            if not trigger_id:
+                raise ValueError("Trigger node requires a nodeId")
+                
+            result = {
                 "type": "trigger_result",
-                "inputs": inputs,
+                "trigger_type": trigger_type,
+                "trigger_id": trigger_id,
+                "status": "triggered",
                 "timestamp": datetime.now().isoformat()
             }
             
+            # Add any inputs to the result
+            if inputs:
+                result["inputs"] = inputs
+                
+            return result
+            
         except Exception as e:
             logger.error(f"Error in trigger node: {str(e)}")
-            return {"type": "error", "error": str(e)}
+            return {
+                "type": "error",
+                "error": str(e),
+                "trigger_id": node_data.get('nodeId'),
+                "timestamp": datetime.now().isoformat()
+            }
 
     async def run_agent_task_node(self, agent_data: Dict[str, Any], task_data: Dict[str, Any], inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
         """Execute agent task with proper settings"""
@@ -798,22 +860,234 @@ CV Data:
                 {"agent_data": agent_data, "task_data": task_data, "traceback": str(e.__traceback__)}
             )
 
-    async def run_output_node(self, output_data: Dict[str, Any], result: Dict[str, Any] = {}) -> Dict[str, Any]:
+    async def run_output_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
         """Handle output node execution"""
         try:
-            logger.info(f"Executing output node with data: {output_data}")
+            # Extract output configuration
+            output_type = node_data.get('outputType', 'webhook')
             
-            # For now, just echo back the output with result
-            return {
+            # Format the result based on output type
+            result = {
                 "type": "output_result",
-                "output_node": output_data,
-                "result": result,
+                "output_node": {
+                    "label": node_data.get('label', 'Output'),
+                    "outputType": output_type,
+                    "description": node_data.get('description', ''),
+                    "nodeId": node_data.get('nodeId'),
+                    "nodeType": "output"
+                },
+                "result": inputs or {},
                 "timestamp": datetime.now().isoformat()
             }
-            
+
+            # Add type-specific configuration
+            if output_type == 'webhook':
+                result["output_node"]["webhook_url"] = node_data.get('webhookUrl', '')
+            elif output_type == 'email':
+                result["output_node"]["email"] = node_data.get('email', '')
+            elif output_type == 'sheets':
+                result["output_node"]["sheetId"] = node_data.get('sheetId', '')
+            elif output_type == 'discord':
+                result["output_node"]["webhook_url"] = node_data.get('webhookUrl', '')
+
+            # Process output based on type
+            if output_type == 'email':
+                from email_runner import send_email
+                email_result = send_email(result, node_data.get('email'))
+                result["email_status"] = email_result
+            elif output_type == 'webhook':
+                webhook_url = node_data.get('webhookUrl')
+                if webhook_url:
+                    try:
+                        async with aiohttp.ClientSession() as session:
+                            async with session.post(webhook_url, json=result) as response:
+                                result["webhook_status"] = {
+                                    "status_code": response.status,
+                                    "success": 200 <= response.status < 300
+                                }
+                    except Exception as e:
+                        result["webhook_status"] = {
+                            "error": str(e),
+                            "success": False
+                        }
+            elif output_type == 'sheets':
+                from sheets_runner import push_to_sheet
+                sheet_result = push_to_sheet(result, node_data.get('sheetId'))
+                result["sheets_status"] = sheet_result
+            elif output_type == 'discord':
+                from discord_runner import post_to_discord
+                discord_result = post_to_discord(result, node_data.get('webhookUrl'))
+                result["discord_status"] = discord_result
+
+            return result
+
         except Exception as e:
             logger.error(f"Error in output node: {str(e)}")
-            return {"type": "error", "error": str(e)}
+            return {
+                "type": "error",
+                "error": str(e),
+                "output_type": node_data.get('outputType', 'webhook'),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    async def run_input_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Handle input node execution"""
+        try:
+            # Extract input configuration
+            input_type = node_data.get('inputType', 'text')
+            variable_name = node_data.get('variableName', '')
+            is_required = bool(node_data.get('isRequired', False))
+            
+            # Get the input value
+            input_value = None
+            if inputs:
+                if isinstance(inputs, dict):
+                    # Try to get the value from different possible locations
+                    if 'value' in inputs:
+                        input_value = inputs['value']
+                    elif 'text_input' in inputs:
+                        input_value = inputs['text_input']
+                    elif 'file_upload' in inputs:
+                        input_value = inputs['file_upload']
+                else:
+                    input_value = inputs
+
+            # Validate required input
+            if is_required and not input_value:
+                return {
+                    "type": "error",
+                    "error": f"Required input '{variable_name}' is missing",
+                    "input_type": input_type,
+                    "timestamp": datetime.now().isoformat()
+                }
+
+            # Format the result
+            result = {
+                "type": "input_result",
+                "input_type": input_type,
+                "variable_name": variable_name,
+                "value": input_value,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in input node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "input_type": node_data.get('inputType', 'text'),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    async def run_task_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a task node"""
+        try:
+            # Extract task configuration
+            task_name = node_data.get('label', 'Unnamed Task')
+            description = node_data.get('description', '')
+            expected_output = node_data.get('expectedOutput', '')
+            is_async = bool(node_data.get('async', False))
+            
+            # Format input data
+            formatted_inputs = {}
+            if inputs:
+                for key, value in inputs.items():
+                    if isinstance(value, dict):
+                        if 'output' in value:
+                            formatted_inputs[key] = value['output']
+                        elif 'value' in value:
+                            formatted_inputs[key] = value['value']
+                        elif 'result' in value:
+                            formatted_inputs[key] = value['result']
+                        else:
+                            formatted_inputs[key] = value
+                    else:
+                        formatted_inputs[key] = value
+
+            # Check for connected agents
+            connected_agents = inputs.get('connected_agents', [])
+            if not connected_agents:
+                logger.warning(f"No agents connected to task: {task_name}")
+
+            # Create task result
+            result = {
+                "type": "task_result",
+                "task_name": task_name,
+                "description": description,
+                "expected_output": expected_output,
+                "is_async": is_async,
+                "inputs": formatted_inputs,
+                "status": "initialized",
+                "timestamp": datetime.now().isoformat()
+            }
+
+            # Add connected agents info if available
+            if connected_agents:
+                result["agents"] = connected_agents
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error in task node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "task_name": node_data.get('label', 'Unnamed Task'),
+                "timestamp": datetime.now().isoformat()
+            }
+
+    async def run_chat_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a chat node by delegating to the existing chat_runner"""
+        try:
+            from chat_runner import run_chat_node
+            return await run_chat_node(node_data, inputs or {})
+        except Exception as e:
+            logger.error(f"Error in chat node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "chat",
+                    "session_id": node_data.get("nodeId", "default")
+                }
+            }
+
+    async def run_delay_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a delay node by delegating to the existing delay_runner"""
+        try:
+            from delay_runner import run_delay_node
+            return await run_delay_node(node_data, inputs or {})
+        except Exception as e:
+            logger.error(f"Error in delay node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "delay",
+                    "session_id": node_data.get("nodeId", "default")
+                }
+            }
+
+    async def run_logic_node(self, node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run a logic node by delegating to the existing logic_runner"""
+        try:
+            from logic_runner import run_logic_node
+            return await run_logic_node(node_data, inputs or {})
+        except Exception as e:
+            logger.error(f"Error in logic node: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "logic",
+                    "session_id": node_data.get("nodeId", "default")
+                }
+            }
 
 async def process_node(node: Dict[str, Any], inputs: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Process a single node in the workflow"""
@@ -847,9 +1121,9 @@ async def process_node(node: Dict[str, Any], inputs: Dict[str, Any], context: Op
             chat_data["nodeType"] = "chat"
             return await run_chat_node(chat_data, inputs)
         elif node_type == "delay":
-            return await run_delay_node(node, inputs)
+            return await process_node.runner.run_delay_node(node, inputs)
         elif node_type == "logic":
-            return await run_logic_node(node, inputs, context)
+            return await process_node.runner.run_logic_node(node, inputs)
         else:
             return {"error": f"No executor found for node type: {node_type}", "type": "error"}
 
