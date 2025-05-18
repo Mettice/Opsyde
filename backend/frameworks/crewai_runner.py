@@ -290,3 +290,107 @@ async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dic
             "type": "error",
             "error": str(e)
         }
+
+async def run_crewai_agent(agent_data: Dict[str, Any], query: str, file_data: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Run a CrewAI agent with a single query and optional file data
+    
+    Args:
+        agent_data (dict): Agent configuration
+        query (str): The query to process
+        file_data (dict, optional): File data including filename and content
+        
+    Returns:
+        dict: The result of the agent execution
+    """
+    try:
+        logger.info(f"Running CrewAI agent with query: {query}")
+        if file_data:
+            logger.info(f"File included: {file_data.get('filename', 'unnamed file')}")
+        
+        # Extract agent configuration
+        role = agent_data.get("role", "Assistant")
+        goal = agent_data.get("goal", "Help the user")
+        backstory = agent_data.get("backstory", "")
+        llm_config = agent_data.get("llm_config", {})
+        
+        # Extract LLM parameters
+        model = llm_config.get("model", "gpt-4")
+        temperature = llm_config.get("temperature", 0.7)
+        max_tokens = llm_config.get("max_tokens", 1000)
+        
+        # Import CrewAI components
+        from crewai import Agent, Task, Crew, Process
+        
+        # Configure LLM
+        try:
+            from langchain_openai import ChatOpenAI
+            
+            # Get API key from environment
+            import os
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable not set")
+                
+            # Create LLM
+            llm = ChatOpenAI(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                api_key=api_key
+            )
+        except ImportError:
+            # Fall back to default CrewAI LLM
+            llm = None
+        
+        # Enhance query with file information if available
+        enhanced_query = query
+        if file_data:
+            # For simple text files that are not too large, include content
+            content = file_data.get('content', '')
+            if file_data.get('filename', '').endswith(('.txt', '.md', '.csv')) and len(content) < 10000:
+                enhanced_query = f"{query}\n\nFile content from {file_data.get('filename')}:\n\n{content}"
+            else:
+                # For other files, just mention the file
+                enhanced_query = f"{query}\n\nPlease analyze the file: {file_data.get('filename')}"
+            
+        # Create agent
+        agent = Agent(
+            role=role,
+            goal=goal,
+            backstory=backstory,
+            verbose=True,
+            allow_delegation=False,
+            llm=llm
+        )
+        
+        # Create task
+        task = Task(
+            description=enhanced_query,
+            expected_output="A detailed and accurate response",
+            agent=agent
+        )
+        
+        # Create crew with single agent
+        crew = Crew(
+            agents=[agent],
+            tasks=[task],
+            process=Process.sequential,
+            verbose=True
+        )
+        
+        # Run the crew
+        logger.info("Executing CrewAI crew")
+        result = crew.kickoff()
+        
+        return {
+            "output": result,
+            "type": "crewai_result",
+            "agent_role": role,
+            "query": query,
+            "file": file_data.get('filename') if file_data else None
+        }
+            
+    except Exception as e:
+        logger.error(f"Error in run_crewai_agent: {str(e)}")
+        raise Exception(f"CrewAI execution failed: {str(e)}")

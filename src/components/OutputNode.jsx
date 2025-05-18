@@ -2,8 +2,23 @@ import React, { useCallback, memo, useRef, useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
+// Safe accessor helper function
+const safeAccess = (obj, path, defaultValue = null) => {
+  if (!obj) return defaultValue;
+  
+  const parts = path.split('.');
+  let result = obj;
+  
+  for (const part of parts) {
+    if (result === null || result === undefined) return defaultValue;
+    result = result[part];
+  }
+  
+  return result !== undefined ? result : defaultValue;
+};
+
 const OutputNode = memo(({ data, isConnectable, selected }) => {
- 
+  // State for hiding API endpoint/details
   const [hideApiEndpoint, setHideApiEndpoint] = useState(true);
   
   // Create stable event handlers with useCallback
@@ -37,111 +52,91 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
- 
-  
+  // Toggle API endpoint visibility
+  const toggleApiVisibility = useCallback((e) => {
+    e.stopPropagation();
+    setHideApiEndpoint(prev => !prev);
+  }, []);
+
   const outputType = data.outputType || 'webhook';
   
   return (
-    <div
-      
-      style={{
-        background: 'white',
-        border: `2px solid ${selected ? '#3b82f6' : '#99f6e4'}`,
-        borderRadius: '0.5rem',
-        padding: '0.75rem',
-        width: '16rem',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        position: 'relative'
-      }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Target handle */}
+    <div className={`bg-white border-2 ${selected ? 'border-blue-500' : 'border-gray-200'} rounded-lg p-4 min-w-[240px] shadow-md`}>
       <Handle
         type="target"
         position={Position.Top}
-        style={{ background: '#0d9488', width: '12px', height: '12px', top: '-6px' }}
+        style={{
+          top: -5,
+          width: 16,
+          height: 16,
+          background: '#3B82F6',
+          border: '3px solid white',
+          borderRadius: '50%'
+        }}
         isConnectable={isConnectable}
       />
       
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '0.5rem' }}>
-        <div style={{ 
-          width: '2rem', 
-          height: '2rem', 
-          borderRadius: '9999px', 
-          backgroundColor: '#ccfbf1', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          marginRight: '0.5rem',
-          color: '#0d9488'
-        }}>
-          {outputType === 'discord' ? '💬' : 
-           outputType === 'sheets' ? '📊' : 
-           outputType === 'email' ? '📧' : '📤'}
-        </div>
-        <div>
-          <div style={{ fontWeight: 'bold', color: '#1f2937' }}>{data.label || 'Output'}</div>
-          <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{outputType} output</div>
+      <div className="flex items-start justify-between">
+        <div className="flex items-center">
+          <span className="text-xl mr-2">📤</span>
+          <div>
+            <h3 className="font-medium text-gray-800">{data.label || 'Output'}</h3>
+            <div className="text-sm text-gray-500 mt-1">{outputType}</div>
+          </div>
         </div>
       </div>
       
-      {/* Output details */}
-      <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem' }}>
-        <span style={{ fontWeight: '500' }}>Type:</span> {outputType.charAt(0).toUpperCase() + outputType.slice(1)}
-      </div>
-      
-      {outputType === 'webhook' && data.webhookUrl && (
-        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ fontWeight: '500' }}>URL:</span> {data.webhookUrl}
+      {/* Configuration section */}
+      {outputType === 'webhook' && data.webhook && (
+        <div className="mt-3 text-sm">
+          <button
+            onClick={toggleApiVisibility}
+            className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded flex items-center"
+          >
+            {hideApiEndpoint ? '👁️ Show Webhook URL' : '🔒 Hide Webhook URL'}
+          </button>
+          
+          {!hideApiEndpoint && (
+            <div className="mt-2 text-xs font-mono bg-gray-50 p-2 rounded border border-gray-200 break-all">
+              {data.webhook}
+            </div>
+          )}
         </div>
       )}
       
-      {outputType === 'discord' && data.webhookUrl && (
-        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ fontWeight: '500' }}>Webhook:</span> {data.webhookUrl}
+      {outputType === 'email' && (
+        <div className="mt-3 bg-gray-50 p-2 rounded text-xs">
+          <div className="text-gray-600">Email: {data.email || 'Not set'}</div>
         </div>
       )}
       
-      {outputType === 'sheets' && data.sheetId && (
-        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ fontWeight: '500' }}>Sheet ID:</span> {data.sheetId}
+      {outputType === 'discord' && (
+        <div className="mt-3 bg-gray-50 p-2 rounded text-xs">
+          <div className="text-gray-600">Webhook configured: {data.webhook ? 'Yes' : 'No'}</div>
         </div>
       )}
       
-      {outputType === 'email' && data.email && (
-        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          <span style={{ fontWeight: '500' }}>Email:</span> {data.email}
+      {outputType === 'sheets' && (
+        <div className="mt-3 bg-gray-50 p-2 rounded text-xs">
+          <div className="text-gray-600">Sheet ID: {data.sheetId || 'Not set'}</div>
         </div>
       )}
       
-      {data.description && (
-        <div style={{ fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.5rem' }}>
-          <span style={{ fontWeight: '500' }}>Description:</span> {data.description}
-        </div>
-      )}
+      {/* Don't render results here - they should only appear in the execution panel */}
       
       {/* Action buttons */}
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button
-         
+      <div className="flex mt-3 pt-2 border-t border-gray-100 space-x-2">
+        <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }}
+          onClick={handleEditClick}
           className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
         
-        <button
-          
+        <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }}
+          onClick={handleDeleteClick}
           className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete

@@ -2,36 +2,47 @@ import json
 import logging
 import base64
 import io
-from PyPDF2 import PdfReader
-import spacy
-from datetime import datetime
 import re
 import tempfile
 import os
 import sys
 from pathlib import Path
-import PyPDF2
-import docx
 from typing import Dict, Any
 from datetime import datetime
 
-# Add the parent directory to sys.path to allow imports from tools
-backend_dir = str(Path(__file__).parent.parent)
-if backend_dir not in sys.path:
-    sys.path.append(backend_dir)
-
-from tools.parse_cv import parse_uploaded_cv
-
+# Configure logger
 logger = logging.getLogger(__name__)
 
-# Load spaCy model
+# Check if required packages are available
+CV_PARSER_AVAILABLE = False
 try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    logger.warning("Downloading spaCy model...")
-    import subprocess
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
+    from PyPDF2 import PdfReader
+    import spacy
+    import docx
+    CV_PARSER_AVAILABLE = True
+    logger.info("CV Parser dependencies available")
+    
+    # Add the parent directory to sys.path to allow imports from tools
+    backend_dir = str(Path(__file__).parent.parent)
+    if backend_dir not in sys.path:
+        sys.path.append(backend_dir)
+    
+    try:
+        from tools.parse_cv import parse_uploaded_cv
+    except ImportError:
+        logger.warning("Could not import parse_cv from tools")
+    
+    # Load spaCy model
+    try:
+        nlp = spacy.load("en_core_web_sm")
+    except OSError:
+        logger.warning("Downloading spaCy model...")
+        import subprocess
+        subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+        nlp = spacy.load("en_core_web_sm")
+    
+except ImportError as e:
+    logger.warning(f"CV Parser not available - missing dependencies: {str(e)}")
 
 def debug_print_structure(obj, prefix=""):
     """Helper function to print nested structure"""
@@ -88,6 +99,9 @@ def find_file_data_recursive(obj, depth=0, path=""):
 
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes"""
+    if not CV_PARSER_AVAILABLE:
+        return "PDF parsing not available - missing dependencies"
+        
     try:
         pdf_file = io.BytesIO(pdf_bytes)
         pdf_reader = PdfReader(pdf_file)
@@ -108,6 +122,9 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
 
 def extract_text_from_docx(docx_bytes: bytes) -> str:
     """Extract text from DOCX bytes"""
+    if not CV_PARSER_AVAILABLE:
+        return "DOCX parsing not available - missing dependencies"
+        
     try:
         doc = docx.Document(io.BytesIO(docx_bytes))
         text = ""
@@ -120,6 +137,9 @@ def extract_text_from_docx(docx_bytes: bytes) -> str:
 
 def extract_skills(text):
     """Extract skills from text"""
+    if not CV_PARSER_AVAILABLE:
+        return ["Skills extraction not available - missing dependencies"]
+        
     skills = set()
     
     # Look for skills section
@@ -149,6 +169,9 @@ def extract_skills(text):
 
 def extract_experience(text: str) -> float:
     """Extract total years of experience, handling real CV formats"""
+    if not CV_PARSER_AVAILABLE:
+        return 0.0
+        
     import re
     from datetime import datetime
 
@@ -204,61 +227,72 @@ def extract_experience(text: str) -> float:
 
 
 def extract_education(text: str) -> list:
-    """Extract education information from CV text"""
+    """Extract clean education and certifications from CV text"""
+    if not CV_PARSER_AVAILABLE:
+        return [{"degree": "Unknown", "field": "Education extraction not available - missing dependencies"}]
+
     education = []
-    
-    # Look for education section with different possible headers
-    edu_section = ""
-    if "Education" in text:
-        edu_section = text.split("Education")[1].split("---")[0]
-    elif "Academic Background" in text:
-        edu_section = text.split("Academic Background")[1].split("---")[0]
-    elif "Academic Qualifications" in text:
-        edu_section = text.split("Academic Qualifications")[1].split("---")[0]
-    
-    if edu_section:
-        # Pattern for degree and field
-        degree_pattern = r"(Bachelor|Master|PhD|B\.Sc\.|M\.Sc\.|B\.Eng\.|M\.Eng\.)\s*(?:in|of)?\s*(.*?)(?=\d{4}|$)"
-        matches = re.finditer(degree_pattern, edu_section, re.MULTILINE | re.IGNORECASE)
-        
-        for match in matches:
-            field_raw = match.group(2).strip()
-            # Clean up the field text
-            field_clean = re.sub(r"[^a-zA-Z0-9\s\-\(\)/]", "", field_raw)  # Remove special chars
-            field_clean = re.sub(r"\s+", " ", field_clean).strip()  # Normalize whitespace
-            field_clean = re.sub(r"\b(?:in|of|and|the|a|an)\b", "", field_clean, flags=re.IGNORECASE)  # Remove common words
-            field_clean = re.sub(r"\s+", " ", field_clean).strip()  # Normalize whitespace again
-            
-            # Skip if field is too short or contains common invalid patterns
-            if len(field_clean) > 2 and not any(x in field_clean.lower() for x in ["'s", "degree", "in", "of", "and", "the"]):
-                education.append({
-                    "degree": match.group(1),
-                    "field": field_clean
-                })
-    
-    # Look for certifications section with different possible headers
-    cert_section = ""
-    if "Certifications" in text:
-        cert_section = text.split("Certifications")[1].split("---")[0]
-    elif "Professional Certifications" in text:
-        cert_section = text.split("Professional Certifications")[1].split("---")[0]
-    elif "Certificates" in text:
-        cert_section = text.split("Certificates")[1].split("---")[0]
-    
-    if cert_section:
-        for line in cert_section.split('\n'):
-            if line.strip().startswith('-'):
-                cert = line.strip('- ').strip()
-                if cert and len(cert) > 5:  # Avoid short/invalid entries
-                    education.append({
-                        "degree": "Certification",
-                        "field": cert
-                    })
-    
+    pattern = r"(Bachelor|Master|PhD|B\.Sc\.|M\.Sc\.|B\.Eng\.|M\.Eng\.)\s*(?:in|of)?\s*(.*?)(?=\d{4}|$)"
+    for match in re.finditer(pattern, text, re.IGNORECASE):
+        field = re.sub(r"[^\w\s\-\/&]", "", match.group(2)).strip()
+        if 2 < len(field) < 80:  # Ignore overly long matches
+            education.append({"degree": match.group(1), "field": field})
+
+    cert_pattern = r"(?:Certifications|Certificates|Courses)\s*(.*?)\s*(?=(?:Experience|Skills|Education|$))"
+    for cert_match in re.finditer(cert_pattern, text, re.IGNORECASE | re.DOTALL):
+        lines = cert_match.group(1).split("\n")
+        for line in lines:
+            line = line.strip("- •\t ")
+            if len(line) > 5 and not line.lower().startswith("linkedin"):
+                education.append({"degree": "Certification", "field": line})
+
     return education
 
-async def run_cv_parser_tool(node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+def extract_contact(text: str) -> dict:
+    """Extract contact information from CV text"""
+    if not CV_PARSER_AVAILABLE:
+        return {"status": "Contact extraction not available - missing dependencies"}
+
+    contact = {}
+    
+    # Email
+    email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
+    if email_match:
+        contact["email"] = email_match.group(0)
+    
+    # Phone
+    phone_match = re.search(r'(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+    if phone_match:
+        contact["phone"] = phone_match.group(0)
+    
+    # LinkedIn
+    linkedin_match = re.search(r'(?:linkedin\.com/in/|linkedin\.com/company/)[\w-]+', text)
+    if linkedin_match:
+        contact["linkedin"] = linkedin_match.group(0)
+
+    # GitHub
+    github_match = re.search(r'(?:github\.com/|github\.com/)[\w-]+', text)
+    if github_match:
+        contact["github"] = github_match.group(0)
+    
+    return contact
+
+async def run_cv_parser_tool(node_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
     """Run the CV parser tool with the given node data and inputs"""
+    if not CV_PARSER_AVAILABLE:
+        logger.warning("CV Parser not available - missing dependencies")
+        return {
+            "type": "cv_result",
+            "data": {
+                "experience_years": 0,
+                "skills": ["CV Parser not available - missing dependencies"],
+                "education": [{"degree": "Unknown", "field": "CV Parser not available - missing dependencies"}],
+                "contact": {"status": "CV Parser not available - missing dependencies"},
+                "filename": "unknown",
+                "extracted_text": "CV Parser not available - missing dependencies"
+            }
+        }
+    
     try:
         logger.info("Starting CV parser tool execution")
         logger.info(f"Node data: {json.dumps(node_data, default=str)}")
@@ -312,68 +346,3 @@ async def run_cv_parser_tool(node_data: Dict[str, Any], inputs: Dict[str, Any]) 
             "error": f"Error in CV parser tool: {str(e)}",
             "type": "error"
         }
-
-def extract_skills(text: str) -> list:
-    """Extract skills from CV text"""
-    # Common skill keywords
-    skill_keywords = [
-        "python", "java", "javascript", "typescript", "react", "angular", "vue",
-        "node.js", "django", "flask", "fastapi", "sql", "nosql", "mongodb",
-        "postgresql", "mysql", "aws", "azure", "gcp", "docker", "kubernetes",
-        "machine learning", "deep learning", "nlp", "computer vision",
-        "data analysis", "data science", "big data", "hadoop", "spark"
-    ]
-    
-    found_skills = []
-    for skill in skill_keywords:
-        if re.search(rf"\b{skill}\b", text.lower()):
-            found_skills.append(skill)
-    
-    return found_skills
-
-
-
-def extract_education(text: str) -> list:
-    """Extract clean education and certifications from CV text"""
-    education = []
-    pattern = r"(Bachelor|Master|PhD|B\.Sc\.|M\.Sc\.|B\.Eng\.|M\.Eng\.)\s*(?:in|of)?\s*(.*?)(?=\d{4}|$)"
-    for match in re.finditer(pattern, text, re.IGNORECASE):
-        field = re.sub(r"[^\w\s\-\/&]", "", match.group(2)).strip()
-        if 2 < len(field) < 80:  # Ignore overly long matches
-            education.append({"degree": match.group(1), "field": field})
-
-    cert_pattern = r"(?:Certifications|Certificates|Courses)\s*(.*?)\s*(?=(?:Experience|Skills|Education|$))"
-    for cert_match in re.finditer(cert_pattern, text, re.IGNORECASE | re.DOTALL):
-        lines = cert_match.group(1).split("\n")
-        for line in lines:
-            line = line.strip("- •\t ")
-            if len(line) > 5 and not line.lower().startswith("linkedin"):
-                education.append({"degree": "Certification", "field": line})
-
-    return education
-
-def extract_contact(text: str) -> dict:
-    """Extract contact information from CV text"""
-    contact = {}
-    
-    # Email
-    email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', text)
-    if email_match:
-        contact["email"] = email_match.group(0)
-    
-    # Phone
-    phone_match = re.search(r'(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
-    if phone_match:
-        contact["phone"] = phone_match.group(0)
-    
-    # LinkedIn
-    linkedin_match = re.search(r'(?:linkedin\.com/in/|linkedin\.com/company/)[\w-]+', text)
-    if linkedin_match:
-        contact["linkedin"] = linkedin_match.group(0)
-
-    # GitHub
-    github_match = re.search(r'(?:github\.com/|github\.com/)[\w-]+', text)
-    if github_match:
-        contact["github"] = github_match.group(0)
-    
-    return contact

@@ -1,5 +1,8 @@
 export const validateConnection = (params, nodes, edges, toast) => {
-  const { source, target, sourceHandle } = params;
+  const { source, target, sourceHandle, targetHandle } = params;
+  
+  // Log connection parameters for debugging
+  console.log('Connection params:', { source, target, sourceHandle, targetHandle });
   
   const sourceNode = nodes.find(n => n.id === source);
   const targetNode = nodes.find(n => n.id === target);
@@ -17,17 +20,22 @@ export const validateConnection = (params, nodes, edges, toast) => {
   const from = sourceNode.type;
   const to = targetNode.type;
   
+  // Log node types
+  console.log('Connecting nodes:', { from, to, sourceHandle, targetHandle });
+  
   // === Agent to Task Assignment ===
   if (from === 'agent' && to === 'task') {
     console.log('Validating agent-task connection:', {
       agent: sourceNode.data,
-      task: targetNode.data
+      task: targetNode.data,
+      sourceHandle,
+      targetHandle
     });
 
     // Check if task already has an agent assigned
     const existingAgentEdge = edges.find(edge => {
       const edgeSourceNode = nodes.find(n => n.id === edge.source);
-      return edge.target === target && edgeSourceNode?.type === 'agent';
+      return edge.target === target && edgeSourceNode?.type === 'agent' && edge.targetHandle === 'agent';
     });
 
     if (existingAgentEdge) {
@@ -35,22 +43,27 @@ export const validateConnection = (params, nodes, edges, toast) => {
       return false;
     }
 
-    // Update the task node's data with agent information
-    const taskNodeIndex = nodes.findIndex(n => n.id === target);
-    if (taskNodeIndex !== -1) {
-      nodes[taskNodeIndex] = {
-        ...nodes[taskNodeIndex],
-        data: {
-          ...nodes[taskNodeIndex].data,
-          agentId: sourceNode.id,
-          agentName: sourceNode.data?.label || 'Unknown Agent',
-          agentRole: sourceNode.data?.role || 'Assistant'
-        }
-      };
-    }
+    // If connecting to the 'agent' handle, allow it regardless of sourceHandle
+    if (targetHandle === 'agent' || !targetHandle) {
+      params.targetHandle = 'agent'; // Ensure we're using the correct handle
+      
+      // Update the task node's data with agent information
+      const taskNodeIndex = nodes.findIndex(n => n.id === target);
+      if (taskNodeIndex !== -1) {
+        nodes[taskNodeIndex] = {
+          ...nodes[taskNodeIndex],
+          data: {
+            ...nodes[taskNodeIndex].data,
+            agentId: sourceNode.id,
+            agentName: sourceNode.data?.label || 'Unknown Agent',
+            agentRole: sourceNode.data?.role || 'Assistant'
+          }
+        };
+      }
 
-    console.log('Updated task data:', nodes[taskNodeIndex]?.data);
-    return true;
+      console.log('Updated task data:', nodes[taskNodeIndex]?.data);
+      return true;
+    }
   }
   
   // Check for existing connections if needed

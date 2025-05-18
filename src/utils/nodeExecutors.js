@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { apiClient } from '../api/client';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
@@ -41,118 +42,254 @@ function cleanDataForBackend(obj) {
 }
 
 // Unified node executor
-export const executeNode = async (node, inputs, previousResult = null, connectedAgentData = null) => {
+export async function executeNode(node, connectedAgentData, inputs = {}) {
   try {
+    // Prefer node.data.nodeType over node.type
+    const nodeType = node.data?.nodeType || node.type;
+    const nodeData = node.data || {};
+    const nodeId = node.id || nodeData.nodeId || "unknown";
+
+    // For task nodes, ensure we have a connected agent with proper data
+    if (nodeType === "task") {
+      if (!connectedAgentData || !Object.keys(connectedAgentData).length) {
+        throw new Error("Task execution requires a connected agent with valid data");
+      }
+
+      // Validate required agent fields
+      const requiredFields = ["framework", "llmModel", "temperature", "max_tokens"];
+      const missingFields = requiredFields.filter(field => !connectedAgentData[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required agent fields: ${missingFields.join(", ")}`);
+      }
+
+      // Sanitize and structure agent data
+      const sanitizedAgent = {
+        id: connectedAgentData.id || connectedAgentData.nodeId || "unknown-agent",
+        agent_id: connectedAgentData.id || connectedAgentData.nodeId || "unknown-agent",
+        framework: (connectedAgentData.framework || "openai").toLowerCase().trim(),
+        llmModel: connectedAgentData.llmModel || "gpt-4",
+        temperature: Math.min(Math.max(parseFloat(connectedAgentData.temperature || 0.7), 0), 1),
+        max_tokens: Math.min(Math.max(parseInt(connectedAgentData.max_tokens || 4000), 1), 8000),
+        memoryEnabled: Boolean(connectedAgentData.memoryEnabled),
+        role: connectedAgentData.role || "",
+        goal: connectedAgentData.goal || "",
+        backstory: connectedAgentData.backstory || "",
+        frameworkConfig: connectedAgentData.frameworkConfig || {}
+      };
+
+      // Sanitize and structure task data
+      const sanitizedTask = {
+        id: node.id || nodeData.nodeId || "unknown-task",
+        task_id: node.id || nodeData.nodeId || "unknown-task",
+        prompt: nodeData.prompt || "",
+        description: nodeData.description || "",
+        expectedOutput: nodeData.expectedOutput || "",
+        isAsync: Boolean(nodeData.async),
+        ...nodeData
+      };
+
+      // Call the agent-task endpoint
+      const response = await fetch(`${BACKEND_URL}/api/nodes/run-task`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          node_id: nodeId,
+          agent: sanitizedAgent,
+          inputs: cleanDataForBackend(inputs)
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || "Failed to execute task");
+      }
+
+      const result = await response.json();
+      return result;
+    }
+
+    // Handle other node types (chat, tool, etc.)
     const cleanedInputs = cleanDataForBackend(inputs);
-    const cleanedData = cleanDataForBackend(node.data);
-
+    
+    // Use the client API instead of direct axios calls
     let response;
-    if (node.type === "tool") {
-      response = await axios.post(`${BACKEND_URL}/api/run-tool`, { 
-        tool: cleanedData, 
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
-    } 
-    else if (node.type === "task") {
-      response = await axios.post(`${BACKEND_URL}/api/run-agent-task`, {
-        agent: connectedAgentData,
-        task: cleanedData,
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
+    
+    switch(nodeType) {
+      case "tool":
+        // Make sure to send all required tool data
+        const toolData = {
+          id: nodeId,
+          toolType: nodeData?.toolType || "llm",
+          framework: nodeData?.framework,
+          config: nodeData?.config || {},
+          inputs: cleanedInputs
+        };
+        console.log("Executing tool with data:", toolData);
+        
+        try {
+          response = await apiClient.executeTool(toolData);
+        } catch (error) {
+          console.error("Error executing tool node:", error, toolData);
+          throw error;
+        }
+        break;
+      case "input":
+        try {
+          console.log("Executing input node:", nodeId, cleanedInputs);
+          response = await apiClient.executeInputNode(nodeId, cleanedInputs);
+        } catch (error) {
+          console.error("Error executing input node:", error, nodeId, cleanedInputs);
+          throw error;
+        }
+        break;
+      case "agent":
+        try {
+          console.log("Executing agent node:", nodeId, cleanedInputs);
+          response = await apiClient.executeAgentNode(nodeId, cleanedInputs);
+          
+          // Format the agent data for consumption by task nodes
+          // Ensure it includes all required fields
+          return {
+            nodeId: nodeId,
+            id: nodeId,
+            agent_id: nodeId,
+            framework: nodeData.framework || "openai",
+            llmModel: nodeData.llmModel || "gpt-4",
+            temperature: nodeData.temperature || 0.7,
+            max_tokens: nodeData.max_tokens || 4000,
+            memoryEnabled: nodeData.memoryEnabled || false,
+            role: nodeData.role || "",
+            goal: nodeData.goal || "",
+            backstory: nodeData.backstory || "",
+            ...response
+          };
+        } catch (error) {
+          console.error("Error executing agent node:", error);
+          throw error;
+        }
+        break;
+      case "output":
+        response = await apiClient.executeOutputNode(nodeId, cleanedInputs);
+        break;
+      case "logic":
+        response = await apiClient.executeLogicNode(nodeId, nodeData, cleanedInputs);
+        break;
+      case "delay":
+        response = await apiClient.executeDelayNode(nodeId, nodeData, cleanedInputs);
+        break;
+      case "chat":
+      case "chatbot":
+        response = await apiClient.executeChatNode(nodeId, nodeData, cleanedInputs);
+        break;
+      case "task":
+        response = await apiClient.executeTaskNode(nodeId, connectedAgentData, cleanedInputs);
+        break;
+      default:
+        // For all other node types, use the general execute endpoint
+        response = await apiClient.executeNode({
+          id: nodeId,
+          type: nodeType,
+          data: nodeData
+        }, cleanedInputs);
     }
-    else if (node.type === "input") {
-      response = await axios.post(`${BACKEND_URL}/api/run-trigger`, { 
-        input: cleanedData,
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
-    }
-    else if (node.type === "output") {
-      response = await axios.post(`${BACKEND_URL}/api/run-output`, {
-        output: cleanedData,
-        result: previousResult,
-        node_id: node.id
-      });
-    }
-    else if (node.type === "chat" || node.type === "chatbot") {
-      response = await axios.post(`${BACKEND_URL}/api/run-chat`, {
-        chat: cleanedData,
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
-    }
-
-  
-    else if (node.type === "logic") {
-      response = await axios.post(`${BACKEND_URL}/api/run-logic`, {
-        logic: cleanedData,
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
-    }
-    else if (node.type === "delay") {
-      response = await axios.post(`${BACKEND_URL}/api/run-delay`, {
-        delay: cleanedData,
-        inputs: cleanedInputs,
-        node_id: node.id
-      });
-    }
-    else {
-      console.error("❗ Unknown node type:", node.type);
-      throw new Error(`No executor found for node type: ${node.type}`);
-    }
-
+    
     // Handle error responses
-    if (response.data.type === "error") {
-      const error = response.data.error;
+    if (response && response.type === "error") {
+      const error = response.error || {};
       return {
         type: "error",
         error: {
-          type: error.type,
-          message: error.message,
-          nodeId: error.node_id || node.id,
-          nodeType: error.node_type || node.type,
-          details: error.details,
-          timestamp: error.timestamp
+          type: error.type || "unknown",
+          message: error.message || "Unknown error",
+          nodeId: error.node_id || (node && node.id) || "unknown",
+          nodeType: error.node_type || nodeType || "unknown",
+          details: error.details || {},
+          timestamp: error.timestamp || new Date().toISOString()
         }
       };
     }
 
-    // Optimize output size by removing duplicate data
-    if (response.data.type !== "error") {
-      // Remove inputs from output if they're identical to what was sent
-      if (response.data.inputs && JSON.stringify(response.data.inputs) === JSON.stringify(cleanedInputs)) {
-        delete response.data.inputs;
-      }
-      
-      // Remove raw data if processed data is available
-      if (response.data.processed_data && response.data.raw_data) {
-        delete response.data.raw_data;
-      }
-      
-      // Truncate long text fields
-      if (response.data.output && typeof response.data.output === 'string' && response.data.output.length > 1000) {
-        response.data.output = response.data.output.substring(0, 1000) + '...';
-      }
-    }
-
-    return response.data;
+    return response || { type: "unknown", value: null };
+    
   } catch (error) {
     console.error("Error executing node:", error);
     throw error;
   }
-};
+}
 
 // Map node types to the unified executor
 export const nodeExecutors = {
-  tool: (node, inputs) => executeNode(node, inputs),
-  task: (node, inputs) => executeNode(node, inputs, null, inputs.agent),
-  input: (node, inputs) => executeNode(node, inputs),
-  output: (node, inputs) => executeNode(node, inputs, inputs),
-  chat: (node, inputs) => executeNode(node, inputs),
-  chatbot: (node, inputs) => executeNode(node, inputs), 
-  logic: (node, inputs) => executeNode(node, inputs),
-  delay: (node, inputs) => executeNode(node, inputs)
+  tool: (node, inputs) => executeNode(node, null, inputs),
+  task: (node, inputs) => {
+    // Look for agent data in the inputs
+    let agentData = inputs.agent;
+    console.log("Task node inputs:", inputs);
+    
+    // Fallback: Check if agent data is in one of the input fields with a specific prefix
+    if (!agentData) {
+      // Find any field that might contain agent data
+      for (const [key, value] of Object.entries(inputs)) {
+        if (key.startsWith('input_from_agent')) {
+          console.log(`Found potential agent data in ${key}`, value);
+          agentData = value;
+          // Add it to the agent key for proper handling
+          inputs.agent = value;
+          break;
+        }
+      }
+    }
+    
+    if (!agentData) {
+      console.error("Task node requires a connected agent, but none was found in inputs:", inputs);
+      throw new Error("Task execution requires a connected agent with valid data");
+    }
+    
+    // Ensure the agent data has all the required fields
+    const requiredFields = ["framework", "llmModel", "temperature", "max_tokens"];
+    const missingFields = requiredFields.filter(field => !agentData[field]);
+    
+    if (missingFields.length > 0) {
+      console.error(`Missing required agent fields: ${missingFields.join(", ")}`, agentData);
+      
+      // Try to supplement missing fields from the node.data if available
+      const agentNode = agentData.nodeId ? 
+        document.querySelector(`[data-id="${agentData.nodeId}"]`) : null;
+      
+      if (agentNode) {
+        console.log("Found agent node in DOM, trying to extract data");
+        // Use node.data to populate missing fields if possible
+        const nodeData = node.data || {};
+        
+        agentData = {
+          ...agentData,
+          framework: agentData.framework || nodeData.framework || "openai",
+          llmModel: agentData.llmModel || nodeData.llmModel || "gpt-4",
+          temperature: agentData.temperature || nodeData.temperature || 0.7,
+          max_tokens: agentData.max_tokens || nodeData.max_tokens || 4000,
+        };
+      } else {
+        // Provide defaults for missing fields
+        agentData = {
+          ...agentData,
+          framework: agentData.framework || "openai",
+          llmModel: agentData.llmModel || "gpt-4",
+          temperature: agentData.temperature || 0.7,
+          max_tokens: agentData.max_tokens || 4000,
+        };
+      }
+      
+      console.log("Updated agent data:", agentData);
+    }
+    
+    return executeNode(node, agentData, inputs);
+  },
+  input: (node, inputs) => executeNode(node, null, inputs),
+  output: (node, inputs) => executeNode(node, null, inputs),
+  chat: (node, inputs) => executeNode(node, null, inputs),
+  chatbot: (node, inputs) => executeNode(node, null, inputs), 
+  logic: (node, inputs) => executeNode(node, null, inputs),
+  delay: (node, inputs) => executeNode(node, null, inputs),
+  agent: (node, inputs) => executeNode(node, null, inputs)
 }; 

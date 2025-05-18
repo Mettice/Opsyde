@@ -14,18 +14,25 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
       e.preventDefault();
     }
     
-    const event = new CustomEvent('node-edit', { 
-      detail: { 
+    console.log('========== TaskNode Edit Button Clicked ==========');
+    console.log('Node ID:', data.nodeId);
+    console.log('Node Type:', data.nodeType || 'task');
+    console.dir(data);
+    
+    // Dispatch a custom event for the parent to handle
+    const editEvent = new CustomEvent('node-edit', {
+      detail: {
         nodeId: data.nodeId,
         nodeType: data.nodeType || 'task',
-        data: {
-          ...data,
-          framework: framework
-        }
-      } 
+        data
+      }
     });
-    document.dispatchEvent(event);
-  }, [data, framework]);
+    
+    console.log('Dispatching event with detail:', editEvent.detail);
+    document.dispatchEvent(editEvent);
+    
+    console.log('Edit event dispatched for node:', data.nodeId);
+  }, [data]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -35,12 +42,12 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-delete', { 
       detail: { 
-        nodeId: data.nodeId,
+        nodeId: data.id || data.nodeId,
         nodeType: data.nodeType || 'task'
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [data]);
 
   const formatDependencyLabel = (dependency) => {
     if (!dependency) return '';
@@ -52,12 +59,23 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
 
   return (
     <div className={`bg-yellow-50 border-2 ${selected ? 'border-blue-500' : 'border-yellow-200'} shadow-md rounded p-3 w-72`}>
-      {/* Target handle at top */}
+      {/* Target handle at top - regular input */}
       <Handle 
         type="target" 
         position={Position.Top} 
+        id="input"
         isConnectable={isConnectable} 
         className="w-3 h-3 bg-yellow-500 hover:bg-yellow-400 hover:w-4 hover:h-4 transition-all"
+      />
+      
+      {/* Special agent handle on the left - for agent connections */}
+      <Handle 
+        type="target" 
+        position={Position.Left} 
+        id="agent"
+        isConnectable={isConnectable} 
+        className="w-3 h-3 bg-blue-500 hover:bg-blue-400 hover:w-4 hover:h-4 transition-all"
+        style={{ left: -5, top: 30 }}
       />
       
       {/* Node header */}
@@ -154,6 +172,7 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
       <Handle 
         type="source" 
         position={Position.Bottom} 
+        id="output"
         isConnectable={isConnectable}
         className="w-3 h-3 bg-yellow-600 hover:bg-yellow-500 hover:w-4 hover:h-4 transition-all"
       />

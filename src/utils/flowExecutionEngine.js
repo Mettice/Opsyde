@@ -79,47 +79,56 @@ export const collectInputData = (nodeId, edges, executionState, globalInputs = {
       // Use the edge label as the input key if available
       const inputKey = edge.label || `input_from_${sourceId}`;
       
-      // Special handling for agent data
-      if (sourceOutput.type === 'agent_status') {
-        // Store agent data in a consistent format
-        inputs.agent = {
-          type: 'agent_status',
-          agent_name: sourceOutput.agent_name,
-          agent_role: sourceOutput.agent_role,
-          agent_id: sourceOutput.agent_id,
-          llmModel: sourceOutput.llmModel,
-          temperature: sourceOutput.temperature,
-          maxTokens: sourceOutput.maxTokens,
-          useMemory: sourceOutput.useMemory,
-          prompt: sourceOutput.prompt,
-          status: sourceOutput.status
-        };
+      // Special handling for agent connection to task node
+      if (edge.targetHandle === 'agent' && sourceOutput) {
+        // Store agent data properly for task nodes
+        inputs.agent = sourceOutput;
+        console.log("Setting agent data for task node:", nodeId, inputs.agent);
       }
-      
-      // Special handling for CV parser results
-      if (sourceOutput.type === 'cv_result' && sourceOutput.data) {
-        // Store CV data under both the edge label and a consistent key
-        inputs[inputKey] = sourceOutput;
-        inputs.cv_result = sourceOutput;
-        // Also store the data directly for backward compatibility
-        inputs.cv_data = sourceOutput.data;
-      } else {
-        // Handle different output formats
-        if (typeof sourceOutput === 'object' && sourceOutput !== null) {
-          // If it has a data field and is from a tool, preserve the structure
-          if (sourceOutput.data && sourceOutput.type) {
-            inputs[inputKey] = sourceOutput;
-          }
-          // If the output is an object with an 'output' field, use that
-          else if (sourceOutput.output !== undefined) {
-            inputs[inputKey] = sourceOutput;
-          } else {
-            // Otherwise use the whole object
-            inputs[inputKey] = sourceOutput;
-          }
-        } else {
-          // For primitive values
+      // Regular handling for other connections
+      else {
+        // Special handling for agent data
+        if (sourceOutput.type === 'agent_status') {
+          // Store agent data in a consistent format
+          inputs.agent = {
+            type: 'agent_status',
+            agent_name: sourceOutput.agent_name,
+            agent_role: sourceOutput.agent_role,
+            agent_id: sourceOutput.agent_id,
+            llmModel: sourceOutput.llmModel,
+            temperature: sourceOutput.temperature,
+            maxTokens: sourceOutput.maxTokens,
+            useMemory: sourceOutput.useMemory,
+            prompt: sourceOutput.prompt,
+            status: sourceOutput.status
+          };
+        }
+        
+        // Special handling for CV parser results
+        if (sourceOutput.type === 'cv_result' && sourceOutput.data) {
+          // Store CV data under both the edge label and a consistent key
           inputs[inputKey] = sourceOutput;
+          inputs.cv_result = sourceOutput;
+          // Also store the data directly for backward compatibility
+          inputs.cv_data = sourceOutput.data;
+        } else {
+          // Handle different output formats
+          if (typeof sourceOutput === 'object' && sourceOutput !== null) {
+            // If it has a data field and is from a tool, preserve the structure
+            if (sourceOutput.data && sourceOutput.type) {
+              inputs[inputKey] = sourceOutput;
+            }
+            // If the output is an object with an 'output' field, use that
+            else if (sourceOutput.output !== undefined) {
+              inputs[inputKey] = sourceOutput;
+            } else {
+              // Otherwise use the whole object
+              inputs[inputKey] = sourceOutput;
+            }
+          } else {
+            // For primitive values
+            inputs[inputKey] = sourceOutput;
+          }
         }
       }
     }

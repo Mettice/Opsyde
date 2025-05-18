@@ -1,22 +1,53 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+import clsx from 'clsx';
+
+// Base styles
+const baseStyles = {
+  container: "bg-white p-3 rounded-lg shadow-md w-64",
+  header: "text-lg font-bold text-amber-700 mb-1",
+  description: "text-xs text-gray-600 mb-2",
+  delayDisplay: "flex items-center justify-center p-3 bg-amber-50 rounded-lg mb-3",
+  delayIcon: "text-2xl text-amber-600",
+  delayText: "text-sm font-medium text-amber-800 mt-1",
+  actionButtons: "flex mt-3 space-x-2",
+  editButton: "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded",
+  deleteButton: "text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+};
 
 const DelayNode = React.memo(({ data, isConnectable, selected }) => {
-  // Create stable event handlers with useCallback
+  // Memoized styles
+  const containerStyle = useMemo(() => 
+    clsx(
+      baseStyles.container,
+      selected ? 'border-2 border-amber-500' : 'border-2 border-amber-200'
+    ), [selected]);
+
+  const handleStyle = useMemo(() => ({
+    source: {
+      className: "w-4 h-4 bg-amber-600 hover:bg-amber-500 hover:w-5 hover:h-5 transition-all -bottom-2",
+      style: { bottom: '-0.5rem' }
+    },
+    target: {
+      className: "w-4 h-4 bg-amber-600 hover:bg-amber-500 hover:w-5 hover:h-5 transition-all -top-2",
+      style: { top: '-0.5rem' }
+    }
+  }), []);
+
+  // Memoized handlers
   const handleEditClick = useCallback((e) => {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    const event = new CustomEvent('node-edit', { 
+    document.dispatchEvent(new CustomEvent('node-edit', { 
       detail: { 
         nodeId: data.nodeId,
         nodeType: data.nodeType || 'delay'
       } 
-    });
-    document.dispatchEvent(event);
+    }));
   }, [data?.nodeId, data?.nodeType]);
 
   const handleDeleteClick = useCallback((e) => {
@@ -25,80 +56,65 @@ const DelayNode = React.memo(({ data, isConnectable, selected }) => {
       e.preventDefault();
     }
     
-    const event = new CustomEvent('node-delete', { 
+    document.dispatchEvent(new CustomEvent('node-delete', { 
       detail: { 
         nodeId: data.nodeId,
         nodeType: data.nodeType || 'delay'
       } 
-    });
-    document.dispatchEvent(event);
+    }));
   }, [data?.nodeId, data?.nodeType]);
 
   return (
-    <div 
-      className={`bg-white border-2 ${selected ? 'border-amber-500' : 'border-amber-200'} p-3 rounded-lg shadow-md w-64`}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Target handle at top */}
+    <div className={containerStyle} onClick={(e) => e.stopPropagation()}>
       <Handle 
         type="target" 
         position={Position.Top} 
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-amber-600 hover:bg-amber-500 hover:w-5 hover:h-5 transition-all -top-2"
+        {...handleStyle.target}
         id="target"
         title="Connect from: Agent, Task, Tool, Trigger"
       >
         <div className="absolute -top-5 text-xs text-gray-500 whitespace-nowrap">← Input</div>
       </Handle>
       
-      <h3 className="text-lg font-bold text-amber-700 mb-1">{data.label || 'Delay'}</h3>
+      <div className={baseStyles.header}>{data.label || 'Delay'}</div>
       
       {data.description && (
-        <div className="text-xs text-gray-600 mb-2">
-          {data.description}
-        </div>
+        <div className={baseStyles.description}>{data.description}</div>
       )}
       
-      <div className="flex items-center justify-center p-3 bg-amber-50 rounded-lg mb-3">
+      <div className={baseStyles.delayDisplay}>
         <div className="text-center">
-          <span className="text-2xl text-amber-600">⏱️</span>
-          <div className="text-sm font-medium text-amber-800 mt-1">
+          <span className={baseStyles.delayIcon}>⏱️</span>
+          <div className={baseStyles.delayText}>
             Wait for {data.duration || '5s'}
           </div>
         </div>
       </div>
       
-      {/* Action buttons */}
-      <div className="flex mt-3 space-x-2">
+      <div className={baseStyles.actionButtons}>
         <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }}
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+          onClick={handleEditClick}
+          className={baseStyles.editButton}
         >
           Edit
         </button>
         
         <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }}
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+          onClick={handleDeleteClick}
+          className={baseStyles.deleteButton}
         >
           Delete
         </button>
       </div>
       
-      {/* Source handle at bottom */}
       <Handle 
         type="source" 
         position={Position.Bottom} 
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-amber-600 hover:bg-amber-500 hover:w-5 hover:h-5 transition-all -bottom-2"
+        {...handleStyle.source}
         id="source"
         title="Connect to: Agent, Task, Tool"
       >

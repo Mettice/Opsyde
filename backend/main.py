@@ -1,75 +1,266 @@
 # backend/main.py
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from email_runner import send_email
-from sheets_runner import push_to_sheet
-from discord_runner import post_to_discord
-from crew_runner import run_crew, UnifiedRunner
+from fastapi.responses import StreamingResponse, JSONResponse
+from typing import Dict, List, Any, Optional, Union
+
+# Framework imports
+from frameworks.email_notifier import send_email
+from frameworks.sheets_logger import log_to_sheet as push_to_sheet
+from frameworks.discord_notifier import run_discord_notifier as post_to_discord
 from frameworks.webhook_loader import handle_webhook_flow
-from chat_runner import router as chat_router
-from frameworks.trigger_storage import register_trigger, get_trigger_flow, list_triggers, delete_trigger
-from frameworks.trigger_scheduler import start_scheduler, update_trigger_metadata
 from frameworks.cv_parser_runner import run_cv_parser_tool
+from frameworks.webhook_runner import post_to_webhook
+from frameworks.apscheduler_manager import scheduler_manager
+
+# Core imports
+from core.runner import UnifiedRunner
+from core.di import get_unified_runner
+from core.exceptions import CrewFlowError, ValidationError, ExecutionError
+
+# API routers
+from api.routers.workflow_router import router as workflow_router
+from api.routers.node_router import router as node_router
+from api.routers.tool_router import router as tool_router
+from api.routers.auth_router import router as auth_router
+from api.routers.trigger_router import router as trigger_router, root_router as trigger_root_router
+from api.routers.output_router import router as output_router
+
+# Models
+from backend.models.data import NodeData
+
 import json
 import logging
 import os
-import threading
-import time
 from datetime import datetime, timedelta
 import asyncio
 import base64
-
 from dotenv import load_dotenv
 
-load_dotenv()  # This loads the .env file into environment variables
+# Load environment variables
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
-runner = UnifiedRunner()
+# Helper function to convert NodeData objects to dictionaries for JSON serialization
+def convert_nodedata_to_dict(obj: Any, depth: int = 0) -> Any:
+    """Convert NodeData objects to dictionaries for JSON serialization"""
+    # Prevent excessive recursion
+    if depth > 20:  # Limit recursion depth
+        return str(obj)
+    
+    if isinstance(obj, NodeData):
+        # Use the to_dict method if available (after our update)
+        if hasattr(obj, 'to_dict') and callable(obj.to_dict):
+            try:
+                result = obj.to_dict()
+                # Process nested objects in the result
+                if isinstance(result, dict):
+                    return {k: convert_nodedata_to_dict(v, depth + 1) for k, v in result.items()}
+                return result
+            except Exception as e:
+                logger.error(f"Error using NodeData.to_dict: {str(e)}")
+        
+        # Fallback to manual conversion if to_dict isn't available
+        try:
+            value = convert_nodedata_to_dict(obj.value, depth + 1) if obj.value is not None else None
+            metadata = convert_nodedata_to_dict(obj.metadata, depth + 1) if obj.metadata is not None else None
+            
+            return {
+                "value": value,
+                "metadata": metadata,
+                "error": obj.error,
+                "timestamp": obj.timestamp.isoformat() if obj.timestamp else None
+            }
+        except Exception as e:
+            logger.error(f"Error converting NodeData: {str(e)}")
+            return {"value": str(obj.value), "error": str(e)}
+    elif isinstance(obj, dict):
+        # Recursively convert values in dictionaries
+        try:
+            return {k: convert_nodedata_to_dict(v, depth + 1) for k, v in obj.items()}
+        except Exception as e:
+            logger.error(f"Error converting dict: {str(e)}")
+            return {"error": f"Dict conversion error: {str(e)}"}
+    elif isinstance(obj, list):
+        # Recursively convert values in lists
+        try:
+            return [convert_nodedata_to_dict(item, depth + 1) for item in obj]
+        except Exception as e:
+            logger.error(f"Error converting list: {str(e)}")
+            return [str(e)]
+    elif hasattr(obj, 'to_dict') and callable(getattr(obj, 'to_dict')):
+        # Handle any object with a to_dict method
+        try:
+            result = obj.to_dict()
+            if isinstance(result, dict):
+                return {k: convert_nodedata_to_dict(v, depth + 1) for k, v in result.items()}
+            return result
+        except Exception as e:
+            logger.error(f"Error using to_dict method: {str(e)}")
+            return str(obj)
+    elif hasattr(obj, '__dict__'):  # Handle other custom objects
+        try:
+            return convert_nodedata_to_dict(obj.__dict__, depth + 1)
+        except Exception as e:
+            logger.error(f"Error converting object: {str(e)}")
+            return str(obj)
+    else:
+        # Return other types as is
+        try:
+            # Check if the object is JSON serializable by attempting to serialize it
+            json.dumps(obj)
+            return obj
+        except (TypeError, OverflowError, ValueError):
+            # If not serializable, convert to string
+            return str(obj)
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="Nodai",
+    description="Nodai - Workflow Automation Platform",
+    version="1.0.0"
 )
 
-# Mount the chat router
-app.include_router(chat_router)
+# Initialize core components
+unified_runner = UnifiedRunner()
 
+# Configure CORS with more explicit settings
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*", "Content-Type", "Authorization"],
+    max_age=3600,
+)
+
+# Add unified runner to app state
 @app.on_event("startup")
 async def startup_event():
-    """
-    Start background services when the application starts
-    """
-    logger.info("Starting background services")
-    # Start the trigger scheduler in a background thread
-    threading.Thread(target=start_scheduler, daemon=True).start()
-    logger.info("Background services started")
+    """Initialize services on startup"""
+    try:
+        # Create necessary data directories
+        os.makedirs("data/workflows", exist_ok=True)
+        os.makedirs("data/triggers", exist_ok=True)
+        os.makedirs("data/executions", exist_ok=True)
+        os.makedirs("data/outputs", exist_ok=True)
+        
+        # Store unified runner in app state
+        app.state.runner = unified_runner
+        
+        # Create a demo workflow if none exist
+        try:
+            from backend.services.workflow_service import workflow_service
+            workflows = await workflow_service.get_all_workflows()
+            
+            if not workflows:
+                logger.info("Creating demo workflow")
+                demo_flow = {
+                    "id": "demo-workflow-123",
+                    "name": "Demo Workflow",
+                    "description": "A sample workflow for demonstration",
+                    "owner_id": "f31db8d3-7b54-46b5-bebf-1ea7b6b2edff",
+                    "nodes": [
+                        {
+                            "id": "node-1",
+                            "type": "input",
+                            "data": {"label": "Input Node"}
+                        },
+                        {
+                            "id": "node-2",
+                            "type": "output",
+                            "data": {"label": "Output Node"}
+                        }
+                    ],
+                    "edges": [
+                        {
+                            "id": "edge-1",
+                            "source": "node-1",
+                            "target": "node-2"
+                        }
+                    ]
+                }
+                await workflow_service.create_workflow(demo_flow)
+                logger.info("Demo workflow created successfully")
+        except Exception as e:
+            logger.error(f"Error creating demo workflow: {str(e)}")
+        
+        # Start scheduler
+        scheduler_manager.start()
+        logger.info("Application started successfully")
+    except Exception as e:
+        logger.error(f"Error during startup: {str(e)}")
+        raise
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """
-    Clean up resources when the application shuts down
-    """
-    from frameworks.trigger_scheduler import stop_scheduler
-    logger.info("Stopping background services")
-    stop_scheduler()
-    logger.info("Background services stopped")
-
-@app.post("/run-crew")
-async def run_crew_endpoint(data: dict):
-    """
-    Run a crew workflow
-    """
+    """Cleanup services on shutdown"""
     try:
-        # Ensure inputs are properly formatted
+        scheduler_manager.shutdown()
+        logger.info("Application shutdown complete")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {str(e)}")
+
+# Register routers with dependencies
+app.include_router(auth_router, prefix="/api/auth")
+app.include_router(workflow_router, prefix="/api/workflows")
+app.include_router(node_router, prefix="/api/nodes")
+app.include_router(tool_router, prefix="/api/tools")
+app.include_router(trigger_router, prefix="/api/triggers")
+app.include_router(trigger_root_router)
+app.include_router(output_router, prefix="/api/outputs")
+
+# Error handlers
+@app.exception_handler(CrewFlowError)
+async def crewflow_exception_handler(request: Request, exc: CrewFlowError):
+    """Handle CrewFlow-specific exceptions"""
+    return JSONResponse(
+        status_code=400,
+        content={
+            "type": exc.__class__.__name__,
+            "message": exc.message,
+            "details": exc.details
+        }
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions"""
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "type": "http_error",
+            "message": exc.detail
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions"""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "type": "internal_error",
+            "message": "An unexpected error occurred"
+        }
+    )
+
+# Direct execution endpoints
+@app.post("/run-crew")
+async def run_crew_endpoint(
+    data: dict,
+    runner: UnifiedRunner = Depends(get_unified_runner)
+):
+    """Execute a crew workflow"""
+    try:
+        # Format inputs
         if "inputs" not in data:
             data["inputs"] = {}
         elif isinstance(data["inputs"], str):
@@ -78,605 +269,226 @@ async def run_crew_endpoint(data: dict):
             except:
                 data["inputs"] = {"input": data["inputs"]}
         
-        # Log the request
-        logger.info(f"Received workflow execution request with {len(data.get('nodes', []))} nodes")
-        
-        # Run the workflow
+        logger.info(f"Executing workflow with {len(data.get('nodes', []))} nodes")
         return StreamingResponse(
-            run_crew(data),
-            media_type="text/plain"
+            runner.execute_workflow(data),
+            media_type="text/event-stream"
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ExecutionError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail="Workflow execution failed")
+
+@app.post("/api/execute-flow")
+async def execute_flow_endpoint(
+    request: Request,
+    runner: UnifiedRunner = Depends(get_unified_runner)
+):
+    """Execute a flow with nodes, edges, and inputs"""
+    try:
+        data = await request.json()
+        nodes = data.get("nodes", [])
+        edges = data.get("edges", [])
+        inputs = data.get("inputs", {})
+        
+        # Build the workflow data
+        workflow_data = {
+            "nodes": nodes,
+            "edges": edges,
+            "inputs": inputs
+        }
+        
+        logger.info(f"Executing flow with {len(nodes)} nodes via /api/execute-flow endpoint")
+        
+        # Validate node structure
+        for node in nodes:
+            if not isinstance(node, dict):
+                raise ValueError(f"Invalid node format: {node}")
+            if "id" not in node:
+                raise ValueError(f"Node missing ID: {node}")
+            if "type" not in node:
+                raise ValueError(f"Node missing type: {node}")
+        
+        # Execute the workflow synchronously (not streaming)
+        result = {
+            "logs": [],
+            "node_results": {},
+            "state": "completed"
+        }
+        
+        # Create structured logs for flow start
+        flow_start_log = {
+            "type": "flow_started",
+            "message": "Starting flow execution",
+            "timestamp": datetime.now().isoformat(),
+            "nodeCount": len(nodes),
+            "connectionCount": len(edges)
+        }
+        result["logs"] = [flow_start_log]
+        
+        # Log each node in the flow
+        for node in nodes:
+            node_log = {
+                "type": "node_found",
+                "nodeId": node.get("id"),
+                "nodeType": node.get("type"),
+                "nodeName": node.get("data", {}).get("label", f"Node {node.get('id')}"),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            # Find connections for this node
+            connections = []
+            for edge in edges:
+                if edge.get("source") == node.get("id"):
+                    connections.append({
+                        "target": edge.get("target"),
+                        "type": "outgoing"
+                    })
+                elif edge.get("target") == node.get("id"):
+                    connections.append({
+                        "source": edge.get("source"),
+                        "type": "incoming"
+                    })
+            
+            if connections:
+                node_log["connections"] = connections
+                
+            result["logs"].append(node_log)
+            
+        # Process the workflow
+        async for item in runner.execute_workflow(workflow_data):
+            # Convert any NodeData objects to dictionaries
+            item = convert_nodedata_to_dict(item)
+            
+            if isinstance(item, dict):
+                # Add node result to the results collection
+                if "nodeId" in item and item["nodeId"]:
+                    result["node_results"][item["nodeId"]] = item
+                    
+                    # Also add a log entry for this node result
+                    log_entry = {
+                        "type": "node_result",
+                        "nodeId": item["nodeId"],
+                        "nodeType": item.get("nodeType", "unknown"),
+                        "status": "error" if "error" in item else "completed",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    
+                    # Add error details if present
+                    if "error" in item:
+                        log_entry["error"] = item["error"]
+                    
+                    # Add result details if present
+                    if "result" in item:
+                        log_entry["result"] = item["result"]
+                    elif "output" in item:
+                        log_entry["output"] = item["output"]
+                        
+                    result["logs"].append(log_entry)
+                
+                # Update the overall result
+                result.update(item)
+            elif isinstance(item, str):
+                try:
+                    # Try to parse as JSON
+                    data = json.loads(item)
+                    if isinstance(data, dict):
+                        # Similar logic as above for dict items
+                        if "nodeId" in data and data["nodeId"]:
+                            result["node_results"][data["nodeId"]] = data
+                            
+                            # Add a log entry
+                            result["logs"].append({
+                                "type": "node_result",
+                                "nodeId": data["nodeId"],
+                                "nodeType": data.get("nodeType", "unknown"),
+                                "status": "error" if "error" in data else "completed",
+                                "timestamp": datetime.now().isoformat(),
+                                **({"error": data["error"]} if "error" in data else {}),
+                                **({"result": data["result"]} if "result" in data else {}),
+                                **({"output": data["output"]} if "output" in data else {})
+                            })
+                        
+                        result.update(data)
+                except:
+                    # Not JSON, treat as text log
+                    text_log = {
+                        "type": "log_message",
+                        "message": item,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    result["logs"].append(text_log)
+        
+        # Add flow completion log
+        flow_complete_log = {
+            "type": "flow_completed",
+            "message": "Flow execution completed",
+            "timestamp": datetime.now().isoformat(),
+            "success": True
+        }
+        result["logs"].append(flow_complete_log)
+        
+        # Convert any NodeData objects in the results to dictionaries
+        processed_result = convert_nodedata_to_dict(result)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "node_results": processed_result.get("node_results", {}),
+                "logs": processed_result.get("logs", []),
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+    except ValidationError as e:
+        logger.error(f"Validation error in execute-flow: {str(e)}")
+        error_log = {
+            "type": "error",
+            "message": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+        return JSONResponse(
+            status_code=400,
+            content={
+                "success": False,
+                "logs": [error_log],
+                "error": {
+                    "message": str(e),
+                    "type": "validation_error"
+                },
+                "timestamp": datetime.now().isoformat()
+            }
         )
     except Exception as e:
-        logger.error(f"Error running crew: {str(e)}")
-        return {"error": str(e)}
-
-@app.post("/send-email")
-async def email_output(request: Request):
-    """Send workflow results via email"""
-    try:
-        data = await request.json()
-        logs = data.get("logs", "")
-        email = data.get("to", "default@example.com")
-        logger.info(f"Sending email to {email}")
-        result = send_email(logs, email)
-        return {"status": result}
-    except Exception as e:
-        logger.error(f"Error sending email: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
-
-@app.post("/export-sheets")
-async def sheet_output(request: Request):
-    """Export workflow results to Google Sheets"""
-    try:
-        data = await request.json()
-        logs = data.get("logs", "")
-        sheet_name = data.get("sheet_name", "Opsyde Logs")
-        logger.info(f"Exporting to sheet: {sheet_name}")
-        result = push_to_sheet(logs, sheet_name)
-        return {"status": result}
-    except Exception as e:
-        logger.error(f"Error exporting to sheets: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to export to sheets: {str(e)}")
-
-@app.post("/post-discord")
-async def discord_output(request: Request):
-    """Post workflow results to Discord"""
-    try:
-        data = await request.json()
-        logs = data.get("logs", "")
-        webhook_url = data.get("webhook_url", "")
-        logger.info("Posting to Discord")
-        result = post_to_discord(logs, webhook_url)
-        return {"status": result}
-    except Exception as e:
-        logger.error(f"Error posting to Discord: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to post to Discord: {str(e)}")
-
-@app.post("/load-webhook-flow")
-async def load_webhook_flow(request: Request):
-    """Receive a flow definition from an external webhook"""
-    return await handle_webhook_flow(request)
-
-@app.post("/trigger/{trigger_id}")
-async def handle_trigger(trigger_id: str, request: Request):
-    """
-    Handle incoming webhook triggers for flows
-    """
-    try:
-        payload = await request.json()
-        logger.info(f"Received trigger for ID: {trigger_id}")
-        
-        # Get the flow associated with this trigger ID
-        flow = get_trigger_flow(trigger_id)
-        if not flow:
-            raise HTTPException(status_code=404, detail="Trigger ID not found")
-        
-        # Add the payload to the flow context
-        flow["trigger_payload"] = payload
-        
-        # Execute the flow
-        logger.info(f"Executing flow for trigger {trigger_id}")
-        return StreamingResponse(run_crew(flow), media_type="text/event-stream")
-    except Exception as e:
-        logger.error(f"Error processing trigger {trigger_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Trigger processing error: {str(e)}")
-
-@app.post("/api/register-trigger")
-async def handle_register_trigger(request: Request):
-    """
-    Register a new trigger with its associated flow
-    """
-    try:
-        data = await request.json()
-        trigger_id = data.get("trigger_id")
-        flow = data.get("flow")
-        owner = data.get("owner", "system")
-        
-        logger.info(f"Registering trigger: {trigger_id} of type {flow.get('trigger_type')}")
-        
-        # Log the trigger node data
-        trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
-        if trigger_nodes:
-            trigger_node = trigger_nodes[0]
-            trigger_data = trigger_node.get('data', {})
-            logger.info(f"Trigger details: type={trigger_data.get('triggerType')}, scheduleType={trigger_data.get('scheduleType')}, runAt={trigger_data.get('runAt')}")
-        else:
-            logger.warning(f"Could not find trigger node with ID {trigger_id} in the flow data")
-        
-        if not trigger_id or not flow:
-            raise HTTPException(status_code=400, detail="Missing trigger_id or flow data")
-        
-        # Make sure the flow has the trigger_id set
-        flow["trigger_id"] = trigger_id
-        
-        # Register the trigger
-        success = register_trigger(trigger_id, flow, owner)
-        if not success:
-            raise HTTPException(status_code=500, detail="Failed to register trigger")
-        
-        # Log the successful registration
-        logger.info(f"Successfully registered trigger: {trigger_id}")
-        
-        return {
-            "status": "success",
-            "message": "Trigger registered successfully",
-            "trigger_id": trigger_id,
-            "webhook_url": f"/api/trigger/{trigger_id}" if flow.get("trigger_type") == "webhook" else None
+        logger.error(f"Error executing flow: {str(e)}", exc_info=True)
+        error_log = {
+            "type": "error",
+            "message": str(e),
+            "timestamp": datetime.now().isoformat()
         }
-    except Exception as e:
-        logger.error(f"Error registering trigger: {str(e)}")
-        import traceback
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Registration error: {str(e)}")
-
-@app.get("/triggers")
-async def handle_list_triggers(owner: str = None):
-    """
-    List all registered triggers
-    """
-    triggers = list_triggers(owner)
-    return {
-        "status": "success",
-        "count": len(triggers),
-        "triggers": triggers
-    }
-
-@app.delete("/trigger/{trigger_id}")
-async def handle_delete_trigger(trigger_id: str):
-    """
-    Delete a registered trigger
-    """
-    success = delete_trigger(trigger_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Trigger not found")
-    
-    return {
-        "status": "success",
-        "message": f"Trigger {trigger_id} deleted successfully"
-    }
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
-
-@app.get("/create-test-trigger")
-async def create_test_trigger():
-    """
-    Create a test trigger for debugging
-    """
-    try:
-        trigger_id = f"test-trigger-{int(time.time())}"
-        
-        # Create a simple flow
-        flow = {
-            "trigger_id": trigger_id,
-            "trigger_type": "schedule",
-            "nodes": [
-                {
-                    "id": trigger_id,
-                    "type": "trigger",
-                    "data": {
-                        "triggerType": "schedule",
-                        "scheduleType": "once",
-                        "runAt": (datetime.now() + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M"),
-                        "label": "Test Trigger"
-                    }
-                }
-            ],
-            "edges": []
-        }
-        
-        # Register the trigger
-        success = register_trigger(trigger_id, flow, "system")
-        
-        if success:
-            logger.info(f"Successfully created test trigger: {trigger_id}")
-            return {
-                "status": "success",
-                "message": "Test trigger created successfully",
-                "trigger_id": trigger_id
-            }
-        else:
-            return {
-                "status": "error",
-                "message": "Failed to create test trigger"
-            }
-    except Exception as e:
-        logger.error(f"Error creating test trigger: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.get("/test")
-async def test_endpoint():
-    """Simple test endpoint"""
-    logger.info("Test endpoint called")
-    return {"status": "ok", "message": "Backend is working"}
-
-@app.get("/create-flow-trigger")
-async def create_flow_trigger():
-    """
-    Create a test trigger with a real flow
-    """
-    try:
-        trigger_id = f"flow-trigger-{int(time.time())}"
-        
-        # Create a flow with your actual nodes
-        flow = {
-            "trigger_id": trigger_id,
-            "trigger_type": "schedule",
-            "nodes": [
-                {
-                    "id": trigger_id,
-                    "type": "trigger",
-                    "data": {
-                        "triggerType": "schedule",
-                        "scheduleType": "once",
-                        "runAt": (datetime.now() + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M"),
-                        "label": "Flow Trigger"
-                    }
+        return JSONResponse(
+            status_code=200,  # Return 200 but with error content for frontend handling
+            content={
+                "success": False,
+                "logs": [error_log],
+                "error": {
+                    "message": str(e),
+                    "type": "execution_error"
                 },
-                # Add your agent node
-                {
-                    "id": "agent-1",
-                    "type": "agent",
-                    "data": {
-                        "label": "Agent Alpha",
-                        "role": "Assistant",
-                        "goal": "Help with research"
-                    }
-                },
-                # Add your task node
-                {
-                    "id": "task-1",
-                    "type": "task",
-                    "data": {
-                        "label": "New Task",
-                        "description": "Task description"
-                    }
-                }
-            ],
-            "edges": [
-                {
-                    "source": trigger_id,
-                    "target": "agent-1"
-                },
-                {
-                    "source": "agent-1",
-                    "target": "task-1"
-                }
-            ]
-        }
-        
-        # Register the trigger
-        success = register_trigger(trigger_id, flow, "system")
-        
-        if success:
-            logger.info(f"Successfully created flow trigger: {trigger_id}")
-            return {
-                "status": "success",
-                "message": "Flow trigger created successfully",
-                "trigger_id": trigger_id
+                "timestamp": datetime.now().isoformat()
             }
-        else:
-            return {
-                "status": "error",
-                "message": "Failed to create flow trigger"
-            }
-    except Exception as e:
-        logger.error(f"Error creating flow trigger: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
+        )
 
-@app.get("/cleanup-test-triggers")
-async def cleanup_test_triggers():
-    """
-    Remove all test triggers from the system
-    """
-    try:
-        triggers = list_triggers()
-        count = 0
-        
-        for trigger in triggers:
-            trigger_id = trigger.get("id")
-            # Check if it's a test trigger
-            if trigger_id.startswith("test-trigger-") or trigger_id.startswith("flow-trigger-"):
-                success = delete_trigger(trigger_id)
-                if success:
-                    count += 1
-                    logger.info(f"Deleted test trigger: {trigger_id}")
-        
-        return {
-            "status": "success",
-            "message": f"Deleted {count} test triggers"
-        }
-    except Exception as e:
-        logger.error(f"Error cleaning up test triggers: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.get("/create-future-trigger")
-async def create_future_trigger():
-    """
-    Create a test trigger scheduled for 2 minutes in the future
-    """
-    try:
-        trigger_id = f"future-trigger-{int(time.time())}"
-        future_time = (datetime.now() + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M")
-        
-        # Create a simple flow
-        flow = {
-            "trigger_id": trigger_id,
-            "trigger_type": "schedule",
-            "nodes": [
-                {
-                    "id": trigger_id,
-                    "type": "trigger",
-                    "data": {
-                        "triggerType": "schedule",
-                        "scheduleType": "once",
-                        "runAt": future_time,
-                        "label": "Future Test Trigger"
-                    }
-                }
-            ],
-            "edges": []
-        }
-        
-        # Register the trigger
-        success = register_trigger(trigger_id, flow, "system")
-        
-        if success:
-            logger.info(f"Successfully created future trigger: {trigger_id} for {future_time}")
-            return {
-                "status": "success",
-                "message": f"Future trigger created successfully for {future_time}",
-                "trigger_id": trigger_id,
-                "scheduled_time": future_time
-            }
-        else:
-            return {
-                "status": "error",
-                "message": "Failed to create future trigger"
-            }
-    except Exception as e:
-        logger.error(f"Error creating future trigger: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.get("/debug-triggers")
-async def debug_triggers():
-    """
-    Show detailed information about all triggers
-    """
-    try:
-        triggers = list_triggers()
-        detailed_triggers = []
-        
-        for trigger in triggers:
-            trigger_id = trigger.get("id")
-            flow = get_trigger_flow(trigger_id)
-            
-            trigger_info = {
-                "id": trigger_id,
-                "type": trigger.get("trigger_type"),
-                "created_at": trigger.get("created_at"),
-                "last_triggered": trigger.get("last_triggered"),
-                "trigger_count": trigger.get("trigger_count"),
-                "completed": trigger.get("completed", False),
-                "completed_at": trigger.get("completed_at"),
-                "nodes_count": len(flow.get("nodes", [])) if flow else 0,
-                "edges_count": len(flow.get("edges", [])) if flow else 0
-            }
-            
-            # Get trigger node details
-            if flow:
-                trigger_nodes = [n for n in flow.get("nodes", []) if n.get("id") == trigger_id]
-                if trigger_nodes:
-                    trigger_node = trigger_nodes[0]
-                    trigger_data = trigger_node.get("data", {})
-                    trigger_info["details"] = {
-                        "label": trigger_data.get("label"),
-                        "triggerType": trigger_data.get("triggerType"),
-                        "scheduleType": trigger_data.get("scheduleType"),
-                        "runAt": trigger_data.get("runAt")
-                    }
-            
-            detailed_triggers.append(trigger_info)
-        
-        return {
-            "status": "success",
-            "count": len(detailed_triggers),
-            "triggers": detailed_triggers
-        }
-    except Exception as e:
-        logger.error(f"Error debugging triggers: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.get("/executed-triggers")
-async def get_executed_triggers():
-    """
-    Get a list of recently executed triggers
-    """
-    try:
-        # Get all triggers
-        all_triggers = list_triggers()
-        
-        # Filter to only include triggers that have been executed
-        executed_triggers = []
-        
-        # Current time
-        now = datetime.now()
-        
-        # Only include triggers executed in the last 30 minutes
-        time_threshold = now - timedelta(minutes=30)
-        
-        for trigger in all_triggers:
-            trigger_id = trigger.get("id")
-            last_triggered = trigger.get("last_triggered")
-            
-            # Skip triggers that haven't been triggered or were triggered too long ago
-            if not last_triggered:
-                continue
-                
-            try:
-                last_triggered_time = datetime.fromisoformat(last_triggered)
-                if last_triggered_time < time_threshold:
-                    continue
-            except:
-                # If we can't parse the time, include it anyway
-                pass
-            
-            trigger_data = get_trigger_flow(trigger_id)
-            
-            # Get the trigger node data
-            trigger_node = None
-            for node in trigger_data.get("nodes", []):
-                if node.get("id") == trigger_id:
-                    trigger_node = node
-                    break
-            
-            executed_triggers.append({
-                "id": trigger_id,
-                "label": trigger_node.get("data", {}).get("label", "Unnamed Trigger") if trigger_node else "Unnamed Trigger",
-                "type": trigger.get("trigger_type"),
-                "last_executed": trigger.get("last_triggered"),
-                "execution_count": trigger.get("trigger_count", 0),
-                "completed": trigger.get("completed", False),
-                "completed_at": trigger.get("completed_at")
-            })
-        
-        # Sort by last execution time, most recent first
-        executed_triggers.sort(key=lambda t: t.get("last_executed", ""), reverse=True)
-        
-        # Return only the 10 most recent executions
-        return {
-            "status": "success",
-            "count": len(executed_triggers),
-            "triggers": executed_triggers[:10]
-        }
-    except Exception as e:
-        logger.error(f"Error getting executed triggers: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.post("/api/cleanup-triggers")
-async def cleanup_triggers():
-    """
-    Clean up all triggers that are in the past
-    """
-    try:
-        # Get all triggers
-        all_triggers = list_triggers()
-        
-        # Count of cleaned up triggers
-        cleaned_up = 0
-        
-        # Current time
-        now = datetime.now()
-        
-        for trigger in all_triggers:
-            trigger_id = trigger.get("id")
-            trigger_data = get_trigger_flow(trigger_id)
-            
-            # Find the trigger node
-            trigger_node = None
-            for node in trigger_data.get("nodes", []):
-                if node.get("id") == trigger_id:
-                    trigger_node = node
-                    break
-            
-            if not trigger_node:
-                continue
-                
-            # Get the trigger data
-            node_data = trigger_node.get("data", {})
-            
-            # Check if this is a one-time schedule trigger
-            if node_data.get("triggerType") == "schedule" and node_data.get("scheduleType") == "once":
-                # Get the run time
-                run_at = node_data.get("runAt")
-                
-                if run_at:
-                    try:
-                        # Parse the time
-                        target_time = datetime.strptime(run_at, "%Y-%m-%d %H:%M")
-                        
-                        # If the time is in the past, mark it as completed
-                        if target_time < now:
-                            update_trigger_metadata(trigger_id, {
-                                "completed": True,
-                                "completed_at": datetime.now().isoformat()
-                            })
-                            cleaned_up += 1
-                    except Exception as e:
-                        logger.error(f"Error parsing time for trigger {trigger_id}: {str(e)}")
-        
-        return {
-            "status": "success",
-            "message": f"Cleaned up {cleaned_up} triggers",
-            "cleaned_up": cleaned_up
-        }
-    except Exception as e:
-        logger.error(f"Error cleaning up triggers: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
-@app.post("/api/force-cleanup-all-triggers")
-async def force_cleanup_all_triggers():
-    """
-    Force cleanup of all triggers by marking them as completed
-    """
-    try:
-        # Get all triggers
-        all_triggers = list_triggers()
-        
-        # Count of cleaned up triggers
-        cleaned_up = 0
-        
-        for trigger in all_triggers:
-            trigger_id = trigger.get("id")
-            
-            # Mark as completed if not already
-            if not trigger.get("completed", False):
-                update_trigger_metadata(trigger_id, {
-                    "completed": True,
-                    "completed_at": datetime.now().isoformat()
-                })
-                cleaned_up += 1
-        
-        return {
-            "status": "success",
-            "message": f"Force-completed {cleaned_up} triggers",
-            "cleaned_up": cleaned_up
-        }
-    except Exception as e:
-        logger.error(f"Error force-cleaning triggers: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error: {str(e)}"
-        }
-
+# Node execution endpoints
 @app.post("/execute-node")
-async def execute_node(request: Request):
-    """
-    Execute a single node
-    """
+async def execute_node(
+    request: Request,
+    runner: UnifiedRunner = Depends(get_unified_runner)
+):
+    """Execute a single node"""
     try:
         data = await request.json()
         node_type = data.get("nodeType")
@@ -684,130 +496,259 @@ async def execute_node(request: Request):
         inputs = data.get("inputs", {})
         
         logger.info(f"Executing node of type {node_type}")
+        return await runner.execute_node(node_type, node_data, inputs)
         
-        # Call the appropriate function based on node type
-        if node_type == "agent":
-            from crew_runner import run_agent_node
-            result = await run_agent_node(node_data, inputs)
-        elif node_type == "task":
-            from crew_runner import run_task_node
-            result = await run_task_node(node_data, inputs)
-        elif node_type == "tool":
-            from crew_runner import run_tool_node
-            result = await run_tool_node(node_data, inputs)
-        else:
-            return {"error": f"Unknown node type: {node_type}"}
-        
-        return result
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error executing node: {str(e)}")
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail="Node execution failed")
 
-@app.post("/api/workflow/execute")
-async def execute_workflow(
-    workflow_data: dict,
-    file: UploadFile = File(None)
-):
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
+# Debug endpoint to list all routes
+@app.get("/debug/routes")
+async def debug_routes():
+    """List all registered routes for debugging"""
+    routes = []
+    for route in app.routes:
+        routes.append({
+            "path": route.path,
+            "name": route.name,
+            "methods": list(route.methods) if hasattr(route, "methods") else None
+        })
+    return {"routes": sorted(routes, key=lambda x: x["path"])}
+
+# Legacy routes for backward compatibility
+@app.get("/api/flows")
+async def legacy_list_flows(owner_id: Optional[str] = None):
+    """Legacy endpoint for listing flows, redirects to workflows endpoint"""
+    from backend.services.workflow_service import WorkflowService
+    workflow_service = WorkflowService()
+    
     try:
-        # If a file is uploaded, add it to the workflow data
-        if file:
-            # Read file content
-            content = await file.read()
+        if owner_id:
+            workflows = await workflow_service.get_workflows_by_owner(owner_id)
+        else:
+            workflows = await workflow_service.get_all_workflows()
             
-            # Create file data structure with consistent format
-            file_data = {
-                "filename": file.filename,
-                "content": f"data:{file.content_type};base64,{base64.b64encode(content).decode('utf-8')}",  # Full data URL format
-                "type": file.content_type,
-                "size": len(content),
-                "lastModified": int(time.time() * 1000)  # Current timestamp in milliseconds
+        return {
+            "success": True,
+            "data": {
+                "data": workflows,
+                "total_count": len(workflows),
+                "owner_id": owner_id
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0"
             }
-            
-            # Add file data to workflow inputs
-            if "inputs" not in workflow_data:
-                workflow_data["inputs"] = {}
-            workflow_data["inputs"]["file_upload"] = file_data
+        }
+    except Exception as e:
+        logger.error(f"Error in legacy flows endpoint: {str(e)}")
+        return {
+            "success": False,
+            "data": [],
+            "error": {
+                "message": str(e)
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0"
+            }
+        }
 
-        # Execute workflow
-        results = []
-        async for result in run_crew(workflow_data):
-            results.append(result)
+@app.get("/api/workflows")
+async def direct_list_workflows(owner_id: Optional[str] = None):
+    """Direct endpoint for listing workflows"""
+    from backend.services.workflow_service import WorkflowService
+    workflow_service = WorkflowService()
+    
+    try:
+        if owner_id:
+            workflows = await workflow_service.get_workflows_by_owner(owner_id)
+        else:
+            workflows = await workflow_service.get_all_workflows()
             
-        return {"results": results}
+        return {
+            "success": True,
+            "data": {
+                "data": workflows,
+                "total_count": len(workflows),
+                "owner_id": owner_id
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0"
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error in workflows endpoint: {str(e)}")
+        return {
+            "success": False,
+            "data": [],
+            "error": {
+                "message": str(e)
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0"
+            }
+        }
+
+# Direct endpoint for output node execution
+@app.post("/api/outputs/node")
+async def direct_output_node_endpoint(request: Request):
+    """Direct endpoint for output node execution"""
+    try:
+        data = await request.json()
+        logger.info(f"Output node direct endpoint invoked: {data}")
+        
+        # Get node data
+        node_data = data.get("node", {})
+        node_id = node_data.get("id")
+        
+        if not node_id:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": "Missing node ID in request",
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        # Get inputs
+        inputs = data.get("inputs", {})
+        
+        # Process the output node using the OutputNode class
+        from backend.nodes.output_node import OutputNode
+        from backend.models.data import NodeData
+        
+        # Convert inputs to NodeData
+        node_inputs = {}
+        for key, value in inputs.items():
+            if isinstance(value, dict) and 'value' in value:
+                node_inputs[key] = NodeData(value=value['value'], metadata=value.get('metadata', {}))
+            else:
+                node_inputs[key] = NodeData(value=value)
+                
+        # Get the first input value
+        first_input = next(iter(node_inputs.values())) if node_inputs else NodeData(value="No input provided")
+        
+        # Default webhook configuration if none specified
+        if 'config' not in node_data:
+            node_data['config'] = {
+                'url': 'https://webhook.site/a450a8da-cfce-4a72-9567-06c0eba8ce1a'
+            }
+        
+        # Create a minimal node data structure for processing
+        output_node_data = {
+            'id': node_id,
+            'type': 'output',
+            'data': {
+                'label': 'Output Node',
+                'output_type': 'webhook',  # Default to webhook
+                'config': node_data.get('config', {}),
+                **node_data  # Include any other provided data
+            }
+        }
+        
+        logger.info(f"Processing output node with data: {output_node_data}")
+        
+        # Process the output
+        output_node = OutputNode()
+        result = await output_node.process(output_node_data, {
+            'input': first_input
+        }, {'execution_id': 'direct-execution'})
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "value": result.get_value() if not result.is_error() else None,
+                "error": result.get_error() if result.is_error() else None,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
         
     except Exception as e:
-        logger.error(f"Error executing workflow: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/parse-cv")
-async def parse_cv(file_data: dict):
-    try:
-        # Run CV parser directly
-        result = run_cv_parser_tool({"inputs": file_data})
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-# New unified API endpoints
-@app.post("/api/run-tool")
-async def run_tool(request: Request):
-    try:
-        body = await request.json()
-        logger.info(f"Running tool: {json.dumps(body)}")
-        return await runner.run_tool_node(body["tool"], inputs=body.get("inputs", {}))
-    except Exception as e:
-        logger.error(f"Error running tool: {str(e)}")
-        return {"error": True, "message": str(e)}
-
-@app.post("/api/run-agent-task")
-async def run_agent_task(request: Request):
-    try:
-        body = await request.json()
-        logger.info(f"Running agent task: {json.dumps(body)}")
-        return await runner.run_agent_task_node(
-            body["agent"], 
-            body["task"], 
-            inputs=body.get("inputs", {})
+        logger.error(f"Error in direct output node endpoint: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
         )
-    except Exception as e:
-        logger.error(f"Error running agent task: {str(e)}")
-        return {"error": True, "message": str(e)}
 
-@app.post("/api/run-agent")
-async def run_agent(request: Request):
-    try:
-        body = await request.json()
-        logger.info(f"Running agent: {json.dumps(body)}")
-        # If no task is given, create dummy task
-        return await runner.run_agent_task_node(
-            body["agent"],
-            {"description": "Self-initiative", "expected_output": "Result"},
-            inputs=body.get("inputs", {})
-        )
-    except Exception as e:
-        logger.error(f"Error running agent: {str(e)}")
-        return {"error": True, "message": str(e)}
-
-@app.post("/api/run-trigger")
-async def run_trigger(request: Request):
-    try:
-        body = await request.json()
-        logger.info(f"Running trigger: {json.dumps(body)}")
-        return await runner.run_trigger_node(body["input"])
-    except Exception as e:
-        logger.error(f"Error running trigger: {str(e)}")
-        return {"error": True, "message": str(e)}
-
-@app.post("/api/run-output")
-async def run_output(request: Request):
-    try:
-        body = await request.json()
-        logger.info(f"Running output: {json.dumps(body)}")
-        return await runner.run_output_node(
-            body["output"], 
-            body.get("result", {})
-        )
-    except Exception as e:
-        logger.error(f"Error running output: {str(e)}")
-        return {"error": True, "message": str(e)}
+@app.get("/api/triggers/executed-triggers")
+@app.get("/executed-triggers")
+@app.get("/api/triggers/executed")
+async def legacy_executed_triggers():
+    """Legacy endpoint for listing executed triggers"""
+    import os
+    import json
     
+    # Check for triggers directly in the triggers directory first (for backward compatibility)
+    triggers_dir = "triggers"
+    data_triggers_dir = "data/triggers"
+    
+    all_triggers = []
+    
+    # Try to read from legacy triggers directory first
+    if os.path.exists(triggers_dir):
+        for filename in os.listdir(triggers_dir):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(triggers_dir, filename), "r") as f:
+                        trigger_data = json.load(f)
+                        trigger_data["id"] = filename.replace(".json", "")
+                        all_triggers.append(trigger_data)
+                except Exception as e:
+                    logger.error(f"Error reading trigger file {filename}: {str(e)}")
+    
+    # Then try to read from data/triggers directory
+    if os.path.exists(data_triggers_dir):
+        for filename in os.listdir(data_triggers_dir):
+            if filename.endswith(".json"):
+                try:
+                    with open(os.path.join(data_triggers_dir, filename), "r") as f:
+                        trigger_data = json.load(f)
+                        trigger_data["id"] = filename.replace(".json", "")
+                        all_triggers.append(trigger_data)
+                except Exception as e:
+                    logger.error(f"Error reading trigger file {filename}: {str(e)}")
+    
+    # Filter to only executed triggers
+    executed_triggers = [
+        trigger for trigger in all_triggers 
+        if trigger.get("trigger_count", 0) > 0
+    ]
+    
+    logger.info(f"Found {len(executed_triggers)} executed triggers")
+    
+    return {
+        "success": True,
+        "data": {
+            "triggers": executed_triggers,
+            "total_count": len(executed_triggers)
+        },
+        "metadata": {
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0"
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

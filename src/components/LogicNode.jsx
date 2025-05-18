@@ -1,10 +1,64 @@
-import React, { useCallback, useRef, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+
+// Move static styles outside component
+const baseStyles = {
+  container: "bg-white border-2 rounded-lg shadow-md p-4 w-64",
+  selectedBorder: "border-yellow-500",
+  defaultBorder: "border-yellow-200",
+  header: "text-sm font-bold text-yellow-800 mb-2 flex items-center",
+  description: "text-xs text-gray-600 mb-3",
+  codeContainer: "bg-yellow-50 p-2 rounded border border-yellow-100 mb-3",
+  codeLabel: "text-xs font-medium text-yellow-700 mb-1",
+  codeBlock: "text-xs font-mono bg-yellow-100 p-1 rounded block overflow-x-auto whitespace-pre-wrap",
+  buttonContainer: "flex mt-3 space-x-2",
+  editButton: "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded",
+  deleteButton: "text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+};
+
+// Define origin badge colors outside component
+const originBadgeColors = {
+  true: {
+    bg: "bg-green-100",
+    text: "text-green-800",
+    border: "border-green-200"
+  },
+  false: {
+    bg: "bg-red-100",
+    text: "text-red-800",
+    border: "border-red-200"
+  },
+  error: {
+    bg: "bg-gray-100",
+    text: "text-gray-800",
+    border: "border-gray-200"
+  }
+};
 
 const LogicNode = React.memo(({ data, isConnectable, selected }) => {
   const [previewResult, setPreviewResult] = useState(null);
   
+  // Memoize container style
+  const containerStyle = useMemo(() => {
+    return `${baseStyles.container} ${selected ? baseStyles.selectedBorder : baseStyles.defaultBorder}`;
+  }, [selected]);
+
+  // Memoize handle styles
+  const handleStyles = useMemo(() => ({
+    input: {
+      className: "w-3 h-3 bg-gray-400 hover:bg-gray-300 hover:w-4 hover:h-4 transition-all -left-1.5"
+    },
+    trueOutput: {
+      className: "w-3 h-3 bg-green-500 hover:bg-green-400 hover:w-4 hover:h-4 transition-all -right-1.5 top-1/3",
+      style: { top: '35%' }
+    },
+    falseOutput: {
+      className: "w-3 h-3 bg-red-500 hover:bg-red-400 hover:w-4 hover:h-4 transition-all -right-1.5 bottom-1/3",
+      style: { top: '65%' }
+    }
+  }), []);
+
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
     if (e) {
@@ -36,12 +90,11 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data?.nodeId, data?.nodeType]);
 
-  // Add this function to test the condition with sample inputs
+  // Memoize test condition function
   const testCondition = useCallback(() => {
     if (!data.condition) return;
     
     try {
-      // Use a default test input if none is provided
       const testInput = data.testInput ? JSON.parse(data.testInput) : { value: 10 };
       const result = new Function('inputs', `return ${data.condition}`)(testInput);
       setPreviewResult({
@@ -62,34 +115,35 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     testCondition();
   }, [testCondition]);
 
+  // Memoize preview result styles
+  const previewResultStyle = useMemo(() => {
+    if (!previewResult) return '';
+    
+    const baseStyle = 'text-xs mt-2 p-1.5 rounded';
+    if (!previewResult.success) return `${baseStyle} bg-gray-100 text-gray-800 border border-gray-200`;
+    return `${baseStyle} ${previewResult.result ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-red-100 text-red-800 border border-red-200'}`;
+  }, [previewResult]);
+
   return (
-    <div className={`bg-white border-2 ${selected ? 'border-yellow-500' : 'border-yellow-200'} rounded-lg shadow-md p-4 w-64`}
-         onClick={(e) => e.stopPropagation()}
-    >
-      <div className="text-sm font-bold text-yellow-800 mb-2 flex items-center">
+    <div className={containerStyle} onClick={(e) => e.stopPropagation()}>
+      <div className={baseStyles.header}>
         <span className="mr-2">⚖️</span>
         {data.label || "Logic Node"}
       </div>
       
-      <div className="text-xs text-gray-600 mb-3">
+      <div className={baseStyles.description}>
         {data.description || "Evaluates a condition and routes flow"}
       </div>
       
-      <div className="bg-yellow-50 p-2 rounded border border-yellow-100 mb-3">
-        <div className="text-xs font-medium text-yellow-700 mb-1">Condition:</div>
-        <code className="text-xs font-mono bg-yellow-100 p-1 rounded block overflow-x-auto whitespace-pre-wrap">
+      <div className={baseStyles.codeContainer}>
+        <div className={baseStyles.codeLabel}>Condition:</div>
+        <code className={baseStyles.codeBlock}>
           {data.condition || "inputs.value > 0"}
         </code>
       </div>
       
       {previewResult && (
-        <div className={`text-xs mt-2 p-1.5 rounded ${
-          previewResult.success 
-            ? previewResult.result 
-              ? 'bg-green-100 text-green-800 border border-green-200' 
-              : 'bg-red-100 text-red-800 border border-red-200'
-            : 'bg-gray-100 text-gray-800 border border-gray-200'
-        }`}>
+        <div className={previewResultStyle}>
           {previewResult.success 
             ? <>
                 Preview: <span className="font-bold">{previewResult.result ? '✅ True' : '❌ False'}</span>
@@ -100,25 +154,19 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
       )}
       
       {/* Action buttons */}
-      <div className="flex mt-3 space-x-2">
+      <div className={baseStyles.buttonContainer}>
         <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }}
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+          onClick={handleEditClick}
+          className={baseStyles.editButton}
         >
           Edit
         </button>
         
         <button 
           type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }}
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+          onClick={handleDeleteClick}
+          className={baseStyles.deleteButton}
         >
           Delete
         </button>
@@ -129,7 +177,7 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
         type="target" 
         position={Position.Left} 
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-gray-400 hover:bg-gray-300 hover:w-4 hover:h-4 transition-all -left-1.5"
+        {...handleStyles.input}
         id="input"
       />
       
@@ -138,9 +186,8 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
         type="source" 
         position={Position.Right} 
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-green-500 hover:bg-green-400 hover:w-4 hover:h-4 transition-all -right-1.5 top-1/3"
+        {...handleStyles.trueOutput}
         id="true"
-        style={{ top: '35%' }}
       >
         <div className="absolute -right-16 -top-1 text-xs text-green-600 whitespace-nowrap font-medium">
           True →
@@ -152,9 +199,8 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
         type="source" 
         position={Position.Right} 
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-red-500 hover:bg-red-400 hover:w-4 hover:h-4 transition-all -right-1.5 bottom-1/3"
+        {...handleStyles.falseOutput}
         id="false"
-        style={{ top: '65%' }}
       >
         <div className="absolute -right-16 -top-1 text-xs text-red-600 whitespace-nowrap font-medium">
           False →

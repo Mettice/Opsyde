@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
-import { fetchFlows, deleteFlow } from '../api';
+import { fetchFlows, deleteFlow, fetchExecutedTriggers } from '../api';
 import { useNavigate } from 'react-router-dom';
 import { getUserProfile, updateUserProfile, initializeUserProfile } from '../services/userProfileService';
 import StatsCard from '../components/profile/StatsCard';
@@ -41,42 +41,58 @@ export default function Dashboard() {
       return;
     }
 
-    async function loadData() {
-      try {
-        // Load flows
-        const { data } = await fetchFlows(user.id);
-        setFlows(data || []);
-        
-        // Update stats
-        setStats({
-          totalFlows: data?.length || 0,
-          lastActive: data?.length > 0 
-            ? new Date(Math.max(...data.map(f => new Date(f.updated_at || f.created_at)))).toLocaleDateString() 
-            : 'Never',
-          completedFlows: data?.filter(f => f.is_completed)?.length || 0
-        });
-
-        // Load profile
-        const profile = await initializeUserProfile(user.id);
-        if (profile) {
-          setProfileData({
-            username: profile.username || user.email,
-            full_name: profile.full_name || '',
-            bio: profile.bio || '',
-            avatar_url: profile.avatar_url || ''
-          });
-        }
-      } catch (err) {
-        setError('Failed to load your data');
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadData();
     fetchTriggerStats();
   }, [user, navigate]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchFlows(user.id);
+      
+      if (Array.isArray(response)) {
+        // Direct array response
+        setFlows(response);
+        setStats({
+          totalFlows: response.length || 0,
+          lastActive: response.length > 0 
+            ? new Date(Math.max(...response.map(f => new Date(f.updated_at || f.created_at)))).toLocaleDateString() 
+            : 'Never',
+          completedFlows: response.filter(f => f.is_completed)?.length || 0
+        });
+      } else if (response && response.success) {
+        // API wrapped response
+        setFlows(response.data || []);
+        setStats({
+          totalFlows: response.data?.length || 0,
+          lastActive: response.data?.length > 0 
+            ? new Date(Math.max(...response.data.map(f => new Date(f.updated_at || f.created_at)))).toLocaleDateString() 
+            : 'Never',
+          completedFlows: response.data?.filter(f => f.is_completed)?.length || 0
+        });
+      } else {
+        // Fall back to empty array
+        setFlows([]);
+        setStats({
+          totalFlows: 0,
+          lastActive: 'Never',
+          completedFlows: 0
+        });
+        console.warn('Received unexpected response format from API', response);
+      }
+    } catch (error) {
+      console.error('Error loading flows:', error);
+      setError('Failed to load workflows. Please try again later.');
+      setFlows([]);
+      setStats({
+        totalFlows: 0,
+        lastActive: 'Never',
+        completedFlows: 0
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDeleteFlow = async (flowId) => {
     if (window.confirm('Are you sure you want to delete this flow?')) {
@@ -122,17 +138,22 @@ export default function Dashboard() {
 
   const fetchTriggerStats = async () => {
     try {
-      const response = await fetch(`${window.BACKEND_URL || 'http://localhost:8000'}/executed-triggers`);
-      if (response.ok) {
-        const data = await response.json();
-        setTriggerStats({
-          total: data.count || 0,
-          completed: data.triggers?.filter(t => t.completed)?.length || 0,
-          active: data.triggers?.filter(t => !t.completed)?.length || 0
-        });
-      }
+      const triggers = await fetchExecutedTriggers();
+      // Always ensure we handle triggers as an array, even if API returns null or undefined
+      const triggersArray = Array.isArray(triggers) ? triggers : [];
+      
+      setTriggerStats({
+        total: triggersArray.length || 0,
+        completed: triggersArray.filter(t => t.status === 'completed')?.length || 0,
+        active: triggersArray.filter(t => t.status === 'active')?.length || 0
+      });
     } catch (error) {
       console.error('Error fetching trigger stats:', error);
+      setTriggerStats({
+        total: 0,
+        completed: 0,
+        active: 0
+      });
     }
   };
 

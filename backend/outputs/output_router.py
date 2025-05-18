@@ -99,11 +99,29 @@ def send_email(smtp_config, subject, content):
         msg["From"] = smtp_config["from"]
         msg["To"] = smtp_config["to"]
 
-        with smtplib.SMTP_SSL(smtp_config["server"], smtp_config["port"]) as server:
-            server.login(smtp_config["user"], smtp_config["password"])
-            server.send_message(msg)
-
-        return f"✅ Email sent to {smtp_config['to']}"
+        logger.info(f"Attempting to send email to {smtp_config['to']} via {smtp_config['server']}:{smtp_config['port']}")
+        
+        try:
+            with smtplib.SMTP_SSL(smtp_config["server"], smtp_config["port"], timeout=10) as server:
+                logger.info("SMTP connection established")
+                server.login(smtp_config["user"], smtp_config["password"])
+                logger.info("SMTP login successful")
+                server.send_message(msg)
+                logger.info("Email sent successfully")
+                return f"✅ Email sent to {smtp_config['to']}"
+        except smtplib.SMTPAuthenticationError as e:
+            logger.error(f"SMTP Authentication Error: {str(e)}")
+            return f"❌ Email Error: Authentication failed. Please check your email credentials."
+        except smtplib.SMTPConnectError as e:
+            logger.error(f"SMTP Connection Error: {str(e)}")
+            return f"❌ Email Error: Could not connect to SMTP server. Please check your network connection and SMTP settings."
+        except smtplib.SMTPException as e:
+            logger.error(f"SMTP Error: {str(e)}")
+            return f"❌ Email Error: {str(e)}"
+        except Exception as e:
+            logger.error(f"Unexpected SMTP Error: {str(e)}")
+            return f"❌ Email Error: {str(e)}"
+            
     except Exception as e:
         logger.error(f"Email error: {str(e)}")
         return f"❌ Email Error: {str(e)}"

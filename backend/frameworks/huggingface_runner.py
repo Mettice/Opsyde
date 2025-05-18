@@ -1,10 +1,8 @@
-import requests
-from datetime import datetime
+import aiohttp
 import logging
 import json
 import os
-import asyncio
-import aiohttp
+from datetime import datetime
 from typing import Dict, Any, List, AsyncGenerator
 
 logger = logging.getLogger(__name__)
@@ -90,14 +88,36 @@ async def run_huggingface_tool(tool_data: Dict[str, Any]) -> Dict[str, Any]:
             elif "value" in inputs and isinstance(inputs["value"], dict) and "file_upload" in inputs["value"]:
                 file_data = inputs["value"]["file_upload"]
                 logger.info("Found file_upload in value")
-        
-        # Validate file data structure
-        if not isinstance(file_data, dict):
-            logger.error("File data not found or invalid format")
-            return {
-                "type": "error",
-                "error": "File data must be a dictionary with content and filename"
-            }
+
+        # Check for text input if no file data
+        if not file_data or not isinstance(file_data, dict):
+            # Check for direct text input
+            text_input = None
+            if 'text_input' in inputs:
+                text_input = inputs['text_input']
+                if isinstance(text_input, dict):
+                    if 'value' in text_input and isinstance(text_input['value'], dict):
+                        if 'file_upload' in text_input['value'] and 'text_input' in text_input['value']['file_upload']:
+                            text_input = text_input['value']['file_upload']['text_input']
+                    elif 'text_input' in text_input:
+                        text_input = text_input['text_input']
+
+            if text_input:
+                logger.info("Processing text input instead of file")
+                return {
+                    "type": "tool_result",
+                    "output": {"text": text_input},
+                    "metadata": {
+                        "timestamp": datetime.now().isoformat(),
+                        "input_type": "text"
+                    }
+                }
+            else:
+                logger.error("No file data or text input found")
+                return {
+                    "type": "error",
+                    "error": "No file data or text input provided"
+                }
             
         # Extract file content and metadata
         content = file_data.get("content")
@@ -132,7 +152,8 @@ async def run_huggingface_tool(tool_data: Dict[str, Any]) -> Dict[str, Any]:
                 "output": result,
                 "metadata": {
                     "filename": filename,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": datetime.now().isoformat(),
+                    "input_type": "file"
                 }
             }
             
@@ -147,7 +168,8 @@ async def run_huggingface_tool(tool_data: Dict[str, Any]) -> Dict[str, Any]:
         logger.error(f"Error in HuggingFace tool: {str(e)}")
         return {
             "type": "error",
-            "error": str(e)
+            "error": str(e),
+            "framework": "huggingface"
         }
 
 async def process_pdf(content: str) -> Dict[str, Any]:
@@ -312,9 +334,7 @@ async def run_huggingface_chat(
     max_tokens: int = 500,
     stream: bool = False
 ) -> str:
-    """
-    Run a chat completion using HuggingFace's API with streaming support
-    """
+    """Run a chat completion using HuggingFace's API with streaming support"""
     try:
         # Validate model
         if model not in SUPPORTED_MODELS:

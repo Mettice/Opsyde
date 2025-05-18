@@ -83,6 +83,7 @@ export default function FloatingMetricsPanel({ nodes, edges, onHighlightNodes })
     <div 
       className="fixed z-50 flex flex-col items-end"
       style={{ 
+        position: 'absolute',
         top: `${position.y}px`, 
         right: isExpanded ? `${position.x}px` : '4px',
         transition: isDragging ? 'none' : 'all 0.2s ease'
@@ -109,6 +110,7 @@ export default function FloatingMetricsPanel({ nodes, edges, onHighlightNodes })
             className={`${headerClasses} p-3 flex justify-between items-center cursor-move`}
             onMouseDown={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               setIsDragging(true);
             }}
             ref={dragRef}
