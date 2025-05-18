@@ -1,0 +1,102 @@
+{
+  "id": "3ab486de-6c25-4c05-8ad3-9b21ccd75b4c",
+  "name": "Agent with Task Test - Fixed",
+  "description": "A flow with agent and task nodes - with fixed connections",
+  "owner_id": "f31db8d3-7b54-46b5-bebf-1ea7b6b2edff",
+  "nodes": [
+    {
+      "id": "input-node-2",
+      "type": "input",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "data": {
+        "label": "User Query",
+        "inputType": "text",
+        "placeholder": "Ask a question",
+        "nodeId": "input-node-2",
+        "nodeType": "input"
+      }
+    },
+    {
+      "id": "agent-node-1",
+      "type": "agent",
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "data": {
+        "label": "Research Assistant",
+        "role": "Research Assistant",
+        "goal": "Find accurate information for user queries",
+        "backstory": "You are an experienced researcher with expertise in many fields",
+        "llmModel": "gpt-4",
+        "temperature": 0.7,
+        "max_tokens": 4000,
+        "framework": "openai",
+        "memoryEnabled": true,
+        "nodeId": "agent-node-1",
+        "nodeType": "agent"
+      }
+    },
+    {
+      "id": "task-node-1",
+      "type": "task",
+      "position": {
+        "x": 700,
+        "y": 100
+      },
+      "data": {
+        "label": "Research Task",
+        "description": "Research the topic and provide a detailed response",
+        "expectedOutput": "A thorough explanation with relevant information",
+        "nodeId": "task-node-1",
+        "nodeType": "task",
+        "priority": "Medium"
+      }
+    },
+    {
+      "id": "output-node-2",
+      "type": "output",
+      "position": {
+        "x": 1000,
+        "y": 100
+      },
+      "data": {
+        "label": "Response Output",
+        "outputType": "webhook",
+        "config": {
+          "url": "https://webhook.site/your-test-id"
+        },
+        "nodeId": "output-node-2",
+        "nodeType": "output"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-2-1",
+      "source": "input-node-2",
+      "target": "agent-node-1",
+      "sourceHandle": "output",
+      "targetHandle": "target"
+    },
+    {
+      "id": "edge-2-2",
+      "source": "agent-node-1",
+      "target": "task-node-1",
+      "sourceHandle": "output",
+      "targetHandle": "agent"
+    },
+    {
+      "id": "edge-2-3",
+      "source": "task-node-1",
+      "target": "output-node-2",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    }
+  ],
+  "created_at": "2025-05-02T09:26:43.599736",
+  "updated_at": "2025-05-02T09:26:43.599736"
+}

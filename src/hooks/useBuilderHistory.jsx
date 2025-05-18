@@ -1,13 +1,16 @@
 // hooks/useBuilderHistory.js
 import { useState, useRef, useCallback } from 'react';
 
+// Maximum number of history states to keep
+const MAX_HISTORY_LENGTH = 100;
+
 export const useBuilderHistory = (initialState = { nodes: [], edges: [] }) => {
   const [history, setHistory] = useState([initialState]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const skipNextHistoryUpdate = useRef(false);
   const debounceTimeoutRef = useRef(null);
 
-  // Add to history with debouncing
+  // Add to history with debouncing and bounded length
   const addToHistory = useCallback((newWorkflow) => {
     if (debounceTimeoutRef.current) {
       clearTimeout(debounceTimeoutRef.current);
@@ -43,18 +46,44 @@ export const useBuilderHistory = (initialState = { nodes: [], edges: [] }) => {
           edges: newWorkflow.edges.map(edge => ({ ...edge }))
         };
         
-        const newHist = history.slice(0, historyIndex + 1);
-        newHist.push(newWorkflowCopy);
+        setHistory(prevHistory => {
+          // Get the active part of history (up to current index + 1)
+          let newHist = prevHistory.slice(0, historyIndex + 1);
+          
+          // Add the new state
+          newHist.push(newWorkflowCopy);
+          
+          // If history exceeds max length, remove oldest states while preserving initial state
+          if (newHist.length > MAX_HISTORY_LENGTH) {
+            // Always keep the initial state (index 0)
+            const excess = newHist.length - MAX_HISTORY_LENGTH;
+            // Remove excess states while preserving the initial state
+            if (excess === 1) {
+              // If we only need to remove one state, remove the second state (index 1)
+              newHist.splice(1, 1);
+            } else {
+              // Remove states from the beginning (after initial state) to maintain max length
+              newHist.splice(1, excess);
+            }
+            // Adjust history index since we removed states before it
+            setHistoryIndex(prev => Math.max(0, prev - excess));
+          }
+          
+          return newHist;
+        });
         
-        setHistory(newHist);
-        setHistoryIndex(newHist.length - 1);
+        setHistoryIndex(prev => {
+          // Calculate new index, ensuring it doesn't exceed MAX_HISTORY_LENGTH - 1
+          const newIndex = Math.min(prev + 1, MAX_HISTORY_LENGTH - 1);
+          return newIndex;
+        });
       } catch (error) {
         console.error('Error adding to history:', error);
       } finally {
         debounceTimeoutRef.current = null;
       }
     }, 300);
-  }, [history, historyIndex]);
+  }, [historyIndex]);
 
   // Undo function
   const undo = useCallback((handleNodeEdit, handleNodeDelete) => {
@@ -135,6 +164,7 @@ export const useBuilderHistory = (initialState = { nodes: [], edges: [] }) => {
     canRedo: historyIndex < history.length - 1,
     addToHistory,
     undo,
-    redo
+    redo,
+    maxHistoryLength: MAX_HISTORY_LENGTH
   };
 };

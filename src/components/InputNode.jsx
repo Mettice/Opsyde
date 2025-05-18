@@ -3,6 +3,8 @@ import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
 const InputNode = memo(({ data, isConnectable, selected }) => {
+  // Ensure data.nodeId has a default value
+  const nodeId = data.nodeId || `input-node-${Math.random().toString(36).substring(2, 9)}`;
   const [value, setValue] = useState(data.value || '');
   const [filePreview, setFilePreview] = useState(null);
   const [customFields, setCustomFields] = useState(data.customFields || {});
@@ -235,18 +237,28 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
   // Handle regular input changes
   const handleInputChange = (e) => {
     const newValue = e.target.value;
-    const inputData = {
-      text_input: newValue,
-      inputKey: data.inputKey || 'text_input',
-      type: 'text',
-      file_upload: null // Clear any file data
+    const inputKey = data.inputKey || 'text_input';
+
+    setValue(newValue);
+
+    // Format the value to match the expected structure
+    const structuredValue = {
+      type: 'text_input',
+      value: newValue,
+      text_output: newValue
     };
 
-    setValue(inputData);
-    setFilePreview(null);
-    
+    // structured object so the flow knows where it came from
     if (data.onValueChange) {
-      data.onValueChange(inputData);
+      const flowResult = {
+        nodeId: nodeId,
+        nodeType: 'input',
+        label: data.label || '',
+        inputKey: inputKey,
+        type: 'text_input',
+        value: structuredValue
+      };
+      data.onValueChange(flowResult);
     }
   };
 
@@ -257,14 +269,26 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
       e.preventDefault();
     }
     
+    // Include all necessary data in the event detail
     const event = new CustomEvent('node-edit', { 
       detail: { 
-        nodeId: data.nodeId,
-        nodeType: data.nodeType || 'input'
+        nodeId: nodeId,
+        nodeType: data.nodeType || 'input',
+        data: {
+          ...data,
+          nodeId,
+          value,
+          customFields,
+          filePreview,
+          inputType: data.inputType || 'text',
+          label: data.label || 'Input',
+          variableName: data.variableName,
+          isRequired: data.isRequired
+        }
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [data, nodeId, value, customFields, filePreview]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -274,12 +298,12 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-delete', { 
       detail: { 
-        nodeId: data.nodeId,
+        nodeId: nodeId,
         nodeType: data.nodeType || 'input'
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [nodeId, data?.nodeType]);
 
   const inputType = data.inputType || 'text';
   const isRequired = data.isRequired || false;
@@ -297,28 +321,36 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
 
   useEffect(() => {
     // Ensure the node's output is properly structured for the flow
-    if (value && typeof value === 'object' && value.value) {
-      // Already properly structured
-      if (data.onValueChange) {
-        data.onValueChange(value);
-      }
-    } else {
-      // Structure the value properly
-      const outputData = {
-        value: {
-          text_input: typeof value === 'string' ? value : '',
-          file_upload: typeof value === 'object' ? value : null
-        },
-        inputKey: data.inputKey || data.variableName || 'input',
-        type: data.inputType || 'text',
-        nodeType: 'input'
+    if (!value) {
+      // Initialize with empty value but proper structure
+      const initialData = {
+        type: 'text_input',
+        value: '',
+        text_output: '',
+        nodeId: nodeId,
+        nodeType: 'input',
+        inputKey: data.inputKey || data.variableName || 'input'
       };
-
+      
       if (data.onValueChange) {
-        data.onValueChange(outputData);
+        data.onValueChange(initialData);
+      }
+    } else if (typeof value === 'string') {
+      // String values need structure
+      const structuredData = {
+        type: 'text_input',
+        value: value,
+        text_output: value,
+        nodeId: nodeId,
+        nodeType: 'input',
+        inputKey: data.inputKey || data.variableName || 'input'
+      };
+      
+      if (data.onValueChange) {
+        data.onValueChange(structuredData);
       }
     }
-  }, [value, data.inputKey, data.inputType, data.variableName, data.onValueChange]);
+  }, [value, data.inputKey, data.inputType, data.variableName, data.onValueChange, nodeId]);
 
   // Clear input handler
   const handleClear = () => {
@@ -416,8 +448,8 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
             onChange={handleInputChange}
             placeholder="Enter URL..."
             className="w-full p-2 border rounded text-sm focus:border-blue-300 focus:ring focus:ring-blue-200"
-            id={`url-input-${data.nodeId}`}
-            name={`url-input-${data.nodeId}`}
+            id={`url-input-${nodeId}`}
+            name={`url-input-${nodeId}`}
             aria-label="URL input"
           />
         ) : (
@@ -427,8 +459,8 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
             placeholder="Enter text..."
             rows={3}
             className="w-full p-2 border rounded text-sm focus:border-blue-300 focus:ring focus:ring-blue-200"
-            id={`text-input-${data.nodeId}`}
-            name={`text-input-${data.nodeId}`}
+            id={`text-input-${nodeId}`}
+            name={`text-input-${nodeId}`}
             aria-label="Text input"
           />
         )}
@@ -532,7 +564,13 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
         </button>
       </div>
 
-      {/* Handle */}
+      {/* Handles */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        isConnectable={isConnectable}
+        className="w-3 h-3 bg-blue-500 top-[-4px]"
+      />
       <Handle
         type="source"
         position={Position.Bottom}
@@ -545,7 +583,7 @@ const InputNode = memo(({ data, isConnectable, selected }) => {
 
 InputNode.propTypes = {
   data: PropTypes.shape({
-    nodeId: PropTypes.string.isRequired,
+    nodeId: PropTypes.string,
     label: PropTypes.string,
     inputType: PropTypes.oneOf(['text', 'file', 'url']),
     inputKey: PropTypes.string,

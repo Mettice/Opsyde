@@ -13,7 +13,7 @@ export default function TemplatesPage() {
 
   const handleLoad = (template) => {
     localStorage.setItem('loadedFlow', JSON.stringify(template));
-    navigate('/builderpage');
+    navigate('/builder');
   };
 
   return (

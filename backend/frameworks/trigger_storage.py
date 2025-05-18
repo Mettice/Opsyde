@@ -30,7 +30,36 @@ logger.info(f"Using triggers directory: {TRIGGERS_DIR.absolute()}")
 # In-memory storage as a fallback
 IN_MEMORY_TRIGGERS = {}
 
-def register_trigger(trigger_id, flow_data, owner="system"):
+async def get_trigger_owner(trigger_id: str) -> str:
+    """
+    Get the owner of a trigger
+    
+    Args:
+        trigger_id: The ID of the trigger
+        
+    Returns:
+        The owner of the trigger, or None if not found
+    """
+    try:
+        # First check file storage
+        trigger_file = TRIGGERS_DIR / f"{trigger_id}.json"
+        if trigger_file.exists():
+            with open(trigger_file, "r") as f:
+                trigger_data = json.load(f)
+                return trigger_data.get("owner")
+                
+        # Fall back to in-memory storage
+        if trigger_id in IN_MEMORY_TRIGGERS:
+            return IN_MEMORY_TRIGGERS[trigger_id].get("owner")
+            
+        logger.warning(f"Trigger ID not found: {trigger_id}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting trigger owner for {trigger_id}: {str(e)}")
+        return None
+
+async def register_trigger(trigger_id, flow_data, owner="system"):
     """
     Register a new trigger with its associated flow
     """
@@ -74,9 +103,13 @@ def register_trigger(trigger_id, flow_data, owner="system"):
         logger.error(f"Error registering trigger {trigger_id}: {str(e)}")
         return False
 
-def get_trigger_flow(trigger_id):
+async def get_trigger_flow(trigger_id, increment_count=False):
     """
     Retrieve a flow associated with a trigger ID
+    
+    Args:
+        trigger_id: The ID of the trigger
+        increment_count: Whether to increment the trigger count (should only be true during actual execution)
     """
     try:
         trigger_file = TRIGGERS_DIR / f"{trigger_id}.json"
@@ -86,21 +119,42 @@ def get_trigger_flow(trigger_id):
             
         with open(trigger_file, "r") as f:
             trigger_data = json.load(f)
-            
-        # Update trigger stats
-        trigger_data["last_triggered"] = datetime.now().isoformat()
-        trigger_data["trigger_count"] = trigger_data.get("trigger_count", 0) + 1
         
-        # Save updated stats
-        with open(trigger_file, "w") as f:
-            json.dump(trigger_data, f, indent=2)
+        # Only update stats if this is an actual execution, not just a status check
+        if increment_count:
+            trigger_data["last_triggered"] = datetime.now().isoformat()
+            trigger_data["trigger_count"] = trigger_data.get("trigger_count", 0) + 1
+            
+            # For one-time schedule triggers, mark as completed after execution
+            if trigger_data.get("trigger_type") == "schedule" and trigger_data.get("flow", {}).get("trigger_type") == "schedule":
+                schedule_type = trigger_data.get("flow", {}).get("nodes", [])[0].get("data", {}).get("scheduleType")
+                if schedule_type == "once":
+                    trigger_data["completed"] = True
+                    trigger_data["completed_at"] = datetime.now().isoformat()
+                    logger.info(f"Marked one-time schedule trigger {trigger_id} as completed")
+            
+            # Save updated stats
+            with open(trigger_file, "w") as f:
+                json.dump(trigger_data, f, indent=2)
             
         return trigger_data["flow"]
     except Exception as e:
         logger.error(f"Error retrieving trigger {trigger_id}: {str(e)}")
         return None
 
-def list_triggers(owner=None):
+async def execute_trigger(trigger_id):
+    """
+    Mark a trigger as executed and increment its count
+    
+    Args:
+        trigger_id: The ID of the trigger to execute
+    
+    Returns:
+        The flow data associated with the trigger, or None if not found
+    """
+    return await get_trigger_flow(trigger_id, increment_count=True)
+
+async def list_triggers(owner=None):
     """
     List all registered triggers, optionally filtered by owner
     """
@@ -167,7 +221,7 @@ def list_triggers(owner=None):
         logger.error(f"Error listing triggers: {str(e)}")
         return []
 
-def delete_trigger(trigger_id):
+async def delete_trigger(trigger_id):
     """
     Delete a registered trigger
     """
@@ -176,19 +230,34 @@ def delete_trigger(trigger_id):
         if trigger_file.exists():
             trigger_file.unlink()
             logger.info(f"Deleted trigger {trigger_id}")
+            
+            # Also remove from in-memory storage if present
+            IN_MEMORY_TRIGGERS.pop(trigger_id, None)
+            
             return True
+            
+        # Check in-memory storage
+        if trigger_id in IN_MEMORY_TRIGGERS:
+            del IN_MEMORY_TRIGGERS[trigger_id]
+            return True
+            
         return False
     except Exception as e:
         logger.error(f"Error deleting trigger {trigger_id}: {str(e)}")
         return False
 
-def update_trigger_metadata(trigger_id, metadata):
+async def update_trigger_metadata(trigger_id, metadata):
     """
     Update metadata for a trigger
     """
     try:
         trigger_file = TRIGGERS_DIR / f"{trigger_id}.json"
         if not trigger_file.exists():
+            # Check in-memory storage
+            if trigger_id in IN_MEMORY_TRIGGERS:
+                IN_MEMORY_TRIGGERS[trigger_id].update(metadata)
+                return True
+                
             logger.warning(f"Trigger ID not found for metadata update: {trigger_id}")
             return False
             
@@ -198,12 +267,15 @@ def update_trigger_metadata(trigger_id, metadata):
         # Update the metadata
         trigger_data.update(metadata)
         
-        # Save updated data
+        # Save back to file
         with open(trigger_file, "w") as f:
             json.dump(trigger_data, f, indent=2)
             
-        logger.info(f"Updated metadata for trigger {trigger_id}")
+        # Update in-memory storage if present
+        if trigger_id in IN_MEMORY_TRIGGERS:
+            IN_MEMORY_TRIGGERS[trigger_id].update(metadata)
+            
         return True
     except Exception as e:
-        logger.error(f"Error updating trigger metadata {trigger_id}: {str(e)}")
+        logger.error(f"Error updating trigger metadata for {trigger_id}: {str(e)}")
         return False 

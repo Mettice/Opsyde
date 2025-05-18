@@ -201,7 +201,7 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
       };
       
       // Use the backend URL from environment if available, otherwise use default
-      const backendUrl = (window.BACKEND_URL || 'http://localhost:8000') + '/api/register-trigger';
+      const backendUrl = (window.BACKEND_URL || 'http://localhost:8000') + '/api/register_trigger';
       console.log(`Sending trigger registration to: ${backendUrl}`);
       console.log("Registration payload:", JSON.stringify(flow, null, 2));
       

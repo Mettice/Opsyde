@@ -153,7 +153,7 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
       <Handle
         type="source"
         position={Position.Bottom}
-        id="source"
+        id="output"
         style={{
           bottom: -5,
           width: 16,

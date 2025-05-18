@@ -1,0 +1,47 @@
+{
+  "id": "fa0c2c6e-1527-49f2-a4e9-d563408b2811",
+  "name": "Sample Input-Output Flow",
+  "description": "A basic flow with input and output nodes",
+  "owner_id": "f31db8d3-7b54-46b5-bebf-1ea7b6b2edff",
+  "nodes": [
+    {
+      "id": "input-node-1",
+      "type": "input",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "data": {
+        "label": "User Input",
+        "inputType": "text",
+        "placeholder": "Enter some text"
+      }
+    },
+    {
+      "id": "output-node-1",
+      "type": "output",
+      "position": {
+        "x": 400,
+        "y": 100
+      },
+      "data": {
+        "label": "Text Output",
+        "output_type": "webhook",
+        "config": {
+          "url": "https://webhook.site/your-test-id"
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "input-node-1",
+      "target": "output-node-1",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    }
+  ],
+  "created_at": "2025-05-01T23:05:41.994306",
+  "updated_at": "2025-05-01T23:05:41.994306"
+}

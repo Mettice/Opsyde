@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 import ReactMarkdown from 'react-markdown';
@@ -6,49 +6,116 @@ import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import 'github-markdown-css/github-markdown.css';
+import clsx from 'clsx';
 
-const ChatNode = React.memo(({ data, isConnectable, selected }) => {
+// Base styles
+const baseStyles = {
+  container: "bg-white p-3 rounded-lg shadow-md w-64 min-h-[200px] chat-node",
+  header: "text-lg font-bold text-pink-700 mb-1",
+  description: "text-xs text-gray-600 mb-2",
+  messagesContainer: "chat-messages space-y-2 max-h-60 overflow-y-auto",
+  inputContainer: "flex items-center",
+  input: "flex-1 border border-gray-300 rounded-l px-2 py-1 text-sm",
+  sendButton: "bg-pink-500 hover:bg-pink-600 text-white text-sm px-3 py-1 rounded-r",
+  modelInfo: "text-xs text-gray-600 mt-2",
+  actionButtons: "flex mt-3 space-x-2"
+};
+
+// Memoized Message component
+const Message = memo(({ message }) => {
+  return (
+    <div className={`chat-message ${message.role} markdown-body`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({node, inline, className, children, ...props}) {
+            const match = /language-(\w+)/.exec(className || '');
+            return !inline && match ? (
+              <SyntaxHighlighter
+                style={vscDarkPlus}
+                language={match[1]}
+                PreTag="div"
+                {...props}
+              >
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            ) : (
+              <code className={className} {...props}>
+                {children}
+              </code>
+            );
+          }
+        }}
+      >
+        {message.text}
+      </ReactMarkdown>
+    </div>
+  );
+});
+
+Message.propTypes = {
+  message: PropTypes.shape({
+    text: PropTypes.string.isRequired,
+    role: PropTypes.string.isRequired
+  }).isRequired
+};
+
+Message.displayName = 'Message';
+
+const ChatNode = memo(({ data, isConnectable, selected }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentMessage, setCurrentMessage] = useState('');
   
-  // Create stable event handlers with useCallback
+  // Memoized styles
+  const containerStyle = useMemo(() => 
+    clsx(
+      baseStyles.container,
+      selected ? 'border-2 border-pink-500' : 'border-2 border-pink-200'
+    ), [selected]);
+
+  const handleStyle = useMemo(() => ({
+    target: {
+      className: "w-4 h-4 bg-pink-600 hover:bg-pink-500 hover:w-5 hover:h-5 transition-all -top-2",
+      style: { top: '-0.5rem' }
+    },
+    source: {
+      className: "w-4 h-4 bg-pink-600 hover:bg-pink-500 hover:w-5 hover:h-5 transition-all -bottom-2",
+      style: { bottom: '-0.5rem' }
+    }
+  }), []);
+
+  // Memoized handlers
   const handleEditClick = useCallback((e) => {
-    // Ensure we have an event object
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    // Dispatch a custom event that Builder.jsx will listen for
-    const event = new CustomEvent('node-edit', { 
+    document.dispatchEvent(new CustomEvent('node-edit', { 
       detail: { 
         nodeId: data.nodeId,
         nodeType: data.nodeType || 'chatbot'
       } 
-    });
-    document.dispatchEvent(event);
+    }));
   }, [data?.nodeId, data?.nodeType]);
 
   const handleDeleteClick = useCallback((e) => {
-    // Ensure we have an event object
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     
-    // Dispatch a custom event that Builder.jsx will listen for
-    const event = new CustomEvent('node-delete', { 
+    document.dispatchEvent(new CustomEvent('node-delete', { 
       detail: { 
         nodeId: data.nodeId,
         nodeType: data.nodeType || 'chatbot'
       } 
-    });
-    document.dispatchEvent(event);
+    }));
   }, [data?.nodeId, data?.nodeType]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     if (!input.trim()) return;
     
     try {
@@ -63,53 +130,28 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
       });
     
       const { reply } = await res.json();
-      setMessages([...messages, { text: input, from: "user" }, { text: reply, from: "bot" }]);
+      setMessages(prev => [...prev, 
+        { text: input, from: "user" }, 
+        { text: reply, from: "bot" }
+      ]);
       setInput("");
     } catch (error) {
       console.error("Error sending message:", error);
-      setMessages([...messages, { text: input, from: "user" }, { text: "Error: Could not get a response", from: "bot" }]);
+      setMessages(prev => [...prev, 
+        { text: input, from: "user" }, 
+        { text: "Error: Could not get a response", from: "bot" }
+      ]);
       setInput("");
     }
-  };
+  }, [input, data.nodeId, messages]);
 
+  // Load messages from data
   useEffect(() => {
     if (data.messages) {
       setMessages(data.messages);
     }
   }, [data.messages]);
 
-  const renderMessage = (message) => {
-    return (
-      <div className={`chat-message ${message.role} markdown-body`}>
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            code({node, inline, className, children, ...props}) {
-              const match = /language-(\w+)/.exec(className || '');
-              return !inline && match ? (
-                <SyntaxHighlighter
-                  style={vscDarkPlus}
-                  language={match[1]}
-                  PreTag="div"
-                  {...props}
-                >
-                  {String(children).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-              ) : (
-                <code className={className} {...props}>
-                  {children}
-                </code>
-              );
-            }
-          }}
-        >
-          {message.text}
-        </ReactMarkdown>
-      </div>
-    );
-  };
-
-  // Handle rendering with an error message if data is missing
   if (!data) {
     return (
       <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded">
@@ -119,62 +161,49 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
   }
 
   return (
-    <div 
-      className={`bg-white border-2 ${selected ? 'border-pink-500' : 'border-pink-200'} p-3 rounded-lg shadow-md w-64 min-h-[200px] chat-node ${selected ? 'selected' : ''}`}
-      data-nodeid={data.id}
-      style={{ display: 'flex', flexDirection: 'column' }}
-    >
-      {/* Target handle at top */}
+    <div className={containerStyle} onClick={(e) => e.stopPropagation()}>
       <Handle 
         type="target" 
         position={Position.Top} 
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-pink-600 hover:bg-pink-500 hover:w-5 hover:h-5 transition-all -top-2"
+        {...handleStyle.target}
         id={`${data.id}-target`}
         title="Connect from: Agent, Task, Tool"
       >
         <div className="absolute -top-5 text-xs text-gray-500 whitespace-nowrap">← Input</div>
       </Handle>
       
-      <h3 className="text-lg font-bold text-pink-700 mb-1">{data.label}</h3>
+      <div className={baseStyles.header}>{data.label}</div>
       
       {data.description && (
-        <div className="text-xs text-gray-600 mb-2">
-          {data.description}
-        </div>
+        <div className={baseStyles.description}>{data.description}</div>
       )}
       
-      <div className="chat-messages space-y-2 max-h-60 overflow-y-auto">
+      <div className={baseStyles.messagesContainer}>
         {messages.map((msg, idx) => (
-          <div key={idx} className={`message ${msg.from === "bot" ? "assistant" : "user"}`}>
-            {renderMessage(msg)}
-          </div>
+          <Message key={idx} message={msg} />
         ))}
-        {isStreaming && (
-          <div className="message assistant">
-            {renderMessage({ text: currentMessage, from: "bot" })}
-          </div>
-        )}
+        {isStreaming && <Message message={{ text: currentMessage, from: "bot" }} />}
       </div>
       
-      <div className="flex items-center">
+      <div className={baseStyles.inputContainer}>
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyPress={e => e.key === 'Enter' && sendMessage()}
-          className="flex-1 border border-gray-300 rounded-l px-2 py-1 text-sm"
+          className={baseStyles.input}
           placeholder="Type your message..."
         />
         <button
           onClick={sendMessage}
-          className="bg-pink-500 hover:bg-pink-600 text-white text-sm px-3 py-1 rounded-r"
+          className={baseStyles.sendButton}
         >
           Send
         </button>
       </div>
       
       {data.llmModel && (
-        <div className="text-xs text-gray-600 mt-2">
+        <div className={baseStyles.modelInfo}>
           <span className="font-medium">Model:</span> {data.llmModel}
           {data.temperature && (
             <span className="ml-2">
@@ -184,37 +213,26 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
         </div>
       )}
       
-      {/* Action buttons */}
-      <div className="flex mt-3 space-x-2">
+      <div className={baseStyles.actionButtons}>
         <button 
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleEditClick(e);
-          }}
+          onClick={handleEditClick}
           className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
         >
           Edit
         </button>
-        
         <button 
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDeleteClick(e);
-          }}
+          onClick={handleDeleteClick}
           className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
         >
           Delete
         </button>
       </div>
       
-      {/* Source handle at bottom */}
       <Handle 
         type="source" 
         position={Position.Bottom} 
         isConnectable={isConnectable}
-        className="w-4 h-4 bg-pink-600 hover:bg-pink-500 hover:w-5 hover:h-5 transition-all -bottom-2"
+        {...handleStyle.source}
         id={`${data.id}-source`}
         title="Connect to: Task, Tool"
       >
@@ -224,7 +242,6 @@ const ChatNode = React.memo(({ data, isConnectable, selected }) => {
   );
 });
 
-// Define PropTypes for type safety and documentation
 ChatNode.propTypes = {
   data: PropTypes.shape({
     id: PropTypes.string,
@@ -233,12 +250,18 @@ ChatNode.propTypes = {
     model: PropTypes.string,
     nodeId: PropTypes.string,
     nodeType: PropTypes.string,
+    llmModel: PropTypes.string,
+    temperature: PropTypes.number,
+    messages: PropTypes.arrayOf(PropTypes.shape({
+      text: PropTypes.string,
+      from: PropTypes.string
+    })),
+    description: PropTypes.string
   }).isRequired,
   isConnectable: PropTypes.bool,
-  selected: PropTypes.bool,
+  selected: PropTypes.bool
 };
 
-// Add a display name for better debugging
 ChatNode.displayName = 'ChatNode';
 
 export default ChatNode; 

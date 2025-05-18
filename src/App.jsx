@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './auth/AuthProvider';
 import HomePage from './pages/Home';
-import BuilderPage from './pages/BuilderPage';
+import Builder from './pages/Builder';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
 import Dashboard from './pages/Dashboard';
@@ -83,7 +83,7 @@ function App() {
           } />
           <Route path="/builder" element={
             <ProtectedRoute>
-              <BuilderPage />
+              <Builder/>
             </ProtectedRoute>
           } />
         </Routes>

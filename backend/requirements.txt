@@ -5,6 +5,7 @@ pydantic
 python-dotenv
 sqlalchemy
 alembic
+APScheduler==3.11
 
 # AI/ML
 openai
@@ -18,6 +19,7 @@ crewai==0.11.2
 pyautogen
 llama-index
 chromadb
+langchain-community
 
 # Vector DB
 faiss-cpu
@@ -55,3 +57,18 @@ python-json-logger
 
 # Install spaCy model
 en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1.tar.gz
+
+# New dependencies
+jinja2
+ratelimit
+tenacity
+
+# Test dependencies
+pytest
+pytest-asyncio
+pytest-cov
+httpx
+black
+isort
+flake8
+mypy

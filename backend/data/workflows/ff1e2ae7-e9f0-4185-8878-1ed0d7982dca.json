@@ -1,0 +1,31 @@
+{
+  "id": "ff1e2ae7-e9f0-4185-8878-1ed0d7982dca",
+  "name": "Sample Workflow",
+  "description": "A sample workflow created automatically",
+  "owner_id": "f31db8d3-7b54-46b5-bebf-1ea7b6b2edff",
+  "nodes": [
+    {
+      "id": "node-1",
+      "type": "input",
+      "data": {
+        "label": "Input Node"
+      }
+    },
+    {
+      "id": "node-2",
+      "type": "output",
+      "data": {
+        "label": "Output Node"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "node-1",
+      "target": "node-2"
+    }
+  ],
+  "created_at": "2025-05-05T14:20:26.179629",
+  "updated_at": "2025-05-05T14:20:26.179629"
+}
