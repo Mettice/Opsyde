@@ -1,7 +1,6 @@
 import React, { useState, useCallback, memo, useEffect, useMemo } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
-import EditModall from './EditModall';
 
 // Base styles defined outside component
 const baseStyles = {
@@ -57,33 +56,10 @@ export const ToolType = {
   CUSTOM: 'custom'
 };
 
-// Framework definitions
-export const LLMFrameworks = {
-  OPENAI: 'openai',
-  OPENROUTER: 'openrouter',
-  HUGGINGFACE: 'huggingface'
-};
-
-export const APIFrameworks = {
-  WEBHOOK: 'webhook',
-  API: 'api',
-  CUSTOM: 'custom'
-};
-
 // Use React.memo to prevent unnecessary re-renders
 const ToolNode = memo(({ data, isConnectable, selected }) => {
   const [hideApiEndpoint, setHideApiEndpoint] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Remove local state that duplicates props - use data directly
-  // This was likely causing the display issue
-  
-  // Sync local state with props when they change
-  useEffect(() => {
-    // Only keep API endpoint visibility as local state since it's UI-only
-    // toolType and framework should come directly from data prop
-  }, [data.toolType, data.framework]);
-
   // Memoize container style
   const containerStyle = useMemo(() => (
     `${baseStyles.container} ${selected ? baseStyles.selectedBorder : baseStyles.defaultBorder}`
@@ -114,8 +90,16 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
       e.stopPropagation();
       e.preventDefault();
     }
-    setIsModalOpen(true);
-  }, []);
+    
+    // Use the same event system as other nodes
+    const event = new CustomEvent('node-edit', { 
+      detail: { 
+        nodeId: data.nodeId,
+        nodeType: 'tool'
+      } 
+    });
+    document.dispatchEvent(event);
+  }, [data.nodeId]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -123,10 +107,15 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
       e.preventDefault();
     }
     
-    if (window.confirm('Are you sure you want to delete this node?')) {
-      data.onDelete?.();
-    }
-  }, [data]);
+    // Use the same event system as other nodes
+    const event = new CustomEvent('node-delete', { 
+      detail: { 
+        nodeId: data.nodeId,
+        nodeType: 'tool'
+      } 
+    });
+    document.dispatchEvent(event);
+  }, [data.nodeId]);
 
   // Toggle API endpoint visibility
   const toggleApiVisibility = useCallback((e) => {
@@ -151,34 +140,23 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     );
   }, [data.origin, originBadgeStyle]);
 
-  const handleCloseModal = useCallback(() => {
-    setIsModalOpen(false);
-  }, []);
+  // Get the display endpoint (frameworkConfig.url or apiEndpoint)
+  const displayEndpoint = useMemo(() => {
+    return data.frameworkConfig?.url || data.apiEndpoint || '';
+  }, [data.frameworkConfig?.url, data.apiEndpoint]);
 
-  const handleSave = useCallback((newData) => {
-    // Make sure to call onChange with the complete updated data
-    if (data.onChange) {
-      data.onChange({
-        ...data,
-        ...newData
-      });
-    }
-    setIsModalOpen(false);
-  }, [data]);
-
-  // Get available frameworks based on tool type - now using data.toolType
-  const getAvailableFrameworks = useCallback(() => {
-    switch (data.toolType) {
-      case ToolType.LLM:
-        return Object.values(LLMFrameworks);
-      case ToolType.API:
-      case ToolType.WEBHOOK:
-      case ToolType.CUSTOM:
-        return Object.values(APIFrameworks);
-      default:
-        return [];
-    }
-  }, [data.toolType]);
+  // Get tool configuration summary
+  const configSummary = useMemo(() => {
+    const config = data.frameworkConfig || {};
+    const parts = [];
+    
+    if (config.method) parts.push(`${config.method}`);
+    if (config.model) parts.push(`Model: ${config.model}`);
+    if (config.temperature !== undefined) parts.push(`T: ${config.temperature}`);
+    if (config.max_tokens) parts.push(`Max: ${config.max_tokens}`);
+    
+    return parts.join(' • ');
+  }, [data.frameworkConfig]);
 
   return (
     <div 
@@ -205,11 +183,11 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
       {/* Description */}
       {data.description && (
         <div className={baseStyles.description}>
-          <span className="font-medium">Performs:</span> {data.description}
+          <span className="font-medium">Purpose:</span> {data.description}
         </div>
       )}
       
-      {/* Tool type and framework - now using data directly */}
+      {/* Tool type and framework */}
       <div className="text-xs text-gray-600 mb-2">
         <div><span className="font-medium">Type:</span> {data.toolType || 'API'}</div>
         {data.framework && (
@@ -217,8 +195,15 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
         )}
       </div>
       
+      {/* Configuration summary */}
+      {configSummary && (
+        <div className="text-xs text-blue-600 mb-2 bg-blue-50 p-2 rounded">
+          <span className="font-medium">Config:</span> {configSummary}
+        </div>
+      )}
+      
       {/* API Endpoint */}
-      {data.apiEndpoint && (
+      {displayEndpoint && (
         <div className="mb-3">
           <button
             onClick={toggleApiVisibility}
@@ -228,9 +213,39 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
           </button>
           {!hideApiEndpoint && (
             <div className="mt-2 text-xs font-mono bg-gray-50 p-2 rounded border border-gray-200 break-all">
-              {data.apiEndpoint}
+              {displayEndpoint}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Expected Output */}
+      {data.expectedOutput && (
+        <div className="mb-3">
+          <div className="text-xs text-gray-600">
+            <span className="font-medium">Expected Output:</span>
+          </div>
+          <div className="text-xs text-gray-500 italic bg-gray-50 p-2 rounded mt-1">
+            {data.expectedOutput}
+          </div>
+        </div>
+      )}
+
+      {/* Condition */}
+      {data.condition && (
+        <div className="mb-3">
+          <div className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
+            <span className="font-medium">Condition:</span> {data.condition}
+          </div>
+        </div>
+      )}
+
+      {/* Async indicator */}
+      {data.async && (
+        <div className="mb-3">
+          <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+            ⚡ Async
+          </span>
         </div>
       )}
 
@@ -260,18 +275,6 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
         isConnectable={isConnectable}
         {...handleStyles.output}
       />
-
-      {/* EditModal with all necessary props */}
-      {isModalOpen && (
-        <EditModall
-          isOpen={true}
-          onClose={handleCloseModal}
-          onSave={handleSave}
-          nodeData={data}
-          nodeType="tool"
-          availableFrameworks={getAvailableFrameworks()}
-        />
-      )}
     </div>
   );
 });
@@ -285,7 +288,11 @@ ToolNode.propTypes = {
     description: PropTypes.string,
     toolType: PropTypes.string,
     framework: PropTypes.string,
+    frameworkConfig: PropTypes.object,
     apiEndpoint: PropTypes.string,
+    expectedOutput: PropTypes.string,
+    condition: PropTypes.string,
+    async: PropTypes.bool,
     origin: PropTypes.string,
     result: PropTypes.any,
     nodeType: PropTypes.string,

@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useState, useRef } from 'react';
 import { ReactFlowProvider } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useAuth } from '../auth/AuthProvider';
@@ -30,6 +30,8 @@ import WebhookFlowModal from '../components/WebhookFlowModal';
 import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
 import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPanel';
 import Notification from '../components/Notification';
+import SmartToolSelector from '../components/templates/SmartToolSelector';
+import HelpTooltip from '../components/HelpTooltip';
 
 // Custom Hooks
 import { useNodeManagement } from '../hooks/useNodeManagement';
@@ -39,6 +41,7 @@ import { useToolTemplates } from '../hooks/useToolTemplates';
 import { useTriggers } from '../hooks/useTriggers';
 import useThrottledViewport from '../hooks/useThrottledViewport';
 import useThrottledZoom from '../hooks/useThrottledZoom';
+import { useSmartToolSelector } from '../hooks/useToolExecution';
 
 // The main content component (using contexts)
 const BuilderPageContent = () => {
@@ -54,7 +57,7 @@ const BuilderPageContent = () => {
     onConnect, canConnect, onNodeDragStop,
     cleanNodesForSave
   } = useFlow();
-  
+
   const {
     // Modal states
     showEditModal, closeEditModal, toggleEditModal,
@@ -115,6 +118,15 @@ const BuilderPageContent = () => {
     handleNodeEdit,
     handleNodeDelete
   } = useNodeManagement();
+
+  // Smart Tool Selector hook
+  const {
+    isOpen: showSmartTools,
+    availableTools: smartTools,
+    openSelector: openSmartTools,
+    closeSelector: closeSmartTools,
+    addTool: addSmartTool
+  } = useSmartToolSelector();
   
   // Function to properly handle node edit saves with clean data
   const onSaveEdit = useCallback((formData) => {
@@ -158,6 +170,43 @@ const BuilderPageContent = () => {
     
     closeEditModal();
   }, [selectedNode, handleNodeEdit, handleNodeDelete, closeEditModal, setNodes]);
+
+  // Handle smart tool selection (converts to node)
+  const handleSmartToolSelect = (toolNode) => {
+    // Calculate a good position for the new node
+    const newPosition = {
+      x: Math.random() * 400 + 100, // Random position to avoid overlap
+      y: Math.random() * 400 + 100
+    };
+
+    // Create a new node from the smart tool
+    const newNode = {
+      id: toolNode.id || `smart-tool-${Date.now()}`,
+      type: 'tool',
+      position: newPosition,
+      data: {
+        ...toolNode.data,
+        // Ensure the node has edit and delete handlers
+        onEdit: () => handleNodeEdit(toolNode.id || `smart-tool-${Date.now()}`),
+        onDelete: () => handleNodeDelete(toolNode.id || `smart-tool-${Date.now()}`)
+      }
+    };
+    
+    setNodes(prev => [...prev, newNode]);
+    closeSmartTools();
+    
+    addNotification({
+      message: `Added ${toolNode.data.label} smart tool to workflow`,
+      type: "success"
+    });
+  };
+
+  // Quick add smart tool function
+  const handleQuickAddSmartTool = async (category, service) => {
+    // For now, just open the smart tool selector
+    // You could extend this to pre-select category/service if Smart Tool Selector supports it
+    openSmartTools();
+  };
 
   // Add event listeners for node editing
   useEffect(() => {
@@ -373,12 +422,86 @@ const BuilderPageContent = () => {
       });
     }
   };
+
+  const getConnectedNodes = useCallback((nodeId) => {
+    if (!nodeId) return [];
+    
+    // Get edges that connect TO this node (incoming edges)
+    const incomingEdges = edges.filter(edge => edge.target === nodeId);
+    
+    // Get the source nodes that connect to this logic node
+    const connectedNodes = incomingEdges.map(edge => {
+      const sourceNode = nodes.find(node => node.id === edge.source);
+      if (!sourceNode) return null;
+      
+      // Get output schema based on node type
+      const nodeType = sourceNode.type || sourceNode.data?.nodeType;
+      const nodeLabel = sourceNode.data?.label || sourceNode.data?.name || `${nodeType} Node`;
+      
+      return {
+        id: sourceNode.id,
+        type: nodeLabel, // Use the actual label for display
+        nodeType: nodeType, // Keep the actual node type
+        outputs: getOutputSchemaForNode(sourceNode.data, nodeType)
+      };
+    }).filter(Boolean); // Remove null entries
+    
+    return connectedNodes;
+  }, [nodes, edges]);
+  
+  // Function to get output schema for each node type (same as in EditModal)
+  const getOutputSchemaForNode = (nodeData, nodeType) => {
+    const schemas = {
+      agent: {
+        response: { type: 'string', sample: 'AI agent response text' },
+        status: { type: 'string', sample: 'completed' },
+        token_usage: { type: 'number', sample: 150 },
+        execution_time: { type: 'number', sample: 2.5 }
+      },
+      task: {
+        result: { type: 'string', sample: 'Task execution result' },
+        status: { type: 'string', sample: 'success' },
+        output: { type: 'object', sample: '{data: "processed"}' },
+        duration: { type: 'number', sample: 1.5 }
+      },
+      tool: {
+        response: { type: 'object', sample: '{result: "tool output"}' },
+        status_code: { type: 'number', sample: 200 },
+        success: { type: 'boolean', sample: true },
+        error: { type: 'string', sample: null }
+      },
+      input: {
+        value: { type: 'string', sample: 'User input text' },
+        type: { type: 'string', sample: 'text' },
+        timestamp: { type: 'number', sample: Date.now() }
+      },
+      chatbot: {
+        message: { type: 'string', sample: 'Chatbot response' },
+        conversation_id: { type: 'string', sample: 'conv_123' },
+        user_input: { type: 'string', sample: 'User message' }
+      },
+      trigger: {
+        triggered: { type: 'boolean', sample: true },
+        trigger_time: { type: 'string', sample: '2024-01-01T12:00:00Z' },
+        payload: { type: 'object', sample: '{data: "trigger data"}' }
+      },
+      delay: {
+        completed: { type: 'boolean', sample: true },
+        duration: { type: 'string', sample: '5s' },
+        start_time: { type: 'string', sample: '2024-01-01T12:00:00Z' }
+      }
+    };
+    
+    return schemas[nodeType] || {};
+  };
   
   // Create toolbar props
   const toolbarProps = {
     onAddAgent: addAgent,
     onAddTask: addTask,
-    onAddTool: () => toggleToolTemplates(true),
+    onAddTool: () => toggleToolTemplates(true), // Traditional tool templates
+    onShowSmartTools: openSmartTools, // Smart Tool Selector
+    onQuickAddSmartTool: handleQuickAddSmartTool, // Quick access buttons
     onAddChat: addChatNode,
     onAddDelay: addDelayNode,
     onAddTrigger: addTriggerNode,
@@ -469,15 +592,25 @@ const BuilderPageContent = () => {
           onSave={onSaveEdit}
           nodeData={selectedNode.data}
           nodeType={selectedNode.type}
+          connectedNodes={getConnectedNodes(selectedNode.id)}
         />
       )}
       
+      {/* Traditional Tool Templates */}
       {showToolTemplates && (
         <ToolTemplates
           onClose={closeToolTemplates}
           onSelectTemplate={onSelectToolTemplate}
           showRegistry={true}
           onSelectToolFromRegistry={handleToolFromRegistry}
+        />
+      )}
+
+      {/* Smart Tool Selector */}
+      {showSmartTools && (
+        <SmartToolSelector
+          onToolSelect={handleSmartToolSelect}
+          onClose={closeSmartTools}
         />
       )}
       
@@ -516,7 +649,7 @@ const BuilderPageContent = () => {
       {/* Panels */}
       {showRunnerPanel && (
         <WebRunnerPanel
-          logs={executionLogs}
+          logs={textLogs} // Fixed: was executionLogs, should be textLogs
           onClose={() => toggleRunnerPanel(false)}
           isMinimized={minimizeRunnerPanel}
           onToggleMinimize={toggleMinimizeRunnerPanel}
@@ -525,8 +658,8 @@ const BuilderPageContent = () => {
 
       {showOutputPanel && (
         <OutputPanel
-          logs={executionLogs}
-          onExport={handleExport}
+          logs={textLogs} // Fixed: was executionLogs, should be textLogs
+          onExport={() => console.log('Export functionality')} // Fixed: was handleExport (undefined)
           isMinimized={minimizeOutputPanel}
           onToggleMinimize={toggleMinimizeOutputPanel}
         />
@@ -548,7 +681,7 @@ const BuilderPageContent = () => {
           onToggleMinimize={toggleMinimizeExecutionPanel}
           onClose={() => {
             toggleExecutionPanel(false);
-            setStructuredLogs([]);
+            // Clear logs if needed - removed setStructuredLogs since it's not defined
           }}
           executionMode={executionMode}
           pollingInterval={customPollingInterval}

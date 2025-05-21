@@ -11,6 +11,52 @@ export const useNodeManagement = () => {
     setSelectedNode
   } = useFlow();
 
+  // Node edit handler - Move to the top
+  const handleNodeEdit = useCallback((nodeId) => {
+    const node = nodes.find(n => n.id === nodeId);
+    if (node) {
+      // Normalize the node type
+      let normalizedType = node.type;
+      if (normalizedType === 'agentNode') normalizedType = 'agent';
+      if (normalizedType === 'taskNode') normalizedType = 'task';
+      if (normalizedType === 'toolNode') normalizedType = 'tool';
+      
+      setSelectedNode({
+        ...node,
+        type: normalizedType
+      });
+    }
+  }, [nodes, setSelectedNode]);
+
+  // Node delete handler - Move to the top
+  const handleNodeDelete = useCallback((nodeId) => {
+    setNodes(nodes => nodes.filter(node => node.id !== nodeId));
+    setEdges(edges => edges.filter(edge => 
+      edge.source !== nodeId && edge.target !== nodeId
+    ));
+  }, [setNodes, setEdges]);
+
+  // Save edits to a node - Move to the top
+  const onSaveEdit = useCallback((data) => {
+    if (!data) return;
+    
+    setNodes(nodes => nodes.map(node => {
+      if (node.id === data.nodeId) {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            ...data,
+            // Preserve/re-add the event handlers after save
+            onEdit: () => handleNodeEdit(node.id),
+            onDelete: () => handleNodeDelete(node.id)
+          }
+        };
+      }
+      return node;
+    }));
+  }, [setNodes, handleNodeEdit, handleNodeDelete]);
+
   // Add agent node
   const addAgent = useCallback(() => {
     const id = `agent-${Date.now()}`;
@@ -31,13 +77,16 @@ export const useNodeManagement = () => {
         allowDelegation: false,
         verbose: true,
         nodeId: id,
-        nodeType: 'agent'
+        nodeType: 'agent',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add task node
   const addTask = useCallback(() => {
@@ -52,13 +101,16 @@ export const useNodeManagement = () => {
         expectedOutput: '',
         dependencies: [],
         nodeId: id,
-        nodeType: 'task'
+        nodeType: 'task',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add chatbot node
   const addChatNode = useCallback(() => {
@@ -74,13 +126,16 @@ export const useNodeManagement = () => {
         temperature: 0.7,
         max_tokens: 500,
         nodeId: id,
-        nodeType: 'chatbot'
+        nodeType: 'chatbot',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add delay node
   const addDelayNode = useCallback(() => {
@@ -93,13 +148,16 @@ export const useNodeManagement = () => {
         label: 'Delay',
         duration: '5s',
         nodeId: id,
-        nodeType: 'delay'
+        nodeType: 'delay',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add trigger node
   const addTriggerNode = useCallback(() => {
@@ -117,13 +175,16 @@ export const useNodeManagement = () => {
         scheduleWeekday: 'monday',
         scheduleMonthDay: 1,
         nodeId: id,
-        nodeType: 'trigger'
+        nodeType: 'trigger',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add logic node
   const addLogicNode = useCallback(() => {
@@ -136,13 +197,16 @@ export const useNodeManagement = () => {
         label: 'Logic',
         condition: '',
         nodeId: id,
-        nodeType: 'logic'
+        nodeType: 'logic',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add input node
   const addInputNode = useCallback(() => {
@@ -157,13 +221,16 @@ export const useNodeManagement = () => {
         variableName: 'user_input',
         isRequired: false,
         nodeId: id,
-        nodeType: 'input'
+        nodeType: 'input',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   // Add output node
   const addOutputNode = useCallback(() => {
@@ -178,15 +245,18 @@ export const useNodeManagement = () => {
         webhookUrl: '',
         email: '',
         nodeId: id,
-        nodeType: 'output'
+        nodeType: 'output',
+        // Add event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
-  // Add tool node
+  // Add tool node 
   const addTool = useCallback(() => {
     const id = `tool-${Date.now()}`;
     const newNode = {
@@ -194,62 +264,38 @@ export const useNodeManagement = () => {
       type: 'tool',
       position: getSafeNodePosition(nodes),
       data: {
+        // Basic fields
         label: 'New Tool',
         description: 'Tool description',
+        
+        // Tool configuration
         toolType: 'api',
-        apiEndpoint: '',
+        framework: '',
+        frameworkConfig: {},
+        
+        // Additional fields for enhanced editor
+        expectedOutput: '',
+        condition: '',
+        async: false,
         parameters: '',
+        apiKey: '',
+        
+        // Legacy field (for backward compatibility)
+        apiEndpoint: '',
+        
+        // Node metadata
         nodeId: id,
-        nodeType: 'tool'
+        nodeType: 'tool',
+        
+        // Event handlers
+        onEdit: () => handleNodeEdit(id),
+        onDelete: () => handleNodeDelete(id)
       }
     };
     
     setNodes(prev => [...prev, newNode]);
     return newNode;
-  }, [nodes, setNodes]);
-
-  // Node edit handler
-  const handleNodeEdit = useCallback((nodeId) => {
-    const node = nodes.find(n => n.id === nodeId);
-    if (node) {
-      // Normalize the node type
-      let normalizedType = node.type;
-      if (normalizedType === 'agentNode') normalizedType = 'agent';
-      if (normalizedType === 'taskNode') normalizedType = 'task';
-      if (normalizedType === 'toolNode') normalizedType = 'tool';
-      
-      setSelectedNode({
-        ...node,
-        type: normalizedType
-      });
-    }
-  }, [nodes, setSelectedNode]);
-
-  // Node delete handler
-  const handleNodeDelete = useCallback((nodeId) => {
-    setNodes(nodes => nodes.filter(node => node.id !== nodeId));
-    setEdges(edges => edges.filter(edge => 
-      edge.source !== nodeId && edge.target !== nodeId
-    ));
-  }, [setNodes, setEdges]);
-
-  // Save edits to a node
-  const onSaveEdit = useCallback((data) => {
-    if (!data) return;
-    
-    setNodes(nodes => nodes.map(node => {
-      if (node.id === data.nodeId) {
-        return {
-          ...node,
-          data: {
-            ...node.data,
-            ...data
-          }
-        };
-      }
-      return node;
-    }));
-  }, [setNodes, nodes]);
+  }, [nodes, setNodes, handleNodeEdit, handleNodeDelete]);
 
   return {
     addAgent,
@@ -265,4 +311,4 @@ export const useNodeManagement = () => {
     handleNodeDelete,
     onSaveEdit
   };
-}; 
+};
