@@ -5,9 +5,11 @@ export default function EnhancedToolbar({ toolbarProps }) {
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [ioDropdownOpen, setIODropdownOpen] = useState(false);
+  const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false); // New dropdown state
   const moreDropdownRef = useRef(null);
   const exportDropdownRef = useRef(null);
   const ioDropdownRef = useRef(null);
+  const toolsDropdownRef = useRef(null); // New dropdown ref
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -20,6 +22,9 @@ export default function EnhancedToolbar({ toolbarProps }) {
       }
       if (ioDropdownRef.current && !ioDropdownRef.current.contains(event.target)) {
         setIODropdownOpen(false);
+      }
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(event.target)) {
+        setToolsDropdownOpen(false);
       }
     }
     
@@ -59,18 +64,100 @@ export default function EnhancedToolbar({ toolbarProps }) {
             <HelpTooltip type="task" />
           </button>
           
-          <button 
-            onClick={toolbarProps.onAddTool}
-            className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center"
-            title="Add a Tool node"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Tool
-            <HelpTooltip type="tool" />
-          </button>
+          {/* Updated Tools dropdown */}
+          <div className="relative" ref={toolsDropdownRef}>
+            <button 
+              onClick={() => setToolsDropdownOpen(!toolsDropdownOpen)}
+              className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm flex items-center"
+              title="Add Tools"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Tools
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                className={`h-4 w-4 ml-1 transition-transform ${toolsDropdownOpen ? 'rotate-180' : ''}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+              <HelpTooltip type="tool" />
+            </button>
+            
+            {toolsDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 bg-gray-800 rounded shadow-lg p-2 z-50 min-w-[200px]">
+                {/* Smart Tools Section */}
+                <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Smart AI Tools</div>
+                <button 
+                  onClick={() => {
+                    toolbarProps.onShowSmartTools();
+                    setToolsDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
+                >
+                  <span className="mr-2">🤖</span>
+                  Smart Tool Selector
+                  <span className="ml-auto text-xs text-green-400">NEW</span>
+                </button>
+                
+                <div className="my-2 border-t border-gray-700"></div>
+                
+                {/* Traditional Tools Section */}
+                <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Traditional Tools</div>
+                <button 
+                  onClick={() => {
+                    toolbarProps.onAddTool();
+                    setToolsDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
+                >
+                  <span className="mr-2">🔧</span>
+                  Tool Templates
+                </button>
+                
+                {/* Quick Access to Popular Smart Tools */}
+                <div className="my-2 border-t border-gray-700"></div>
+                <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Quick Access</div>
+                <button 
+                  onClick={() => {
+                    // You can add a quick action for popular tools
+                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('text_generation', 'gpt4');
+                    setToolsDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
+                >
+                  <span className="mr-2">💬</span>
+                  GPT-4 Text Gen
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('image_generation', 'dalle');
+                    setToolsDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
+                >
+                  <span className="mr-2">🎨</span>
+                  DALL-E Image Gen
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('web_search', 'serper');
+                    setToolsDropdownOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
+                >
+                  <span className="mr-2">🔍</span>
+                  Web Search
+                </button>
+              </div>
+            )}
+          </div>
           
           <button 
             onClick={toolbarProps.onAddTrigger}
@@ -84,7 +171,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
         </div>
         
-        {/* Input/Output dropdown */}
+        {/* Input/Output dropdown - unchanged */}
         <div className="relative" ref={ioDropdownRef}>
           <button 
             onClick={() => setIODropdownOpen(!ioDropdownOpen)}
@@ -188,7 +275,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           )}
         </div>
         
-        {/* More dropdown */}
+        {/* More dropdown - unchanged */}
         <div className="relative" ref={moreDropdownRef}>
           <button 
             onClick={() => setMoreDropdownOpen(!moreDropdownOpen)}
@@ -249,7 +336,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
         </div>
       </div>
       
-      {/* Right side - Actions */}
+      {/* Right side - Actions - unchanged */}
       <div className="flex items-center space-x-2">
         {/* Save/Load buttons */}
         <div className="flex space-x-1">
@@ -404,4 +491,4 @@ export default function EnhancedToolbar({ toolbarProps }) {
       </div>
     </div>
   );
-} 
+}

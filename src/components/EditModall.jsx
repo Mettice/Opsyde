@@ -46,10 +46,69 @@ export const FRAMEWORK_OPTIONS = {
   ]
 };
 
+// Function to get output schema for each node type
+const getOutputSchemaForNode = (nodeData, nodeType) => {
+  const schemas = {
+    agent: {
+      response: { type: 'string', sample: 'AI agent response text' },
+      status: { type: 'string', sample: 'completed' },
+      token_usage: { type: 'number', sample: 150 },
+      execution_time: { type: 'number', sample: 2.5 },
+      'data.result': { type: 'string', sample: 'Agent execution result' },
+      'data.status': { type: 'string', sample: 'completed|error' }
+    },
+    task: {
+      result: { type: 'string', sample: 'Task execution result' },
+      status: { type: 'string', sample: 'success' },
+      output: { type: 'object', sample: '{data: "processed"}' },
+      duration: { type: 'number', sample: 1.5 },
+      'data.result': { type: 'string', sample: 'Task output' },
+      'data.status': { type: 'string', sample: 'completed|failed' },
+      'data.task_name': { type: 'string', sample: 'Task name' }
+    },
+    tool: {
+      response: { type: 'object', sample: '{result: "tool output"}' },
+      status_code: { type: 'number', sample: 200 },
+      success: { type: 'boolean', sample: true },
+      error: { type: 'string', sample: null }
+    },
+    input: {
+      value: { type: 'string', sample: 'User input text' },
+      type: { type: 'string', sample: 'text' },
+      timestamp: { type: 'number', sample: Date.now() }
+    },
+    chatbot: {
+      message: { type: 'string', sample: 'Chatbot response' },
+      conversation_id: { type: 'string', sample: 'conv_123' },
+      user_input: { type: 'string', sample: 'User message' }
+    },
+    trigger: {
+      triggered: { type: 'boolean', sample: true },
+      trigger_time: { type: 'string', sample: '2024-01-01T12:00:00Z' },
+      payload: { type: 'object', sample: '{data: "trigger data"}' }
+    },
+    delay: {
+      completed: { type: 'boolean', sample: true },
+      duration: { type: 'string', sample: '5s' },
+      start_time: { type: 'string', sample: '2024-01-01T12:00:00Z' }
+    }
+  };
+  
+  return schemas[nodeType] || {};
+};
+
 /**
  * Modal component for editing node properties
  */
-const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDependencies = [] }) => {
+const EditModal = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  nodeData, 
+  nodeType, 
+  availableDependencies = [], 
+  connectedNodes = [] 
+}) => {
   // Initialize form data with default values
   const [formData, setFormData] = useState({
     label: '',
@@ -113,6 +172,18 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
   const [testInput, setTestInput] = useState('{\n  "value": 15,\n  "status": "approved",\n  "message": "Success"\n}');
   const [testResult, setTestResult] = useState(null);
   const [savedTestInputs, setSavedTestInputs] = useState([]);
+
+  // Use a default value if nodeType is undefined
+  const currentNodeType = nodeType || 'agent';
+
+  // Function to get connected nodes with their output schemas
+  const getConnectedNodesWithSchemas = () => {
+    return connectedNodes.map(node => ({
+      id: node.id,
+      type: node.type || node.nodeType,
+      outputs: getOutputSchemaForNode(node.data, node.type || node.nodeType)
+    }));
+  };
 
   // Populate form data when nodeData changes
   useEffect(() => {
@@ -328,9 +399,6 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
   // Return null if modal is not open
   if (!isOpen) return null;
 
-  // Use a default value if nodeType is undefined
-  const currentNodeType = nodeType || 'agent';
-
   // Save test input function
   const saveTestInput = () => {
     try {
@@ -343,7 +411,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
       // Add to saved inputs
       setSavedTestInputs([
         ...savedTestInputs,
-        { name: inputName, input: testInput }
+        { name: inputName, input: testInput, timestamp: Date.now() }
       ]);
       
       toast.success('Test input saved');
@@ -364,7 +432,8 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
       testResult,
       setTestResult,
       savedTestInputs,
-      saveTestInput
+      saveTestInput,
+      connectedNodes: getConnectedNodesWithSchemas() // Pass processed connected nodes
     };
 
     switch (currentNodeType) {
@@ -435,7 +504,7 @@ const EditModal = ({ isOpen, onClose, onSave, nodeData, nodeType, availableDepen
   );
 };
 
-// Define PropTypes for type safety and documentation
+// Define PropTypes AFTER the component declaration
 EditModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
@@ -457,7 +526,8 @@ EditModal.propTypes = {
       label: PropTypes.string.isRequired,
       name: PropTypes.string
     })
-  )
+  ),
+  connectedNodes: PropTypes.array
 };
 
 export default EditModal;
