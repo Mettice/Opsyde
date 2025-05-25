@@ -13,6 +13,8 @@ import TriggerEditor from './editmodal/TriggerEditor';
 import LogicEditor from './editmodal/LogicEditor';
 import InputEditor from './editmodal/InputEditor';
 import OutputEditor from './editmodal/OutputEditor';
+import InheritanceSelector from './editmodal/shared/InheritanceSelector';
+
 
 // Tool type constants
 export const ToolType = {
@@ -107,7 +109,8 @@ const EditModal = ({
   nodeData, 
   nodeType, 
   availableDependencies = [], 
-  connectedNodes = [] 
+  connectedNodes = [],
+  workflowNodes = []
 }) => {
   // Initialize form data with default values
   const [formData, setFormData] = useState({
@@ -420,6 +423,15 @@ const EditModal = ({
     }
   };
 
+
+
+  const getInheritableNodes = () => {
+    return workflowNodes.filter(node => 
+      node.id !== nodeData?.nodeId && // Can't inherit from self
+      node.type !== nodeType // Usually can't inherit from same type
+    );
+  };
+
   // Render the appropriate node editor based on node type
   const renderNodeEditor = () => {
     const editorProps = {
@@ -436,13 +448,32 @@ const EditModal = ({
       connectedNodes: getConnectedNodesWithSchemas() // Pass processed connected nodes
     };
 
+
+  
+    const inheritanceSelector = (
+      <InheritanceSelector
+        formData={formData}
+        handleInputChange={handleInputChange}
+        availableNodes={getInheritableNodes()}
+        nodeType={currentNodeType}
+      />
+    );
+
     switch (currentNodeType) {
       case 'agent':
         return <AgentEditor {...editorProps} />;
       case 'task':
-        return <TaskEditor {...editorProps} availableDependencies={availableDependencies} />;
+        return (
+          <>
+          {inheritanceSelector}
+          <TaskEditor {...editorProps} availableDependencies={availableDependencies} />
+          </>
+        );
       case 'tool':
-        return <ToolEditor {...editorProps} />;
+        return (<>
+        {inheritanceSelector}
+        <ToolEditor {...editorProps} />
+        </>);
       case 'chatbot':
         return <ChatbotEditor {...editorProps} />;
       case 'delay':

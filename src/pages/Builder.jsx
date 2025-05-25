@@ -25,7 +25,6 @@ import HelpPanel from '../components/HelpPanel';
 import TemplateModal from '../components/builder/TemplateModal';
 import RunCrewButton from '../components/RunCrewButton';
 import WebRunnerPanel from '../components/webrunners/WebRunnerPanel';
-import OutputPanel from '../components/webrunners/OutputPanel';
 import WebhookFlowModal from '../components/WebhookFlowModal';
 import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
 import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPanel';
@@ -69,13 +68,11 @@ const BuilderPageContent = () => {
     
     // Panel states
     showRunnerPanel, toggleRunnerPanel,
-    showOutputPanel, toggleOutputPanel,
     showTriggerHistory, toggleTriggerHistory,
     showExecutionPanel, toggleExecutionPanel,
     
     // Minimized states
     minimizeRunnerPanel, toggleMinimizeRunnerPanel,
-    minimizeOutputPanel, toggleMinimizeOutputPanel,
     minimizeExecutionPanel, toggleMinimizeExecutionPanel,
     
     // Settings
@@ -653,15 +650,6 @@ const BuilderPageContent = () => {
           onClose={() => toggleRunnerPanel(false)}
           isMinimized={minimizeRunnerPanel}
           onToggleMinimize={toggleMinimizeRunnerPanel}
-        />
-      )}
-
-      {showOutputPanel && (
-        <OutputPanel
-          logs={textLogs} // Fixed: was executionLogs, should be textLogs
-          onExport={() => console.log('Export functionality')} // Fixed: was handleExport (undefined)
-          isMinimized={minimizeOutputPanel}
-          onToggleMinimize={toggleMinimizeOutputPanel}
         />
       )}
 

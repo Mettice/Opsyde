@@ -25,13 +25,11 @@ export const BuilderUIProvider = ({ children }) => {
   
   // Panel states
   const [showRunnerPanel, setShowRunnerPanel] = useState(false);
-  const [showOutputPanel, setShowOutputPanel] = useState(false);
   const [showTriggerHistory, setShowTriggerHistory] = useState(false);
   const [showExecutionPanel, setShowExecutionPanel] = useState(false);
   
   // Minimized states
   const [minimizeRunnerPanel, setMinimizeRunnerPanel] = useState(false);
-  const [minimizeOutputPanel, setMinimizeOutputPanel] = useState(false);
   const [minimizeExecutionPanel, setMinimizeExecutionPanel] = useState(false);
   
   // Settings
@@ -50,7 +48,6 @@ export const BuilderUIProvider = ({ children }) => {
   const toggleWebhookFlowModal = (value) => setShowWebhookFlowModal(value !== undefined ? value : !showWebhookFlowModal);
   const toggleTemplateGallery = (value) => setShowTemplateGallery(value !== undefined ? value : !showTemplateGallery);
   const toggleRunnerPanel = (value) => setShowRunnerPanel(value !== undefined ? value : !showRunnerPanel);
-  const toggleOutputPanel = (value) => setShowOutputPanel(value !== undefined ? value : !showOutputPanel);
   const toggleTriggerHistory = (value) => setShowTriggerHistory(value !== undefined ? value : !showTriggerHistory);
   const toggleExecutionPanel = (forceState) => {
     if (typeof forceState === 'boolean') {
@@ -65,7 +62,6 @@ export const BuilderUIProvider = ({ children }) => {
     }
   };
   const toggleMinimizeRunnerPanel = () => setMinimizeRunnerPanel(!minimizeRunnerPanel);
-  const toggleMinimizeOutputPanel = () => setMinimizeOutputPanel(!minimizeOutputPanel);
   const toggleMinimizeExecutionPanel = () => setMinimizeExecutionPanel(!minimizeExecutionPanel);
   const toggleExecutionMode = () => setExecutionMode(executionMode === 'development' ? 'production' : 'development');
   
@@ -90,13 +86,11 @@ export const BuilderUIProvider = ({ children }) => {
     
     // Panel states
     showRunnerPanel, toggleRunnerPanel,
-    showOutputPanel, toggleOutputPanel,
     showTriggerHistory, toggleTriggerHistory,
     showExecutionPanel, toggleExecutionPanel,
     
     // Minimized states
     minimizeRunnerPanel, toggleMinimizeRunnerPanel,
-    minimizeOutputPanel, toggleMinimizeOutputPanel,
     minimizeExecutionPanel, toggleMinimizeExecutionPanel,
     
     // Settings

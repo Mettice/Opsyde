@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional, Union
 from datetime import datetime
 
 from backend.models.data import NodeData
-from backend.models.nodes import Node, NodeType
+from backend.models.nodes import Node, NodeType, WorkflowInheritanceResolver
 from backend.core.exceptions import NodeError
 from backend.utils.logging import get_logger
 
