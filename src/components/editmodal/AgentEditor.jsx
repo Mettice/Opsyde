@@ -1,14 +1,17 @@
+// frontend/src/components/editmodal/AgentEditor.jsx - REPLACE your existing
 import React from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import { FRAMEWORK_OPTIONS } from '../EditModall';
+import LLMConfigSection from './shared/LLMConfigSection';
 
 const AgentEditor = ({ formData, handleInputChange, handleFrameworkChange }) => {
   return (
     <>
+      {/* Basic Agent Configuration */}
       <div className="mb-4">
         <label className="block text-gray-700 mb-1 flex items-center">
-          Role
+          Role *
           <HelpTooltip type="agent" field="role" />
         </label>
         <input
@@ -16,257 +19,161 @@ const AgentEditor = ({ formData, handleInputChange, handleFrameworkChange }) => 
           name="role"
           value={formData.role || ''}
           onChange={handleInputChange}
-          className="w-full p-2 border rounded"
-          placeholder="e.g., Senior Software Engineer"
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="e.g., Senior Software Engineer, Research Analyst, Content Creator"
+          required
         />
       </div>
 
       <div className="mb-4">
         <label className="block text-gray-700 mb-1 flex items-center">
-          Goal
+          Goal *
           <HelpTooltip type="agent" field="goal" />
         </label>
         <textarea
           name="goal"
           value={formData.goal || ''}
           onChange={handleInputChange}
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           rows="3"
-          placeholder="What is this agent's primary objective?"
+          placeholder="What is this agent's primary objective? Be specific about what you want them to accomplish."
+          required
         />
       </div>
 
       <div className="mb-4">
         <label className="block text-gray-700 mb-1 flex items-center">
-          Backstory
+          Backstory *
           <HelpTooltip type="agent" field="backstory" />
         </label>
         <textarea
           name="backstory"
           value={formData.backstory || ''}
           onChange={handleInputChange}
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           rows="3"
-          placeholder="Background and context for this agent"
+          placeholder="Background and context for this agent. This helps shape their personality and approach."
+          required
         />
       </div>
 
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700">Framework</label>
-        <select
-          name="framework"
-          value={formData.framework || ''}
-          onChange={handleFrameworkChange}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-        >
-          <option value="">Select a framework</option>
+      {/* Framework Selection */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          AI Framework *
+          <HelpTooltip type="agent" field="framework" />
+        </label>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {FRAMEWORK_OPTIONS.AGENT.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+            <label 
+              key={option.value} 
+              className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors hover:bg-gray-50 ${
+                formData.framework === option.value 
+                  ? 'border-blue-300 bg-blue-50 shadow-sm' 
+                  : 'border-gray-200'
+              }`}
+            >
+              <input
+                type="radio"
+                name="framework"
+                value={option.value}
+                checked={formData.framework === option.value}
+                onChange={handleFrameworkChange}
+                className="mr-3"
+                required
+              />
+              <div className="text-sm font-medium text-gray-800">
+                {option.label}
+              </div>
+            </label>
           ))}
-        </select>
-      </div>
-
-      {formData.framework && renderFrameworkConfig(formData, handleInputChange)}
-
-      <div className="mt-4 space-y-4">
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="allowDelegation"
-            name="allowDelegation"
-            checked={formData.allowDelegation || false}
-            onChange={handleInputChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label htmlFor="allowDelegation" className="ml-2 block text-sm text-gray-700">
-            Allow Delegation
-            <HelpTooltip type="agent" field="allowDelegation" />
-          </label>
-        </div>
-
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="enableMemory"
-            name="enableMemory"
-            checked={formData.enableMemory || false}
-            onChange={handleInputChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label htmlFor="enableMemory" className="ml-2 block text-sm text-gray-700">
-            Enable Memory
-            <HelpTooltip type="agent" field="enableMemory" />
-          </label>
-        </div>
-
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            id="verbose"
-            name="verbose"
-            checked={formData.verbose || false}
-            onChange={handleInputChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label htmlFor="verbose" className="ml-2 block text-sm text-gray-700">
-            Verbose Mode
-            <HelpTooltip type="agent" field="verbose" />
-          </label>
         </div>
       </div>
-    </>
-  );
-};
 
-// Helper function to render framework-specific configuration
-const renderFrameworkConfig = (formData, handleInputChange) => {
-  return (
-    <div className="mt-4 p-4 bg-gray-50 rounded-md">
-      <h4 className="text-sm font-medium text-gray-900 mb-3">Framework Configuration</h4>
-      
-      {formData.framework === 'webhook' ? (
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Webhook URL</label>
-          <input
-            type="text"
-            name="frameworkConfig.url"
-            value={formData.frameworkConfig?.url || ''}
-            onChange={handleInputChange}
-            placeholder="Enter webhook URL"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-          />
-        </div>
-      ) : formData.framework === 'openai' ? (
-        <div>
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700">Model</label>
-            <select
-              name="frameworkConfig.model"
-              value={formData.frameworkConfig?.model || 'gpt-4'}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="gpt-4">GPT-4</option>
-              <option value="gpt-4-turbo">GPT-4 Turbo</option>
-              <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Temperature</label>
-              <input
-                type="number"
-                name="frameworkConfig.temperature"
-                value={formData.frameworkConfig?.temperature || 0.7}
-                onChange={handleInputChange}
-                min="0"
-                max="2"
-                step="0.1"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Max Tokens</label>
-              <input
-                type="number"
-                name="frameworkConfig.max_tokens"
-                value={formData.frameworkConfig?.max_tokens || 2000}
-                onChange={handleInputChange}
-                min="1"
-                max="32000"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      ) : formData.framework === 'anthropic' ? (
-        <div>
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700">Model</label>
-            <select
-              name="frameworkConfig.model"
-              value={formData.frameworkConfig?.model || 'claude-3-opus'}
-              onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            >
-              <option value="claude-3-opus">Claude 3 Opus</option>
-              <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-              <option value="claude-3-haiku">Claude 3 Haiku</option>
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Temperature</label>
-              <input
-                type="number"
-                name="frameworkConfig.temperature"
-                value={formData.frameworkConfig?.temperature || 0.7}
-                onChange={handleInputChange}
-                min="0"
-                max="1"
-                step="0.1"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Max Tokens</label>
-              <input
-                type="number"
-                name="frameworkConfig.max_tokens"
-                value={formData.frameworkConfig?.max_tokens || 4000}
-                onChange={handleInputChange}
-                min="1"
-                max="4096"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <div className="mb-3">
-            <label className="block text-sm font-medium text-gray-700">Model</label>
+      {/* LLM Configuration */}
+      {formData.framework && formData.framework !== 'webhook' && (
+        <LLMConfigSection
+          formData={formData}
+          handleInputChange={handleInputChange}
+          framework={formData.framework}
+          showApiKey={true}
+          isInherited={false}
+        />
+      )}
+
+      {/* Webhook Configuration */}
+      {formData.framework === 'webhook' && (
+        <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+          <h4 className="text-sm font-medium text-yellow-800 mb-3">🔗 Webhook Configuration</h4>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Webhook URL *</label>
             <input
-              type="text"
-              name="frameworkConfig.model"
-              value={formData.frameworkConfig?.model || ''}
+              type="url"
+              name="frameworkConfig.url"
+              value={formData.frameworkConfig?.url || ''}
               onChange={handleInputChange}
-              placeholder="Enter model name"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              placeholder="https://your-webhook-endpoint.com"
+              className="w-full p-2 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+              required
             />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Temperature</label>
-              <input
-                type="number"
-                name="frameworkConfig.temperature"
-                value={formData.frameworkConfig?.temperature || 0.7}
-                onChange={handleInputChange}
-                min="0"
-                max="1"
-                step="0.1"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Max Tokens</label>
-              <input
-                type="number"
-                name="frameworkConfig.max_tokens"
-                value={formData.frameworkConfig?.max_tokens || 2000}
-                onChange={handleInputChange}
-                min="1"
-                max="32000"
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-              />
+            <div className="text-xs text-yellow-700 mt-1">
+              The webhook will receive agent requests and should return responses
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {/* Agent Behavior Settings */}
+      <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+        <h4 className="text-sm font-medium text-gray-900 mb-4">🎛️ Agent Behavior</h4>
+        <div className="space-y-4">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="allowDelegation"
+              name="allowDelegation"
+              checked={formData.allowDelegation || false}
+              onChange={handleInputChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="allowDelegation" className="ml-2 block text-sm text-gray-700">
+              Allow Delegation
+              <HelpTooltip type="agent" field="allowDelegation" />
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="enableMemory"
+              name="enableMemory"
+              checked={formData.enableMemory || false}
+              onChange={handleInputChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="enableMemory" className="ml-2 block text-sm text-gray-700">
+              Enable Memory
+              <HelpTooltip type="agent" field="enableMemory" />
+            </label>
+          </div>
+
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="verbose"
+              name="verbose"
+              checked={formData.verbose || false}
+              onChange={handleInputChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="verbose" className="ml-2 block text-sm text-gray-700">
+              Verbose Mode
+              <HelpTooltip type="agent" field="verbose" />
+            </label>
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 

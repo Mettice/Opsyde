@@ -6,7 +6,7 @@ from datetime import datetime
 from .image_gen import handle_image_generation
 from .text_gen import handle_text_generation
 from ..integrations.web_search import handle_web_search
-from .llm_tools import create_llm_tool, LLMConfig, LLMProvider
+from backend.tools.llm_tools import create_llm_tool, LLMConfig, LLMProvider
 
 logger = logging.getLogger(__name__)
 

@@ -548,6 +548,12 @@ export default function UnifiedExecutionPanel({
         >
           Statistics
         </button>
+        <button 
+          className={`flex-1 py-2 text-sm font-medium ${activeTab === 'export' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
+          onClick={() => setActiveTab('export')}
+        >
+          Export
+        </button>
       </div>
       
       {/* View mode toggle for all execution modes */}
@@ -783,7 +789,7 @@ export default function UnifiedExecutionPanel({
               })
             )}
           </div>
-        ) : (
+        ) : activeTab === 'stats' ? (
           // Stats tab
           <div className="space-y-4">
             <div className="bg-gray-50 p-4 rounded-lg">
@@ -845,7 +851,78 @@ export default function UnifiedExecutionPanel({
               </div>
             )}
           </div>
-        )}
+        ) : activeTab === 'export' ? (
+          // Export tab
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h3 className="font-medium text-gray-700 mb-3">📤 Export Options</h3>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    const dataStr = JSON.stringify(structuredLogs, null, 2);
+                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.json`;
+                    link.click();
+                  }}
+                  className="w-full bg-blue-100 text-blue-800 px-4 py-2 rounded hover:bg-blue-200 transition flex items-center"
+                >
+                  <span className="mr-2">📄</span> Download Logs as JSON
+                </button>
+                
+                <button
+                  onClick={() => {
+                    const textData = parsedTextLogs.map(log => log.text).join('\n');
+                    const dataBlob = new Blob([textData], {type: 'text/plain'});
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.txt`;
+                    link.click();
+                  }}
+                  className="w-full bg-gray-100 text-gray-800 px-4 py-2 rounded hover:bg-gray-200 transition flex items-center"
+                >
+                  <span className="mr-2">📝</span> Download Logs as Text
+                </button>
+                
+                <button
+                  onClick={() => {
+                    const statsData = {
+                      summary: nodeStats,
+                      execution_time: viewMode === 'structured' && structuredLogs.length >= 2 
+                        ? `${((new Date(structuredLogs[structuredLogs.length - 1].timestamp) - new Date(structuredLogs[0].timestamp)) / 1000).toFixed(1)}s`
+                        : 'N/A',
+                      logs_count: displayLogs.length,
+                      export_timestamp: new Date().toISOString()
+                    };
+                    const dataStr = JSON.stringify(statsData, null, 2);
+                    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                    const url = URL.createObjectURL(dataBlob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `execution-stats-${new Date().toISOString().split('T')[0]}.json`;
+                    link.click();
+                  }}
+                  className="w-full bg-green-100 text-green-800 px-4 py-2 rounded hover:bg-green-200 transition flex items-center"
+                >
+                  <span className="mr-2">📊</span> Download Statistics
+                </button>
+              </div>
+            </div>
+            
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <h4 className="font-medium text-blue-800 mb-2">💡 Export Tips</h4>
+              <ul className="text-sm text-blue-700 space-y-1">
+                <li>• JSON format preserves all metadata and structure</li>
+                <li>• Text format is human-readable and great for sharing</li>
+                <li>• Statistics include execution metrics and performance data</li>
+              </ul>
+            </div>
+          </div>
+        ) : null
+        }
       </div>
     </div>
   );

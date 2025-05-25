@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
@@ -19,35 +18,38 @@ const ToolEditor = ({
   // Local state for framework config to prevent reset issues
   const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
 
-  // Update local config when formData changes (but not on every render)
+  // Find the parent agent if inheriting
+  const parentAgent = connectedNodes.find(node => 
+    node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
+  );
+  const isInheritingFromAgent = formData.inherits_from && parentAgent;
+
+  // Update local config when formData changes
   useEffect(() => {
     if (formData.frameworkConfig) {
       setLocalFrameworkConfig(formData.frameworkConfig);
     }
-  }, [formData.framework]); // Only trigger when framework changes, not frameworkConfig
+  }, [formData.framework]);
 
   // Handle tool type change without causing resets
   const handleToolTypeChange = (e) => {
     const newToolType = e.target.value;
     
-    // Update tool type
     handleInputChange(e);
     
-    // Reset framework selection but preserve the flow
-    setTimeout(() => {
-      handleInputChange({ target: { name: 'framework', value: '' } });
-      setLocalFrameworkConfig({});
-    }, 0);
+    // Reset framework selection for non-inherited tools
+    if (!isInheritingFromAgent) {
+      setTimeout(() => {
+        handleInputChange({ target: { name: 'framework', value: '' } });
+        setLocalFrameworkConfig({});
+      }, 0);
+    }
   };
 
   // Enhanced framework change handler
   const handleFrameworkChangeLocal = (e) => {
     const framework = e.target.value;
-    
-    // Call the parent handler
     handleFrameworkChange(e);
-    
-    // Update local state
     setLocalFrameworkConfig(formData.frameworkConfig || {});
   };
 
@@ -63,7 +65,6 @@ const ToolEditor = ({
     
     setLocalFrameworkConfig(newConfig);
     
-    // Update parent with constructed event
     handleInputChange({
       target: {
         name: 'frameworkConfig',
@@ -97,7 +98,6 @@ const ToolEditor = ({
         });
       }
     } catch (error) {
-      // For invalid JSON, store as string
       handleInputChange({
         target: {
           name: fieldName,
@@ -112,10 +112,18 @@ const ToolEditor = ({
     try {
       const inputs = JSON.parse(testInput);
       
-      // Simulate tool execution based on configuration
       let simulatedResult;
       
-      if (formData.toolType === ToolType.LLM) {
+      if (isInheritingFromAgent) {
+        // Use inherited LLM configuration
+        simulatedResult = {
+          success: true,
+          response: `Simulated response using inherited ${parentAgent.data?.framework} configuration`,
+          tokens_used: 150,
+          model: parentAgent.data?.frameworkConfig?.model || parentAgent.data?.llmModel || 'inherited-model',
+          inherited: true
+        };
+      } else if (formData.toolType === ToolType.LLM) {
         simulatedResult = {
           success: true,
           response: "Simulated LLM response based on your configuration",
@@ -134,7 +142,7 @@ const ToolEditor = ({
       setTestResult({
         success: true,
         result: simulatedResult,
-        execution_time: Math.random() * 2 + 0.5 // Random execution time
+        execution_time: Math.random() * 2 + 0.5
       });
     } catch (error) {
       setTestResult({
@@ -146,6 +154,24 @@ const ToolEditor = ({
 
   return (
     <div className="space-y-6">
+      {/* Inheritance Indicator */}
+      {isInheritingFromAgent && (
+        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+          <h3 className="text-green-800 font-semibold mb-2 flex items-center">
+            ✅ Inheriting from Agent: {parentAgent.data?.label || parentAgent.id}
+          </h3>
+          <div className="text-sm text-green-700 space-y-1">
+            <div>🤖 LLM Framework: {parentAgent.data?.framework || 'Not set'}</div>
+            <div>🧠 Model: {parentAgent.data?.frameworkConfig?.model || parentAgent.data?.llmModel || 'Not set'}</div>
+            <div>🌡️ Temperature: {parentAgent.data?.frameworkConfig?.temperature || parentAgent.data?.temperature || 0.7}</div>
+            <div>🎯 Max Tokens: {parentAgent.data?.frameworkConfig?.max_tokens || parentAgent.data?.max_tokens || 2000}</div>
+          </div>
+          <div className="text-xs text-green-600 mt-2 bg-green-100 p-2 rounded">
+            💡 This tool will automatically use the agent's LLM configuration. Tool-specific settings configured below.
+          </div>
+        </div>
+      )}
+
       {/* Basic Configuration */}
       <div className="mb-4">
         <label className="block text-gray-700 mb-1 flex items-center">
@@ -162,36 +188,104 @@ const ToolEditor = ({
         />
       </div>
 
-      {/* Tool Type and Framework Selection */}
+      {/* Tool Type Selection */}
       <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
         <h3 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
           🔧 Tool Configuration
         </h3>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Tool Type *
-              <HelpTooltip type="tool" field="toolType" />
-            </label>
-            <select
-              name="toolType"
-              value={formData.toolType || ToolType.API}
-              onChange={handleToolTypeChange}
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value={ToolType.LLM}>🤖 LLM Tool</option>
-              <option value={ToolType.API}>🌐 API Tool</option>
-              <option value={ToolType.WEBHOOK}>🔗 Webhook Tool</option>
-              <option value={ToolType.CUSTOM}>⚙️ Custom Tool</option>
-            </select>
-            <div className="text-xs text-gray-500 mt-1">
-              Choose the type of tool you want to create
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Tool Type *
+            <HelpTooltip type="tool" field="toolType" />
+          </label>
+          <select
+            name="toolType"
+            value={formData.toolType || ToolType.API}
+            onChange={handleToolTypeChange}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            required
+          >
+            <option value={ToolType.API}>🌐 API Tool</option>
+            <option value={ToolType.WEBHOOK}>🔗 Webhook Tool</option>
+            <option value={ToolType.CUSTOM}>⚙️ Custom Tool</option>
+            {/* Smart Integration Options */}
+            <option value="smart_api">🤖 AI-Powered Integration</option>
+          </select>
+          <div className="text-xs text-gray-500 mt-1">
+            {isInheritingFromAgent 
+              ? "LLM capabilities are inherited from the connected agent"
+              : "Choose the type of tool you want to create"
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Smart Integration Configuration */}
+      {formData.toolType === 'smart_api' && (
+        <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+          <h3 className="text-lg font-semibold text-purple-800 mb-4 flex items-center">
+            🤖 AI-Powered Integration
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Describe what you want this tool to do:
+              </label>
+              <textarea
+                name="ai_description"
+                value={formData.ai_description || ''}
+                onChange={handleInputChange}
+                placeholder="e.g., 'Send new leads to HubSpot CRM as contacts' or 'Update my Notion project status page'"
+                className="w-full p-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                rows="3"
+              />
+              <div className="text-xs text-purple-600 mt-1">
+                💡 AI will automatically detect the service and configure the integration
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2 font-medium">
+                Service Category (optional):
+              </label>
+              <select
+                name="service_type"
+                value={formData.service_type || ''}
+                onChange={handleInputChange}
+                className="w-full p-2 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
+              >
+                <option value="">🔍 Let AI auto-detect</option>
+                <option value="crm">👥 CRM (HubSpot, Salesforce, etc.)</option>
+                <option value="communication">💬 Communication (Slack, Discord, etc.)</option>
+                <option value="productivity">📝 Productivity (Notion, Airtable, etc.)</option>
+                <option value="database">🗄️ Database (PostgreSQL, MySQL, etc.)</option>
+                <option value="custom_api">🔧 Custom API/Webhook</option>
+              </select>
+            </div>
+
+            <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <p className="text-sm text-blue-800">
+                <strong>🔮 AI will handle:</strong>
+                <br />• Service detection and API endpoint discovery
+                <br />• Authentication requirements
+                <br />• Data mapping and format conversion
+                <br />• Error handling and retries
+              </p>
             </div>
           </div>
+        </div>
+      )}
 
-          <div>
+      {/* Traditional Framework Configuration - Only for non-smart tools */}
+      {formData.toolType !== 'smart_api' && (
+        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+            ⚙️ Framework Configuration
+          </h3>
+          
+          <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Framework *
               <HelpTooltip type="tool" field="framework" />
@@ -204,26 +298,112 @@ const ToolEditor = ({
               required
             >
               <option value="">Select Framework...</option>
-              {(formData.toolType === ToolType.LLM ? FRAMEWORK_OPTIONS.LLM : FRAMEWORK_OPTIONS.API).map(framework => (
+              {FRAMEWORK_OPTIONS.API.map(framework => (
                 <option key={framework.value} value={framework.value}>
                   {framework.label}
                 </option>
               ))}
             </select>
-            <div className="text-xs text-gray-500 mt-1">
-              Select the framework or service for this tool
-            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Framework-Specific Configuration */}
-      {formData.framework && (
-        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-          <h3 className="text-lg font-semibold text-green-800 mb-4 flex items-center">
-            ⚡ {formData.framework.charAt(0).toUpperCase() + formData.framework.slice(1)} Configuration
-          </h3>
-          {renderFrameworkFields(formData, localFrameworkConfig, handleFrameworkConfigChange, handleJsonChange)}
+          {/* Framework-Specific Configuration */}
+          {formData.framework && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {formData.toolType === ToolType.WEBHOOK ? '🔗 Webhook URL *' : '🌐 Endpoint URL *'}
+                </label>
+                <input
+                  type="url"
+                  name="frameworkConfig.url"
+                  value={localFrameworkConfig.url || ''}
+                  onChange={handleFrameworkConfigChange}
+                  placeholder={formData.toolType === ToolType.WEBHOOK 
+                    ? "https://your-webhook-endpoint.com/hook"
+                    : "https://api.example.com/endpoint"}
+                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  required
+                />
+              </div>
+
+              {formData.toolType !== ToolType.WEBHOOK && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">HTTP Method</label>
+                  <select
+                    name="frameworkConfig.method"
+                    value={localFrameworkConfig.method || 'GET'}
+                    onChange={handleFrameworkConfigChange}
+                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                  >
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="DELETE">DELETE</option>
+                    <option value="PATCH">PATCH</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Headers (JSON)</label>
+                  <textarea
+                    name="frameworkConfig.headers"
+                    value={typeof localFrameworkConfig.headers === 'object' 
+                      ? JSON.stringify(localFrameworkConfig.headers, null, 2)
+                      : localFrameworkConfig.headers || '{}'}
+                    onChange={(e) => handleJsonChange('frameworkConfig.headers', e.target.value)}
+                    placeholder='{\n  "Content-Type": "application/json",\n  "Authorization": "Bearer token"\n}'
+                    className="w-full p-2 border border-gray-300 rounded-md font-mono focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                    rows="4"
+                  />
+                  <div className="text-xs text-gray-500 mt-1">HTTP headers in JSON format</div>
+                </div>
+
+                {(formData.toolType === ToolType.WEBHOOK || 
+                  (localFrameworkConfig.method && localFrameworkConfig.method !== 'GET')) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      {formData.toolType === ToolType.WEBHOOK ? 'Webhook Payload (JSON)' : 'Request Body (JSON)'}
+                    </label>
+                    <textarea
+                      name="frameworkConfig.body"
+                      value={typeof localFrameworkConfig.body === 'object' 
+                        ? JSON.stringify(localFrameworkConfig.body, null, 2)
+                        : localFrameworkConfig.body || '{}'}
+                      onChange={(e) => handleJsonChange('frameworkConfig.body', e.target.value)}
+                      placeholder='{\n  "param1": "value1",\n  "param2": "value2"\n}'
+                      className="w-full p-2 border border-gray-300 rounded-md font-mono focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      rows="4"
+                    />
+                    <div className="text-xs text-gray-500 mt-1">Request payload in JSON format</div>
+                  </div>
+                )}
+              </div>
+
+              {(formData.toolType === ToolType.API || formData.toolType === ToolType.CUSTOM) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">API Key (optional)</label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      name="apiKey"
+                      value={formData.apiKey || ''}
+                      onChange={handleInputChange}
+                      placeholder="Your API key (if required)"
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-8"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                      <span className="text-gray-400">🔐</span>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    API key for authentication (if required by the API)
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -297,7 +477,6 @@ const ToolEditor = ({
             </div>
           </div>
 
-          {/* Async Execution Option */}
           <div className="flex items-center p-3 bg-white rounded-lg border border-gray-200">
             <input
               type="checkbox"
@@ -332,7 +511,6 @@ const ToolEditor = ({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Test Input */}
           <div>
             <label className="block text-gray-700 mb-1">
               Test Input (JSON)
@@ -353,7 +531,6 @@ const ToolEditor = ({
             </div>
           </div>
 
-          {/* Test Result */}
           <div>
             <label className="block text-gray-700 mb-1">Test Result</label>
             <div className="h-40 p-3 border border-gray-300 rounded-lg bg-gray-50 overflow-y-auto">
@@ -445,224 +622,6 @@ const ToolEditor = ({
           )}
         </div>
       </div>
-    </div>
-  );
-};
-
-// Helper function to render framework-specific fields
-const renderFrameworkFields = (formData, localFrameworkConfig, handleFrameworkConfigChange, handleJsonChange) => {
-  if (!formData.framework) return null;
-
-  if (formData.toolType === ToolType.LLM) {
-    return renderLLMFields(formData, localFrameworkConfig, handleFrameworkConfigChange);
-  } else if ([ToolType.API, ToolType.WEBHOOK, ToolType.CUSTOM].includes(formData.toolType)) {
-    return renderApiFields(formData, localFrameworkConfig, handleFrameworkConfigChange, handleJsonChange);
-  }
-
-  return null;
-};
-
-const renderLLMFields = (formData, localFrameworkConfig, handleFrameworkConfigChange) => (
-  <div className="space-y-4">
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">Model *</label>
-      <select
-        name="frameworkConfig.model"
-        value={localFrameworkConfig.model || ''}
-        onChange={handleFrameworkConfigChange}
-        className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-        required
-      >
-        <option value="">Select Model...</option>
-        {formData.framework === 'openai' && (
-          <>
-            <option value="gpt-4">GPT-4</option>
-            <option value="gpt-4-turbo">GPT-4 Turbo</option>
-            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-          </>
-        )}
-        {formData.framework === 'openrouter' && (
-          <>
-            <option value="openai/gpt-4">GPT-4</option>
-            <option value="openai/gpt-4-turbo">GPT-4 Turbo</option>
-            <option value="anthropic/claude-3-opus">Claude 3 Opus</option>
-            <option value="anthropic/claude-3-sonnet">Claude 3 Sonnet</option>
-            <option value="meta-llama/llama-2-70b-chat">Llama 2 70B</option>
-          </>
-        )}
-        {formData.framework === 'huggingface' && (
-          <>
-            <option value="meta-llama/Llama-2-70b-chat-hf">Llama 2 70B Chat</option>
-            <option value="microsoft/DialoGPT-large">DialoGPT Large</option>
-            <option value="mistralai/Mistral-7B-Instruct-v0.2">Mistral 7B Instruct</option>
-          </>
-        )}
-        {formData.framework === 'anthropic' && (
-          <>
-            <option value="claude-3-opus-20240229">Claude 3 Opus</option>
-            <option value="claude-3-sonnet-20240229">Claude 3 Sonnet</option>
-            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-          </>
-        )}
-      </select>
-    </div>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Temperature</label>
-        <input
-          type="number"
-          name="frameworkConfig.temperature"
-          value={localFrameworkConfig.temperature || 0.7}
-          onChange={handleFrameworkConfigChange}
-          min="0"
-          max="2"
-          step="0.1"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-        />
-        <div className="text-xs text-gray-500 mt-1">0 = focused, 2 = random</div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">Max Tokens</label>
-        <input
-          type="number"
-          name="frameworkConfig.max_tokens"
-          value={localFrameworkConfig.max_tokens || 2000}
-          onChange={handleFrameworkConfigChange}
-          min="1"
-          max="32000"
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-        />
-        <div className="text-xs text-gray-500 mt-1">Maximum response length</div>
-      </div>
-    </div>
-
-    {/* API Key field for frameworks that require it */}
-    {(formData.framework === 'openai' || formData.framework === 'anthropic' || formData.framework === 'openrouter') && (
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">API Key *</label>
-        <div className="relative">
-          <input
-            type="password"
-            name="apiKey"
-            value={formData.apiKey || ''}
-            onChange={handleFrameworkConfigChange}
-            placeholder="Your API key"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-8"
-            required
-          />
-          <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-            <span className="text-gray-400">🔐</span>
-          </div>
-        </div>
-        <div className="text-xs text-gray-500 mt-1">
-          Required to authenticate with {formData.framework} API
-        </div>
-      </div>
-    )}
-  </div>
-);
-
-const renderApiFields = (formData, localFrameworkConfig, handleFrameworkConfigChange, handleJsonChange) => {
-  const showMethodSelect = formData.toolType !== ToolType.WEBHOOK;
-
-  return (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {formData.toolType === ToolType.WEBHOOK ? '🔗 Webhook URL *' : '🌐 Endpoint URL *'}
-        </label>
-        <input
-          type="url"
-          name="frameworkConfig.url"
-          value={localFrameworkConfig.url || ''}
-          onChange={handleFrameworkConfigChange}
-          placeholder={formData.toolType === ToolType.WEBHOOK 
-            ? "https://your-webhook-endpoint.com/hook"
-            : "https://api.example.com/endpoint"}
-          className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          required
-        />
-      </div>
-
-      {showMethodSelect && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">HTTP Method</label>
-          <select
-            name="frameworkConfig.method"
-            value={localFrameworkConfig.method || 'GET'}
-            onChange={handleFrameworkConfigChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
-          >
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PUT">PUT</option>
-            <option value="DELETE">DELETE</option>
-            <option value="PATCH">PATCH</option>
-          </select>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Headers (JSON)</label>
-          <textarea
-            name="frameworkConfig.headers"
-            value={typeof localFrameworkConfig.headers === 'object' 
-              ? JSON.stringify(localFrameworkConfig.headers, null, 2)
-              : localFrameworkConfig.headers || '{}'}
-            onChange={(e) => handleJsonChange('frameworkConfig.headers', e.target.value)}
-            placeholder='{\n  "Content-Type": "application/json",\n  "Authorization": "Bearer token"\n}'
-            className="w-full p-2 border border-gray-300 rounded-md font-mono focus:ring-2 focus:ring-green-500 focus:border-green-500"
-            rows="4"
-          />
-          <div className="text-xs text-gray-500 mt-1">HTTP headers in JSON format</div>
-        </div>
-
-        {/* Show body field for non-GET methods or always for webhooks */}
-        {(formData.toolType === ToolType.WEBHOOK || 
-          (localFrameworkConfig.method && localFrameworkConfig.method !== 'GET')) && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {formData.toolType === ToolType.WEBHOOK ? 'Webhook Payload (JSON)' : 'Request Body (JSON)'}
-            </label>
-            <textarea
-              name="frameworkConfig.body"
-              value={typeof localFrameworkConfig.body === 'object' 
-                ? JSON.stringify(localFrameworkConfig.body, null, 2)
-                : localFrameworkConfig.body || '{}'}
-              onChange={(e) => handleJsonChange('frameworkConfig.body', e.target.value)}
-              placeholder='{\n  "param1": "value1",\n  "param2": "value2"\n}'
-              className="w-full p-2 border border-gray-300 rounded-md font-mono focus:ring-2 focus:ring-green-500 focus:border-green-500"
-              rows="4"
-            />
-            <div className="text-xs text-gray-500 mt-1">Request payload in JSON format</div>
-          </div>
-        )}
-      </div>
-
-      {/* API Key field for API and Custom tools */}
-      {(formData.toolType === ToolType.API || formData.toolType === ToolType.CUSTOM) && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">API Key (optional)</label>
-          <div className="relative">
-            <input
-              type="password"
-              name="apiKey"
-              value={formData.apiKey || ''}
-              onChange={handleFrameworkConfigChange}
-              placeholder="Your API key (if required)"
-              className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500 pr-8"
-            />
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-              <span className="text-gray-400">🔐</span>
-            </div>
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            API key for authentication (if required by the API)
-          </div>
-        </div>
-      )}
     </div>
   );
 };
