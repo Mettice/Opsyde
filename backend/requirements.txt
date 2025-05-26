@@ -46,6 +46,13 @@ pytesseract
 pillow
 pypdf
 pdfplumber
+pydantic 
+markdown2 
+jinja2 
+pillow 
+pandas 
+matplotlib 
+seaborn
 
 # Utils
 requests

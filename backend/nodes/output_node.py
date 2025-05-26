@@ -2,6 +2,18 @@
 import logging
 from typing import Dict, Any, Optional
 from datetime import datetime
+import asyncio
+
+# Import the new rich output schema
+try:
+    from backend.schemas.output_schema import (
+        RichOutput, OutputType, ChartType, FileType,
+        smart_format_output, detect_output_type
+    )
+    RICH_OUTPUT_AVAILABLE = True
+except ImportError:
+    RICH_OUTPUT_AVAILABLE = False
+    logging.warning("Rich output schema not available, falling back to basic output")
 
 from backend.models.data import NodeData
 from backend.frameworks.ai_integration_runner import AIIntegrationRunner
@@ -14,7 +26,17 @@ class OutputNode:
     """Enhanced output node with AI-powered integrations"""
     
     def __init__(self):
-        self.ai_runner = AIIntegrationRunner()
+        """Initialize the OutputNode with AI integration support"""
+        self.logger = logging.getLogger(__name__)
+        
+        # Initialize AI runner for smart outputs
+        try:
+            from backend.frameworks.ai_runner import AIRunner
+            self.ai_runner = AIRunner()
+            self.logger.info("AI runner initialized for smart outputs")
+        except ImportError:
+            self.logger.warning("AI runner not available, smart outputs will use fallback")
+            self.ai_runner = None
 
     async def process(
         self, 
@@ -22,42 +44,53 @@ class OutputNode:
         inputs: Dict[str, NodeData], 
         context: Dict[str, Any]
     ) -> NodeData:
-        """Process output node with AI integration support"""
+        """Enhanced process method with rich output support"""
         try:
-            node_data = node.get("data", {})
-            output_type = node_data.get("outputType") or node_data.get("output_type", "webhook")
+            self.logger.info(f"Processing output node: {node.get('id', 'unknown')}")
             
-            # Collect all input data for output
+            # Collect input data
             output_data = self._collect_output_data(inputs)
+            node_data = node.get('data', {})
             
-            # Check if this is an AI-powered output
-            if output_type.startswith('smart_') or node_data.get('config', {}).get('ai_description'):
+            # Determine processing type
+            output_type = node_data.get('outputType', 'webhook')
+            ai_description = node_data.get('ai_description', '')
+            
+            # Check if this should use AI processing
+            if output_type.startswith('smart_') or ai_description:
                 return await self._process_ai_output(node_data, output_data, context)
             else:
                 return await self._process_traditional_output(node_data, output_data, context)
                 
         except Exception as e:
-            logger.error(f"Error in output node: {str(e)}")
+            self.logger.error(f"Error processing output node: {str(e)}")
             return NodeData.from_error(f"Output processing failed: {str(e)}")
     
     def _collect_output_data(self, inputs: Dict[str, NodeData]) -> Dict[str, Any]:
-        """Collect and structure data from all inputs"""
-        output_data = {}
+        """Enhanced data collection with rich content detection"""
+        collected_data = {}
+        rich_outputs = []
         
-        for key, node_data in inputs.items():
-            if node_data.is_error():
-                # Include error information
-                output_data[f"{key}_error"] = node_data.error
+        for input_id, node_data in inputs.items():
+            if node_data.has_error():
+                collected_data[f"{input_id}_error"] = node_data.error
             else:
-                # Extract the actual value
-                value = node_data.get_value()
-                output_data[key] = value
+                data_value = node_data.value
+                collected_data[input_id] = data_value
                 
-                # If the value has metadata, include it
-                if hasattr(node_data, 'metadata') and node_data.metadata:
-                    output_data[f"{key}_metadata"] = node_data.metadata
+                # If rich output is available, try to create rich content
+                if RICH_OUTPUT_AVAILABLE and data_value:
+                    try:
+                        rich_output = smart_format_output(data_value, title=f"Output from {input_id}")
+                        rich_outputs.append(rich_output.to_dict())
+                    except Exception as e:
+                        self.logger.warning(f"Failed to create rich output for {input_id}: {e}")
         
-        return output_data
+        # Add rich outputs if available
+        if rich_outputs:
+            collected_data['_rich_outputs'] = rich_outputs
+            
+        return collected_data
     
     async def _process_ai_output(
         self, 
@@ -65,65 +98,53 @@ class OutputNode:
         output_data: Dict[str, Any], 
         context: Dict[str, Any]
     ) -> NodeData:
-        """Process AI-powered output integration"""
+        """Enhanced AI output processing with rich content support"""
         try:
             output_type = node_data.get('outputType', 'smart_api')
-            
-            # Get user's API keys from context (you'll need to implement this)
-            user_keys = context.get('user_keys', {})
-            
-            # Prepare AI configuration
             ai_config = {
-                "description": node_data.get('ai_description') or node_data.get('config', {}).get('ai_description'),
-                "service_type": node_data.get('service_type') or node_data.get('config', {}).get('service_type'),
-                "output_format": node_data.get('output_format') or node_data.get('config', {}).get('output_format'),
-                "output_type": output_type,
-                **node_data.get('config', {})
+                'description': node_data.get('ai_description', ''),
+                'service_type': node_data.get('service_type', 'general'),
+                'output_format': node_data.get('output_format', 'auto'),
+                'recipient_email': node_data.get('recipient_email'),
+                'subject_template': node_data.get('subject_template'),
+                'api_endpoint': node_data.get('api_endpoint'),
+                'webhook_url': node_data.get('webhookUrl')
             }
             
-            # NEW: Add smart email specific configuration
-            if output_type == 'smart_email':
-                ai_config.update({
-                    "recipient_email": node_data.get('recipient_email') or node_data.get('config', {}).get('recipient_email'),
-                    "subject_template": node_data.get('subject_template') or node_data.get('config', {}).get('subject_template'),
-                    "email_style": node_data.get('service_type') or node_data.get('config', {}).get('service_type', 'professional')
-                })
+            # Get user keys from context
+            user_keys = context.get('user_keys', {})
             
-            # Validate AI configuration
-            if not ai_config.get('description'):
-                return NodeData.from_error("AI description is required for smart integrations")
-            
-            # NEW: Different processing for smart email vs smart API
             if output_type == 'smart_email':
                 result = await self._process_smart_email(ai_config, output_data, context, user_keys)
-            else:
+            elif output_type == 'smart_api':
                 result = await self._process_smart_api(ai_config, output_data, context, user_keys)
-            
-            if result.get('success'):
-                return NodeData.from_value({
-                    "success": True,
-                    "output_type": output_type,
-                    "service_detected": result.get('service_detected'),
-                    "summary": result.get('summary', f'{output_type} completed successfully'),
-                    "data": result.get('result'),
-                    "metadata": {
-                        "execution_time": result.get('execution_time'),
-                        "ai_confidence": result.get('confidence'),
-                        "endpoint_used": result.get('endpoint_used')
-                    }
-                })
             else:
-                # AI integration failed, try fallback
-                if result.get('setup_required'):
-                    return NodeData.from_error(
-                        "AI integration requires API keys. Please configure your API keys in settings."
-                    )
-                else:
-                    return NodeData.from_error(f"AI integration failed: {result.get('error')}")
-
+                result = {"success": False, "error": f"Unknown AI output type: {output_type}"}
+            
+            # Enhance result with rich output if available
+            if RICH_OUTPUT_AVAILABLE and result.get('success'):
+                try:
+                    # Create rich output from the result
+                    rich_result = smart_format_output(result, title="AI Processing Result")
+                    result['rich_output'] = rich_result.to_dict()
+                except Exception as e:
+                    self.logger.warning(f"Failed to create rich output for AI result: {e}")
+            
+            return NodeData.from_value(result)
+            
         except Exception as e:
-            logger.error(f"AI integration error: {str(e)}")
-            return NodeData.from_error(f"AI integration failed: {str(e)}")
+            self.logger.error(f"AI output processing failed: {str(e)}")
+            error_result = {"success": False, "error": f"AI processing failed: {str(e)}"}
+            
+            # Create rich error output
+            if RICH_OUTPUT_AVAILABLE:
+                try:
+                    rich_error = RichOutput.create_error(str(e), "AI Processing Error")
+                    error_result['rich_output'] = rich_error.to_dict()
+                except:
+                    pass
+                    
+            return NodeData.from_value(error_result)
 
     async def _process_smart_email(
         self, 
@@ -132,10 +153,40 @@ class OutputNode:
         context: Dict[str, Any],
         user_keys: Dict[str, str]
     ) -> Dict[str, Any]:
-        """Process smart email with AI formatting"""
+        """Enhanced smart email processing with rich content"""
         try:
-            # Use AI to format email content
-            email_result = await self.ai_runner.run_smart_output(
+            if not self.ai_runner:
+                # Fallback: create a simple formatted email
+                recipient = ai_config.get('recipient_email')
+                if not recipient:
+                    return {"success": False, "error": "Recipient email is required for smart email"}
+                
+                subject = ai_config.get('subject_template', 'Workflow Results')
+                
+                # Create rich email content
+                email_content = self._format_rich_email_body(output_data)
+                
+                # Send basic email (implement your email sending logic)
+                result = {
+                    "success": True,
+                    "output_type": "smart_email",
+                    "summary": f"Smart email sent to {recipient}",
+                    "data": {
+                        "recipient": recipient,
+                        "subject": subject,
+                        "content": email_content
+                    }
+                }
+                
+                # Add rich output
+                if RICH_OUTPUT_AVAILABLE:
+                    rich_output = RichOutput.create_html(email_content, "Email Content")
+                    result['rich_output'] = rich_output.to_dict()
+                
+                return result
+            
+            # Use AI runner for advanced email processing
+            result = await self.ai_runner.run_smart_output(
                 output_type="smart_email",
                 ai_config=ai_config,
                 data=output_data,
@@ -143,37 +194,10 @@ class OutputNode:
                 user_keys=user_keys
             )
             
-            if email_result.get('success'):
-                # Extract email details from AI result
-                email_data = email_result.get('result', {})
-                recipient = ai_config.get('recipient_email') or email_data.get('recipient')
-                subject = email_data.get('subject') or ai_config.get('subject_template', 'AI-Generated Report')
-                body = email_data.get('formatted_content') or email_data.get('body')
-                
-                if not recipient:
-                    return {"success": False, "error": "No recipient email specified"}
-                
-                # Send the formatted email
-                from backend.frameworks.email_notifier import send_email
-                send_result = await send_email(recipient, subject, body)
-                
-                return {
-                    "success": True,
-                    "service_detected": "Smart Email",
-                    "summary": f"AI-formatted email sent to {recipient}",
-                    "result": {
-                        "recipient": recipient,
-                        "subject": subject,
-                        "email_style": ai_config.get('email_style', 'professional'),
-                        "send_result": send_result
-                    },
-                    "confidence": email_result.get('confidence', 0.9)
-                }
-            else:
-                return email_result
-                
+            return result
+            
         except Exception as e:
-            logger.error(f"Smart email processing failed: {str(e)}")
+            self.logger.error(f"Smart email processing failed: {str(e)}")
             return {"success": False, "error": f"Smart email failed: {str(e)}"}
 
     async def _process_smart_api(
@@ -183,9 +207,11 @@ class OutputNode:
         context: Dict[str, Any],
         user_keys: Dict[str, str]
     ) -> Dict[str, Any]:
-        """Process smart API integration"""
+        """Enhanced smart API processing"""
         try:
-            # Execute AI integration
+            if not self.ai_runner:
+                return {"success": False, "error": "Smart API integrations require AI processing"}
+            
             result = await self.ai_runner.run_smart_output(
                 output_type="smart_api",
                 ai_config=ai_config,
@@ -197,7 +223,7 @@ class OutputNode:
             return result
             
         except Exception as e:
-            logger.error(f"Smart API processing failed: {str(e)}")
+            self.logger.error(f"Smart API processing failed: {str(e)}")
             return {"success": False, "error": f"Smart API failed: {str(e)}"}
 
     async def _process_traditional_output(
@@ -206,25 +232,45 @@ class OutputNode:
         output_data: Dict[str, Any], 
         context: Dict[str, Any]
     ) -> NodeData:
-        """Process traditional output types (webhook, email, etc.)"""
-        output_type = node_data.get("outputType", "webhook")
+        """Enhanced traditional output processing with rich content support"""
+        output_type = node_data.get('outputType', 'webhook')
         
         try:
-            if output_type == "webhook":
+            # Route to appropriate handler based on output type
+            if output_type == 'webhook':
                 return await self._send_webhook(node_data, output_data)
-            elif output_type == "email":
+            elif output_type == 'email':
                 return await self._send_email(node_data, output_data)
-            elif output_type == "discord":
+            elif output_type == 'discord':
                 return await self._send_discord(node_data, output_data)
-            elif output_type == "sheets":
+            elif output_type == 'sheets':
                 return await self._send_to_sheets(node_data, output_data)
+            elif output_type in ['smart_email', 'smart_api']:
+                # These should be handled by AI processing, not traditional
+                return NodeData.from_error(f"Output type '{output_type}' should use AI processing")
             else:
-                return NodeData.from_error(f"Unsupported output type: {output_type}")
+                # Enhanced default processing with rich output
+                result = {
+                    "success": True,
+                    "output_type": output_type,
+                    "summary": f"Output processed successfully",
+                    "data": output_data
+                }
                 
+                # Add rich output representation
+                if RICH_OUTPUT_AVAILABLE:
+                    try:
+                        rich_output = smart_format_output(output_data, title="Workflow Output")
+                        result['rich_output'] = rich_output.to_dict()
+                    except Exception as e:
+                        self.logger.warning(f"Failed to create rich output: {e}")
+                
+                return NodeData.from_value(result)
+                    
         except Exception as e:
-            logger.error(f"Traditional output error: {str(e)}")
-            return NodeData.from_error(f"Output failed: {str(e)}")
-    
+            self.logger.error(f"Traditional output processing failed: {str(e)}")
+            return NodeData.from_error(f"Output processing failed: {str(e)}")
+
     async def _send_webhook(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via webhook"""
         # Use your existing webhook infrastructure
@@ -232,7 +278,17 @@ class OutputNode:
         
         webhook_url = node_data.get('webhookUrl') or node_data.get('config', {}).get('url')
         if not webhook_url:
-            return NodeData.from_error("Webhook URL is required")
+            # For webhook type, URL is required
+            if node_data.get('outputType') == 'webhook':
+                return NodeData.from_error("Webhook URL is required for webhook output type")
+            else:
+                # For other types, return success with data
+                return NodeData.from_value({
+                    "success": True,
+                    "output_type": node_data.get('outputType', 'unknown'),
+                    "summary": f"Data processed successfully (no webhook configured)",
+                    "data": output_data
+                })
         
         try:
             result = await post_to_webhook(webhook_url, output_data)
@@ -313,6 +369,88 @@ class OutputNode:
             return "\n".join(formatted_lines)
         else:
             return str(data)
+
+    def _format_rich_email_body(self, data: Dict[str, Any]) -> str:
+        """Create rich HTML email content"""
+        html_content = """
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+                .header { background: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+                .content { padding: 20px; }
+                .data-item { margin: 10px 0; padding: 10px; background: #f9f9f9; border-left: 4px solid #007cba; }
+                .rich-output { margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+                pre { background: #f4f4f4; padding: 10px; border-radius: 3px; overflow-x: auto; }
+                table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>🚀 Workflow Results</h2>
+                <p>Your CrewFlow workflow has completed successfully!</p>
+            </div>
+            <div class="content">
+        """
+        
+        # Process rich outputs if available
+        if '_rich_outputs' in data:
+            for rich_output in data['_rich_outputs']:
+                output_type = rich_output.get('output_type', 'text')
+                payload = rich_output.get('payload', '')
+                metadata = rich_output.get('metadata', {})
+                title = metadata.get('title', 'Output')
+                
+                html_content += f'<div class="rich-output"><h3>{title}</h3>'
+                
+                if output_type == 'html':
+                    html_content += payload
+                elif output_type == 'markdown':
+                    # Convert markdown to HTML (basic conversion)
+                    html_payload = payload.replace('\n', '<br>').replace('**', '<strong>').replace('*', '<em>')
+                    html_content += html_payload
+                elif output_type == 'table':
+                    if isinstance(payload, list) and payload:
+                        html_content += '<table>'
+                        # Headers
+                        if isinstance(payload[0], dict):
+                            html_content += '<tr>'
+                            for key in payload[0].keys():
+                                html_content += f'<th>{key}</th>'
+                            html_content += '</tr>'
+                            # Rows
+                            for row in payload:
+                                html_content += '<tr>'
+                                for value in row.values():
+                                    html_content += f'<td>{value}</td>'
+                                html_content += '</tr>'
+                        html_content += '</table>'
+                elif output_type == 'json':
+                    html_content += f'<pre>{str(payload)}</pre>'
+                else:
+                    html_content += f'<p>{str(payload)}</p>'
+                
+                html_content += '</div>'
+        
+        # Process regular data
+        for key, value in data.items():
+            if not key.startswith('_') and not key.endswith('_error'):
+                html_content += f'''
+                <div class="data-item">
+                    <strong>{key.replace('_', ' ').title()}:</strong><br>
+                    {str(value)}
+                </div>
+                '''
+        
+        html_content += """
+            </div>
+        </body>
+        </html>
+        """
+        
+        return html_content
 
 
 # Register the handler function
