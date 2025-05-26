@@ -1,441 +1,203 @@
 // FlowCanvas.jsx
-import React, { useRef, useMemo, useCallback, useState, useEffect, forwardRef, memo } from 'react';
+import React, { useRef, useMemo, useCallback, useEffect, useState, forwardRef } from 'react';
 import ReactFlow, {
-  MiniMap,
   Background,
-  ReactFlowProvider
+  MiniMap,
+  Panel,
+  ReactFlowProvider,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { toast } from 'react-hot-toast';
 import PropTypes from 'prop-types';
 
 // Custom components
-import ConnectionLine from './ConnectionLine';
 import AnimatedEdge from './AnimatedEdge';
-import ConnectionGuide from './ConnectionGuide';
-import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
-import ZoomControls from './builder/ZoomControls';
 import FloatingMetricsPanel from "./builder/FloatingMetricsPanel";
 import TemplateGallery from './flowcanvas/TemplateGallery';
-import NodeResultDisplay from './flowcanvas/NodeResultDisplay';
-import DebugPanel from './flowcanvas/DebugPanel';
-import ConnectionDiagram from './flowcanvas/ConnectionDiagram';
 
 // Utilities
 import { validateConnection } from '../utils/validateConnection';
 import { nodeTypes } from '../utils/nodeTypes';
-import { useFlow } from '../contexts/FlowContext';
 import { useBuilderUI } from '../contexts/BuilderUIContext';
 
-// Custom styles
-import './flowcanvas/FlowCanvas.css';
-
-// Enhanced edge types with our AnimatedEdge
+// Enhanced edge types with execution state
 const edgeTypes = {
   default: AnimatedEdge,
   animated: AnimatedEdge,
-  bezier: AnimatedEdge,
-  smoothstep: AnimatedEdge,
-  straight: AnimatedEdge,
 };
 
-// Define the base component
-const FlowCanvasBase = ({
-  nodes,
-  edges,
+// Enhanced FlowCanvas component with execution visuals
+const FlowCanvasBase = forwardRef(({
+  nodes = [],
+  edges = [],
   onNodesChange,
   onEdgesChange,
   onConnect,
   onNodeClick,
   onEdgeClick,
-  onNodeDragStop,
-  onConnectStart,
-  onConnectEnd,
-  onMove,
-  viewport,
-  className,
-  style,
-  reactFlowRef,
-  // New props for execution state
+  onPaneClick,
+  className = '',
+  style = {},
   nodeStates = new Map(),
   connectionStates = new Map(),
-  isExecuting = false
-}) => {
-  // Context hooks
-  const { setSelectedNode, canConnect } = useFlow();
-  const { toggleTemplateGallery, showTemplateGallery } = useBuilderUI();
-  
-  // Local state
-  const [connectionInfo, setConnectionInfo] = useState({ sourceType: null, targetType: null });
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [showConnectionGuideModal, setShowConnectionGuideModal] = useState(false);
-  const [connectionSourceType, setConnectionSourceType] = useState(null);
-  const [debugMode, setDebugMode] = useState(false);
-  const [showConnectionDiagram, setShowConnectionDiagram] = useState(false);
-  
-  // Refs
-  const reactFlowWrapper = useRef(null);
-  const flowInstance = useRef(null);
-  
-  // Memoized values
-  const customNodeTypes = useMemo(() => nodeTypes, []);
-  const customEdgeTypes = useMemo(() => edgeTypes, []);
+  isExecuting = false,
+  ...props
+}, ref) => {
+  const { 
+    showTemplateGallery,
+  } = useBuilderUI();
+
+  // Enhanced connection validation
+  const isValidConnection = useCallback((connection) => {
+    return validateConnection(connection, nodes, edges, toast);
+  }, [nodes, edges]);
+
+  const handleConnect = useCallback((params) => {
+    console.log('Connection attempt:', params);
+    
+    if (validateConnection(params, nodes, edges, toast)) {
+      onConnect(params);
+      toast.success('Connection created successfully!');
+    } else {
+      toast.error('Invalid connection');
+    }
+  }, [nodes, edges, onConnect]);
 
   // Enhanced nodes with execution state
   const enhancedNodes = useMemo(() => {
-    return nodes.map(node => {
-      const nodeState = nodeStates.get(node.id);
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          executionState: nodeState || { status: 'idle', progress: 0, time: 0, cost: 0 },
-          resultDisplay: node.data?.result ? <NodeResultDisplay result={node.data.result} /> : null
-        }
-      };
-    });
+    return nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        executionState: nodeStates.get(node.id) || { status: 'idle', progress: 0 }
+      }
+    }));
   }, [nodes, nodeStates]);
 
   // Enhanced edges with connection state
   const enhancedEdges = useMemo(() => {
-    return edges.map(edge => {
-      const connectionState = connectionStates.get(edge.id);
-      return {
-        ...edge,
-        type: 'animated', // Use our AnimatedEdge
-        data: {
-          ...edge.data,
-          ...connectionState,
-          isActive: connectionState?.state === 'active' || connectionState?.state === 'processing',
-          sourceType: nodes.find(n => n.id === edge.source)?.type,
-          targetType: nodes.find(n => n.id === edge.target)?.type,
-        },
-        animated: connectionState?.state === 'active' || connectionState?.state === 'processing' || isExecuting,
-        style: {
-          ...edge.style,
-          strokeWidth: connectionState?.state === 'active' ? 3 : 2,
-          stroke: connectionState?.state === 'success' ? '#10b981' : 
-                  connectionState?.state === 'error' ? '#ef4444' :
-                  connectionState?.state === 'active' ? '#3b82f6' : '#9ca3af'
-        }
-      };
-    });
-  }, [edges, connectionStates, nodes, isExecuting]);
-
-  // Validate connections
-  const isValidConnection = useCallback((params) => {
-    return validateConnection(params, nodes, edges, toast);
-  }, [nodes, edges]);
-
-  // Fit view handler
-  const handleFitView = useCallback(() => {
-    if (flowInstance.current) {
-      flowInstance.current.fitView({ padding: 0.2 });
-    }
-  }, []);
-
-  // Connect event handlers
-  const handleConnectStart = useCallback((event, { nodeId, handleType }) => {
-    const sourceNode = nodes.find(node => node.id === nodeId);
-    if (sourceNode) {
-      setConnectionInfo({
-        sourceType: sourceNode.type,
-        targetType: null
-      });
-      setIsConnecting(true);
-    }
-    if (onConnectStart) {
-      onConnectStart(event, { nodeId, handleType });
-    }
-  }, [nodes, onConnectStart]);
-
-  const handleConnectStop = useCallback((event) => {
-    setConnectionInfo({ sourceType: null, targetType: null });
-    setIsConnecting(false);
-    if (onConnectEnd) {
-      onConnectEnd(event);
-    }
-  }, [onConnectEnd]);
-
-  // Handle connection guide modal
-  useEffect(() => {
-    const handleShowConnectionGuide = (e) => {
-      setShowConnectionGuideModal(true);
-      if (e.detail && e.detail.sourceType) {
-        setConnectionSourceType(e.detail.sourceType);
-      } else {
-        setConnectionSourceType(null);
-      }
-    };
-
-    document.addEventListener('show-connection-guide', handleShowConnectionGuide);
-    
-    return () => {
-      document.removeEventListener('show-connection-guide', handleShowConnectionGuide);
-    };
-  }, []);
-
-  // Handle edge click (with deletion confirmation)
-  const handleEdgeClick = useCallback((event, edge) => {
-    if (window.confirm('Are you sure you want to delete this connection?')) {
-      onEdgesChange([{ id: edge.id, type: 'remove' }]);
-      toast.success('Connection deleted');
-    }
-  }, [onEdgesChange]);
-
-  // Highlight nodes by type
-  const highlightNodesByType = useCallback((nodeType) => {
-    const updatedNodes = nodes.map(node => ({
-      ...node,
+    return edges.map(edge => ({
+      ...edge,
       data: {
-        ...node.data,
-        highlighted: node.type === nodeType
+        ...edge.data,
+        state: connectionStates.get(edge.id)?.state || 'idle',
+        animated: connectionStates.get(edge.id)?.state === 'active' || connectionStates.get(edge.id)?.state === 'processing'
       }
     }));
-    
-    onNodesChange(updatedNodes);
-    
-    // Clear the highlight after a few seconds
-    setTimeout(() => {
-      onNodesChange(nodes.map(node => ({
-        ...node,
-        data: {
-          ...node.data,
-          highlighted: false
-        }
-      })));
-    }, 3000);
-  }, [nodes, onNodesChange]);
-
-  // Handle node clicks - select the node
-  const handleNodeClick = useCallback((event, node) => {
-    setSelectedNode(node);
-    if (onNodeClick) {
-      onNodeClick(event, node);
-    }
-  }, [onNodeClick, setSelectedNode]);
-
-  // Store ReactFlow instance globally for connection animations
-  useEffect(() => {
-    if (flowInstance.current) {
-      window.reactFlowInstance = flowInstance.current;
-    }
-  }, [flowInstance.current]);
+  }, [edges, connectionStates]);
 
   return (
-    <div className={`h-full relative ${className}`} ref={reactFlowWrapper} style={{ width: '100%', height: '100vh', ...style }}>
-      {/* Connection Guide Modal */}
-      <ConnectionGuide 
-        isVisible={showConnectionGuideModal} 
-        sourceType={connectionSourceType}
-        onClose={() => setShowConnectionGuideModal(false)}
-      />
-      
-      {/* Active Connection Guide */}
-      {isConnecting && (
-        <div className="active-connection-guide">
-          <div className="guide-content">
-            {connectionInfo.sourceType ? `Connecting from: ${connectionInfo.sourceType}` : 'Click and drag to connect nodes'}
-          </div>
-        </div>
-      )}
-      
-      {/* Execution Status Indicator */}
-      {isExecuting && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
-            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-            <span className="font-medium">Workflow Executing...</span>
-          </div>
-        </div>
-      )}
-      
-      {/* Connection Diagram */}
-      <ConnectionDiagram 
-        isVisible={showConnectionDiagram} 
-        onClose={() => setShowConnectionDiagram(false)} 
-      />
-      
-      {/* ReactFlow Component */}
+    <div 
+      ref={ref}
+      className={`flow-canvas relative ${className}`} 
+      style={{ 
+        width: '100%', 
+        height: '100%',
+        background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+        ...style 
+      }}
+      {...props}
+    >
       <ReactFlow
-        ref={reactFlowRef}
         nodes={enhancedNodes}
         edges={enhancedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={(params) => {
-          // Validation logic
-          const sourceNode = nodes.find(n => n.id === params.source);
-          const targetNode = nodes.find(n => n.id === params.target);
-          const sourceType = sourceNode?.type || 'unknown';
-          const targetType = targetNode?.type || 'unknown';
-          
-          // Check for trigger node rules
-          if (sourceNode?.type === 'trigger') {
-            const existingTriggerWithConnections = edges.some(edge => {
-              const edgeSourceNode = nodes.find(n => n.id === edge.source);
-              return edgeSourceNode?.type === 'trigger' && edge.source !== params.source;
-            });
-            
-            if (existingTriggerWithConnections) {
-              toast.error("Only one trigger node can be active in a flow");
-              return;
-            }
-          }
-
-          // Validate the connection
-          const isValid = isValidConnection(params);
-          
-          if (isValid) {
-            if (onConnect) {
-              onConnect(params);
-            }
-          } else {
-            toast.error(`Invalid connection: ${sourceType} → ${targetType}`);
-          }
-        }}
-        onNodeClick={handleNodeClick}
-        onEdgeClick={handleEdgeClick}
-        onConnectStart={handleConnectStart}
-        onConnectEnd={handleConnectStop}
-        onNodeDragStop={onNodeDragStop}
-        onMove={onMove}
-        nodeTypes={customNodeTypes}
-        edgeTypes={customEdgeTypes}
-        connectionLineComponent={ConnectionLine}
+        onConnect={handleConnect}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
+        onPaneClick={onPaneClick}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
-        className={className}
-        style={style}
         fitView
-        onInit={(reactFlowInstance) => {
-          flowInstance.current = reactFlowInstance;
-          reactFlowWrapper.current.reactFlowInstance = reactFlowInstance;
-          window.reactFlowInstance = reactFlowInstance; // Store globally for animations
-        }}
-        attributionPosition="bottom-right"
-        minZoom={0.1}
-        maxZoom={2}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        snapToGrid={true}
-        snapGrid={[15, 15]}
-        // Enhanced default edge options for better animations
-        defaultEdgeOptions={{
-          type: 'animated',
-          animated: isExecuting,
-          style: {
-            strokeWidth: 2,
-            stroke: '#9ca3af',
-          },
-        }}
+        attributionPosition="bottom-left"
+        proOptions={{ hideAttribution: true }}
       >
+        <Background 
+          variant="dots" 
+          gap={20} 
+          size={1} 
+          color="#e2e8f0"
+        />
+        
         <MiniMap 
-          nodeStrokeColor={(n) => {
-            const nodeState = nodeStates.get(n.id);
-            if (nodeState?.status === 'processing') return '#3b82f6';
-            if (nodeState?.status === 'success') return '#10b981';
-            if (nodeState?.status === 'error') return '#ef4444';
-            
-            if (n.type === 'agent') return '#0088FF';
-            if (n.type === 'task') return '#00FF88';
-            if (n.type === 'tool') return '#FF8800';
-            if (n.type === 'trigger') return '#9C27B0';
-            return '#FF0000';
-          }}
-          nodeColor={(n) => {
-            const nodeState = nodeStates.get(n.id);
-            if (nodeState?.status === 'processing') return '#3b82f630';
-            if (nodeState?.status === 'success') return '#10b98130';
-            if (nodeState?.status === 'error') return '#ef444430';
-            
-            if (n.type === 'agent') return '#0088FF30';
-            if (n.type === 'task') return '#00FF8830';
-            if (n.type === 'tool') return '#FF880030';
-            if (n.type === 'trigger') return '#9C27B030';
-            return '#FF000030';
-          }}
+          position="bottom-left"
           style={{
-            backgroundColor: '#f8f8f8',
-            border: '1px solid #e0e0e0',
-            borderRadius: '4px'
+            background: 'rgba(255, 255, 255, 0.9)',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+          }}
+          nodeColor={(node) => {
+            const state = nodeStates.get(node.id);
+            const status = state?.status || 'idle';
+            
+            // Color based on execution state
+            switch (status) {
+              case 'processing':
+                return '#3b82f6'; // Blue for processing
+              case 'success':
+                return '#22c55e'; // Green for success
+              case 'error':
+                return '#ef4444'; // Red for error
+              default:
+                // Default colors by type
+                switch (node.type) {
+                  case 'agent': return '#8b5cf6';
+                  case 'task': return '#f59e0b';
+                  case 'trigger': return '#ec4899';
+                  case 'tool': return '#10b981';
+                  case 'chatbot': return '#06b6d4';
+                  case 'input': return '#84cc16';
+                  case 'output': return '#f97316';
+                  case 'logic': return '#eab308';
+                  case 'delay': return '#a855f7';
+                  default: return '#6b7280';
+                }
+            }
           }}
         />
-        
-        <ZoomControls
-          zoomIn={() => flowInstance.current?.zoomIn()}
-          zoomOut={() => flowInstance.current?.zoomOut()}
-          resetView={() => flowInstance.current?.setViewport({ x: 0, y: 0, zoom: 1 })}
-          fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
-        />
-        
-        <Background
-          variant="dots"
-          gap={12}
-          size={1}
-          color="#e0e0e0"
-          style={{ backgroundColor: '#ffffff' }}
-        />
-        
-        <FloatingMetricsPanel 
-          nodes={enhancedNodes} 
-          edges={enhancedEdges} 
-          onHighlightNodes={highlightNodesByType}
-          nodeStates={nodeStates}
-          connectionStates={connectionStates}
-          isExecuting={isExecuting}
-        />
+
+        {/* Floating Metrics Panel */}
+        <Panel position="top-right">
+          <FloatingMetricsPanel 
+            nodes={nodes}
+            edges={edges}
+            nodeStates={nodeStates}
+            connectionStates={connectionStates}
+            isExecuting={isExecuting}
+          />
+        </Panel>
       </ReactFlow>
-      
-      {/* Bottom controls */}
-      <div className="flow-controls">
-        <button 
-          onClick={handleFitView}
-          className="control-button fit-view"
-          title="Fit view to all nodes"
-        >
-          Fit View
-        </button>
-        <button 
-          onClick={() => toggleTemplateGallery()}
-          className="control-button template-gallery"
-          title="Browse templates"
-        >
-          {showTemplateGallery ? 'Hide Templates' : 'Show Templates'}
-        </button>
-        <button 
-          onClick={() => setShowConnectionDiagram(true)}
-          className="control-button connection-diagram"
-          title="Show connection rules"
-        >
-          Connection Rules
-        </button>
-      </div>
 
       {/* Template Gallery */}
       {showTemplateGallery && <TemplateGallery />}
 
-      {/* Debug controls */}
-      <button 
-        onClick={() => setDebugMode(!debugMode)}
-        className="debug-toggle-button"
-      >
-        {debugMode ? 'Hide Debug' : 'Debug'}
-      </button>
-      
-      {/* Debug panel */}
-      {debugMode && (
-        <DebugPanel 
-          nodes={enhancedNodes}
-          edges={enhancedEdges}
-          isConnecting={isConnecting}
-          connectionInfo={connectionInfo}
-          nodeStates={nodeStates}
-          connectionStates={connectionStates}
-          isExecuting={isExecuting}
-        />
-      )}
+      {/* Simple Visual Metrics */}
+      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3 text-xs">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+            <span className="text-gray-600">Nodes: {nodes.length}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+            <span className="text-gray-600">Connections: {edges.length}</span>
+          </div>
+          {isExecuting && (
+            <div className="flex items-center gap-1">
+              <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+              <span className="text-orange-600">Executing</span>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
-};
+});
+
+FlowCanvasBase.displayName = 'FlowCanvasBase';
 
 FlowCanvasBase.propTypes = {
   nodes: PropTypes.array.isRequired,
@@ -445,35 +207,21 @@ FlowCanvasBase.propTypes = {
   onConnect: PropTypes.func.isRequired,
   onNodeClick: PropTypes.func,
   onEdgeClick: PropTypes.func,
-  onNodeDragStop: PropTypes.func,
-  onConnectStart: PropTypes.func,
-  onConnectEnd: PropTypes.func,
-  onMove: PropTypes.func,
-  viewport: PropTypes.shape({
-    x: PropTypes.number,
-    y: PropTypes.number,
-    zoom: PropTypes.number
-  }),
+  onPaneClick: PropTypes.func,
   className: PropTypes.string,
   style: PropTypes.object,
-  reactFlowRef: PropTypes.oneOfType([
-    PropTypes.func,
-    PropTypes.shape({ current: PropTypes.any })
-  ]),
-  // New props for execution state
   nodeStates: PropTypes.instanceOf(Map),
   connectionStates: PropTypes.instanceOf(Map),
-  isExecuting: PropTypes.bool
+  isExecuting: PropTypes.bool,
 };
 
-// Define the FlowCanvass component with forwardRef
+// Wrap with ReactFlowProvider
 const FlowCanvass = forwardRef((props, ref) => (
   <ReactFlowProvider>
-    <FlowCanvasBase {...props} reactFlowRef={ref} />
+    <FlowCanvasBase {...props} ref={ref} />
   </ReactFlowProvider>
 ));
 
 FlowCanvass.displayName = 'FlowCanvass';
 
-// Export the memoized component
-export default memo(FlowCanvass);
+export default FlowCanvass;

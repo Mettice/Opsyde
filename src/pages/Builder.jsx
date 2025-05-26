@@ -293,7 +293,8 @@ const BuilderPageContent = () => {
     runCrew,
     validateFlow,
     nodeStates,
-    connectionStates
+    connectionStates,
+    testExecutionStates
   } = useFlowExecution({ nodes, edges, inputs });
   
   const {
@@ -650,6 +651,21 @@ const BuilderPageContent = () => {
         hasErrors={validateFlow().length > 0}
         nodeCount={nodes.length}
       />
+
+      {/* Test Execution Button (for debugging) */}
+      {process.env.NODE_ENV === 'development' && (
+        <button
+          onClick={() => {
+            testExecutionStates();
+            toggleExecutionPanel(true);
+          }}
+          disabled={isExecuting}
+          className="fixed bottom-6 right-32 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition text-sm"
+          title="Test execution visual states"
+        >
+          🧪 Test States
+        </button>
+      )}
 
       {/* Panels */}
       {showRunnerPanel && (

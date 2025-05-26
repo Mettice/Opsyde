@@ -3,22 +3,26 @@ import React, { useState } from 'react';
 import { normalizeType } from '../../utils/nodeHelpers';
 
 const GraphMetricsPanel = ({ 
-  nodes, 
-  edges, 
+  nodes = [], 
+  edges = [], 
   onHighlightNodes, 
   darkMode,
   nodeStates = new Map(),
   connectionStates = new Map(),
   isExecuting = false
 }) => {
+  // Ensure nodes and edges are arrays
+  const safeNodes = Array.isArray(nodes) ? nodes : [];
+  const safeEdges = Array.isArray(edges) ? edges : [];
+
   // Count nodes by type
-  const agentCount = nodes.filter(n => n.type === 'agent').length;
-  const taskCount = nodes.filter(n => n.type === 'task').length;
-  const toolCount = nodes.filter(n => n.type === 'tool').length;
-  const triggerCount = nodes.filter(n => n.type === 'trigger').length;
-  const chatCount = nodes.filter(n => n.type === 'chatbot').length;
-  const logicCount = nodes.filter(n => n.type === 'logic').length;
-  const delayCount = nodes.filter(n => n.type === 'delay').length;
+  const agentCount = safeNodes.filter(n => n.type === 'agent').length;
+  const taskCount = safeNodes.filter(n => n.type === 'task').length;
+  const toolCount = safeNodes.filter(n => n.type === 'tool').length;
+  const triggerCount = safeNodes.filter(n => n.type === 'trigger').length;
+  const chatCount = safeNodes.filter(n => n.type === 'chatbot').length;
+  const logicCount = safeNodes.filter(n => n.type === 'logic').length;
+  const delayCount = safeNodes.filter(n => n.type === 'delay').length;
 
   // Count execution states
   const executionStats = {
@@ -28,7 +32,7 @@ const GraphMetricsPanel = ({
     error: 0
   };
 
-  nodes.forEach(node => {
+  safeNodes.forEach(node => {
     const state = nodeStates.get(node.id);
     const status = state?.status || 'idle';
     if (executionStats.hasOwnProperty(status)) {
@@ -46,7 +50,7 @@ const GraphMetricsPanel = ({
     error: 0
   };
 
-  edges.forEach(edge => {
+  safeEdges.forEach(edge => {
     const state = connectionStates.get(edge.id);
     const status = state?.state || 'idle';
     if (connectionStats.hasOwnProperty(status)) {
@@ -87,14 +91,20 @@ const GraphMetricsPanel = ({
     ['delay', 'task'],
     ['delay', 'tool'],
     ['delay', 'chatbot'],
-    ['delay', 'logic']
+    ['delay', 'logic'],
+    ['input', 'agent'],
+    ['input', 'task'],
+    ['input', 'tool'],
+    ['agent', 'output'],
+    ['task', 'output'],
+    ['tool', 'output']
   ];
 
   // Count valid and invalid connections
-  const { validConnections, invalidConnections } = edges.reduce(
+  const { validConnections, invalidConnections } = safeEdges.reduce(
     (acc, edge) => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      const targetNode = nodes.find(n => n.id === edge.target);
+      const sourceNode = safeNodes.find(n => n.id === edge.source);
+      const targetNode = safeNodes.find(n => n.id === edge.target);
 
       if (!sourceNode || !targetNode) return acc;
 
@@ -119,7 +129,7 @@ const GraphMetricsPanel = ({
   );
   
   // Count input bindings (nodes with data.inputs defined)
-  const inputBindingsCount = nodes.filter(node => 
+  const inputBindingsCount = safeNodes.filter(node => 
     node.data && node.data.inputs && Object.keys(node.data.inputs).length > 0
   ).length;
   

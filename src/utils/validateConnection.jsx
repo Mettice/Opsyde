@@ -9,11 +9,21 @@ export const validateConnection = (params, nodes, edges, toast) => {
   
   // Basic validation
   if (!sourceNode || !targetNode) {
-    toast?.error("Invalid connection: Source or target node not found");
+    console.warn("Invalid connection: Source or target node not found");
     return false;
   }
+  
   if (source === target) {
-    toast?.error("Self connections are not allowed");
+    console.warn("Self connections are not allowed");
+    return false;
+  }
+  
+  // Check for existing connections
+  const hasExistingConnection = edges.some(
+    edge => edge.source === source && edge.target === target
+  );
+  if (hasExistingConnection) {
+    console.warn("Connection already exists between these nodes");
     return false;
   }
   
@@ -23,237 +33,106 @@ export const validateConnection = (params, nodes, edges, toast) => {
   // Log node types
   console.log('Connecting nodes:', { from, to, sourceHandle, targetHandle });
   
-  // === Agent to Task Assignment ===
-  if (from === 'agent' && to === 'task') {
-    console.log('Validating agent-task connection:', {
-      agent: sourceNode.data,
-      task: targetNode.data,
-      sourceHandle,
-      targetHandle
-    });
-
-    // Check if task already has an agent assigned
-    const existingAgentEdge = edges.find(edge => {
-      const edgeSourceNode = nodes.find(n => n.id === edge.source);
-      return edge.target === target && edgeSourceNode?.type === 'agent' && edge.targetHandle === 'agent';
-    });
-
-    if (existingAgentEdge) {
-      toast?.error("Task already has an agent assigned. Remove existing connection first.");
-      return false;
-    }
-
-    // If connecting to the 'agent' handle, allow it regardless of sourceHandle
-    if (targetHandle === 'agent' || !targetHandle) {
-      params.targetHandle = 'agent'; // Ensure we're using the correct handle
-      
-      // Update the task node's data with agent information
-      const taskNodeIndex = nodes.findIndex(n => n.id === target);
-      if (taskNodeIndex !== -1) {
-        nodes[taskNodeIndex] = {
-          ...nodes[taskNodeIndex],
-          data: {
-            ...nodes[taskNodeIndex].data,
-            agentId: sourceNode.id,
-            agentName: sourceNode.data?.label || 'Unknown Agent',
-            agentRole: sourceNode.data?.role || 'Assistant'
-          }
-        };
-      }
-
-      console.log('Updated task data:', nodes[taskNodeIndex]?.data);
-      return true;
-    }
-  }
+  // Define basic valid connection patterns
+  const validConnections = [
+    // Basic flow patterns
+    ['trigger', 'agent'],
+    ['trigger', 'task'],
+    ['trigger', 'tool'],
+    ['trigger', 'chatbot'],
+    ['trigger', 'logic'],
+    ['trigger', 'delay'],
+    
+    // Input connections
+    ['input', 'agent'],
+    ['input', 'task'],
+    ['input', 'tool'],
+    ['input', 'chatbot'],
+    
+    // Agent connections
+    ['agent', 'task'],
+    ['agent', 'tool'],
+    ['agent', 'chatbot'],
+    ['agent', 'output'],
+    ['agent', 'delay'],
+    ['agent', 'logic'],
+    
+    // Task connections
+    ['task', 'task'],
+    ['task', 'tool'],
+    ['task', 'agent'],
+    ['task', 'chatbot'],
+    ['task', 'output'],
+    ['task', 'delay'],
+    ['task', 'logic'],
+    
+    // Tool connections
+    ['tool', 'agent'],
+    ['tool', 'task'],
+    ['tool', 'chatbot'],
+    ['tool', 'output'],
+    ['tool', 'delay'],
+    ['tool', 'logic'],
+    
+    // Logic connections
+    ['logic', 'agent'],
+    ['logic', 'task'],
+    ['logic', 'tool'],
+    ['logic', 'chatbot'],
+    ['logic', 'output'],
+    ['logic', 'delay'],
+    
+    // Delay connections
+    ['delay', 'agent'],
+    ['delay', 'task'],
+    ['delay', 'tool'],
+    ['delay', 'chatbot'],
+    ['delay', 'output'],
+    ['delay', 'logic'],
+    
+    // Chatbot connections
+    ['chatbot', 'agent'],
+    ['chatbot', 'task'],
+    ['chatbot', 'tool'],
+    ['chatbot', 'output'],
+    ['chatbot', 'delay'],
+    ['chatbot', 'logic']
+  ];
   
-  // Check for existing connections if needed
-  const hasExistingConnection = edges.some(
-    edge => edge.source === source && edge.target === target
+  // Check if this connection pattern is valid
+  const isValidPattern = validConnections.some(
+    ([validSource, validTarget]) => validSource === from && validTarget === to
   );
-  if (hasExistingConnection) {
-    toast?.error("Connection already exists between these nodes");
+  
+  if (!isValidPattern) {
+    console.warn(`Invalid connection pattern: ${from} -> ${to}`);
+    if (toast) {
+      toast.error(`Cannot connect ${from} to ${to}`);
+    }
     return false;
   }
   
-  // Validate maximum connections
-  const getConnectionCount = (nodeId, type) => {
-    return edges.filter(edge => 
-      type === 'in' ? edge.target === nodeId : edge.source === nodeId
-    ).length;
-  };
-  
-  // === Special Logic for Triggers ===
-  if (from === 'trigger') {
-    // Only one outgoing connection per trigger
-    if (getConnectionCount(source, 'out') > 0) {
-      toast?.error("Trigger nodes can only have one outgoing connection");
-      return false;
-    }
-    // Trigger can connect to any node except another trigger or output
-    if (to === 'trigger' || to === 'output') {
-      toast?.error("Trigger cannot connect to another trigger or output node");
-      return false;
-    }
-    return true;
-  }
-  
-  if (to === 'trigger') {
-    toast?.error("Trigger nodes cannot receive connections");
-    return false;
-  }
-  
-  // === Input Node ===
-  if (from === 'input') {
-    if (to === 'trigger' || to === 'input') {
-      toast?.error("Input nodes cannot connect to triggers or other inputs");
-      return false;
-    }
-    // Input nodes can have multiple outgoing connections
-    return true;
-  }
-  
-  if (to === 'input') {
-    toast?.error("Input nodes cannot receive connections");
-    return false;
-  }
-  
-  // === Output Node ===
-  if (to === 'output') {
-    // Check if output already has an incoming connection
-    if (getConnectionCount(target, 'in') > 0) {
-      toast?.error("Output nodes can only have one incoming connection");
-      return false;
-    }
-    return from !== 'trigger';
-  }
-  
-  if (from === 'output') {
-    toast?.error("Output nodes cannot have outgoing connections");
-    return false;
-  }
-  
-  // === Logic Node ===
-  if (from === 'logic') {
-    // Logic nodes can have two outgoing connections (true/false paths)
-    if (getConnectionCount(source, 'out') >= 2) {
-      toast?.error("Logic nodes can only have two outgoing connections (true/false)");
-      return false;
-    }
-    if (to === 'trigger') {
-      toast?.error("Logic nodes cannot connect to triggers");
-      return false;
-    }
-    return true;
-  }
-  
-  if (to === 'logic') {
-    if (from === 'logic') {
-      toast?.error("Logic nodes cannot connect to other logic nodes");
-      return false;
-    }
-    return true;
-  }
-  
-  // === Tool Node ===
-  if (from === 'tool') {
-    // Tool can connect to agent, chatbot, task or output
-    const validTargets = ['agent', 'chatbot', 'chat', 'task', 'output'];
-    if (!validTargets.includes(to)) {
-      toast?.error(`Tools can only connect to: ${validTargets.join(', ')}`);
-      return false;
-    }
+  // Special handling for agent-task connections
+  if (from === 'agent' && to === 'task') {
+    // Set the target handle to 'agent' for proper task assignment
+    params.targetHandle = 'agent';
     
-    // Check if the tool has valid type and configuration
-    const sourceNodeData = sourceNode.data || {};
-    if (!sourceNodeData.toolType) {
-      toast?.error("Tool node is missing required tool type");
-      return false;
+    // Update the task node's data with agent information
+    const taskNodeIndex = nodes.findIndex(n => n.id === target);
+    if (taskNodeIndex !== -1) {
+      nodes[taskNodeIndex] = {
+        ...nodes[taskNodeIndex],
+        data: {
+          ...nodes[taskNodeIndex].data,
+          agentId: sourceNode.id,
+          agentName: sourceNode.data?.label || 'Unknown Agent',
+          agentRole: sourceNode.data?.role || 'Assistant'
+        }
+      };
     }
-
-    // Set edge label based on tool output type
-    params.label = sourceNodeData.toolType;
-    
-    return true;
   }
   
-  if (to === 'tool') {
-    // Tools can receive input from input nodes or other tools
-    const validSources = ['input', 'tool'];
-    if (!validSources.includes(from)) {
-      toast?.error(`Tools can only receive connections from: ${validSources.join(', ')}`);
-      return false;
-    }
-
-    // If source is an input node, set edge label to match the input type
-    if (from === 'input') {
-      const sourceNodeData = sourceNode.data || {};
-      params.label = sourceNodeData.inputType === 'file' ? 'file_upload' : 'text_input';
-    }
-
-    return true;
-  }
-  
-  // === Agent Node ===
-  if (from === 'agent') {
-    // Agent can connect to task, chatbot, delay, or output
-    const validTargets = ['task', 'chatbot', 'chat', 'delay', 'output'];
-    if (!validTargets.includes(to)) {
-      toast?.error(`Agents can only connect to: ${validTargets.join(', ')}`);
-      return false;
-    }
-    return true;
-  }
-  
-  // === Task Node ===
-  if (from === 'task') {
-    // Task can connect to task, chatbot, delay, or output
-    const validTargets = ['task', 'chatbot', 'chat', 'delay', 'output'];
-    if (!validTargets.includes(to)) {
-      toast?.error(`Tasks can only connect to: ${validTargets.join(', ')}`);
-      return false;
-    }
-    return true;
-  }
-  
-  // === Chat/Chatbot Node ===
-  if (from === 'chatbot' || from === 'chat') {
-    if (to === 'trigger') {
-      toast?.error("Chat nodes cannot connect to triggers");
-      return false;
-    }
-    // Check maximum outgoing connections for chat nodes
-    if (getConnectionCount(source, 'out') >= 3) {
-      toast?.error("Chat nodes can have at most 3 outgoing connections");
-      return false;
-    }
-    return true;
-  }
-  
-  // === Delay Node ===
-  if (from === 'delay') {
-    if (to === 'trigger') {
-      toast?.error("Delay nodes cannot connect to triggers");
-      return false;
-    }
-    // Delay nodes can only have one outgoing connection
-    if (getConnectionCount(source, 'out') > 0) {
-      toast?.error("Delay nodes can only have one outgoing connection");
-      return false;
-    }
-    return true;
-  }
-  
-  if (to === 'delay') {
-    // Delay nodes can only have one incoming connection
-    if (getConnectionCount(target, 'in') > 0) {
-      toast?.error("Delay nodes can only have one incoming connection");
-      return false;
-    }
-    return true;
-  }
-  
-  // If we get here, the connection is not valid
-  toast?.error(`Invalid connection: ${from} → ${to}`);
-  return false;
+  console.log('Connection validated successfully:', { from, to });
+  return true;
 };
   

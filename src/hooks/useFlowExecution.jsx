@@ -326,6 +326,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
 
   // Enhanced node state update function
   const updateNodeState = useCallback((nodeId, state, progress = 0, additionalData = {}) => {
+    console.log(`🔄 Updating node ${nodeId} state to: ${state} (${progress}%)`);
     setNodeStates(prev => {
       const newStates = new Map(prev);
       newStates.set(nodeId, {
@@ -336,6 +337,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         timestamp: Date.now(),
         ...additionalData
       });
+      console.log(`📊 Node states updated:`, Object.fromEntries(newStates));
       return newStates;
     });
 
@@ -363,6 +365,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       const { nodeMap, connectionsMap } = createNodeMaps();
       
       // Initialize all nodes to idle state
+      console.log('🚀 Initializing nodes to idle state...');
       nodes.forEach(node => {
         updateNodeState(node.id, 'idle', 0);
       });
@@ -427,6 +430,13 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       
       setTextLogs(prev => [...prev, '⚡ Starting execution...']);
       
+      // Mark first node as processing to show immediate visual feedback
+      if (nodes.length > 0) {
+        const firstNode = nodes[0];
+        console.log('🎯 Setting first node to processing:', firstNode.id);
+        updateNodeState(firstNode.id, 'processing', 10);
+      }
+      
       // Execute the flow using streaming API with enhanced error handling
       try {
         const controller = new AbortController();
@@ -487,20 +497,33 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
                 try {
                   // Parse JSON line
                   const rawLogEntry = JSON.parse(line);
-                  console.log('Raw log entry:', rawLogEntry);
+                  console.log('📨 Raw log entry:', rawLogEntry);
                   
                   // Process and enhance the log entry
                   const logEntry = processLogEntry(rawLogEntry, nodeMap);
-                  console.log('Processed log entry:', logEntry);
+                  console.log('✨ Processed log entry:', logEntry);
                   
                   allLogs.push(logEntry);
                   
                   // Update node state based on log entry
                   if (logEntry.node_id) {
                     const nodeId = logEntry.node_id;
-                    const status = logEntry.status || 'processing';
-                    const progress = logEntry.progress || (status === 'completed' ? 100 : 50);
+                    let status = logEntry.status || 'processing';
+                    let progress = logEntry.progress || 50;
                     
+                    // Map different status values
+                    if (status === 'started' || status === 'running') {
+                      status = 'processing';
+                      progress = 25;
+                    } else if (status === 'completed' || status === 'finished' || status === 'success') {
+                      status = 'success';
+                      progress = 100;
+                    } else if (status === 'error' || status === 'failed') {
+                      status = 'error';
+                      progress = 0;
+                    }
+                    
+                    console.log(`🎯 Updating node ${nodeId}: ${status} (${progress}%)`);
                     updateNodeState(nodeId, status, progress, {
                       executionTime: logEntry.execution_time || Math.random() * 2 + 1,
                       cost: logEntry.cost || Math.random() * 0.01,
@@ -805,6 +828,47 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     return issues;
   }, [nodes, edges, inputs, extractNodeName]);
 
+  // Test function to simulate execution states (for debugging)
+  const testExecutionStates = useCallback(() => {
+    console.log('🧪 Testing execution states...');
+    
+    if (nodes.length === 0) {
+      console.log('❌ No nodes to test');
+      return;
+    }
+    
+    setIsExecuting(true);
+    
+    // Test each node sequentially
+    nodes.forEach((node, index) => {
+      setTimeout(() => {
+        console.log(`🎯 Testing node ${node.id} (${index + 1}/${nodes.length})`);
+        
+        // Start processing
+        updateNodeState(node.id, 'processing', 25);
+        
+        // Simulate progress
+        setTimeout(() => {
+          updateNodeState(node.id, 'processing', 75);
+        }, 1000);
+        
+        // Complete
+        setTimeout(() => {
+          updateNodeState(node.id, 'success', 100);
+          
+          // If this is the last node, end execution
+          if (index === nodes.length - 1) {
+            setTimeout(() => {
+              setIsExecuting(false);
+              console.log('✅ Test execution completed');
+            }, 500);
+          }
+        }, 2000);
+        
+      }, index * 3000); // 3 second delay between nodes
+    });
+  }, [nodes, updateNodeState]);
+
   return {
     isExecuting,
     textLogs,
@@ -816,6 +880,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     validateFlow,
     updateNodeState, // Export for external use
     triggerConnectionAnimation, // Export for external use
+    testExecutionStates, // Export test function
     // Additional utility functions
     cleanDataForFlow,
     extractNodeName,

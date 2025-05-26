@@ -8,7 +8,8 @@ const DebugPanel = ({
   connectionInfo,
   nodeStates = new Map(),
   connectionStates = new Map(),
-  isExecuting = false
+  isExecuting = false,
+  onClose
 }) => {
   // Calculate execution statistics
   const executionStats = {
@@ -48,7 +49,20 @@ const DebugPanel = ({
 
   return (
     <div className="absolute bottom-20 left-4 bg-white p-3 rounded-lg shadow-lg z-40 text-xs max-w-sm debug-panel border">
-      <h3 className="font-bold mb-2 text-gray-800">Debug Info</h3>
+      <div className="flex justify-between items-center mb-2">
+        <h3 className="font-bold text-gray-800">Debug Info</h3>
+        {onClose && (
+          <button 
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100"
+            title="Close debug panel"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        )}
+      </div>
       
       {/* Basic Stats */}
       <div className="debug-stats mb-3 space-y-1">
@@ -189,7 +203,8 @@ DebugPanel.propTypes = {
   }).isRequired,
   nodeStates: PropTypes.instanceOf(Map),
   connectionStates: PropTypes.instanceOf(Map),
-  isExecuting: PropTypes.bool
+  isExecuting: PropTypes.bool,
+  onClose: PropTypes.func
 };
 
 export default DebugPanel;
