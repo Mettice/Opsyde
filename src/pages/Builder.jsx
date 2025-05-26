@@ -291,7 +291,9 @@ const BuilderPageContent = () => {
     structuredLogs,
     executionState,
     runCrew,
-    validateFlow
+    validateFlow,
+    nodeStates,
+    connectionStates
   } = useFlowExecution({ nodes, edges, inputs });
   
   const {
@@ -562,8 +564,8 @@ const BuilderPageContent = () => {
             }}
             connectionLineType="bezier"
             defaultEdgeOptions={{
-              type: 'bezier',
-              animated: true,
+              type: 'animated',
+              animated: isExecuting,
               style: {
                 stroke: '#888',
                 strokeWidth: 1.5,
@@ -573,6 +575,9 @@ const BuilderPageContent = () => {
             onMove={setViewport}
             viewport={viewport}
             ref={flowInstance}
+            nodeStates={nodeStates}
+            connectionStates={connectionStates}
+            isExecuting={isExecuting}
           />
         </ReactFlowProvider>
         

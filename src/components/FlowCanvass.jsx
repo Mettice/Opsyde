@@ -11,6 +11,7 @@ import PropTypes from 'prop-types';
 
 // Custom components
 import ConnectionLine from './ConnectionLine';
+import AnimatedEdge from './AnimatedEdge';
 import ConnectionGuide from './ConnectionGuide';
 import ConnectionRulesPanel from './builder/ConnectionRulesPanel';
 import ZoomControls from './builder/ZoomControls';
@@ -25,10 +26,18 @@ import { validateConnection } from '../utils/validateConnection';
 import { nodeTypes } from '../utils/nodeTypes';
 import { useFlow } from '../contexts/FlowContext';
 import { useBuilderUI } from '../contexts/BuilderUIContext';
-import { edgeTypes } from './flowcanvas/edgeTypes';
 
 // Custom styles
 import './flowcanvas/FlowCanvas.css';
+
+// Enhanced edge types with our AnimatedEdge
+const edgeTypes = {
+  default: AnimatedEdge,
+  animated: AnimatedEdge,
+  bezier: AnimatedEdge,
+  smoothstep: AnimatedEdge,
+  straight: AnimatedEdge,
+};
 
 // Define the base component
 const FlowCanvasBase = ({
@@ -46,7 +55,11 @@ const FlowCanvasBase = ({
   viewport,
   className,
   style,
-  reactFlowRef
+  reactFlowRef,
+  // New props for execution state
+  nodeStates = new Map(),
+  connectionStates = new Map(),
+  isExecuting = false
 }) => {
   // Context hooks
   const { setSelectedNode, canConnect } = useFlow();
@@ -67,6 +80,47 @@ const FlowCanvasBase = ({
   // Memoized values
   const customNodeTypes = useMemo(() => nodeTypes, []);
   const customEdgeTypes = useMemo(() => edgeTypes, []);
+
+  // Enhanced nodes with execution state
+  const enhancedNodes = useMemo(() => {
+    return nodes.map(node => {
+      const nodeState = nodeStates.get(node.id);
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          executionState: nodeState || { status: 'idle', progress: 0, time: 0, cost: 0 },
+          resultDisplay: node.data?.result ? <NodeResultDisplay result={node.data.result} /> : null
+        }
+      };
+    });
+  }, [nodes, nodeStates]);
+
+  // Enhanced edges with connection state
+  const enhancedEdges = useMemo(() => {
+    return edges.map(edge => {
+      const connectionState = connectionStates.get(edge.id);
+      return {
+        ...edge,
+        type: 'animated', // Use our AnimatedEdge
+        data: {
+          ...edge.data,
+          ...connectionState,
+          isActive: connectionState?.state === 'active' || connectionState?.state === 'processing',
+          sourceType: nodes.find(n => n.id === edge.source)?.type,
+          targetType: nodes.find(n => n.id === edge.target)?.type,
+        },
+        animated: connectionState?.state === 'active' || connectionState?.state === 'processing' || isExecuting,
+        style: {
+          ...edge.style,
+          strokeWidth: connectionState?.state === 'active' ? 3 : 2,
+          stroke: connectionState?.state === 'success' ? '#10b981' : 
+                  connectionState?.state === 'error' ? '#ef4444' :
+                  connectionState?.state === 'active' ? '#3b82f6' : '#9ca3af'
+        }
+      };
+    });
+  }, [edges, connectionStates, nodes, isExecuting]);
 
   // Validate connections
   const isValidConnection = useCallback((params) => {
@@ -161,16 +215,12 @@ const FlowCanvasBase = ({
     }
   }, [onNodeClick, setSelectedNode]);
 
-  // Process nodes to add result display components
-  const processedNodes = useMemo(() => {
-    return nodes.map(node => ({
-      ...node,
-      data: {
-        ...node.data,
-        resultDisplay: node.data?.result ? <NodeResultDisplay result={node.data.result} /> : null
-      }
-    }));
-  }, [nodes]);
+  // Store ReactFlow instance globally for connection animations
+  useEffect(() => {
+    if (flowInstance.current) {
+      window.reactFlowInstance = flowInstance.current;
+    }
+  }, [flowInstance.current]);
 
   return (
     <div className={`h-full relative ${className}`} ref={reactFlowWrapper} style={{ width: '100%', height: '100vh', ...style }}>
@@ -190,6 +240,16 @@ const FlowCanvasBase = ({
         </div>
       )}
       
+      {/* Execution Status Indicator */}
+      {isExecuting && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg flex items-center space-x-2">
+            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+            <span className="font-medium">Workflow Executing...</span>
+          </div>
+        </div>
+      )}
+      
       {/* Connection Diagram */}
       <ConnectionDiagram 
         isVisible={showConnectionDiagram} 
@@ -199,8 +259,8 @@ const FlowCanvasBase = ({
       {/* ReactFlow Component */}
       <ReactFlow
         ref={reactFlowRef}
-        nodes={processedNodes}
-        edges={edges}
+        nodes={enhancedNodes}
+        edges={enhancedEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={(params) => {
@@ -250,6 +310,7 @@ const FlowCanvasBase = ({
         onInit={(reactFlowInstance) => {
           flowInstance.current = reactFlowInstance;
           reactFlowWrapper.current.reactFlowInstance = reactFlowInstance;
+          window.reactFlowInstance = reactFlowInstance; // Store globally for animations
         }}
         attributionPosition="bottom-right"
         minZoom={0.1}
@@ -257,9 +318,23 @@ const FlowCanvasBase = ({
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         snapToGrid={true}
         snapGrid={[15, 15]}
+        // Enhanced default edge options for better animations
+        defaultEdgeOptions={{
+          type: 'animated',
+          animated: isExecuting,
+          style: {
+            strokeWidth: 2,
+            stroke: '#9ca3af',
+          },
+        }}
       >
         <MiniMap 
           nodeStrokeColor={(n) => {
+            const nodeState = nodeStates.get(n.id);
+            if (nodeState?.status === 'processing') return '#3b82f6';
+            if (nodeState?.status === 'success') return '#10b981';
+            if (nodeState?.status === 'error') return '#ef4444';
+            
             if (n.type === 'agent') return '#0088FF';
             if (n.type === 'task') return '#00FF88';
             if (n.type === 'tool') return '#FF8800';
@@ -267,6 +342,11 @@ const FlowCanvasBase = ({
             return '#FF0000';
           }}
           nodeColor={(n) => {
+            const nodeState = nodeStates.get(n.id);
+            if (nodeState?.status === 'processing') return '#3b82f630';
+            if (nodeState?.status === 'success') return '#10b98130';
+            if (nodeState?.status === 'error') return '#ef444430';
+            
             if (n.type === 'agent') return '#0088FF30';
             if (n.type === 'task') return '#00FF8830';
             if (n.type === 'tool') return '#FF880030';
@@ -296,9 +376,12 @@ const FlowCanvasBase = ({
         />
         
         <FloatingMetricsPanel 
-          nodes={nodes} 
-          edges={edges} 
+          nodes={enhancedNodes} 
+          edges={enhancedEdges} 
           onHighlightNodes={highlightNodesByType}
+          nodeStates={nodeStates}
+          connectionStates={connectionStates}
+          isExecuting={isExecuting}
         />
       </ReactFlow>
       
@@ -341,10 +424,13 @@ const FlowCanvasBase = ({
       {/* Debug panel */}
       {debugMode && (
         <DebugPanel 
-          nodes={nodes}
-          edges={edges}
+          nodes={enhancedNodes}
+          edges={enhancedEdges}
           isConnecting={isConnecting}
           connectionInfo={connectionInfo}
+          nodeStates={nodeStates}
+          connectionStates={connectionStates}
+          isExecuting={isExecuting}
         />
       )}
     </div>
@@ -373,7 +459,11 @@ FlowCanvasBase.propTypes = {
   reactFlowRef: PropTypes.oneOfType([
     PropTypes.func,
     PropTypes.shape({ current: PropTypes.any })
-  ])
+  ]),
+  // New props for execution state
+  nodeStates: PropTypes.instanceOf(Map),
+  connectionStates: PropTypes.instanceOf(Map),
+  isExecuting: PropTypes.bool
 };
 
 // Define the FlowCanvass component with forwardRef

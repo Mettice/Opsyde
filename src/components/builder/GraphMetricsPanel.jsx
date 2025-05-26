@@ -2,7 +2,15 @@
 import React, { useState } from 'react';
 import { normalizeType } from '../../utils/nodeHelpers';
 
-const GraphMetricsPanel = ({ nodes, edges, onHighlightNodes, darkMode }) => {
+const GraphMetricsPanel = ({ 
+  nodes, 
+  edges, 
+  onHighlightNodes, 
+  darkMode,
+  nodeStates = new Map(),
+  connectionStates = new Map(),
+  isExecuting = false
+}) => {
   // Count nodes by type
   const agentCount = nodes.filter(n => n.type === 'agent').length;
   const taskCount = nodes.filter(n => n.type === 'task').length;
@@ -11,7 +19,50 @@ const GraphMetricsPanel = ({ nodes, edges, onHighlightNodes, darkMode }) => {
   const chatCount = nodes.filter(n => n.type === 'chatbot').length;
   const logicCount = nodes.filter(n => n.type === 'logic').length;
   const delayCount = nodes.filter(n => n.type === 'delay').length;
-  
+
+  // Count execution states
+  const executionStats = {
+    idle: 0,
+    processing: 0,
+    success: 0,
+    error: 0
+  };
+
+  nodes.forEach(node => {
+    const state = nodeStates.get(node.id);
+    const status = state?.status || 'idle';
+    if (executionStats.hasOwnProperty(status)) {
+      executionStats[status]++;
+    } else {
+      executionStats.idle++;
+    }
+  });
+
+  // Count connection states
+  const connectionStats = {
+    idle: 0,
+    active: 0,
+    success: 0,
+    error: 0
+  };
+
+  edges.forEach(edge => {
+    const state = connectionStates.get(edge.id);
+    const status = state?.state || 'idle';
+    if (connectionStats.hasOwnProperty(status)) {
+      connectionStats[status]++;
+    } else {
+      connectionStats.idle++;
+    }
+  });
+
+  // Calculate performance metrics
+  const totalThroughput = Array.from(connectionStates.values())
+    .filter(state => state?.throughput)
+    .reduce((sum, state) => sum + (state.throughput || 0), 0);
+
+  const avgThroughput = connectionStates.size > 0 ? totalThroughput / connectionStates.size : 0;
+
   // Define all valid connection patterns
   const validPatterns = [
     ['tool', 'agent'],
@@ -84,8 +135,36 @@ const GraphMetricsPanel = ({ nodes, edges, onHighlightNodes, darkMode }) => {
 
   return (
     <div className="w-full h-full">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        {/* Node counts */}
+      {/* Execution Status Section */}
+      {isExecuting && (
+        <div className={`mb-4 p-3 rounded-lg ${darkMode ? 'bg-blue-900/30 border border-blue-700' : 'bg-blue-50 border border-blue-200'}`}>
+          <div className="flex items-center mb-2">
+            <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+            <span className={`font-semibold ${textColorClass}`}>Workflow Executing</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex justify-between">
+              <span className={textColorClass}>Processing:</span>
+              <span className="font-medium text-blue-500">{executionStats.processing}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Completed:</span>
+              <span className="font-medium text-green-500">{executionStats.success}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Active Connections:</span>
+              <span className="font-medium text-blue-500">{connectionStats.active}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Avg Throughput:</span>
+              <span className="font-medium text-purple-500">{avgThroughput.toFixed(1)}/s</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Node Counts Section */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm mb-4">
         <div 
           className={`flex items-center cursor-pointer ${hoverBgClass} p-1 rounded`}
           onClick={() => handleHighlight('agent')}
@@ -148,24 +227,70 @@ const GraphMetricsPanel = ({ nodes, edges, onHighlightNodes, darkMode }) => {
           <span className={textColorClass}>Delay Nodes:</span>
         </div>
         <div className={`font-medium ${textColorClass}`}>{delayCount}</div>
-        
-        {/* Connection counts */}
-        <div className={`flex items-center col-span-2 mt-2 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} pt-2`}>
-          <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-          <span className={textColorClass}>Valid Connections:</span>
-          <div className={`font-medium ml-auto ${textColorClass}`}>{validConnections.length}</div>
+      </div>
+
+      {/* Execution States Section */}
+      {nodeStates.size > 0 && (
+        <div className={`mb-4 p-3 rounded-lg ${darkMode ? 'bg-gray-800/50 border border-gray-700' : 'bg-gray-50 border border-gray-200'}`}>
+          <h4 className={`font-semibold mb-2 ${textColorClass}`}>Node States</h4>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="flex justify-between">
+              <span className={textColorClass}>Idle:</span>
+              <span className="font-medium text-gray-500">{executionStats.idle}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Processing:</span>
+              <span className="font-medium text-blue-500">{executionStats.processing}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Success:</span>
+              <span className="font-medium text-green-500">{executionStats.success}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className={textColorClass}>Error:</span>
+              <span className="font-medium text-red-500">{executionStats.error}</span>
+            </div>
+          </div>
         </div>
-        
-        <div className="flex items-center col-span-2">
-          <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
-          <span className={textColorClass}>Invalid Connections:</span>
-          <div className={`font-medium ml-auto ${textColorClass}`}>{invalidConnections.length}</div>
-        </div>
-        
-        <div className="flex items-center col-span-2">
-          <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
-          <span className={textColorClass}>Input Bindings:</span>
-          <div className={`font-medium ml-auto ${textColorClass}`}>{inputBindingsCount}</div>
+      )}
+
+      {/* Connection Status Section */}
+      <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'} pt-3`}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          <div className="flex items-center col-span-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+            <span className={textColorClass}>Valid Connections:</span>
+            <div className={`font-medium ml-auto ${textColorClass}`}>{validConnections.length}</div>
+          </div>
+          
+          <div className="flex items-center col-span-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+            <span className={textColorClass}>Invalid Connections:</span>
+            <div className={`font-medium ml-auto ${textColorClass}`}>{invalidConnections.length}</div>
+          </div>
+          
+          <div className="flex items-center col-span-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full mr-2"></div>
+            <span className={textColorClass}>Input Bindings:</span>
+            <div className={`font-medium ml-auto ${textColorClass}`}>{inputBindingsCount}</div>
+          </div>
+
+          {/* Connection States */}
+          {connectionStates.size > 0 && (
+            <>
+              <div className="flex items-center col-span-2 mt-2">
+                <div className="w-3 h-3 bg-blue-400 rounded-full mr-2"></div>
+                <span className={textColorClass}>Active Connections:</span>
+                <div className={`font-medium ml-auto text-blue-500`}>{connectionStats.active}</div>
+              </div>
+              
+              <div className="flex items-center col-span-2">
+                <div className="w-3 h-3 bg-green-400 rounded-full mr-2"></div>
+                <span className={textColorClass}>Successful:</span>
+                <div className={`font-medium ml-auto text-green-500`}>{connectionStats.success}</div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

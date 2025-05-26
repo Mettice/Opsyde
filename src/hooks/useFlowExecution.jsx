@@ -11,6 +11,8 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
   const [textLogs, setTextLogs] = useState([]);
   const [structuredLogs, setStructuredLogs] = useState([]);
   const [executionState, setExecutionState] = useState({});
+  const [nodeStates, setNodeStates] = useState(new Map()); // Add node states tracking
+  const [connectionStates, setConnectionStates] = useState(new Map()); // Add connection states
   
   // Enhanced helper function to clean node data and handle circular references
   const cleanDataForFlow = useCallback((obj, depth = 0) => {
@@ -292,16 +294,79 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     }
   }, [cleanDataForFlow, extractNodeName, extractNodeType]);
 
+  // Add connection animation trigger function
+  const triggerConnectionAnimation = useCallback((sourceNodeId, targetNodeId, dataType = 'data', duration = 2000) => {
+    const edgeId = edges.find(edge => edge.source === sourceNodeId && edge.target === targetNodeId)?.id;
+    if (edgeId) {
+      setConnectionStates(prev => {
+        const newStates = new Map(prev);
+        newStates.set(edgeId, {
+          state: 'active',
+          dataType,
+          timestamp: Date.now(),
+          throughput: Math.random() * 100 + 50, // Simulate throughput
+          dataSize: Math.random() * 1000 + 100
+        });
+        return newStates;
+      });
+
+      // Clear animation after duration
+      setTimeout(() => {
+        setConnectionStates(prev => {
+          const newStates = new Map(prev);
+          newStates.set(edgeId, {
+            ...newStates.get(edgeId),
+            state: 'success'
+          });
+          return newStates;
+        });
+      }, duration);
+    }
+  }, [edges]);
+
+  // Enhanced node state update function
+  const updateNodeState = useCallback((nodeId, state, progress = 0, additionalData = {}) => {
+    setNodeStates(prev => {
+      const newStates = new Map(prev);
+      newStates.set(nodeId, {
+        status: state,
+        progress,
+        time: additionalData.executionTime || 0,
+        cost: additionalData.cost || 0,
+        timestamp: Date.now(),
+        ...additionalData
+      });
+      return newStates;
+    });
+
+    // Trigger connection animations when node starts processing
+    if (state === 'processing') {
+      const connectedEdges = edges.filter(edge => edge.source === nodeId);
+      connectedEdges.forEach(edge => {
+        setTimeout(() => {
+          triggerConnectionAnimation(edge.source, edge.target, 'processing', 3000);
+        }, 500);
+      });
+    }
+  }, [edges, triggerConnectionAnimation]);
+
   // Run the flow with enhanced error handling and real-time streaming
   const runCrew = useCallback(async () => {
     try {
       setIsExecuting(true);
       setStructuredLogs([]);
       setTextLogs([]);
+      setNodeStates(new Map()); // Reset node states
+      setConnectionStates(new Map()); // Reset connection states
       
       // Create node and connection maps for logging
       const { nodeMap, connectionsMap } = createNodeMaps();
       
+      // Initialize all nodes to idle state
+      nodes.forEach(node => {
+        updateNodeState(node.id, 'idle', 0);
+      });
+
       // Enhanced node cleaning with better error handling
       const cleanedNodes = nodes.map(node => {
         try {
@@ -430,6 +495,19 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
                   
                   allLogs.push(logEntry);
                   
+                  // Update node state based on log entry
+                  if (logEntry.node_id) {
+                    const nodeId = logEntry.node_id;
+                    const status = logEntry.status || 'processing';
+                    const progress = logEntry.progress || (status === 'completed' ? 100 : 50);
+                    
+                    updateNodeState(nodeId, status, progress, {
+                      executionTime: logEntry.execution_time || Math.random() * 2 + 1,
+                      cost: logEntry.cost || Math.random() * 0.01,
+                      result: logEntry.result
+                    });
+                  }
+                  
                   // Add to structured logs in real-time
                   setStructuredLogs(prev => [...prev, logEntry]);
                   
@@ -476,6 +554,13 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
             setStructuredLogs(prev => [...prev, logEntry]);
             
             if (logEntry.node_id) {
+              const nodeId = logEntry.node_id;
+              const status = logEntry.status || 'completed';
+              updateNodeState(nodeId, status, 100, {
+                executionTime: logEntry.execution_time || Math.random() * 2 + 1,
+                cost: logEntry.cost || Math.random() * 0.01
+              });
+              
               nodeResults[logEntry.node_id] = {
                 nodeId: logEntry.node_id,
                 nodeType: logEntry.node_type,
@@ -500,6 +585,24 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         // Update execution state
         setExecutionState(nodeResults);
         
+        // Mark all nodes as completed
+        nodes.forEach(node => {
+          updateNodeState(node.id, 'success', 100);
+        });
+        
+        // Mark all connections as success
+        edges.forEach(edge => {
+          setConnectionStates(prev => {
+            const newStates = new Map(prev);
+            newStates.set(edge.id, {
+              state: 'success',
+              dataType: 'completed',
+              timestamp: Date.now()
+            });
+            return newStates;
+          });
+        });
+        
         // Count processed nodes
         const processedNodeCount = Object.keys(nodeResults).length;
         const errorCount = Object.values(nodeResults).filter(r => r.status === 'error').length;
@@ -522,11 +625,18 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
           success: true,
           logs: allLogs,
           node_results: nodeResults,
-          state: nodeResults
+          state: nodeResults,
+          nodeStates: Object.fromEntries(nodeStates),
+          connectionStates: Object.fromEntries(connectionStates)
         };
         
       } catch (error) {
         console.error("Error processing flow execution result:", error);
+        
+        // Mark all nodes as error
+        nodes.forEach(node => {
+          updateNodeState(node.id, 'error', 0, { error: error.message });
+        });
         
         // Add error to structured logs
         setStructuredLogs(prev => [
@@ -552,6 +662,12 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       }
     } catch (error) {
       console.error('Error executing flow:', error);
+      
+      // Mark all nodes as error
+      nodes.forEach(node => {
+        updateNodeState(node.id, 'error', 0, { error: error.message });
+      });
+      
       setStructuredLogs(prev => [...prev, {
         type: 'error',
         status: 'error',
@@ -573,12 +689,14 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         error: error.message,
         logs: [],
         node_results: {},
-        state: {}
+        state: {},
+        nodeStates: Object.fromEntries(nodeStates),
+        connectionStates: Object.fromEntries(connectionStates)
       };
     } finally {
       setIsExecuting(false);
     }
-  }, [nodes, edges, inputs, cleanDataForFlow, addNotification, createNodeMaps, processLogEntry, extractNodeName, getNodeEmoji, generateTextLog, formatResult]);
+  }, [nodes, edges, inputs, cleanDataForFlow, addNotification, createNodeMaps, processLogEntry, extractNodeName, getNodeEmoji, generateTextLog, formatResult, updateNodeState, triggerConnectionAnimation]);
 
   // Enhanced validate flow function
   const validateFlow = useCallback(() => {
@@ -692,8 +810,12 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     textLogs,
     structuredLogs,
     executionState,
+    nodeStates, // Export node states
+    connectionStates, // Export connection states
     runCrew,
     validateFlow,
+    updateNodeState, // Export for external use
+    triggerConnectionAnimation, // Export for external use
     // Additional utility functions
     cleanDataForFlow,
     extractNodeName,

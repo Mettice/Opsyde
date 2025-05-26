@@ -9,11 +9,278 @@
 }
 
 @keyframes highlight-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+  0% { 
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    transform: scale(1);
+  }
+  70% { 
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    transform: scale(1.05);
+  }
+  100% { 
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
 }
 
 .animate-pulse {
   animation: highlight-pulse 2s infinite;
+}
+
+/* Flowing particle animations */
+@keyframes flow {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+  }
+}
+
+.flowing-particle {
+  animation: flow 2s linear infinite;
+}
+
+.flowing-particle-delayed {
+  animation: flow 2s linear infinite;
+  animation-delay: 0.5s;
+}
+
+.flowing-particle-delayed-2 {
+  animation: flow 2s linear infinite;
+  animation-delay: 1s;
+}
+
+/* Glow effects for active connections */
+@keyframes glow {
+  0% {
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 12px currentColor);
+  }
+  100% {
+    filter: drop-shadow(0 0 2px currentColor);
+  }
+}
+
+.connection-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+/* Success connection animations */
+@keyframes success-pulse {
+  0% {
+    stroke-width: 2;
+    opacity: 0.8;
+  }
+  50% {
+    stroke-width: 4;
+    opacity: 1;
+  }
+  100% {
+    stroke-width: 2;
+    opacity: 0.8;
+  }
+}
+
+.success-connection {
+  animation: success-pulse 1.5s ease-in-out infinite;
+}
+
+/* Error connection animations */
+@keyframes error-flash {
+  0%, 100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+    stroke-width: 3;
+  }
+}
+
+.error-connection {
+  animation: error-flash 0.8s ease-in-out infinite;
+}
+
+/* Data flow animations */
+@keyframes data-flow {
+  0% {
+    stroke-dasharray: 0 20;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dasharray: 20 0;
+    stroke-dashoffset: -20;
+  }
+}
+
+.data-flow-animation {
+  animation: data-flow 1s linear infinite;
+}
+
+/* Connection label animations */
+@keyframes label-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.connection-label {
+  animation: label-appear 0.3s ease-out;
+}
+
+.connection-label-active {
+  animation: label-appear 0.3s ease-out, highlight-pulse 2s infinite 0.3s;
+}
+
+/* Smooth transitions for connection state changes */
+.connection-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover effects for connections */
+.connection-hover {
+  transition: all 0.2s ease-in-out;
+}
+
+.connection-hover:hover {
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+/* Gradient animation for active connections */
+@keyframes gradient-shift {
+  0% {
+    stop-color: var(--start-color);
+  }
+  50% {
+    stop-color: var(--end-color);
+  }
+  100% {
+    stop-color: var(--start-color);
+  }
+}
+
+.animated-gradient stop {
+  animation: gradient-shift 2s ease-in-out infinite;
+}
+
+/* Particle trail effect */
+@keyframes particle-trail {
+  0% {
+    opacity: 0;
+    r: 1;
+  }
+  20% {
+    opacity: 1;
+    r: 3;
+  }
+  80% {
+    opacity: 1;
+    r: 3;
+  }
+  100% {
+    opacity: 0;
+    r: 1;
+  }
+}
+
+.particle-trail {
+  animation: particle-trail 2s linear infinite;
+}
+
+/* Connection thickness variations */
+.connection-thin {
+  stroke-width: 1;
+}
+
+.connection-normal {
+  stroke-width: 2;
+}
+
+.connection-thick {
+  stroke-width: 3;
+}
+
+.connection-extra-thick {
+  stroke-width: 4;
+}
+
+/* Smart routing visual indicators */
+.connection-curved {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Connection type specific styles */
+.connection-data {
+  stroke-dasharray: none;
+}
+
+.connection-control {
+  stroke-dasharray: 5, 5;
+}
+
+.connection-error {
+  stroke-dasharray: 3, 3;
+}
+
+.connection-success {
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+/* Responsive connection styles */
+@media (max-width: 768px) {
+  .connection-hover:hover {
+    stroke-width: 2;
+  }
+  
+  .flowing-particle {
+    r: 2;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .connection-transition {
+    stroke-width: 3;
+  }
+  
+  .connection-label {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animated-dash,
+  .animate-pulse,
+  .flowing-particle,
+  .connection-glow,
+  .success-connection,
+  .error-connection,
+  .data-flow-animation,
+  .animated-gradient stop,
+  .particle-trail {
+    animation: none;
+  }
+  
+  .connection-transition {
+    transition: none;
+  }
 } 
