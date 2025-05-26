@@ -1,12 +1,59 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 import registry from '../data/tool_registry.json';
 
 const TaskNode = React.memo(({ data, isConnectable, selected }) => {
   const [showDependencies, setShowDependencies] = useState(false);
+  const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
+  const [executionProgress, setExecutionProgress] = useState(0);
+  const [executionTime, setExecutionTime] = useState(0);
+  const [cost, setCost] = useState(0);
+  
   const framework = data.framework || 'crewai';
   const frameworkConfig = registry.frameworks[framework]?.config || {};
+
+  // Simulate execution progress and metrics
+  useEffect(() => {
+    if (data.executionState) {
+      setStatus(data.executionState.status || 'idle');
+      setExecutionProgress(data.executionState.progress || 0);
+      setExecutionTime(data.executionState.time || 0);
+      setCost(data.executionState.cost || 0);
+    }
+  }, [data.executionState]);
+
+  // Get status icon and color
+  const getStatusDisplay = () => {
+    switch (status) {
+      case 'processing':
+        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+      case 'success':
+        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+      case 'error':
+        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
+      case 'waiting':
+        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+      default:
+        return { icon: '📋', color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+    }
+  };
+
+  const statusDisplay = getStatusDisplay();
+
+  // Get priority color
+  const getPriorityColor = () => {
+    switch (data.priority?.toLowerCase()) {
+      case 'high':
+        return 'bg-red-100 text-red-700 border-red-200';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      case 'low':
+        return 'bg-green-100 text-green-700 border-green-200';
+      default:
+        return 'bg-gray-100 text-gray-700 border-gray-200';
+    }
+  };
 
   const handleEditClick = useCallback((e) => {
     if (e) {
@@ -19,7 +66,6 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     console.log('Node Type:', data.nodeType || 'task');
     console.dir(data);
     
-    // Dispatch a custom event for the parent to handle
     const editEvent = new CustomEvent('node-edit', {
       detail: {
         nodeId: data.nodeId,
@@ -58,14 +104,62 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
   };
 
   return (
-    <div className={`bg-yellow-50 border-2 ${selected ? 'border-blue-500' : 'border-yellow-200'} shadow-md rounded p-3 w-72`}>
+    <div 
+      className={`
+        relative group w-80
+        bg-gradient-to-br from-white via-yellow-50/30 to-yellow-100/20
+        backdrop-blur-sm border-2 rounded-2xl
+        shadow-lg shadow-yellow-100/50
+        transition-all duration-300 ease-out
+        hover:shadow-2xl hover:shadow-yellow-200/60 hover:scale-[1.02] hover:-translate-y-1
+        ${selected ? 
+          'border-yellow-400 shadow-yellow-300/60 scale-[1.01]' : 
+          `${statusDisplay.borderColor} hover:border-yellow-300`
+        }
+        ${status === 'processing' ? 'animate-pulse' : ''}
+        ${status === 'error' ? 'animate-shake' : ''}
+      `}
+    >
+      {/* Animated border for processing state */}
+      {status === 'processing' && (
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 opacity-75 animate-spin-slow -z-10" 
+             style={{ padding: '2px' }}>
+          <div className="w-full h-full rounded-2xl bg-white"></div>
+        </div>
+      )}
+
+      {/* Execution Progress Ring */}
+      {(status === 'processing' || executionProgress > 0) && (
+        <div className="absolute -top-2 -right-2 w-8 h-8">
+          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
+            <circle
+              cx="16" cy="16" r="14"
+              fill="none" stroke="currentColor" strokeWidth="2"
+              className="text-gray-200"
+            />
+            <circle
+              cx="16" cy="16" r="14"
+              fill="none" stroke="currentColor" strokeWidth="2"
+              strokeDasharray={`${executionProgress * 0.88} 88`}
+              className="text-yellow-500 transition-all duration-300"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs font-bold text-yellow-600">
+              {Math.round(executionProgress)}%
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Target handle at top - regular input */}
       <Handle 
         type="target" 
         position={Position.Top} 
         id="input"
         isConnectable={isConnectable} 
-        className="w-3 h-3 bg-yellow-500 hover:bg-yellow-400 hover:w-4 hover:h-4 transition-all"
+        className="w-4 h-4 bg-gradient-to-r from-yellow-400 to-yellow-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
+        style={{ top: -8 }}
       />
       
       {/* Special agent handle on the left - for agent connections */}
@@ -74,98 +168,149 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         position={Position.Left} 
         id="agent"
         isConnectable={isConnectable} 
-        className="w-3 h-3 bg-blue-500 hover:bg-blue-400 hover:w-4 hover:h-4 transition-all"
-        style={{ left: -5, top: 30 }}
+        className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
+        style={{ left: -8, top: 40 }}
       />
       
-      {/* Node header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">📋</span>
-          <div>
-            <h3 className="font-semibold text-lg">{data.label || 'Task'}</h3>
-            <div className="text-xs text-gray-500">{data.type || 'Sequential'}</div>
+      {/* Header Section */}
+      <div className="p-4 pb-3">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className={`
+              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
+              flex items-center justify-center text-2xl
+              shadow-inner border ${statusDisplay.borderColor}
+              ${status === 'processing' ? 'animate-bounce' : ''}
+            `}>
+              {statusDisplay.icon}
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-lg text-gray-800 leading-tight">
+                {data.label || 'Task'}
+              </h3>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-gray-500">
+                  {data.type || 'Sequential'} Task
+                </span>
+                <div className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium border ${getPriorityColor()}`}>
+                  {data.priority || 'Medium'}
+                </div>
+              </div>
+            </div>
           </div>
+          
+          {/* Status indicator */}
+          <div className={`
+            px-2 py-1 rounded-full text-xs font-medium
+            ${statusDisplay.color} ${statusDisplay.bgColor}
+          `}>
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </div>
+        </div>
+
+        {/* Key Information */}
+        <div className="space-y-2 text-sm">
+          {data.description && (
+            <div className="flex items-start gap-2">
+              <span className="font-medium text-gray-600 min-w-[70px]">Description:</span>
+              <span className="text-gray-800 flex-1">{data.description}</span>
+            </div>
+          )}
+          {data.expectedOutput && (
+            <div className="flex items-start gap-2">
+              <span className="font-medium text-gray-600 min-w-[70px]">Expected:</span>
+              <span className="text-gray-800 flex-1 line-clamp-2">{data.expectedOutput}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Task Details */}
-      <div className="space-y-2 text-sm">
-        {data.description && (
-          <div>
-            <span className="font-medium">Description:</span> {data.description}
+      {/* Progress Bar */}
+      {status === 'processing' && (
+        <div className="px-4 pb-3">
+          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${executionProgress}%` }}
+            />
           </div>
-        )}
-        {data.expectedOutput && (
-          <div>
-            <span className="font-medium">Expected Output:</span> {data.expectedOutput}
-          </div>
-        )}
-      </div>
-
-      {/* Task Info */}
-      <div className="mt-2 space-y-1 text-xs text-gray-600">
-        <div>
-          <span className="font-medium">Priority:</span> {data.priority || 'Medium'}
-        </div>
-      </div>
-
-      {/* Async Badge */}
-      {data.async && (
-        <div className="mt-2">
-          <span className="text-xs bg-yellow-100 px-2 py-1 rounded">Async</span>
         </div>
       )}
 
+      {/* Performance Metrics */}
+      <div className="px-4 pb-3">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-gray-600">
+              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
+            </span>
+            <span className="flex items-center gap-1 text-gray-600">
+              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
+            </span>
+          </div>
+          {data.async && (
+            <span className="flex items-center gap-1 text-purple-600">
+              🔄 Async
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Dependencies Section */}
-      <div className="mt-2">
+      <div className="px-4 pb-3">
         <button
           onClick={() => setShowDependencies(!showDependencies)}
-          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded mb-2"
+          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors duration-200"
         >
-          {showDependencies ? 'Hide Dependencies' : 'Show Dependencies'}
+          {showDependencies ? '🔼 Hide Dependencies' : '🔽 Show Dependencies'}
         </button>
         
         {showDependencies && data.dependencies && data.dependencies.length > 0 && (
-          <div className="mt-1 text-xs bg-gray-50 p-2 rounded">
-            <div className="font-semibold mb-1">Dependencies:</div>
-            <ul className="list-disc pl-4">
+          <div className="mt-2 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/50">
+            <div className="text-xs font-medium text-gray-700 mb-2">Dependencies:</div>
+            <div className="space-y-1">
               {data.dependencies.map((dep, index) => (
-                <li key={index} className="truncate" title={formatDependencyLabel(dep)}>
-                  {formatDependencyLabel(dep)}
-                  {dep.type && <span className="text-gray-500"> ({dep.type})</span>}
-                </li>
+                <div key={index} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded border">
+                  <span className="font-medium text-gray-800 truncate" title={formatDependencyLabel(dep)}>
+                    {formatDependencyLabel(dep)}
+                  </span>
+                  {dep.type && (
+                    <span className="text-gray-500 ml-2">({dep.type})</span>
+                  )}
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
         )}
       </div>
 
       {/* Action Buttons */}
-      <div className="flex mt-2 space-x-2">
-        <button 
-          type="button"
-          onClick={handleEditClick}
-          onMouseDown={(e) => { if (e) e.stopPropagation(); }}
-          onPointerDown={(e) => { if (e) e.stopPropagation(); }}
-          onTouchStart={(e) => { if (e) e.stopPropagation(); }}
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
-          aria-label="Edit task"
-        >
-          Edit
-        </button>
-        
-        <button 
-          type="button"
-          onClick={handleDeleteClick}
-          onMouseDown={(e) => { if (e) e.stopPropagation(); }}
-          onPointerDown={(e) => { if (e) e.stopPropagation(); }}
-          onTouchStart={(e) => { if (e) e.stopPropagation(); }}
-          className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
-          aria-label="Delete task"
-        >
-          Delete
-        </button>
+      <div className="px-4 pb-4">
+        <div className="flex gap-2">
+          <button 
+            type="button"
+            onClick={handleEditClick}
+            onMouseDown={(e) => { if (e) e.stopPropagation(); }}
+            onPointerDown={(e) => { if (e) e.stopPropagation(); }}
+            onTouchStart={(e) => { if (e) e.stopPropagation(); }}
+            className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
+            aria-label="Edit task"
+          >
+            Edit
+          </button>
+          
+          <button 
+            type="button"
+            onClick={handleDeleteClick}
+            onMouseDown={(e) => { if (e) e.stopPropagation(); }}
+            onPointerDown={(e) => { if (e) e.stopPropagation(); }}
+            onTouchStart={(e) => { if (e) e.stopPropagation(); }}
+            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
+            aria-label="Delete task"
+          >
+            Delete
+          </button>
+        </div>
       </div>
       
       {/* Source handle at bottom */}
@@ -174,8 +319,14 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         position={Position.Bottom} 
         id="output"
         isConnectable={isConnectable}
-        className="w-3 h-3 bg-yellow-600 hover:bg-yellow-500 hover:w-4 hover:h-4 transition-all"
+        className="w-4 h-4 bg-gradient-to-r from-yellow-600 to-yellow-800 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
+        style={{ bottom: -8 }}
       />
+
+      {/* Glow effect for selected state */}
+      {selected && (
+        <div className="absolute inset-0 rounded-2xl bg-yellow-400/20 -z-10 blur-xl" />
+      )}
     </div>
   );
 });
@@ -191,7 +342,8 @@ TaskNode.propTypes = {
     priority: PropTypes.string,
     dependencies: PropTypes.array,
     framework: PropTypes.string,
-    nodeType: PropTypes.string
+    nodeType: PropTypes.string,
+    executionState: PropTypes.object
   }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,
