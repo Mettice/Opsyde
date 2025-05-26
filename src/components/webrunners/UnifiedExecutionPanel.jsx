@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import CVResultsDisplay from '../CVResultsDisplay';
+import RichContentRenderer from '../RichContentRenderer';
 
 // Safe JSON stringify function to handle circular references and React elements
 const safeStringify = (obj, indent = 2) => {
@@ -55,206 +56,6 @@ const safeStringify = (obj, indent = 2) => {
       }
     }
     return String(obj);
-  }
-};
-
-// Enhanced safe content renderer that prevents circular reference errors
-const SafeRichContentRenderer = ({ content, maxHeight = '200px', type = 'auto' }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-  
-  const renderContent = useCallback(() => {
-    try {
-      if (!content && content !== 0 && content !== false) {
-        return <span className="text-gray-500 italic">No content</span>;
-      }
-      
-      // Handle primitive types first
-      if (typeof content === 'string') {
-        // If it's a short string, just display it
-        if (content.length < 500) {
-          return (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
-              {content}
-            </div>
-          );
-        }
-        
-        // For longer strings, check if it's JSON
-        try {
-          const parsed = JSON.parse(content);
-          return (
-            <pre className="whitespace-pre-wrap text-sm font-mono bg-gray-50 p-2 rounded">
-              {JSON.stringify(parsed, null, 2)}
-            </pre>
-          );
-        } catch {
-          // Not JSON, render as text with proper line breaks
-          return (
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">
-              {content}
-            </div>
-          );
-        }
-      }
-      
-      // Handle numbers, booleans, etc.
-      if (typeof content === 'number' || typeof content === 'boolean') {
-        return (
-          <div className="text-sm font-mono">
-            {String(content)}
-          </div>
-        );
-      }
-      
-      // Handle arrays
-      if (Array.isArray(content)) {
-        if (content.length === 0) {
-          return <span className="text-gray-500 italic">Empty array</span>;
-        }
-        
-        // If it's a simple array of primitives, display nicely
-        if (content.every(item => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')) {
-          return (
-            <div className="text-sm">
-              {content.map((item, index) => (
-                <div key={index} className="py-1">
-                  <span className="text-gray-500 mr-2">{index + 1}.</span>
-                  {String(item)}
-                </div>
-              ))}
-            </div>
-          );
-        }
-        
-        // For complex arrays, use JSON
-        return (
-          <pre className="whitespace-pre-wrap text-sm font-mono bg-gray-50 p-2 rounded overflow-auto">
-            {safeStringify(content, 2)}
-          </pre>
-        );
-      }
-      
-      // Handle objects
-      if (typeof content === 'object' && content !== null) {
-        // Check for common result patterns
-        if (content.output && typeof content.output === 'string') {
-          return (
-            <div className="text-sm">
-              <div className="font-medium text-gray-700 mb-1">Output:</div>
-              <div className="whitespace-pre-wrap bg-gray-50 p-2 rounded">
-                {content.output}
-              </div>
-            </div>
-          );
-        }
-        
-        if (content.result && typeof content.result === 'string') {
-          return (
-            <div className="text-sm">
-              <div className="font-medium text-gray-700 mb-1">Result:</div>
-              <div className="whitespace-pre-wrap bg-gray-50 p-2 rounded">
-                {content.result}
-              </div>
-            </div>
-          );
-        }
-        
-        if (content.data) {
-          return (
-            <div className="text-sm">
-              <div className="font-medium text-gray-700 mb-1">Data:</div>
-              <div className="whitespace-pre-wrap bg-gray-50 p-2 rounded">
-                <SafeRichContentRenderer content={content.data} />
-              </div>
-            </div>
-          );
-        }
-        
-        // For other objects, try to display them nicely
-        const safeContent = safeStringify(content, 2);
-        return (
-          <pre className="whitespace-pre-wrap text-sm font-mono bg-gray-50 p-2 rounded overflow-auto">
-            {safeContent}
-          </pre>
-        );
-      }
-      
-      // Fallback for other types
-      return (
-        <div className="text-sm">
-          {String(content)}
-        </div>
-      );
-    } catch (error) {
-      console.error('Error rendering content:', error);
-      setHasError(true);
-      return (
-        <div className="text-red-500 text-sm bg-red-50 p-2 rounded">
-          Error displaying content: {error.message}
-          <details className="mt-2">
-            <summary className="cursor-pointer">Raw content</summary>
-            <pre className="text-xs mt-1">{String(content)}</pre>
-          </details>
-        </div>
-      );
-    }
-  }, [content]);
-
-  if (hasError) {
-    return (
-      <div className="text-red-500 text-sm bg-red-50 p-2 rounded border border-red-200">
-        <span className="font-medium">Rendering Error:</span> Unable to display content safely
-        <details className="mt-2">
-          <summary className="cursor-pointer">Raw content</summary>
-          <pre className="text-xs mt-1">{String(content)}</pre>
-        </details>
-      </div>
-    );
-  }
-
-  try {
-    const renderedContent = renderContent();
-    
-    return (
-      <div className="relative">
-        <div 
-          className={`overflow-hidden transition-all duration-200 ${
-            isExpanded ? '' : 'max-h-48'
-          }`}
-          style={{ maxHeight: isExpanded ? 'none' : maxHeight }}
-        >
-          {renderedContent}
-        </div>
-        {!isExpanded && (
-          <button
-            onClick={() => setIsExpanded(true)}
-            className="absolute bottom-0 right-0 bg-gradient-to-t from-white to-transparent px-2 py-1 text-xs text-blue-600 hover:text-blue-800"
-          >
-            Show more...
-          </button>
-        )}
-        {isExpanded && (
-          <button
-            onClick={() => setIsExpanded(false)}
-            className="mt-2 text-xs text-blue-600 hover:text-blue-800"
-          >
-            Show less
-          </button>
-        )}
-      </div>
-    );
-  } catch (error) {
-    console.error('Critical error in SafeRichContentRenderer:', error);
-    return (
-      <div className="text-red-500 text-sm bg-red-50 p-2 rounded">
-        Critical rendering error occurred
-        <details className="mt-2">
-          <summary className="cursor-pointer">Raw content</summary>
-          <pre className="text-xs mt-1">{String(content)}</pre>
-        </details>
-      </div>
-    );
   }
 };
 
@@ -857,448 +658,458 @@ export default function UnifiedExecutionPanel({
       )}
       
       {/* Content Area */}
-      <div className="flex-1 overflow-auto p-4 bg-gradient-to-b from-gray-50/50 to-white" ref={scrollRef}>
-        {activeTab === 'logs' ? (
-          <div className="space-y-4">
-            {/* Debug Information - Always show when DEV_MODE is enabled */}
-            {debugMode && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                <h4 className="font-semibold text-yellow-800 mb-2">🐛 Debug Information</h4>
-                <div className="text-sm text-yellow-700 space-y-1">
-                  <div><strong>Raw logs:</strong> {logs ? (Array.isArray(logs) ? logs.length : typeof logs) : 'null'}</div>
-                  <div><strong>Structured logs:</strong> {structuredLogs ? structuredLogs.length : 'null'}</div>
-                  <div><strong>View mode:</strong> {viewMode}</div>
-                  <div><strong>Display logs length:</strong> {displayLogs.length}</div>
-                  <div><strong>Parsed text logs length:</strong> {parsedTextLogs.length}</div>
-                  {logs && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-yellow-600">Show raw logs sample</summary>
-                      <pre className="text-xs bg-yellow-100 p-2 rounded mt-1 overflow-auto max-h-32">
-                        {safeStringify(Array.isArray(logs) ? logs.slice(0, 3) : logs)}
-                      </pre>
-                    </details>
-                  )}
-                  {structuredLogs && structuredLogs.length > 0 && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-yellow-600">Show structured logs sample</summary>
-                      <pre className="text-xs bg-yellow-100 p-2 rounded mt-1 overflow-auto max-h-32">
-                        {safeStringify(structuredLogs.slice(0, 3))}
-                      </pre>
-                    </details>
-                  )}
-                </div>
-              </div>
-            )}
-            
-            {displayLogs.length === 0 ? (
-              <div className="text-center py-16">
-                <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">
-                  <span className="text-3xl opacity-50">📊</span>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-600 mb-2">No execution logs yet</h3>
-                <p className="text-gray-500 text-sm">Run your workflow to see real-time execution logs here</p>
-                {/* Additional debug info for empty state */}
-                {debugMode && (
-                  <div className="mt-4 text-xs text-gray-400">
-                    <div>Raw logs: {logs ? 'present' : 'null'}</div>
-                    <div>Structured logs: {structuredLogs ? 'present' : 'null'}</div>
-                    <div>View mode: {viewMode}</div>
+      <div className="flex-1 overflow-hidden bg-gradient-to-b from-gray-50/50 to-white" ref={scrollRef}>
+        <div className="h-full overflow-y-auto overflow-x-hidden p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {activeTab === 'logs' ? (
+            <div className="space-y-4">
+              {/* Debug Information - Always show when DEV_MODE is enabled */}
+              {debugMode && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 flex-shrink-0">
+                  <h4 className="font-semibold text-yellow-800 mb-2">🐛 Debug Information</h4>
+                  <div className="text-sm text-yellow-700 space-y-1">
+                    <div><strong>Raw logs:</strong> {logs ? (Array.isArray(logs) ? logs.length : typeof logs) : 'null'}</div>
+                    <div><strong>Structured logs:</strong> {structuredLogs ? structuredLogs.length : 'null'}</div>
+                    <div><strong>View mode:</strong> {viewMode}</div>
+                    <div><strong>Display logs length:</strong> {displayLogs.length}</div>
+                    <div><strong>Parsed text logs length:</strong> {parsedTextLogs.length}</div>
+                    {logs && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-yellow-600">Show raw logs sample</summary>
+                        <div className="max-h-32 overflow-auto bg-yellow-100 p-2 rounded mt-1">
+                          <pre className="text-xs whitespace-pre-wrap">
+                            {safeStringify(Array.isArray(logs) ? logs.slice(0, 3) : logs)}
+                          </pre>
+                        </div>
+                      </details>
+                    )}
+                    {structuredLogs && structuredLogs.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-yellow-600">Show structured logs sample</summary>
+                        <div className="max-h-32 overflow-auto bg-yellow-100 p-2 rounded mt-1">
+                          <pre className="text-xs whitespace-pre-wrap">
+                            {safeStringify(structuredLogs.slice(0, 3))}
+                          </pre>
+                        </div>
+                      </details>
+                    )}
                   </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {viewMode === 'structured' ? (
-                  // Structured logs view with enhanced error handling
-                  <div className="space-y-3">
-                    {displayLogs.map((log, index) => {
-                      try {
-                        const nodeId = extractNodeId(log);
-                        const nodeName = extractNodeName(log);
-                        const logType = log?.type || 'info';
-                        const status = log?.status || (log?.metadata?.has_error ? 'error' : 'completed');
-                        
-                        return (
-                          <div key={`log-${index}-${nodeId}`} className={getCardStyle(status, logType)}>
-                            {/* Glow effect */}
-                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
-                            
-                            <div className="relative p-4">
-                              {/* Header */}
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-3">
-                                  {/* Node Icon */}
-                                  <div className="flex-shrink-0">
-                                    <div className="w-10 h-10 rounded-lg bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
-                                      <span className="text-lg">
-                                        {getStatusIcon(status)}
-                                      </span>
+                </div>
+              )}
+              
+              {displayLogs.length === 0 ? (
+                <div className="text-center py-16 flex-shrink-0">
+                  <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-br from-gray-100 to-gray-200 rounded-2xl flex items-center justify-center">
+                    <span className="text-3xl opacity-50">📊</span>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-600 mb-2">No execution logs yet</h3>
+                  <p className="text-gray-500 text-sm">Run your workflow to see real-time execution logs here</p>
+                  {/* Additional debug info for empty state */}
+                  {debugMode && (
+                    <div className="mt-4 text-xs text-gray-400">
+                      <div>Raw logs: {logs ? 'present' : 'null'}</div>
+                      <div>Structured logs: {structuredLogs ? 'present' : 'null'}</div>
+                      <div>View mode: {viewMode}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {viewMode === 'structured' ? (
+                    // Structured logs view with enhanced error handling
+                    <div className="space-y-4">
+                      {displayLogs.map((log, index) => {
+                        try {
+                          const nodeId = extractNodeId(log);
+                          const nodeName = extractNodeName(log);
+                          const logType = log?.type || 'info';
+                          const status = log?.status || (log?.metadata?.has_error ? 'error' : 'completed');
+                          
+                          return (
+                            <div key={`log-${index}-${nodeId}`} className={`${getCardStyle(status, logType)} flex-shrink-0`}>
+                              {/* Glow effect */}
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
+                              
+                              <div className="relative p-4">
+                                {/* Header */}
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center space-x-3">
+                                    {/* Node Icon */}
+                                    <div className="flex-shrink-0">
+                                      <div className="w-10 h-10 rounded-lg bg-white/80 backdrop-blur-sm flex items-center justify-center shadow-sm">
+                                        <span className="text-lg">
+                                          {getStatusIcon(status)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    
+                                    {/* Node Info */}
+                                    <div className="flex-1 min-w-0">
+                                      <h3 className="font-semibold text-gray-900 truncate">
+                                        {nodeName}
+                                      </h3>
+                                      <div className="flex items-center space-x-2 text-sm text-gray-600">
+                                        <span className="px-2 py-1 bg-white/60 rounded-md font-mono text-xs">
+                                          {nodeId}
+                                        </span>
+                                        <span className="px-2 py-1 bg-white/60 rounded-md text-xs capitalize">
+                                          {logType}
+                                        </span>
+                                      </div>
                                     </div>
                                   </div>
                                   
-                                  {/* Node Info */}
-                                  <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-900 truncate">
-                                      {nodeName}
-                                    </h3>
-                                    <div className="flex items-center space-x-2 text-sm text-gray-600">
-                                      <span className="px-2 py-1 bg-white/60 rounded-md font-mono text-xs">
-                                        {nodeId}
-                                      </span>
-                                      <span className="px-2 py-1 bg-white/60 rounded-md text-xs capitalize">
-                                        {logType}
-                                      </span>
+                                  {/* Status Badge */}
+                                  <div className="flex-shrink-0">
+                                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                      status === 'started' ? 'bg-blue-100 text-blue-800' :
+                                      status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      status === 'error' ? 'bg-red-100 text-red-800' :
+                                      status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* Content */}
+                                {log.result && (
+                                  <div className="mt-3 p-3 bg-white/60 rounded-lg">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Result:</h4>
+                                    <div className="text-sm text-gray-600">
+                                      <RichContentRenderer content={log.result} maxHeight="250px" />
+                                    </div>
+                                    {debugMode && (
+                                      <details className="mt-2">
+                                        <summary className="text-xs text-gray-500 cursor-pointer">Debug: Raw result data</summary>
+                                        <div className="max-h-32 overflow-auto bg-gray-100 p-2 rounded mt-1">
+                                          <pre className="text-xs text-gray-400 whitespace-pre-wrap">
+                                            {safeStringify(log.result)}
+                                          </pre>
+                                        </div>
+                                      </details>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Error Details */}
+                                {log.error && (
+                                  <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                                    <h4 className="text-sm font-medium text-red-700 mb-2">Error:</h4>
+                                    <div className="text-sm text-red-600">
+                                      <RichContentRenderer content={log.error} maxHeight="150px" />
                                     </div>
                                   </div>
-                                </div>
-                                
-                                {/* Status Badge */}
-                                <div className="flex-shrink-0">
-                                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                    status === 'started' ? 'bg-blue-100 text-blue-800' :
-                                    status === 'completed' ? 'bg-green-100 text-green-800' :
-                                    status === 'error' ? 'bg-red-100 text-red-800' :
-                                    status === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-gray-100 text-gray-800'
-                                  }`}>
-                                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                                  </span>
-                                </div>
+                                )}
+
+                                {/* Message */}
+                                {log.message && (
+                                  <div className="mt-3 p-3 bg-blue-50 rounded-lg">
+                                    <h4 className="text-sm font-medium text-blue-700 mb-2">Message:</h4>
+                                    <div className="text-sm text-blue-600">
+                                      <RichContentRenderer content={log.message} maxHeight="150px" />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Metadata */}
+                                {log.metadata && Object.keys(log.metadata).length > 0 && (
+                                  <div className="mt-3 p-3 bg-white/40 rounded-lg">
+                                    <h4 className="text-sm font-medium text-gray-700 mb-2">Metadata:</h4>
+                                    <div className="text-xs text-gray-600 font-mono">
+                                      <RichContentRenderer content={log.metadata} maxHeight="120px" />
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Timestamp */}
+                                {(log.timestamp || log.metadata?.timestamp) && (
+                                  <div className="mt-3 text-xs text-gray-500">
+                                    🕒 {new Date(log.timestamp || log.metadata.timestamp).toLocaleString()}
+                                  </div>
+                                )}
                               </div>
-
-                              {/* Content */}
-                              {log.result && (
-                                <div className="mt-3 p-3 bg-white/60 rounded-lg">
-                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Result:</h4>
-                                  <div className="text-sm text-gray-600">
-                                    <SafeRichContentRenderer content={log.result} />
-                                  </div>
-                                  {debugMode && (
-                                    <details className="mt-2">
-                                      <summary className="text-xs text-gray-500 cursor-pointer">Debug: Raw result data</summary>
-                                      <pre className="text-xs text-gray-400 mt-1 bg-gray-100 p-2 rounded overflow-auto max-h-32">
-                                        {safeStringify(log.result)}
-                                      </pre>
-                                    </details>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Error Details */}
-                              {log.error && (
-                                <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                                  <h4 className="text-sm font-medium text-red-700 mb-2">Error:</h4>
-                                  <div className="text-sm text-red-600">
-                                    <SafeRichContentRenderer content={log.error} />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Message */}
-                              {log.message && (
-                                <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                                  <h4 className="text-sm font-medium text-blue-700 mb-2">Message:</h4>
-                                  <div className="text-sm text-blue-600">
-                                    <SafeRichContentRenderer content={log.message} />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Metadata */}
-                              {log.metadata && Object.keys(log.metadata).length > 0 && (
-                                <div className="mt-3 p-3 bg-white/40 rounded-lg">
-                                  <h4 className="text-sm font-medium text-gray-700 mb-2">Metadata:</h4>
-                                  <div className="text-xs text-gray-600 font-mono">
-                                    <SafeRichContentRenderer content={log.metadata} />
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Timestamp */}
-                              {(log.timestamp || log.metadata?.timestamp) && (
-                                <div className="mt-3 text-xs text-gray-500">
-                                  🕒 {new Date(log.timestamp || log.metadata.timestamp).toLocaleString()}
-                                </div>
-                              )}
                             </div>
-                          </div>
-                        );
-                      } catch (error) {
-                        console.error('Error rendering log entry:', error, log);
-                        return (
-                          <div key={`error-log-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                            <div className="text-red-700 font-medium">Error rendering log entry #{index}</div>
-                            <div className="text-red-600 text-sm mt-1">
-                              {error.message}
+                          );
+                        } catch (error) {
+                          console.error('Error rendering log entry:', error, log);
+                          return (
+                            <div key={`error-log-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+                              <div className="text-red-700 font-medium">Error rendering log entry #{index}</div>
+                              <div className="text-red-600 text-sm mt-1">
+                                {error.message}
+                              </div>
+                              <details className="mt-2">
+                                <summary className="text-red-600 text-sm cursor-pointer">Raw log data</summary>
+                                <div className="max-h-32 overflow-auto mt-1">
+                                  <pre className="text-xs text-red-500 whitespace-pre-wrap">
+                                    {safeStringify(log)}
+                                  </pre>
+                                </div>
+                              </details>
                             </div>
-                            <details className="mt-2">
-                              <summary className="text-red-600 text-sm cursor-pointer">Raw log data</summary>
-                              <pre className="text-xs text-red-500 mt-1 overflow-auto max-h-32">
-                                {safeStringify(log)}
-                              </pre>
-                            </details>
-                          </div>
-                        );
-                      }
-                    })}
-                  </div>
-                ) : (
-                  // Text logs view with enhanced styling
-                  <div className="space-y-2">
-                    {displayLogs.map((log, index) => {
-                      try {
-                        const isDetailLog = log.text && log.text.startsWith('  ');
-                        const logStyle = getLogStyle(log.text || '');
-                        
-                        return (
-                          <div 
-                            key={`text-log-${index}`} 
-                            className={`group p-3 rounded-xl border transition-all duration-200 hover:shadow-md ${
-                              isDetailLog 
-                                ? 'ml-6 bg-gray-50/50 border-gray-200/50' 
-                                : `${logStyle.bg} ${logStyle.border}`
-                            }`}
-                          >
-                            <div className="flex items-start space-x-3">
-                              {!isDetailLog && (
-                                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center">
-                                  <span className="text-sm">{logStyle.emoji}</span>
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className={`text-sm font-medium ${logStyle.textColor}`}>
-                                    {log.type || 'info'}
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Now'}
-                                  </span>
-                                </div>
-                                <div className="text-sm text-gray-700 leading-relaxed">
-                                  <SafeRichContentRenderer content={log.text || log.message || safeStringify(log)} />
+                          );
+                        }
+                      })}
+                    </div>
+                  ) : (
+                    // Text logs view with enhanced styling
+                    <div className="space-y-3">
+                      {displayLogs.map((log, index) => {
+                        try {
+                          const isDetailLog = log.text && log.text.startsWith('  ');
+                          const logStyle = getLogStyle(log.text || '');
+                          
+                          return (
+                            <div 
+                              key={`text-log-${index}`} 
+                              className={`group p-3 rounded-xl border transition-all duration-200 hover:shadow-md flex-shrink-0 ${
+                                isDetailLog 
+                                  ? 'ml-6 bg-gray-50/50 border-gray-200/50' 
+                                  : `${logStyle.bg} ${logStyle.border}`
+                              }`}
+                            >
+                              <div className="flex items-start space-x-3">
+                                {!isDetailLog && (
+                                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/80 backdrop-blur-sm border border-gray-200 flex items-center justify-center">
+                                    <span className="text-sm">{logStyle.emoji}</span>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <span className={`text-sm font-medium ${logStyle.textColor}`}>
+                                      {log.type || 'info'}
+                                    </span>
+                                    <span className="text-xs text-gray-500">
+                                      {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Now'}
+                                    </span>
+                                  </div>
+                                  <div className="text-sm text-gray-700 leading-relaxed">
+                                    <RichContentRenderer content={log.text || log.message || safeStringify(log)} maxHeight="150px" />
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      } catch (error) {
-                        console.error('Error rendering text log:', error, log);
-                        return (
-                          <div key={`text-error-${index}`} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                            <div className="text-red-700 text-sm">Error rendering text log #{index}</div>
-                          </div>
-                        );
-                      }
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ) : activeTab === 'stats' ? (
-          // Stats tab
-          <div className="space-y-4">
-            <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
-              <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="text-lg mr-2">📊</span>
-                Execution Summary
-              </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
-                  <div className="text-sm text-gray-500 mb-1">Total Nodes</div>
-                  <div className="text-2xl font-bold text-gray-800">
-                    {nodeStats.totalNodes}
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
-                  <div className="text-sm text-gray-500 mb-1">Success Rate</div>
-                  <div className="text-2xl font-bold text-green-600">
-                    {nodeStats.successRate}%
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
-                  <div className="text-sm text-gray-500 mb-1">Completed</div>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {nodeStats.successCount}
-                  </div>
-                </div>
-                <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
-                  <div className="text-sm text-gray-500 mb-1">Errors</div>
-                  <div className="text-2xl font-bold text-red-600">
-                    {nodeStats.errorCount}
-                  </div>
-                </div>
-              </div>
+                          );
+                        } catch (error) {
+                          console.error('Error rendering text log:', error, log);
+                          return (
+                            <div key={`text-error-${index}`} className="p-3 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+                              <div className="text-red-700 text-sm">Error rendering text log #{index}</div>
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            
-            {/* Duration Calculation */}
-            {viewMode === 'structured' && structuredLogs && structuredLogs.length >= 2 && (
+          ) : activeTab === 'stats' ? (
+            // Stats tab
+            <div className="space-y-4">
               <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                  <span className="text-lg mr-2">⏱️</span>
-                  Timing Information
+                  <span className="text-lg mr-2">📊</span>
+                  Execution Summary
                 </h3>
-                <div className="bg-white p-4 rounded-lg border border-gray-100">
-                  <div className="text-sm text-gray-500 mb-1">Total Duration</div>
-                  <div className="text-xl font-semibold text-purple-600">
-                    {(() => {
-                      try {
-                        const startTime = new Date(structuredLogs[0].timestamp || structuredLogs[0].metadata?.timestamp);
-                        const endTime = new Date(structuredLogs[structuredLogs.length - 1].timestamp || structuredLogs[structuredLogs.length - 1].metadata?.timestamp);
-                        const duration = (endTime - startTime) / 1000;
-                        return isNaN(duration) ? '0.0s' : `${duration.toFixed(1)}s`;
-                      } catch (error) {
-                        return '—';
-                      }
-                    })()}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
+                    <div className="text-sm text-gray-500 mb-1">Total Nodes</div>
+                    <div className="text-2xl font-bold text-gray-800">
+                      {nodeStats.totalNodes}
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
+                    <div className="text-sm text-gray-500 mb-1">Success Rate</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {nodeStats.successRate}%
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
+                    <div className="text-sm text-gray-500 mb-1">Completed</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {nodeStats.successCount}
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border border-gray-100 shadow-sm">
+                    <div className="text-sm text-gray-500 mb-1">Errors</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {nodeStats.errorCount}
+                    </div>
                   </div>
                 </div>
               </div>
-            )}
-            
-            {/* Node Type Breakdown */}
-            {Object.keys(nodeStats.nodeTypes).length > 0 && (
+              
+              {/* Duration Calculation */}
+              {viewMode === 'structured' && structuredLogs && structuredLogs.length >= 2 && (
+                <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
+                    <span className="text-lg mr-2">⏱️</span>
+                    Timing Information
+                  </h3>
+                  <div className="bg-white p-4 rounded-lg border border-gray-100">
+                    <div className="text-sm text-gray-500 mb-1">Total Duration</div>
+                    <div className="text-xl font-semibold text-purple-600">
+                      {(() => {
+                        try {
+                          const startTime = new Date(structuredLogs[0].timestamp || structuredLogs[0].metadata?.timestamp);
+                          const endTime = new Date(structuredLogs[structuredLogs.length - 1].timestamp || structuredLogs[structuredLogs.length - 1].metadata?.timestamp);
+                          const duration = (endTime - startTime) / 1000;
+                          return isNaN(duration) ? '0.0s' : `${duration.toFixed(1)}s`;
+                        } catch (error) {
+                          return '—';
+                        }
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Node Type Breakdown */}
+              {Object.keys(nodeStats.nodeTypes).length > 0 && (
+                <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
+                  <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
+                    <span className="text-lg mr-2">📈</span>
+                    Node Type Breakdown
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(nodeStats.nodeTypes).map(([type, count]) => (
+                      <div key={type} className="flex items-center bg-white p-3 rounded-lg border border-gray-100">
+                        <div className="w-20 text-sm font-medium text-gray-700 capitalize">{type}</div>
+                        <div className="flex-1 mx-3">
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div 
+                              className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500" 
+                              style={{ width: `${nodeStats.totalNodes > 0 ? (count / nodeStats.totalNodes) * 100 : 0}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        <div className="w-8 text-right text-sm font-semibold text-gray-800">{count}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : activeTab === 'export' ? (
+            // Export tab
+            <div className="space-y-4">
               <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
                 <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                  <span className="text-lg mr-2">📈</span>
-                  Node Type Breakdown
+                  <span className="text-lg mr-2">📤</span>
+                  Export Options
                 </h3>
                 <div className="space-y-3">
-                  {Object.entries(nodeStats.nodeTypes).map(([type, count]) => (
-                    <div key={type} className="flex items-center bg-white p-3 rounded-lg border border-gray-100">
-                      <div className="w-20 text-sm font-medium text-gray-700 capitalize">{type}</div>
-                      <div className="flex-1 mx-3">
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-500" 
-                            style={{ width: `${nodeStats.totalNodes > 0 ? (count / nodeStats.totalNodes) * 100 : 0}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div className="w-8 text-right text-sm font-semibold text-gray-800">{count}</div>
+                  <button
+                    onClick={() => {
+                      try {
+                        const dataStr = safeStringify(structuredLogs);
+                        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                        const url = URL.createObjectURL(dataBlob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.json`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      } catch (error) {
+                        console.error('Error exporting JSON:', error);
+                        alert('Error exporting logs as JSON');
+                      }
+                    }}
+                    className="w-full bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 px-4 py-3 rounded-lg hover:from-blue-200 hover:to-blue-100 transition-all duration-200 flex items-center shadow-sm border border-blue-200"
+                  >
+                    <span className="mr-3 text-lg">📄</span>
+                    <div className="text-left">
+                      <div className="font-medium">Download Logs as JSON</div>
+                      <div className="text-xs opacity-80">Structured data with full metadata</div>
                     </div>
-                  ))}
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      try {
+                        const textData = parsedTextLogs.map(log => `[${log.type}] ${log.text}`).join('\n');
+                        const dataBlob = new Blob([textData], {type: 'text/plain'});
+                        const url = URL.createObjectURL(dataBlob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.txt`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      } catch (error) {
+                        console.error('Error exporting text:', error);
+                        alert('Error exporting logs as text');
+                      }
+                    }}
+                    className="w-full bg-gradient-to-r from-gray-100 to-gray-50 text-gray-800 px-4 py-3 rounded-lg hover:from-gray-200 hover:to-gray-100 transition-all duration-200 flex items-center shadow-sm border border-gray-200"
+                  >
+                    <span className="mr-3 text-lg">📝</span>
+                    <div className="text-left">
+                      <div className="font-medium">Download Logs as Text</div>
+                      <div className="text-xs opacity-80">Human-readable format for sharing</div>
+                    </div>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      try {
+                        const statsData = {
+                          summary: nodeStats,
+                          execution_time: viewMode === 'structured' && structuredLogs && structuredLogs.length >= 2 
+                            ? (() => {
+                                try {
+                                  const startTime = new Date(structuredLogs[0].timestamp || structuredLogs[0].metadata?.timestamp);
+                                  const endTime = new Date(structuredLogs[structuredLogs.length - 1].timestamp || structuredLogs[structuredLogs.length - 1].metadata?.timestamp);
+                                  const duration = (endTime - startTime) / 1000;
+                                  return isNaN(duration) ? 'N/A' : `${duration.toFixed(1)}s`;
+                                } catch {
+                                  return 'N/A';
+                                }
+                              })()
+                            : 'N/A',
+                          logs_count: displayLogs.length,
+                          export_timestamp: new Date().toISOString()
+                        };
+                        const dataStr = safeStringify(statsData);
+                        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                        const url = URL.createObjectURL(dataBlob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `execution-stats-${new Date().toISOString().split('T')[0]}.json`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                      } catch (error) {
+                        console.error('Error exporting stats:', error);
+                        alert('Error exporting statistics');
+                      }
+                    }}
+                    className="w-full bg-gradient-to-r from-green-100 to-green-50 text-green-800 px-4 py-3 rounded-lg hover:from-green-200 hover:to-green-100 transition-all duration-200 flex items-center shadow-sm border border-green-200"
+                  >
+                    <span className="mr-3 text-lg">📊</span>
+                    <div className="text-left">
+                      <div className="font-medium">Download Statistics</div>
+                      <div className="text-xs opacity-80">Performance metrics and summary data</div>
+                    </div>
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
-        ) : activeTab === 'export' ? (
-          // Export tab
-          <div className="space-y-4">
-            <div className="bg-gradient-to-br from-white to-gray-50 p-6 rounded-xl border border-gray-200 shadow-sm">
-              <h3 className="font-semibold text-gray-800 mb-4 flex items-center">
-                <span className="text-lg mr-2">📤</span>
-                Export Options
-              </h3>
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    try {
-                      const dataStr = safeStringify(structuredLogs);
-                      const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                      const url = URL.createObjectURL(dataBlob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.json`;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                    } catch (error) {
-                      console.error('Error exporting JSON:', error);
-                      alert('Error exporting logs as JSON');
-                    }
-                  }}
-                  className="w-full bg-gradient-to-r from-blue-100 to-blue-50 text-blue-800 px-4 py-3 rounded-lg hover:from-blue-200 hover:to-blue-100 transition-all duration-200 flex items-center shadow-sm border border-blue-200"
-                >
-                  <span className="mr-3 text-lg">📄</span>
-                  <div className="text-left">
-                    <div className="font-medium">Download Logs as JSON</div>
-                    <div className="text-xs opacity-80">Structured data with full metadata</div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    try {
-                      const textData = parsedTextLogs.map(log => `[${log.type}] ${log.text}`).join('\n');
-                      const dataBlob = new Blob([textData], {type: 'text/plain'});
-                      const url = URL.createObjectURL(dataBlob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = `execution-logs-${new Date().toISOString().split('T')[0]}.txt`;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                    } catch (error) {
-                      console.error('Error exporting text:', error);
-                      alert('Error exporting logs as text');
-                    }
-                  }}
-                  className="w-full bg-gradient-to-r from-gray-100 to-gray-50 text-gray-800 px-4 py-3 rounded-lg hover:from-gray-200 hover:to-gray-100 transition-all duration-200 flex items-center shadow-sm border border-gray-200"
-                >
-                  <span className="mr-3 text-lg">📝</span>
-                  <div className="text-left">
-                    <div className="font-medium">Download Logs as Text</div>
-                    <div className="text-xs opacity-80">Human-readable format for sharing</div>
-                  </div>
-                </button>
-                
-                <button
-                  onClick={() => {
-                    try {
-                      const statsData = {
-                        summary: nodeStats,
-                        execution_time: viewMode === 'structured' && structuredLogs && structuredLogs.length >= 2 
-                          ? (() => {
-                              try {
-                                const startTime = new Date(structuredLogs[0].timestamp || structuredLogs[0].metadata?.timestamp);
-                                const endTime = new Date(structuredLogs[structuredLogs.length - 1].timestamp || structuredLogs[structuredLogs.length - 1].metadata?.timestamp);
-                                const duration = (endTime - startTime) / 1000;
-                                return isNaN(duration) ? 'N/A' : `${duration.toFixed(1)}s`;
-                              } catch {
-                                return 'N/A';
-                              }
-                            })()
-                          : 'N/A',
-                        logs_count: displayLogs.length,
-                        export_timestamp: new Date().toISOString()
-                      };
-                      const dataStr = safeStringify(statsData);
-                      const dataBlob = new Blob([dataStr], {type: 'application/json'});
-                      const url = URL.createObjectURL(dataBlob);
-                      const link = document.createElement('a');
-                      link.href = url;
-                      link.download = `execution-stats-${new Date().toISOString().split('T')[0]}.json`;
-                      link.click();
-                      URL.revokeObjectURL(url);
-                    } catch (error) {
-                      console.error('Error exporting stats:', error);
-                      alert('Error exporting statistics');
-                    }
-                  }}
-                  className="w-full bg-gradient-to-r from-green-100 to-green-50 text-green-800 px-4 py-3 rounded-lg hover:from-green-200 hover:to-green-100 transition-all duration-200 flex items-center shadow-sm border border-green-200"
-                >
-                  <span className="mr-3 text-lg">📊</span>
-                  <div className="text-left">
-                    <div className="font-medium">Download Statistics</div>
-                    <div className="text-xs opacity-80">Performance metrics and summary data</div>
-                  </div>
-                </button>
+              
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
+                <h4 className="font-semibold text-blue-800 mb-2 flex items-center">
+                  <span className="mr-2">💡</span>
+                  Export Tips
+                </h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>• JSON format preserves all metadata and structure</li>
+                  <li>• Text format is human-readable and great for sharing</li>
+                  <li>• Statistics include execution metrics and performance data</li>
+                  <li>• All exports are safe and handle circular references</li>
+                </ul>
               </div>
             </div>
-            
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-200">
-              <h4 className="font-semibold text-blue-800 mb-2 flex items-center">
-                <span className="mr-2">💡</span>
-                Export Tips
-              </h4>
-              <ul className="text-sm text-blue-700 space-y-1">
-                <li>• JSON format preserves all metadata and structure</li>
-                <li>• Text format is human-readable and great for sharing</li>
-                <li>• Statistics include execution metrics and performance data</li>
-                <li>• All exports are safe and handle circular references</li>
-              </ul>
-            </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
     </div>
   );
