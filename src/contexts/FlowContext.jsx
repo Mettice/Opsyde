@@ -37,6 +37,25 @@ export const FlowProvider = ({ children }) => {
     future: []
   });
 
+  // Utility function to enhance edges with animation
+  const enhanceEdgeForAnimation = useCallback((edge) => {
+    return {
+      ...edge,
+      type: 'animated', // Always use animated type
+      animated: true,
+      style: {
+        strokeWidth: 2,
+        stroke: '#8b5cf6',
+        ...edge.style // Preserve any existing styles
+      },
+      data: {
+        ...edge.data,
+        state: 'idle',
+        animated: true
+      }
+    };
+  }, []);
+
   // Handle node changes
   const onNodesChange = useCallback((changes) => {
     // Save current state to history
@@ -55,14 +74,22 @@ export const FlowProvider = ({ children }) => {
     setEdges((eds) => applyEdgeChanges(changes, eds));
   }, [nodes, edges, setEdges]);
 
-  // Handle connections
+  // Handle new connections
   const onConnect = useCallback((params) => {
     // Save current state to history
     historyRef.current.past.push({ nodes, edges });
     historyRef.current.future = [];
     
-    setEdges((eds) => addEdge(params, eds));
-  }, [nodes, edges, setEdges]);
+    // Create enhanced edge with animated type
+    const baseEdge = {
+      ...params,
+      id: `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    };
+    
+    const newEdge = enhanceEdgeForAnimation(baseEdge);
+    
+    setEdges((eds) => [...eds, newEdge]);
+  }, [nodes, edges, setEdges, enhanceEdgeForAnimation]);
 
   // Validate if a connection can be made
   const canConnect = useCallback((source, target) => {
@@ -116,15 +143,18 @@ export const FlowProvider = ({ children }) => {
         };
       });
       
-      // Update edge references with new IDs
+      // Update edge references with new IDs and enhance with animations
       const newEdges = template.edges.map(edge => {
         const newId = `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        return {
+        const edgeWithNewIds = {
           ...edge,
           id: newId,
           source: idMapping[edge.source],
           target: idMapping[edge.target]
         };
+        
+        // Enhance with animations
+        return enhanceEdgeForAnimation(edgeWithNewIds);
       });
       
       // Set the new nodes and edges
@@ -165,6 +195,7 @@ export const FlowProvider = ({ children }) => {
     onNodeDragStop,
     cleanNodesForSave,
     applyTemplate,
+    enhanceEdgeForAnimation,
     history: historyRef.current
   };
 
