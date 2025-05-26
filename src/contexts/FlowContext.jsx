@@ -91,6 +91,64 @@ export const FlowProvider = ({ children }) => {
     });
   }, [nodes]);
 
+  // Apply template function
+  const applyTemplate = useCallback((template) => {
+    // Save current state to history
+    historyRef.current.past.push({ nodes, edges });
+    historyRef.current.future = [];
+    
+    if (template.nodes && template.edges) {
+      // It's a complete flow template
+      const idMapping = {};
+      
+      // Create nodes with new IDs
+      const newNodes = template.nodes.map(node => {
+        const newId = `${node.type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        idMapping[node.id] = newId;
+        
+        return {
+          ...node,
+          id: newId,
+          data: {
+            ...node.data,
+            nodeId: newId
+          }
+        };
+      });
+      
+      // Update edge references with new IDs
+      const newEdges = template.edges.map(edge => {
+        const newId = `edge-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        return {
+          ...edge,
+          id: newId,
+          source: idMapping[edge.source],
+          target: idMapping[edge.target]
+        };
+      });
+      
+      // Set the new nodes and edges
+      setNodes(newNodes);
+      setEdges(newEdges);
+    } else {
+      // It's a single node template
+      const newId = `${template.type}-${Date.now()}`;
+      const newNode = {
+        id: newId,
+        type: template.type,
+        position: { x: Math.random() * 300 + 100, y: Math.random() * 300 + 100 },
+        data: {
+          label: template.name || `New ${template.type}`,
+          nodeId: newId,
+          nodeType: template.type,
+          ...template.data
+        }
+      };
+      
+      setNodes(prev => [...prev, newNode]);
+    }
+  }, [nodes, edges, setNodes, setEdges]);
+
   // Context value
   const value = {
     nodes, setNodes,
@@ -106,6 +164,7 @@ export const FlowProvider = ({ children }) => {
     canConnect,
     onNodeDragStop,
     cleanNodesForSave,
+    applyTemplate,
     history: historyRef.current
   };
 

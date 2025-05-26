@@ -2,20 +2,15 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { useFlow } from '../../contexts/FlowContext';
 import { useBuilderUI } from '../../contexts/BuilderUIContext';
-import { nodeTypes } from '../../utils/nodeTypes';
+import { flowTemplates } from '../../data/flowTemplates';
 
 const TemplateGallery = () => {
   const { applyTemplate } = useFlow();
   const { toggleTemplateGallery } = useBuilderUI();
 
-  // Create an array of node templates from the nodeTypes object
-  const nodeTemplates = React.useMemo(() => {
-    return Object.entries(nodeTypes).map(([type, component]) => ({
-      type,
-      name: type.charAt(0).toUpperCase() + type.slice(1),
-      description: `Add a ${type} node to your workflow`,
-      component
-    }));
+  // Get featured flow templates (limit to 6 for quick access)
+  const featuredTemplates = React.useMemo(() => {
+    return flowTemplates.slice(0, 6);
   }, []);
 
   const handleApplyTemplate = (template) => {
@@ -23,83 +18,102 @@ const TemplateGallery = () => {
     toggleTemplateGallery(false);
   };
 
-  // Helper function to render the icon based on template type
+  // Helper function to render the icon based on template
   const renderTemplateIcon = (template) => {
-    const iconClasses = `w-6 h-6 mr-2 rounded flex items-center justify-center 
-      ${template.type === 'agent' ? 'bg-blue-100 text-blue-600' : 
-        template.type === 'task' ? 'bg-yellow-100 text-yellow-600' : 
-        template.type === 'tool' ? 'bg-green-100 text-green-600' : 
-        'bg-purple-100 text-purple-600'}`;
+    // Use template metadata or default icons
+    const iconClasses = `w-8 h-8 mr-2 rounded flex items-center justify-center bg-gradient-to-r from-blue-500 to-purple-600 text-white`;
     
-    if (template.type === 'agent') {
-      return (
-        <div className={iconClasses}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-        </div>
-      );
+    // Template-specific icons
+    if (template.name.includes('Market Analysis')) {
+      return <div className={iconClasses}>📊</div>;
+    } else if (template.name.includes('Support')) {
+      return <div className={iconClasses}>🎧</div>;
+    } else if (template.name.includes('Lead')) {
+      return <div className={iconClasses}>🎯</div>;
+    } else if (template.name.includes('RAG') || template.name.includes('Research')) {
+      return <div className={iconClasses}>🔍</div>;
+    } else if (template.name.includes('Email')) {
+      return <div className={iconClasses}>📧</div>;
+    } else {
+      return <div className={iconClasses}>🚀</div>;
     }
-    
-    if (template.type === 'task') {
-      return (
-        <div className={iconClasses}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </svg>
-        </div>
-      );
-    }
-    
-    if (template.type === 'tool') {
-      return (
-        <div className={iconClasses}>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
-      );
-    }
-    
-    // Default icon for flow templates
-    return (
-      <div className={iconClasses}>
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2M7 7h10" />
-        </svg>
-      </div>
-    );
   };
   
   return (
-    <div className="absolute bottom-16 left-2 right-2 bg-white rounded shadow-md z-10 p-2 max-h-[300px] overflow-y-auto">
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="font-semibold">Quick Templates</h3>
+    <div className="absolute bottom-16 left-2 right-2 bg-white rounded-lg shadow-lg z-10 p-4 max-h-[400px] overflow-y-auto border border-gray-200">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h3 className="font-semibold text-lg text-gray-800">🔥 Flow Templates</h3>
+          <p className="text-xs text-gray-600">Ready-to-use AI workflows</p>
+        </div>
         <button 
           onClick={() => toggleTemplateGallery(false)}
-          className="text-gray-500 hover:text-gray-700"
+          className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-100"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
       
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {nodeTemplates.map((template, idx) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {featuredTemplates.map((template, idx) => (
           <div 
             key={idx}
-            className="flex-shrink-0 border border-gray-200 rounded p-2 hover:bg-blue-50 cursor-pointer w-[200px]"
+            className="border border-gray-200 rounded-lg p-3 hover:bg-blue-50 hover:border-blue-300 cursor-pointer transition-all duration-200 hover:shadow-md"
             onClick={() => handleApplyTemplate(template)}
           >
-            <div className="flex items-center mb-1">
+            <div className="flex items-start mb-2">
               {renderTemplateIcon(template)}
-              <h4 className="font-medium text-sm truncate">{template.name}</h4>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-medium text-sm text-gray-800 truncate">{template.name}</h4>
+                <p className="text-xs text-gray-600 line-clamp-2 mt-1">{template.description}</p>
+              </div>
             </div>
-            <p className="text-xs text-gray-600 truncate">{template.description}</p>
+            
+            {/* Template metadata */}
+            <div className="flex items-center justify-between mt-2">
+              <div className="flex flex-wrap gap-1">
+                {template.tags && template.tags.slice(0, 2).map((tag, i) => (
+                  <span key={i} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="text-xs text-gray-500">
+                {template.nodes ? `${template.nodes.length} nodes` : 'Template'}
+              </div>
+            </div>
+            
+            {/* Complexity indicator */}
+            {template.complexity && (
+              <div className="mt-2 text-xs">
+                <span className="text-gray-500">Complexity: </span>
+                <span className={`font-medium ${
+                  template.complexity === 'Simple' ? 'text-green-600' :
+                  template.complexity === 'Medium' ? 'text-yellow-600' :
+                  'text-red-600'
+                }`}>
+                  {template.complexity}
+                </span>
+              </div>
+            )}
           </div>
         ))}
+      </div>
+      
+      {/* View all templates button */}
+      <div className="mt-4 text-center">
+        <button 
+          onClick={() => {
+            // This would open the full template modal
+            toggleTemplateGallery(false);
+            // You could dispatch an event or call a function to open the full template browser
+          }}
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+        >
+          View All Templates →
+        </button>
       </div>
     </div>
   );

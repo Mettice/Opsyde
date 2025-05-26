@@ -9,7 +9,7 @@ const useThrottledZoom = (flowInstance, delay = 16) => {
       if (flowInstance.current) {
         const nextZoom = Math.min(Math.max(zoomRef.current + amount, 0.1), 2);
         zoomRef.current = nextZoom;
-        flowInstance.current.setZoom(nextZoom);
+        flowInstance.current.zoomTo(nextZoom);
       }
     }, delay),
     [flowInstance]
@@ -20,8 +20,8 @@ const useThrottledZoom = (flowInstance, delay = 16) => {
   const resetZoom = useCallback(() => {
     if (flowInstance.current) {
       zoomRef.current = 1;
-      flowInstance.current.setZoom(1);
-      flowInstance.current.fitView();
+      flowInstance.current.zoomTo(1);
+      flowInstance.current.fitView({ padding: 0.2 });
     }
   }, [flowInstance]);
 

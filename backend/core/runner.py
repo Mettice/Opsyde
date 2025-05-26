@@ -198,8 +198,8 @@ class UnifiedRunner:
             if obj_id in seen_objects:
                 seen_objects.remove(obj_id)
         
-    async def execute_workflow(self, workflow_data: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-        """Execute a workflow and yield results"""
+    async def execute_workflow(self, workflow_data: Dict[str, Any]) -> AsyncGenerator[str, None]:
+        """Execute a workflow and yield results as JSON strings"""
         try:
             nodes = workflow_data.get("nodes", [])
             edges = workflow_data.get("edges", [])
@@ -247,9 +247,9 @@ class UnifiedRunner:
                 
                 # Format output
                 output = {
-                    "nodeId": node_id,
-                    "nodeType": node.get("type", "unknown"),
-                    "nodeName": node.get("data", {}).get("label", "Unnamed Node"),
+                    "node_id": node_id,
+                    "node_type": node.get("type", "unknown"),
+                    "node_label": node.get("data", {}).get("label", "Unnamed Node"),
                     "result": clean_result,
                     "metadata": {
                         "timestamp": datetime.now().isoformat(),
@@ -259,15 +259,18 @@ class UnifiedRunner:
                     }
                 }
                 
-                yield output
+                # Convert to JSON string before yielding
+                yield json.dumps(output) + "\n"
                 
         except Exception as e:
             logger.error(f"Error executing workflow: {str(e)}")
-            yield {
+            error_output = {
                 "type": "error",
                 "error": str(e),
                 "timestamp": datetime.now().isoformat()
             }
+            # Convert to JSON string before yielding
+            yield json.dumps(error_output) + "\n"
             
     async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single node with framework validation"""

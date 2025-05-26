@@ -458,7 +458,7 @@ export class APIClient {
   }
 
   async executeFlow(nodes: any[], edges: any[], inputs: any): Promise<any> {
-    console.log("Executing flow with URL:", `${this.baseUrl}/api/execute-flow`);
+    console.log("Executing flow with streaming URL:", `${this.baseUrl}/run-crew`);
     
     try {
       const formattedData = {
@@ -473,7 +473,7 @@ export class APIClient {
         inputKeys: Object.keys(inputs || {})
       }));
       
-      const response = await fetch(`${this.baseUrl}/api/execute-flow`, {
+      const response = await fetch(`${this.baseUrl}/run-crew`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formattedData)
@@ -483,30 +483,104 @@ export class APIClient {
         console.error("Flow execution failed with status:", response.status);
         const errorText = await response.text();
         console.error("Error response:", errorText);
+        throw new Error(`Flow execution failed: ${errorText || response.statusText}`);
       }
       
-      const result = await handleResponse<any>(response);
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
       
-      // Process the result to ensure node_results are properly formatted
-      const processedResult: any = {
-        ...result,
-        node_results: {}
-      };
+      if (!reader) {
+        throw new Error('No response body reader available');
+      }
       
-      // Extract node results from logs if available
-      if (result && result.logs && Array.isArray(result.logs)) {
-        // Process each log entry to extract node results
-        result.logs.forEach((log: any) => {
-          if (log && log.nodeId && (log.result !== undefined || log.output !== undefined)) {
-            processedResult.node_results[log.nodeId] = {
-              ...log,
-              status: log.status || 'completed'
+      let logs: any[] = [];
+      let node_results: any = {};
+      let buffer = '';
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) break;
+          
+          // Decode the chunk and add to buffer
+          buffer += decoder.decode(value, { stream: true });
+          
+          // Process complete lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          
+          for (const line of lines) {
+            if (line.trim()) {
+              try {
+                // Parse JSON line
+                const logEntry = JSON.parse(line);
+                console.log('Received log entry:', logEntry);
+                
+                logs.push(logEntry);
+                
+                // Extract node results
+                if (logEntry.node_id) {
+                  node_results[logEntry.node_id] = {
+                    nodeId: logEntry.node_id,
+                    nodeType: logEntry.node_type,
+                    nodeName: logEntry.node_label,
+                    result: logEntry.result,
+                    status: logEntry.metadata?.has_error ? 'error' : 'completed',
+                    timestamp: logEntry.metadata?.timestamp
+                  };
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse log line:', line, parseError);
+                // Add as text log if JSON parsing fails
+                logs.push({
+                  type: 'text',
+                  message: line,
+                  timestamp: new Date().toISOString()
+                });
+              }
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      
+      // Process any remaining buffer content
+      if (buffer.trim()) {
+        try {
+          const logEntry = JSON.parse(buffer);
+          logs.push(logEntry);
+          
+          if (logEntry.node_id) {
+            node_results[logEntry.node_id] = {
+              nodeId: logEntry.node_id,
+              nodeType: logEntry.node_type,
+              nodeName: logEntry.node_label,
+              result: logEntry.result,
+              status: logEntry.metadata?.has_error ? 'error' : 'completed',
+              timestamp: logEntry.metadata?.timestamp
             };
           }
-        });
+        } catch (parseError) {
+          console.warn('Failed to parse remaining buffer:', buffer, parseError);
+          logs.push({
+            type: 'text',
+            message: buffer,
+            timestamp: new Date().toISOString()
+          });
+        }
       }
       
-      console.log("Processed flow execution result:", processedResult);
+      const processedResult = {
+        success: true,
+        logs,
+        node_results,
+        timestamp: new Date().toISOString()
+      };
+      
+      console.log("Processed streaming flow execution result:", processedResult);
       return processedResult;
     } catch (error) {
       console.error("Flow execution error:", error);
