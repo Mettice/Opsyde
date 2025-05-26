@@ -518,7 +518,13 @@ const SmartToolSelector = ({ onToolSelect, onClose }) => {
               serviceId={selectedService}
               config={toolConfig}
               onConfigChange={handleConfigChange}
-              onSave={handleSave}
+              onSave={(toolData) =>
+                handleSave({
+                  ...toolData,
+                  categoryId: selectedCategory,
+                  serviceId: selectedService
+                })
+              }
               onBack={handleBack}
             />
           )}

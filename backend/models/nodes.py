@@ -18,6 +18,7 @@ class ToolType(str, Enum):
     API = "api"
     WEBHOOK = "webhook"
     CUSTOM = "custom"
+    UNIVERSAL_API = "universal_api"
 
 # NEW: Inheritance configuration
 class InheritanceConfig(BaseModel):
@@ -69,8 +70,8 @@ class TaskConfig(BaseNodeConfig):
         return parent_type == NodeType.AGENT
 
 class ToolConfig(BaseNodeConfig):
-    tool_type: ToolType
-    framework: str
+    tool_type: Optional[ToolType] = Field(default=ToolType.API)
+    framework: Optional[str] = Field(default="api")
     framework_config: Dict[str, Any] = Field(default_factory=dict)
     parameters: Dict[str, Any] = Field(default_factory=dict)
     

@@ -14,6 +14,9 @@ from backend.models.data import NodeData
 from backend.core.graph import determine_execution_order, get_node_inputs, cleanup_node_results
 from backend.core.node_processor import node_processor
 
+# NEW: Import enhanced framework registry
+from backend.framework_registry import framework_registry, validate_framework_llm_combination
+
 logger = logging.getLogger(__name__)
 
 class UnifiedRunner:
@@ -27,7 +30,7 @@ class UnifiedRunner:
     def sanitize_result(self, obj, depth=0, seen_objects=None, path=None):
         """
         Clean results to prevent circular references by tracking object IDs and paths
-        and ensuring proper JSON serialization
+        and ensuring proper JSON serialization. Enhanced for framework-specific handling.
         """
         # Initialize tracking collections if this is the top-level call
         if seen_objects is None:
@@ -56,6 +59,40 @@ class UnifiedRunner:
         seen_objects.add(obj_id)
         
         try:
+            # NEW: Handle framework-specific result formats
+            if isinstance(obj, dict):
+                # Handle enhanced framework results
+                if "framework_used" in obj and "success" in obj:
+                    # This is a framework execution result - preserve structure
+                    framework_result = {
+                        "success": obj.get("success"),
+                        "framework_used": obj.get("framework_used"),
+                        "execution_time": obj.get("execution_time"),
+                        "error": obj.get("error"),
+                        "error_type": obj.get("error_type")
+                    }
+                    
+                    # Safely handle the result data
+                    if "result" in obj:
+                        framework_result["result"] = self.sanitize_result(
+                            obj["result"], depth+1, seen_objects, path + ["result"]
+                        )
+                    
+                    return framework_result
+                
+                # Handle universal API results
+                if obj.get("type") == "universal_api_result":
+                    return {
+                        "type": "universal_api_result",
+                        "success": obj.get("success"),
+                        "service_detected": obj.get("service_detected"),
+                        "protocol": obj.get("protocol"),
+                        "response": self.sanitize_result(
+                            obj.get("response"), depth+1, seen_objects, path + ["response"]
+                        ),
+                        "metadata": obj.get("metadata", {})
+                    }
+            
             # Handle different object types
             if isinstance(obj, NodeData):
                 # Convert NodeData to safe dictionary
@@ -233,8 +270,25 @@ class UnifiedRunner:
             }
             
     async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a single node"""
+        """Execute a single node with framework validation"""
         try:
+            # NEW: Framework validation before execution
+            framework = node_data.get("framework")
+            if framework:
+                # Validate framework/LLM combination if applicable
+                llm_config = node_data.get("frameworkConfig", {})
+                llm_provider = llm_config.get("provider") or node_data.get("llmProvider")
+                
+                validation = validate_framework_llm_combination(framework, llm_provider)
+                if not validation["valid"]:
+                    return {
+                        "type": "error",
+                        "error": f"Framework validation failed: {validation['error']}",
+                        "nodeId": node_data.get("id", "unknown"),
+                        "nodeType": node_type,
+                        "timestamp": datetime.now().isoformat()
+                    }
+            
             node = {
                 "type": node_type,
                 "data": node_data,

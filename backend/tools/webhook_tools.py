@@ -162,3 +162,39 @@ class WebhookEventType:
 def create_webhook_tool(config: Dict[str, Any]) -> WebhookTool:
     """Create a webhook tool instance"""
     return WebhookTool(config)
+
+async def run_webhook_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Run webhook tool with configuration and inputs"""
+    try:
+        # Create webhook tool instance
+        webhook_tool = create_webhook_tool(config)
+        
+        # Execute the webhook
+        result = await webhook_tool.execute(inputs)
+        
+        # Format response for consistency
+        if result.get("success"):
+            return {
+                "success": True,
+                "output": result.get("data"),
+                "metadata": {
+                    "status_code": result.get("status_code"),
+                    "timestamp": result.get("timestamp"),
+                    "webhook_url": config.get("webhook_url")
+                },
+                "framework": "webhook_tool"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error"),
+                "framework": "webhook_tool"
+            }
+            
+    except Exception as e:
+        logger.error(f"Webhook tool execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "framework": "webhook_tool"
+        }

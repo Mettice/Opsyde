@@ -238,6 +238,102 @@ const baseTemplates = [
       version: '1.0',
       author: 'NodAi',
       created: '2025-04-15'
+    },
+    
+    // NEW: Market Analysis AI Agent Template
+    {
+      name: 'Market Analysis AI Agent',
+      description: '🔥 Professional market research workflow with AI-powered analysis and comprehensive reporting',
+      thumbnail: '/img/market-analysis-flow.png',
+      nodes: [
+        {
+          id: 'input-market-1',
+          type: 'input',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'Market Research Input',
+            description: 'Input for market research query',
+            inputType: 'text',
+            placeholder: 'Enter your market research topic...',
+            value: 'Analyze the current trends in AI automation tools for small businesses in 2024',
+            nodeId: 'input-market-1',
+            nodeType: 'input'
+          }
+        },
+        {
+          id: 'agent-market-1',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Senior Market Research Analyst',
+            role: 'Senior Market Research Analyst',
+            goal: 'Provide comprehensive market analysis and actionable insights for business decision-making',
+            backstory: 'You are a seasoned market research analyst with over 10 years of experience in the tech industry. You specialize in AI and automation trends, have worked with Fortune 500 companies, and are known for delivering data-driven insights that drive strategic business decisions. Your expertise includes market sizing, competitive analysis, trend forecasting, and strategic recommendations.',
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.7,
+              max_tokens: 4000,
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 4000,
+            allowDelegation: true,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-market-1',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-analysis-1',
+          type: 'task',
+          position: { x: 600, y: 100 },
+          data: {
+            label: 'Comprehensive Market Analysis',
+            description: 'Conduct thorough analysis of market trends, competitive landscape, and provide strategic recommendations',
+            expectedOutput: 'A detailed market research report including: 1) Executive Summary with key findings, 2) Market size and growth projections with specific numbers, 3) Competitive landscape analysis with major players, 4) Current trends and emerging opportunities, 5) Target audience insights and demographics, 6) Strategic recommendations with actionable next steps, 7) Risk assessment and mitigation strategies. Format as a professional business report with clear sections, bullet points, and data-driven insights.',
+            async: false,
+            agentId: 'agent-market-1',
+            agentName: 'Senior Market Research Analyst',
+            agentRole: 'Senior Market Research Analyst',
+            nodeId: 'task-analysis-1',
+            nodeType: 'task'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-input-agent',
+          source: 'input-market-1',
+          target: 'agent-market-1',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-task',
+          source: 'agent-market-1',
+          target: 'task-analysis-1',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Market Research', 'AI Analysis', 'Business Intelligence', 'Strategic Planning', 'CrewAI'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Medium',
+      estimatedTime: '2-3 minutes',
+      useCase: 'Perfect for businesses needing professional market research reports, competitive analysis, and strategic insights for decision-making.',
+      metadata: {
+        category: 'Business Intelligence',
+        industry: ['Technology', 'Consulting', 'Startups', 'Enterprise'],
+        outputFormat: 'Professional Report',
+        aiCapabilities: ['Market Analysis', 'Trend Forecasting', 'Competitive Intelligence'],
+        businessValue: 'High - Provides actionable insights for strategic planning'
+      }
     }
 ];
 

@@ -12,6 +12,9 @@ from backend.core.node_processor import node_processor
 from backend.utils.logging import get_logger
 from backend.core.di import injector
 
+# NEW: Import framework validation
+from backend.framework_registry import framework_registry, validate_framework_llm_combination
+
 logger = get_logger(__name__)
 
 # Configurable constants
@@ -30,13 +33,32 @@ class WorkflowEngine:
         self.max_retries = 3
         
     async def execute_workflow(self, workflow: Workflow, inputs: Dict[str, Any] = None) -> AsyncGenerator[Dict[str, Any], None]:
-        """Execute a workflow and yield results"""
+        """Execute a workflow with framework validation and enhanced error handling"""
         try:
+            # NEW: Pre-execution framework validation
+            validation_errors = await self._validate_workflow_frameworks(workflow)
+            if validation_errors:
+                yield {
+                    "type": "validation_error",
+                    "errors": validation_errors,
+                    "timestamp": datetime.now().isoformat()
+                }
+                return
+            
             # Get execution order
             execution_order = determine_execution_order(workflow.nodes, workflow.edges)
             
             # Create node lookup
             node_map = {node.id: node for node in workflow.nodes}
+            
+            # Yield workflow start event
+            yield {
+                "type": "workflow_started",
+                "workflow_id": workflow.id,
+                "node_count": len(workflow.nodes),
+                "execution_order": execution_order,
+                "timestamp": datetime.now().isoformat()
+            }
             
             for node_id in execution_order:
                 if node_id in self.executed_nodes:
@@ -53,34 +75,82 @@ class WorkflowEngine:
                 # Get node inputs
                 node_inputs = get_node_inputs(node_id, workflow.edges, self.node_results, inputs or {})
                 
+                # Yield node start event
+                yield {
+                    "type": "node_started",
+                    "node_id": node_id,
+                    "node_type": node.type,
+                    "timestamp": datetime.now().isoformat()
+                }
+                
                 # Process node
                 try:
-                    result = await node_processor.process_node(node, node_inputs)
-                    self.node_results[node_id] = result
+                    start_time = datetime.now()
+                    
+                    # Create execution context with framework registry access
+                    context = {
+                        "workflow_id": workflow.id,
+                        "execution_order": execution_order,
+                        "framework_registry": framework_registry
+                    }
+                    
+                    result = await node_processor.process_node(node.dict(), node_inputs, context)
+                    execution_time = (datetime.now() - start_time).total_seconds()
+                    
+                    # Store result with enhanced metadata
+                    enhanced_result = self._enhance_result_metadata(result, node, execution_time)
+                    self.node_results[node_id] = enhanced_result
                     self.executed_nodes.add(node_id)
                     
                     yield {
+                        "type": "node_completed",
                         "node_id": node_id,
+                        "node_type": node.type,
                         "status": "completed",
-                        "result": result,
+                        "result": enhanced_result,
+                        "execution_time": execution_time,
                         "timestamp": datetime.now().isoformat()
                     }
                     
                 except Exception as e:
                     logger.error(f"Error executing node {node_id}: {str(e)}")
                     self.failed_nodes.add(node_id)
-                    yield {
+                    
+                    # Enhanced error information
+                    error_info = {
+                        "type": "node_error",
                         "node_id": node_id,
+                        "node_type": node.type,
                         "status": "error",
                         "error": str(e),
+                        "error_type": type(e).__name__,
                         "timestamp": datetime.now().isoformat()
                     }
+                    
+                    # Add framework context if applicable
+                    if hasattr(node, 'data') and node.data.get('framework'):
+                        error_info["framework"] = node.data.get('framework')
+                        error_info["framework_available"] = node.data.get('framework') in framework_registry.get_available_frameworks()
+                    
+                    yield error_info
+            
+            # Yield workflow completion event
+            yield {
+                "type": "workflow_completed",
+                "workflow_id": workflow.id,
+                "total_nodes": len(workflow.nodes),
+                "executed_nodes": len(self.executed_nodes),
+                "failed_nodes": len(self.failed_nodes),
+                "success_rate": len(self.executed_nodes) / len(workflow.nodes) if workflow.nodes else 0,
+                "timestamp": datetime.now().isoformat()
+            }
                     
         except Exception as e:
             logger.error(f"Error executing workflow: {str(e)}")
             yield {
-                "type": "error",
+                "type": "workflow_error",
                 "error": str(e),
+                "error_type": type(e).__name__,
                 "timestamp": datetime.now().isoformat()
             }
             
@@ -126,6 +196,55 @@ class WorkflowEngine:
         """Validate node configuration"""
         required_fields = ["id", "type"]
         return all(field in node for field in required_fields)
+
+    async def _validate_workflow_frameworks(self, workflow: Workflow) -> List[str]:
+        """Validate all frameworks in the workflow"""
+        errors = []
+        available_frameworks = framework_registry.get_available_frameworks()
+        
+        for node in workflow.nodes:
+            node_data = node.data if hasattr(node, 'data') else {}
+            framework = node_data.get('framework')
+            
+            if framework:
+                # Check if framework is available
+                if framework not in available_frameworks:
+                    errors.append(f"Node {node.id}: Framework '{framework}' is not available")
+                    continue
+                
+                # Validate framework/LLM combination
+                llm_config = node_data.get('frameworkConfig', {})
+                llm_provider = llm_config.get('provider') or node_data.get('llmProvider')
+                
+                if llm_provider:
+                    validation = validate_framework_llm_combination(framework, llm_provider)
+                    if not validation["valid"]:
+                        errors.append(f"Node {node.id}: {validation['error']}")
+        
+        return errors
+
+    def _enhance_result_metadata(self, result: Any, node: Node, execution_time: float) -> Dict:
+        """Enhance result metadata with execution information"""
+        if hasattr(result, 'dict'):
+            enhanced_result = result.dict()
+        elif isinstance(result, dict):
+            enhanced_result = result.copy()
+        else:
+            enhanced_result = {"value": result}
+        
+        # Add execution metadata
+        if "metadata" not in enhanced_result:
+            enhanced_result["metadata"] = {}
+        
+        enhanced_result["metadata"].update({
+            "execution_time": execution_time,
+            "node_id": node.id,
+            "node_type": node.type,
+            "framework_used": node.data.get('framework') if hasattr(node, 'data') else None,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return enhanced_result
 
 # Create and register workflow engine instance
 workflow_engine = WorkflowEngine()

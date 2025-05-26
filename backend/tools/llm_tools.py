@@ -7,7 +7,7 @@ import aiohttp
 from openai import AsyncOpenAI
 import asyncio
 
-from models.types import (
+from backend.models.types import (
     ToolType,
     LLMProvider,
     LLMConfig,
@@ -254,3 +254,49 @@ def create_llm_tool(config: LLMConfig) -> LLMTool:
         raise LLMError(f"Unsupported LLM provider: {config.provider}")
         
     return tool_class(config)
+
+async def run_llm_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Run LLM tool with configuration and inputs"""
+    try:
+        # Extract LLM configuration
+        provider = config.get("provider", "openai")
+        model = config.get("model", "gpt-4")
+        
+        # Create LLM config
+        llm_config = LLMConfig(
+            name=f"{provider}_{model}",
+            provider=LLMProvider(provider.upper()),
+            model=model,
+            temperature=config.get("temperature", 0.7),
+            max_tokens=config.get("max_tokens", 1000),
+            system_message=config.get("system_message", ""),
+            top_p=config.get("top_p", 1.0),
+            frequency_penalty=config.get("frequency_penalty", 0.0),
+            presence_penalty=config.get("presence_penalty", 0.0)
+        )
+        
+        # Create and execute tool
+        tool = create_llm_tool(llm_config)
+        result = await tool.execute(inputs)
+        
+        if result.success:
+            return {
+                "success": True,
+                "output": result.data,
+                "metadata": result.metadata,
+                "framework": "llm_tool"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.error,
+                "framework": "llm_tool"
+            }
+            
+    except Exception as e:
+        logger.error(f"LLM tool execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "framework": "llm_tool"
+        }

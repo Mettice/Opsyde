@@ -94,14 +94,19 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     setTestResult(null);
     
     try {
-      const response = await fetch('/api/test-smart-integration', {
+      // Determine which endpoint to use based on output type
+      const isSmartEmail = formData.outputType === 'smart_email';
+      const endpoint = isSmartEmail ? '/api/tools/research-email-format' : '/api/tools/research-output-api';
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          service_name: extractServiceName(formData.ai_description || formData.config?.ai_description),
           description: formData.ai_description || formData.config?.ai_description,
-          service_type: formData.service_type || formData.config?.service_type,
-          output_format: formData.output_format || formData.config?.output_format,
-          sample_data: { test: "sample workflow output", timestamp: new Date().toISOString() }
+          endpoint_hint: formData.manual_endpoint || formData.config?.manual_endpoint,
+          output_type: formData.outputType,
+          email_style: isSmartEmail ? (formData.service_type || formData.config?.service_type) : undefined
         })
       });
       
@@ -116,6 +121,30 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     } finally {
       setIsTestingIntegration(false);
     }
+  };
+
+  // Helper function to extract service name from description
+  const extractServiceName = (description) => {
+    if (!description) return 'unknown_service';
+    
+    const commonServices = ['hubspot', 'slack', 'notion', 'discord', 'airtable', 'linear', 'webflow'];
+    const descriptionLower = description.toLowerCase();
+    
+    for (const service of commonServices) {
+      if (descriptionLower.includes(service)) {
+        return service;
+      }
+    }
+    
+    // Try to extract from common patterns
+    const words = descriptionLower.split(/\s+/);
+    for (const word of words) {
+      if (word.length > 3 && word.endsWith('api')) {
+        return word.replace('api', '');
+      }
+    }
+    
+    return 'unknown_service';
   };
 
   // NEW: Enhanced output type options

@@ -105,26 +105,26 @@ class Settings(BaseSettings):
     OUTPUT_RATE_LIMIT_CALLS: int = Field(100, env="OUTPUT_RATE_LIMIT_CALLS")
     OUTPUT_RATE_LIMIT_PERIOD: int = Field(60, env="OUTPUT_RATE_LIMIT_PERIOD")
     
-    # Email settings
-    EMAIL_SENDER: str = Field(..., env="EMAIL_SENDER")
-    EMAIL_PASSWORD: str = Field(..., env="EMAIL_PASSWORD")
+    # Email settings (optional)
+    EMAIL_SENDER: Optional[str] = Field(None, env="EMAIL_SENDER")
+    EMAIL_PASSWORD: Optional[str] = Field(None, env="EMAIL_PASSWORD")
     
-    # Google settings
-    GOOGLE_CREDS_FILE: str = Field(..., env="GOOGLE_CREDS_FILE")
+    # Google settings (optional)
+    GOOGLE_CREDS_FILE: Optional[str] = Field(None, env="GOOGLE_CREDS_FILE")
     
     # Server settings
     PORT: str = Field("8000", env="PORT")
     HOST: str = Field("0.0.0.0", env="HOST")
     DEBUG: str = Field("True", env="DEBUG")
     
-    # Supabase settings
-    VITE_SUPABASE_URL: str = Field(..., env="VITE_SUPABASE_URL")
-    VITE_SUPABASE_ANON_KEY: str = Field(..., env="VITE_SUPABASE_ANON_KEY")
+    # Supabase settings (optional)
+    VITE_SUPABASE_URL: Optional[str] = Field(None, env="VITE_SUPABASE_URL")
+    VITE_SUPABASE_ANON_KEY: Optional[str] = Field(None, env="VITE_SUPABASE_ANON_KEY")
     
-    # API Keys
-    OPENAI_API_KEY: str = Field(..., env="OPENAI_API_KEY")
-    OPENROUTER_API_KEY: str = Field(..., env="OPENROUTER_API_KEY")
-    HUGGINGFACE_API_KEY: str = Field(..., env="HUGGINGFACE_API_KEY")
+    # API Keys (optional)
+    OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
+    OPENROUTER_API_KEY: Optional[str] = Field(None, env="OPENROUTER_API_KEY")
+    HUGGINGFACE_API_KEY: Optional[str] = Field(None, env="HUGGINGFACE_API_KEY")
     
     # Sub-settings
     logging: LoggingSettings = LoggingSettings()

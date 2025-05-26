@@ -201,6 +201,49 @@ plugin_loader = PluginLoader()
 tool_registry.register(DataTransformTool)
 tool_registry.register(DataValidationTool)
 
+async def run_custom_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Run custom tool with configuration and inputs"""
+    try:
+        # Extract tool configuration
+        tool_name = config.get('tool_name', 'data_transform')
+        instance_id = config.get('instance_id', f"{tool_name}_{hash(str(config))}")
+        
+        # Create or get tool instance
+        tool_instance = tool_registry.get_instance(tool_name, instance_id)
+        if not tool_instance:
+            tool_instance = tool_registry.create_instance(tool_name, instance_id, config)
+        
+        # Execute the tool
+        result = await tool_instance.execute(inputs)
+        
+        # Format response for consistency
+        if result.get("success"):
+            return {
+                "success": True,
+                "output": result.get("data"),
+                "metadata": {
+                    "tool_name": tool_name,
+                    "tool_version": tool_instance.version,
+                    "timestamp": result.get("timestamp"),
+                    "instance_id": instance_id
+                },
+                "framework": "custom_tool"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error"),
+                "framework": "custom_tool"
+            }
+            
+    except Exception as e:
+        logger.error(f"Custom tool execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "framework": "custom_tool"
+        }
+
 # Example usage:
 # plugin_loader.load_plugins()  # Load custom plugins
 # transform_tool = tool_registry.create_instance(

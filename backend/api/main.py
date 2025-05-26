@@ -8,11 +8,12 @@ import logging
 import os
 from typing import Dict, Any, AsyncGenerator
 from fastapi.openapi.utils import get_openapi
+from datetime import datetime
 
 # Import routers and core components
 from backend.api.routers.workflow_router import router as workflow_router
 from backend.api.routers.node_router import router as node_router
-from backend.api.routers.tool_router import router as tool_router
+from backend.api.routers.tools import router as tools_router
 from backend.api.routers.auth_router import router as auth_router
 from backend.api.routers.trigger_router import router as trigger_router
 from backend.api.routers.output_router import router as output_router
@@ -24,6 +25,9 @@ from backend.core.runner import UnifiedRunner
 from backend.models.api_models import APIResponse, ErrorCode
 from backend.core.exceptions import CrewFlowError
 from backend.utils.api_utils import handle_exception
+
+# NEW: Import enhanced framework registry
+from backend.framework_registry import framework_registry, create_framework_routes
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +50,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Store unified runner in app state
         app.state.runner = UnifiedRunner()
         logger.info("Unified runner initialized")
+        
+        # NEW: Initialize framework registry
+        app.state.framework_registry = framework_registry
+        logger.info("Framework registry initialized")
         
         # Load environment variables
         logger.info("Environment variables loaded")
@@ -92,16 +100,19 @@ async def get_unified_runner():
 # Update router dependencies to use unified runner
 workflow_router.dependencies.append(Depends(get_unified_runner))
 node_router.dependencies.append(Depends(get_unified_runner))
-tool_router.dependencies.append(Depends(get_unified_runner))
 output_router.dependencies.append(Depends(get_unified_runner))
 
 # Register routers
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(workflow_router, prefix="/api/workflows")
 app.include_router(node_router, prefix="/api/nodes")
-app.include_router(tool_router, prefix="/api/tools")
+app.include_router(tools_router, prefix="/api/tools")
 app.include_router(trigger_router, prefix="/api/triggers")
 app.include_router(output_router, prefix="/api/outputs")
+
+# NEW: Add framework metadata routes
+framework_routes = create_framework_routes()
+app.include_router(framework_routes, prefix="/api")
 
 # Error handlers
 @app.exception_handler(HTTPException)
@@ -138,6 +149,35 @@ async def get_version():
         "environment": settings.ENVIRONMENT,
         "api_version": "v1"
     }
+
+# NEW: Health check endpoint with framework registry status
+@app.get("/health")
+async def health_check():
+    """Health check endpoint with framework registry status"""
+    try:
+        available_frameworks = framework_registry.get_available_frameworks()
+        framework_metrics = {
+            framework: framework_registry.get_framework_metrics(framework)
+            for framework in available_frameworks
+        }
+        
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.0.0",
+            "environment": settings.ENVIRONMENT,
+            "framework_registry": {
+                "available_frameworks": available_frameworks,
+                "framework_count": len(available_frameworks),
+                "metrics": framework_metrics
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 
 # Root endpoint
 @app.get("/")

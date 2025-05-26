@@ -1,223 +1,499 @@
+# Enhanced LangChain Runner with Modern Features
 import logging
-from typing import Dict, Any, List, Optional
-from langchain.chains import LLMChain, ConversationChain, RetrievalQA
-from langchain.agents import AgentExecutor, Tool, initialize_agent, AgentType
-from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory
-from langchain.prompts import PromptTemplate
-from langchain.chat_models import ChatOpenAI, ChatAnthropic
-from langchain.embeddings import OpenAIEmbeddings, HuggingFaceEmbeddings
-from langchain.vectorstores import FAISS
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
+import asyncio
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def get_llm_for_provider(provider: str, config: Dict[str, Any]):
-    """Get LLM instance based on provider configuration"""
-    temperature = float(config.get("temperature", 0.7))
-    model = config.get("model", "gpt-4")
-    
-    if provider == "openai":
-        return ChatOpenAI(
-            model=model,
-            temperature=temperature
-        )
-    elif provider == "anthropic":
-        return ChatAnthropic(
-            model=model,
-            temperature=temperature
-        )
-    elif provider == "huggingface":
-        from langchain.llms import HuggingFaceHub
-        return HuggingFaceHub(
-            repo_id=model,
-            task="text-generation"
-        )
-    else:
-        raise ValueError(f"Unsupported LLM provider: {provider}")
-
-def get_memory_instance(memory_type: str) -> Optional[Any]:
-    """Get memory instance based on type"""
-    if memory_type == "buffer":
-        return ConversationBufferMemory()
-    elif memory_type == "summary":
-        return ConversationSummaryMemory(llm=ChatOpenAI())
-    elif memory_type == "none":
-        return None
-    else:
-        raise ValueError(f"Unsupported memory type: {memory_type}")
-
-def get_tools_for_agent(tool_names: List[str]) -> List[Tool]:
-    """Get list of tools based on names"""
-    available_tools = {
-        "search": Tool(
-            name="search",
-            func=lambda x: "Search result for: " + x,
-            description="Useful for searching information"
-        ),
-        "calculator": Tool(
-            name="calculator",
-            func=lambda x: eval(x),
-            description="Useful for doing math calculations"
-        )
-    }
-    
-    return [available_tools[name] for name in tool_names if name in available_tools]
-
-async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Run a LangChain tool with the given configuration and inputs
-    
-    Args:
-        config: Tool configuration including chain type, memory type, etc.
-        inputs: Input data for the chain/agent
-        
-    Returns:
-        Dictionary containing the result and metadata
-    """
+try:
+    # Modern LangChain imports
+    from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+    from langchain_core.output_parsers import StrOutputParser, JsonOutputParser, PydanticOutputParser
+    from langchain_core.runnables import RunnablePassthrough, RunnableLambda, RunnableParallel
+    from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+    from langchain_core.tools import BaseTool, tool
+    from langchain.agents import AgentExecutor, create_openai_functions_agent, create_react_agent
+    from langchain.memory import ConversationBufferMemory, ConversationSummaryMemory, ConversationBufferWindowMemory
+    from langchain_community.vectorstores import FAISS, Chroma
+    from langchain.chains import LLMChain, ConversationChain, RetrievalQA
+    from langchain.prompts import PromptTemplate, ChatPromptTemplate
+    from langchain.schema import HumanMessage, SystemMessage, AIMessage
+    from langchain.text_splitter import RecursiveCharacterTextSplitter
+    from langchain_openai import OpenAIEmbeddings
+    from langchain_community.document_loaders import TextLoader, WebBaseLoader
+    # Try different PDF loader imports
     try:
-        # Extract configuration
-        chain_type = config.get("chain_type", "llm")
-        llm_provider = config.get("llm_provider", "openai")
-        memory_type = config.get("memory_type", "none")
-        prompt_template = config.get("prompt_template", "")
+        from langchain_community.document_loaders import PyPDFLoader as PDFLoader
+    except ImportError:
+        try:
+            from langchain_community.document_loaders import PDFPlumberLoader as PDFLoader
+        except ImportError:
+            PDFLoader = None
+    from langchain.agents import initialize_agent, Tool, AgentType
+    from langchain_community.tools import DuckDuckGoSearchRun, WikipediaQueryRun
+    from langchain_openai import ChatOpenAI
+    from langchain_anthropic import ChatAnthropic
+    LANGCHAIN_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"LangChain not fully available: {str(e)}")
+    LANGCHAIN_AVAILABLE = False
+
+class EnhancedLangChainRunner:
+    """Enhanced LangChain runner with modern LCEL and advanced features"""
+    
+    def __init__(self):
+        self.chains_cache = {}
+        self.vectorstores_cache = {}
+        self.tools_cache = {}
+    
+    def get_llm(self, config: Dict[str, Any]):
+        """Get LLM based on configuration"""
+        provider = config.get('provider', 'openai')
+        model = config.get('model', 'gpt-4')
+        temperature = config.get('temperature', 0.7)
+        max_tokens = config.get('max_tokens', 4000)
         
-        # Initialize components
-        llm = get_llm_for_provider(llm_provider, config)
-        memory = get_memory_instance(memory_type)
-        
-        # Handle different chain types
-        if chain_type == "llm":
-            # Simple LLM chain
-            prompt = PromptTemplate(
-                template=prompt_template,
-                input_variables=list(inputs.keys())
+        if provider == 'openai':
+            return ChatOpenAI(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
             )
-            chain = LLMChain(llm=llm, prompt=prompt, memory=memory)
-            result = await chain.arun(**inputs)
-            
-        elif chain_type == "conversation":
-            # Conversation chain
-            chain = ConversationChain(
-                llm=llm,
-                memory=memory or ConversationBufferMemory()
+        elif provider == 'anthropic':
+            return ChatAnthropic(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
             )
-            result = await chain.arun(inputs.get("input", ""))
-            
-        elif chain_type == "retrieval_qa":
-            # Retrieval QA chain
-            embeddings = OpenAIEmbeddings()
-            docs = inputs.get("documents", [])
-            vectorstore = FAISS.from_texts(docs, embeddings)
-            chain = RetrievalQA.from_chain_type(
-                llm=llm,
-                chain_type="stuff",
-                retriever=vectorstore.as_retriever()
-            )
-            result = await chain.arun(inputs.get("query", ""))
-            
-        elif chain_type == "agent":
-            # Agent with tools
-            tools = get_tools_for_agent(config.get("tools", []))
-            agent = initialize_agent(
-                tools,
-                llm,
-                agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-                memory=memory
-            )
-            result = await agent.arun(inputs.get("input", ""))
-            
         else:
-            raise ValueError(f"Unsupported chain type: {chain_type}")
-
-        return {
-            "type": "langchain_result",
-            "output": result,
-            "metadata": {
-                "chain_type": chain_type,
-                "llm_provider": llm_provider,
-                "memory_type": memory_type,
-                "timestamp": datetime.now().isoformat()
-            }
+            # Fallback to OpenAI
+            return ChatOpenAI(model='gpt-4', temperature=temperature)
+    
+    def get_output_parser(self, parser_type: str):
+        """Get output parser based on type"""
+        parsers = {
+            'string': StrOutputParser(),
+            'json': JsonOutputParser(),
+            'text': StrOutputParser()
         }
+        return parsers.get(parser_type, StrOutputParser())
+    
+    def create_tools(self, tool_configs: List[Dict[str, Any]]) -> List[BaseTool]:
+        """Create LangChain tools"""
+        tools = []
+        
+        for tool_config in tool_configs:
+            tool_type = tool_config.get('type', 'search')
+            
+            if tool_type == 'search':
+                tools.append(DuckDuckGoSearchRun())
+            elif tool_type == 'wikipedia':
+                tools.append(WikipediaQueryRun())
+            elif tool_type == 'calculator':
+                tools.append(self._create_calculator_tool())
+            elif tool_type == 'custom':
+                tools.append(self._create_custom_tool(tool_config))
+                
+        return tools
+    
+    @tool
+    def _create_calculator_tool(self):
+        """Create calculator tool"""
+        def calculator(expression: str) -> str:
+            """Calculate mathematical expressions safely"""
+            try:
+                # Simple safe evaluation
+                import ast
+                import operator
+                
+                # Supported operations
+                ops = {
+                    ast.Add: operator.add, ast.Sub: operator.sub,
+                    ast.Mult: operator.mul, ast.Div: operator.truediv,
+                    ast.Pow: operator.pow, ast.USub: operator.neg
+                }
+                
+                def eval_expr(expr):
+                    return eval_node(ast.parse(expr, mode='eval').body)
+                
+                def eval_node(node):
+                    if isinstance(node, ast.Constant):
+                        return node.value
+                    elif isinstance(node, ast.BinOp):
+                        return ops[type(node.op)](eval_node(node.left), eval_node(node.right))
+                    elif isinstance(node, ast.UnaryOp):
+                        return ops[type(node.op)](eval_node(node.operand))
+                    else:
+                        raise TypeError(node)
+                
+                result = eval_expr(expression)
+                return f"Result: {result}"
+            except Exception as e:
+                return f"Error: {str(e)}"
+        
+        return calculator
+    
+    def _create_custom_tool(self, config: Dict[str, Any]) -> BaseTool:
+        """Create custom tool from configuration"""
+        name = config.get('name', 'custom_tool')
+        description = config.get('description', 'A custom tool')
+        
+        @tool(name=name, description=description)
+        def custom_tool(input_text: str) -> str:
+            """Custom tool implementation"""
+            # This would be replaced with actual tool logic
+            return f"Custom tool {name} processed: {input_text}"
+        
+        return custom_tool
+    
+    async def run_simple_chain(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a simple LLM chain using LCEL"""
+        try:
+            llm = self.get_llm(config.get('frameworkConfig', {}))
+            
+            # Create prompt template
+            prompt_text = config.get('systemMessage', config.get('prompt', 'You are a helpful assistant.'))
+            
+            if '{input}' in prompt_text:
+                prompt = PromptTemplate.from_template(prompt_text)
+            else:
+                prompt = ChatPromptTemplate.from_messages([
+                    ("system", prompt_text),
+                    ("human", "{input}")
+                ])
+            
+            # Create output parser
+            output_parser = self.get_output_parser(config.get('outputParser', 'string'))
+            
+            # Build chain using LCEL
+            chain = prompt | llm | output_parser
+            
+            # Prepare input
+            input_text = inputs.get('input', inputs.get('message', ''))
+            if not input_text:
+                # Combine all inputs into a single string
+                input_text = "\n".join([f"{k}: {v}" for k, v in inputs.items()])
+            
+            # Execute chain
+            result = await chain.ainvoke({"input": input_text})
+            
+            return {
+                "type": "langchain_result",
+                "output": result,
+                "framework": "langchain",
+                "chain_type": "simple",
+                "success": True,
+                "metadata": {
+                    "model": config.get('frameworkConfig', {}).get('model', 'unknown'),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Simple chain execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "langchain",
+                "success": False
+            }
+    
+    async def run_conversation_chain(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run conversation chain with memory"""
+        try:
+            llm = self.get_llm(config.get('frameworkConfig', {}))
+            
+            # Create memory
+            memory_type = config.get('memoryType', 'buffer')
+            if memory_type == 'buffer':
+                memory = ConversationBufferMemory(return_messages=True)
+            elif memory_type == 'summary':
+                memory = ConversationSummaryMemory(llm=llm, return_messages=True)
+            elif memory_type == 'window':
+                memory = ConversationBufferWindowMemory(k=5, return_messages=True)
+            else:
+                memory = ConversationBufferMemory(return_messages=True)
+            
+            # Create prompt with memory
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", config.get('systemMessage', 'You are a helpful assistant.')),
+                ("placeholder", "{chat_history}"),
+                ("human", "{input}")
+            ])
+            
+            # Build conversation chain
+            chain = (
+                RunnablePassthrough.assign(
+                    chat_history=lambda x: memory.chat_memory.messages
+                )
+                | prompt
+                | llm
+                | StrOutputParser()
+            )
+            
+            input_text = inputs.get('input', inputs.get('message', ''))
+            
+            # Execute with memory
+            result = await chain.ainvoke({"input": input_text})
+            
+            # Save to memory
+            memory.chat_memory.add_user_message(input_text)
+            memory.chat_memory.add_ai_message(result)
+            
+            return {
+                "type": "langchain_result",
+                "output": result,
+                "framework": "langchain",
+                "chain_type": "conversation",
+                "success": True,
+                "metadata": {
+                    "memory_type": memory_type,
+                    "conversation_length": len(memory.chat_memory.messages),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Conversation chain execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "langchain",
+                "success": False
+            }
+    
+    async def run_rag_chain(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run Retrieval Augmented Generation chain"""
+        try:
+            llm = self.get_llm(config.get('frameworkConfig', {}))
+            
+            # Create embeddings
+            embeddings = OpenAIEmbeddings()
+            
+            # Get or create vector store
+            documents_source = config.get('documentsSource', 'text')
+            vectorstore = await self._get_or_create_vectorstore(
+                documents_source, config, embeddings
+            )
+            
+            # Create retriever
+            retriever = vectorstore.as_retriever(
+                search_kwargs={"k": config.get('similarityTopK', 3)}
+            )
+            
+            # Create RAG prompt
+            rag_prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a helpful assistant. Use the following context to answer the question.
+                If you don't know the answer based on the context, say so.
+                
+                Context: {context}"""),
+                ("human", "{question}")
+            ])
+            
+            # Build RAG chain using LCEL
+            rag_chain = (
+                {"context": retriever | self._format_docs, "question": RunnablePassthrough()}
+                | rag_prompt
+                | llm
+                | StrOutputParser()
+            )
+            
+            query = inputs.get('query', inputs.get('question', inputs.get('input', '')))
+            
+            # Execute RAG chain
+            result = await rag_chain.ainvoke(query)
+            
+            return {
+                "type": "langchain_result",
+                "output": result,
+                "framework": "langchain",
+                "chain_type": "rag",
+                "success": True,
+                "metadata": {
+                    "documents_source": documents_source,
+                    "query": query,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"RAG chain execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "langchain",
+                "success": False
+            }
+    
+    async def run_agent_chain(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run agent with tools"""
+        try:
+            llm = self.get_llm(config.get('frameworkConfig', {}))
+            
+            # Create tools
+            tool_configs = config.get('tools', [])
+            tools = self.create_tools(tool_configs)
+            
+            # Create agent prompt
+            agent_prompt = ChatPromptTemplate.from_messages([
+                ("system", config.get('systemMessage', 'You are a helpful assistant with access to tools.')),
+                ("placeholder", "{chat_history}"),
+                ("human", "{input}"),
+                ("placeholder", "{agent_scratchpad}")
+            ])
+            
+            # Create agent
+            agent = create_openai_functions_agent(llm, tools, agent_prompt)
+            
+            # Create agent executor
+            agent_executor = AgentExecutor(
+                agent=agent,
+                tools=tools,
+                verbose=config.get('verbose', True),
+                max_iterations=config.get('maxIterations', 3),
+                early_stopping_method="generate"
+            )
+            
+            input_text = inputs.get('input', inputs.get('message', ''))
+            
+            # Execute agent
+            result = await agent_executor.ainvoke({"input": input_text})
+            
+            return {
+                "type": "langchain_result",
+                "output": result.get('output', str(result)),
+                "framework": "langchain",
+                "chain_type": "agent",
+                "success": True,
+                "metadata": {
+                    "tools_used": [tool.name for tool in tools],
+                    "intermediate_steps": result.get('intermediate_steps', []),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Agent chain execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "langchain",
+                "success": False
+            }
+    
+    async def _get_or_create_vectorstore(self, source_type: str, config: Dict[str, Any], embeddings):
+        """Get or create vector store based on source type"""
+        cache_key = f"{source_type}_{hash(str(config))}"
+        
+        if cache_key in self.vectorstores_cache:
+            return self.vectorstores_cache[cache_key]
+        
+        if source_type == 'text':
+            # Use provided text
+            text = config.get('text', 'No text provided')
+            docs = [{"page_content": text, "metadata": {}}]
+        elif source_type == 'url':
+            # Load from URL
+            loader = WebBaseLoader(config.get('url', ''))
+            docs = loader.load()
+        else:
+            # Default text
+            docs = [{"page_content": "No documents available", "metadata": {}}]
+        
+        # Split documents
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=config.get('chunkSize', 1000),
+            chunk_overlap=config.get('chunkOverlap', 200)
+        )
+        splits = text_splitter.split_documents(docs)
+        
+        # Create vector store
+        vectorstore = FAISS.from_documents(splits, embeddings)
+        
+        # Cache it
+        self.vectorstores_cache[cache_key] = vectorstore
+        
+        return vectorstore
+    
+    def _format_docs(self, docs):
+        """Format documents for context"""
+        return "\n\n".join([doc.page_content for doc in docs])
 
-    except Exception as e:
-        logger.error(f"Error in LangChain tool: {str(e)}")
+# Main execution function
+async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Main entry point for LangChain tool execution"""
+    
+    if not LANGCHAIN_AVAILABLE:
         return {
             "type": "error",
-            "error": str(e),
-            "metadata": {
-                "chain_type": config.get("chain_type"),
-                "llm_provider": config.get("llm_provider"),
-                "timestamp": datetime.now().isoformat()
-            }
+            "error": "LangChain not available",
+            "framework": "langchain",
+            "success": False
+        }
+    
+    runner = EnhancedLangChainRunner()
+    
+    # Determine chain type
+    chain_type = config.get('chainType', 'simple')
+    
+    if chain_type == 'simple' or chain_type == 'llm':
+        return await runner.run_simple_chain(config, inputs)
+    elif chain_type == 'conversation':
+        return await runner.run_conversation_chain(config, inputs)
+    elif chain_type == 'rag' or chain_type == 'retrieval_qa':
+        return await runner.run_rag_chain(config, inputs)
+    elif chain_type == 'agent':
+        return await runner.run_agent_chain(config, inputs)
+    else:
+        return {
+            "type": "error",
+            "error": f"Unsupported chain type: {chain_type}",
+            "framework": "langchain",
+            "success": False
         }
 
+# Backward compatibility
 def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 
                tools: List[Dict[str, Any]] = None, memory: Dict[str, Any] = None, 
                inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Run a workflow with multiple agents and tasks using LangChain
+    """Run multi-agent LangChain workflow"""
     
-    Args:
-        agents: List of agent configurations
-        tasks: List of task configurations
-        tools: Optional list of tool configurations
-        memory: Optional memory configuration
-        inputs: Optional input data
-        
-    Returns:
-        Dictionary containing the workflow results
-    """
-    try:
-        if inputs is None:
-            inputs = {}
-            
+    # Convert to async and run
+    async def run_workflow():
         results = []
         
-        # Process each agent-task pair
         for agent, task in zip(agents, tasks):
-            # Configure agent
-            agent_config = {
-                "llm_provider": agent.get("llmProvider", "openai"),
-                "model": agent.get("llmModel", "gpt-4"),
-                "temperature": float(agent.get("temperature", 0.7)),
-                "chain_type": "agent",
-                "tools": agent.get("tools", []),
-                "memory_type": "buffer" if agent.get("enableMemory") else "none"
+            config = {
+                'chainType': agent.get('chainType', 'simple'),
+                'systemMessage': agent.get('systemMessage', task.get('description', '')),
+                'tools': agent.get('tools', tools or []),
+                'frameworkConfig': agent.get('frameworkConfig', {}),
+                'verbose': agent.get('verbose', True)
             }
             
-            # Add task-specific inputs
-            task_inputs = {
-                "input": task.get("description", ""),
-                **inputs
-            }
-            
-            # Run the agent
-            result = run_langchain_tool(agent_config, task_inputs)
+            result = await run_langchain_tool(config, inputs or {})
             results.append({
-                "agent_id": agent.get("nodeId"),
-                "task_id": task.get("nodeId"),
+                "agent_id": agent.get('nodeId'),
+                "task_id": task.get('nodeId'),
                 "result": result
             })
         
         return {
             "type": "workflow_result",
             "results": results,
+            "framework": "langchain",
             "metadata": {
                 "agent_count": len(agents),
                 "task_count": len(tasks),
                 "timestamp": datetime.now().isoformat()
             }
         }
-        
-    except Exception as e:
-        logger.error(f"Error in LangChain workflow: {str(e)}")
-        return {
-            "type": "error",
-            "error": str(e),
-            "metadata": {
-                "timestamp": datetime.now().isoformat()
-            }
-        } 
+    
+    # Run in event loop
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(run_workflow())
+    finally:
+        loop.close()

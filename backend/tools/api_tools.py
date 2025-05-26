@@ -150,3 +150,42 @@ def create_api_tool(tool_type: str, config: Dict[str, Any]) -> APITool:
     
     tool_class = tool_types.get(tool_type.lower(), APITool)
     return tool_class(config)
+
+async def run_api_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Run API tool with configuration and inputs"""
+    try:
+        # Extract tool type from config
+        tool_type = config.get('tool_type', 'rest')
+        
+        # Create API tool instance
+        api_tool = create_api_tool(tool_type, config)
+        
+        # Execute the tool
+        result = await api_tool.execute(inputs)
+        
+        # Format response for consistency
+        if result.get("success"):
+            return {
+                "success": True,
+                "output": result.get("data"),
+                "metadata": {
+                    "status_code": result.get("status_code"),
+                    "timestamp": result.get("timestamp"),
+                    "tool_type": tool_type
+                },
+                "framework": "api_tool"
+            }
+        else:
+            return {
+                "success": False,
+                "error": result.get("error"),
+                "framework": "api_tool"
+            }
+            
+    except Exception as e:
+        logger.error(f"API tool execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "framework": "api_tool"
+        }

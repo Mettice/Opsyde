@@ -14,6 +14,7 @@ from backend.utils.security import security_manager
 from backend.utils.logging import get_logger
 from backend.utils.api_utils import handle_exception
 from backend.core.runner import UnifiedRunner
+from backend.auth.dependencies import get_current_user
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["nodes"])
@@ -728,3 +729,39 @@ async def run_output(
             "type": "output_result",
             "node_id": data.get("node_id", "unknown")
         } 
+    
+
+@router.post("/run-universal-api-tool")
+async def run_universal_api_tool_endpoint(
+    data: Dict[str, Any],
+    current_user: Dict = Depends(get_current_user)
+) -> Dict[str, Any]:
+    '''Run a universal API tool with AI configuration'''
+    try:
+        from backend.frameworks.universal_api_runner import run_universal_api_tool
+        
+        # Extract configuration
+        config = data.get("config", {})
+        inputs = data.get("inputs", {})
+        
+        # Convert input data to NodeData objects if needed
+        from backend.models.data import NodeData
+        node_inputs = {
+            key: NodeData.from_value(value) if not isinstance(value, NodeData) else value
+            for key, value in inputs.items()
+        }
+        
+        # Execute universal API tool
+        result = await run_universal_api_tool(config, inputs)
+        
+        return {
+            "success": result.get("success", False),
+            "value": result.get("data"),
+            "metadata": result.get("metadata", {}),
+            "error": result.get("error"),
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error running universal API tool: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

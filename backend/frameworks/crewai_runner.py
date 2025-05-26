@@ -1,396 +1,324 @@
 import logging
-from typing import Dict, Any, List
-from frameworks.openrouter_runner import run_openrouter_chat
-from crewai import Agent, Task, Crew, Process
+from typing import Dict, Any, List, Optional
+from datetime import datetime
+import asyncio
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Option 1: If you have CrewAI installed, uncomment these imports:
-# try:
-#     from crewai import Agent, Task, Crew
-# except ImportError:
-#     logger.warning("CrewAI library not installed. Using simulated implementation.")
-#     Agent, Task, Crew = None, None, None
+try:
+    from crewai import Agent, Task, Crew, Process
+    from crewai.tools import BaseTool
+    from langchain.tools import Tool
+    CREWAI_AVAILABLE = True
+except ImportError:
+    logger.warning("CrewAI not installed - using fallback implementation")
+    CREWAI_AVAILABLE = False
+    # Define fallback BaseTool when CrewAI is not available
+    class BaseTool:
+        """Fallback BaseTool class when CrewAI is not available"""
+        pass
 
-def run_agent_chat(data: Dict[str, Any], inputs: Dict[str, Any]) -> str:
-    """
-    Run an agent chat interaction
-    """
-    prompt = data.get("prompt", "You are a helpful AI assistant.")
-    model = data.get("llmModel", "gpt-4")
-    temperature = data.get("temperature", 0.7)
-    max_tokens = data.get("max_tokens", 500)
-    role = data.get("role", "Assistant")
-    goal = data.get("goal", "")
-    backstory = data.get("backstory", "")
+class EnhancedCrewAIRunner:
+    """Enhanced CrewAI runner with full framework features"""
     
-    # Construct system message
-    system_message = f"""Role: {role}
+    def __init__(self):
+        self.agents_cache = {}
+        self.tools_cache = {}
+    
+    def get_llm_for_framework(self, framework_config: Dict[str, Any]):
+        """Get appropriate LLM based on configuration"""
+        provider = framework_config.get('provider', 'openai')
+        model = framework_config.get('model', 'gpt-4')
+        
+        if provider == 'openai':
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(
+                model=model,
+                temperature=framework_config.get('temperature', 0.7),
+                max_tokens=framework_config.get('max_tokens', 4000)
+            )
+        elif provider == 'anthropic':
+            from langchain_anthropic import ChatAnthropic
+            return ChatAnthropic(
+                model=model,
+                temperature=framework_config.get('temperature', 0.7),
+                max_tokens=framework_config.get('max_tokens', 4000)
+            )
+        # Add other providers as needed
+        
+    def create_crewai_tools(self, tool_configs: List[Dict[str, Any]]) -> List[BaseTool]:
+        """Create CrewAI-compatible tools"""
+        tools = []
+        
+        for tool_config in tool_configs:
+            tool_type = tool_config.get('type', 'api')
+            
+            if tool_type == 'search':
+                tools.append(self._create_search_tool(tool_config))
+            elif tool_type == 'api':
+                tools.append(self._create_api_tool(tool_config))
+            elif tool_type == 'file':
+                tools.append(self._create_file_tool(tool_config))
+                
+        return tools
+    
+    def _create_search_tool(self, config: Dict[str, Any]) -> BaseTool:
+        """Create search tool for CrewAI"""
+        from crewai.tools import tool
+        
+        @tool("search_tool")
+        def search(query: str) -> str:
+            """Search for information on the internet"""
+            # Implement search logic here
+            return f"Search results for: {query}"
+            
+        return search
+    
+    def _create_api_tool(self, config: Dict[str, Any]) -> BaseTool:
+        """Create API tool for CrewAI"""
+        from crewai.tools import tool
+        
+        @tool("api_tool")
+        def api_call(data: str) -> str:
+            """Make API calls to external services"""
+            # Implement API logic here
+            return f"API response for: {data}"
+            
+        return api_call
+    
+    async def run_crewai_agent(self, agent_config: Dict[str, Any], 
+                             task_config: Dict[str, Any],
+                             tools: List[Dict[str, Any]] = None,
+                             inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run CrewAI agent with full framework support"""
+        
+        if not CREWAI_AVAILABLE:
+            return await self._fallback_execution(agent_config, task_config, inputs)
+        
+        try:
+            # Create LLM
+            llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
+            
+            # Create tools
+            crewai_tools = []
+            if tools:
+                crewai_tools = self.create_crewai_tools(tools)
+            
+            # Create Agent
+            agent = Agent(
+                role=agent_config.get('role', 'Assistant'),
+                goal=agent_config.get('goal', 'Help the user'),
+                backstory=agent_config.get('backstory', ''),
+                verbose=agent_config.get('verbose', True),
+                allow_delegation=agent_config.get('allowDelegation', False),
+                tools=crewai_tools,
+                llm=llm,
+                max_iter=agent_config.get('max_iterations', 3),
+                memory=agent_config.get('enableMemory', False)
+            )
+            
+            # Create Task
+            task_description = task_config.get('description', '')
+            if inputs:
+                # Inject inputs into task description
+                input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
+                task_description = f"{task_description}\n\nInput Data:\n{input_lines}"
+            
+            task = Task(
+                description=task_description,
+                expected_output=task_config.get('expectedOutput', 'Detailed response'),
+                agent=agent,
+                output_file=task_config.get('output_file'),
+                tools=crewai_tools
+            )
+            
+            # Create and run Crew
+            crew = Crew(
+                agents=[agent],
+                tasks=[task],
+                process=Process.sequential,
+                verbose=True,
+                memory=agent_config.get('enableMemory', False)
+            )
+            
+            # Execute crew
+            result = crew.kickoff()
+            
+            return {
+                "type": "crewai_result",
+                "output": str(result),
+                "framework": "crewai",
+                "agent_role": agent_config.get('role'),
+                "task_description": task_config.get('description'),
+                "success": True,
+                "metadata": {
+                    "tools_used": len(crewai_tools),
+                    "memory_enabled": agent_config.get('enableMemory', False),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"CrewAI execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "crewai",
+                "success": False
+            }
+    
+    async def run_multi_agent_crew(self, agents: List[Dict[str, Any]], 
+                                 tasks: List[Dict[str, Any]],
+                                 process_type: str = "sequential",
+                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Run multi-agent CrewAI workflow"""
+        
+        if not CREWAI_AVAILABLE:
+            return {"error": "CrewAI not available", "success": False}
+        
+        try:
+            # Create agents
+            crew_agents = []
+            for agent_config in agents:
+                llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
+                
+                agent = Agent(
+                    role=agent_config.get('role'),
+                    goal=agent_config.get('goal'),
+                    backstory=agent_config.get('backstory'),
+                    verbose=agent_config.get('verbose', True),
+                    allow_delegation=agent_config.get('allowDelegation', False),
+                    llm=llm
+                )
+                crew_agents.append(agent)
+            
+            # Create tasks
+            crew_tasks = []
+            for i, task_config in enumerate(tasks):
+                # Assign agent to task (round-robin if more tasks than agents)
+                assigned_agent = crew_agents[i % len(crew_agents)]
+                
+                task_description = task_config.get('description', '')
+                if inputs:
+                    input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
+                    task_description = f"{task_description}\n\nInput Data:\n{input_lines}"
+                
+                task = Task(
+                    description=task_description,
+                    expected_output=task_config.get('expectedOutput', 'Detailed response'),
+                    agent=assigned_agent
+                )
+                crew_tasks.append(task)
+            
+            # Set process type
+            process = Process.sequential if process_type == "sequential" else Process.hierarchical
+            
+            # Create and run crew
+            crew = Crew(
+                agents=crew_agents,
+                tasks=crew_tasks,
+                process=process,
+                verbose=True
+            )
+            
+            result = crew.kickoff()
+            
+            return {
+                "type": "crew_result",
+                "output": str(result),
+                "framework": "crewai",
+                "agents_count": len(crew_agents),
+                "tasks_count": len(crew_tasks),
+                "process_type": process_type,
+                "success": True
+            }
+            
+        except Exception as e:
+            logger.error(f"Multi-agent CrewAI execution failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "framework": "crewai",
+                "success": False
+            }
+    
+    async def _fallback_execution(self, agent_config: Dict[str, Any], 
+                                task_config: Dict[str, Any],
+                                inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Fallback when CrewAI is not available"""
+        from .openrouter_runner import run_openrouter_chat
+        
+        # Simulate CrewAI behavior using direct LLM calls
+        role = agent_config.get('role', 'Assistant')
+        goal = agent_config.get('goal', 'Help the user')
+        backstory = agent_config.get('backstory', '')
+        task_description = task_config.get('description', '')
+        
+        prompt = f"""You are a {role}.
 Goal: {goal}
 Backstory: {backstory}
 
-{prompt}"""
+Task: {task_description}
 
-    # Format input message
-    input_message = ""
-    for key, val in inputs.items():
-        input_message += f"{key}: {val}\n"
-    
-    if not input_message:
-        input_message = "Hello, how can I help you?"
-
-    # Create messages array
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": input_message}
-    ]
-
-    try:
-        # Run the chat model
-        result = run_openrouter_chat(
-            messages=messages,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Agent chat error: {str(e)}")
-        return f"I apologize, but I encountered an error: {str(e)}"
-
-def run_task_chat(data: Dict[str, Any], inputs: Dict[str, Any]) -> str:
-    """
-    Run a task chat interaction
-    """
-    prompt = data.get("prompt", "")
-    model = data.get("llmModel", "gpt-4")
-    temperature = data.get("temperature", 0.7)
-    max_tokens = data.get("max_tokens", 500)
-    description = data.get("description", "")
-    expected_output = data.get("expectedOutput", "")
-    
-    # Construct system message
-    system_message = f"""Task Description: {description}
-Expected Output: {expected_output}
-
-{prompt}
-
-Please complete this task based on the provided input."""
-
-    # Format input message
-    input_message = ""
-    for key, val in inputs.items():
-        input_message += f"{key}: {val}\n"
-    
-    if not input_message:
-        input_message = "Please proceed with the task."
-
-    # Create messages array
-    messages = [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": input_message}
-    ]
-
-    try:
-        # Run the chat model
-        result = run_openrouter_chat(
-            messages=messages,
-            model=model,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Task chat error: {str(e)}")
-        return f"I apologize, but I encountered an error: {str(e)}"
-
-def run_crewai_workflow(crew_config: Dict[str, Any], framework: str = "crewai") -> Dict[str, Any]:
-    """
-    Run a CrewAI workflow with the specified configuration
-    """
-    try:
-        agents = crew_config.get("agents", [])
-        tasks = crew_config.get("tasks", [])
-        inputs = crew_config.get("inputs", {})
-        
-        results = []
-        
-        # Process agents
-        for agent in agents:
-            agent_result = run_agent_chat(agent, inputs)
-            results.append({
-                "type": "agent_result",
-                "agent_id": agent.get("nodeId"),
-                "output": agent_result
-            })
-        
-        # Process tasks
-        for task in tasks:
-            task_result = run_task_chat(task, inputs)
-            results.append({
-                "type": "task_result",
-                "task_id": task.get("nodeId"),
-                "output": task_result
-            })
-        
-        return {
-            "output": "Workflow completed successfully",
-            "type": "workflow_result",
-            "results": results
-        }
-        
-    except Exception as e:
-        logger.error(f"CrewAI workflow error: {str(e)}")
-        return {
-            "output": f"Error: {str(e)}",
-            "type": "error",
-            "error": str(e)
-        }
-
-def run_agents(agents, tasks, tools=None, memory=None, inputs=None):
-    """
-    Run a workflow with agents, tasks, and tools using the CrewAI framework.
-    
-    Args:
-        agents (list): List of agent configurations
-        tasks (list): List of task configurations
-        tools (list, optional): List of tool configurations
-        memory (dict, optional): Memory configuration
-        inputs (dict, optional): Input data for the workflow
-        
-    Returns:
-        dict: The result of the workflow execution
-    """
-    try:
-        # Ensure inputs is a dictionary
-        if inputs is None:
-            inputs = {}
-        elif isinstance(inputs, str):
-            try:
-                inputs = json.loads(inputs)
-            except Exception:
-                inputs = {"input": inputs}
-        
-        # For backward compatibility, if there's only one agent and one task
-        if len(agents) == 1 and len(tasks) == 1:
-            return run_crewai_workflow(
-                agent_data=agents[0],
-                task_data=tasks[0],
-                inputs=inputs
-            )
-        
-        # Process multiple agents and tasks
-        agent_instances = []
-        task_instances = []
-        
-        # Create agent instances
-        for agent_data in agents:
-            agent_name = agent_data.get("label", "Unknown Agent")
-            agent_role = agent_data.get("role", "Assistant")
-            agent_goal = agent_data.get("goal", "Help with tasks")
-            agent_backstory = agent_data.get("description", "I am an AI assistant")
-            
-            logger.info(f"Creating agent '{agent_name}' with role '{agent_role}'")
-            
-            # Here you would create actual CrewAI Agent instances if the library is available
-            agent_instances.append({
-                "name": agent_name,
-                "role": agent_role,
-                "goal": agent_goal,
-                "backstory": agent_backstory
-            })
-        
-        # Create task instances
-        for task_data in tasks:
-            task_name = task_data.get("label", "Unknown Task")
-            task_description = task_data.get("description", "Perform a task")
-            expected_output = task_data.get("expectedOutput", "Task result")
-            
-            logger.info(f"Creating task '{task_name}': {task_description}")
-            
-            # Here you would create actual CrewAI Task instances if the library is available
-            task_instances.append({
-                "name": task_name,
-                "description": task_description,
-                "expected_output": expected_output
-            })
-        
-        # Simulate execution
-        result_text = "CrewAI workflow executed with:\n"
-        result_text += f"- {len(agent_instances)} agents\n"
-        result_text += f"- {len(task_instances)} tasks\n"
+"""
         
         if inputs:
-            result_text += "Using the provided inputs:\n"
-            for key, value in inputs.items():
-                result_text += f"- {key}: {value}\n"
+            input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
+            prompt += f"Input Data:\n{input_lines}\n\n"
         
-        # Return a dictionary result
-        return {
-            "output": result_text,
-            "type": "crew_result",
-            "agents": [a["name"] for a in agent_instances],
-            "tasks": [t["name"] for t in task_instances]
-        }
+        prompt += "Please complete this task based on your role and the provided information."
         
-    except Exception as e:
-        logger.error(f"Error in CrewAI runner: {str(e)}")
+        messages = [{"role": "user", "content": prompt}]
+        
+        response = await run_openrouter_chat(
+            messages=messages,
+            model=agent_config.get('frameworkConfig', {}).get('model', 'gpt-4'),
+            temperature=agent_config.get('frameworkConfig', {}).get('temperature', 0.7)
+        )
+        
         return {
-            "output": f"Error: {str(e)}",
-            "type": "error",
-            "error": str(e)
+            "type": "crewai_fallback",
+            "output": response,
+            "framework": "crewai_fallback",
+            "success": True,
+            "note": "CrewAI not available - using fallback implementation"
         }
 
+# Main entry points for compatibility
 async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        # Extract configuration
-        agent_role = config.get("agent_role", "researcher")
-        llm_provider = config.get("llm_provider", "openai")
-        goal = config.get("goal", "")
-        backstory = config.get("backstory", "")
-        allow_delegation = config.get("allow_delegation", False)
-
-        # Create agent
-        agent = Agent(
-            role=agent_role,
-            goal=goal,
-            backstory=backstory,
-            allow_delegation=allow_delegation,
-            llm=get_llm_for_provider(llm_provider, config)
-        )
-
-        # Create and execute task
-        task = Task(
-            description=inputs.get("task", ""),
-            agent=agent
-        )
-
-        # Create crew with single agent
-        crew = Crew(
-            agents=[agent],
-            tasks=[task],
-            process=Process.sequential
-        )
-
-        result = await crew.kickoff()
-
-        return {
-            "type": "crewai_result",
-            "output": result,
-            "metadata": {
-                "agent_role": agent_role,
-                "llm_provider": llm_provider
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error in CrewAI tool: {str(e)}")
-        return {
-            "type": "error",
-            "error": str(e)
-        }
-
-async def run_crewai_agent(agent_data: Dict[str, Any], query: str, file_data: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Run a CrewAI agent with a single query and optional file data
+    """Main entry point for CrewAI tool execution"""
+    runner = EnhancedCrewAIRunner()
     
-    Args:
-        agent_data (dict): Agent configuration
-        query (str): The query to process
-        file_data (dict, optional): File data including filename and content
-        
-    Returns:
-        dict: The result of the agent execution
-    """
+    # Extract agent and task config from the unified config
+    agent_config = {
+        'role': config.get('role', 'Assistant'),
+        'goal': config.get('goal', 'Help the user'),
+        'backstory': config.get('backstory', ''),
+        'verbose': config.get('verbose', True),
+        'allowDelegation': config.get('allowDelegation', False),
+        'enableMemory': config.get('enableMemory', False),
+        'frameworkConfig': config.get('frameworkConfig', {})
+    }
+    
+    task_config = {
+        'description': config.get('prompt', config.get('description', 'Complete the requested task')),
+        'expectedOutput': config.get('expectedOutput', 'Detailed response')
+    }
+    
+    return await runner.run_crewai_agent(agent_config, task_config, inputs=inputs)
+
+def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 
+               tools: List[Dict[str, Any]] = None, memory: Dict[str, Any] = None, 
+               inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Run multi-agent CrewAI workflow"""
+    runner = EnhancedCrewAIRunner()
+    
+    # Run async function in sync context
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     try:
-        logger.info(f"Running CrewAI agent with query: {query}")
-        if file_data:
-            logger.info(f"File included: {file_data.get('filename', 'unnamed file')}")
-        
-        # Extract agent configuration
-        role = agent_data.get("role", "Assistant")
-        goal = agent_data.get("goal", "Help the user")
-        backstory = agent_data.get("backstory", "")
-        llm_config = agent_data.get("llm_config", {})
-        
-        # Extract LLM parameters
-        model = llm_config.get("model", "gpt-4")
-        temperature = llm_config.get("temperature", 0.7)
-        max_tokens = llm_config.get("max_tokens", 1000)
-        
-        # Import CrewAI components
-        from crewai import Agent, Task, Crew, Process
-        
-        # Configure LLM
-        try:
-            from langchain_openai import ChatOpenAI
-            
-            # Get API key from environment
-            import os
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set")
-                
-            # Create LLM
-            llm = ChatOpenAI(
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                api_key=api_key
-            )
-        except ImportError:
-            # Fall back to default CrewAI LLM
-            llm = None
-        
-        # Enhance query with file information if available
-        enhanced_query = query
-        if file_data:
-            # For simple text files that are not too large, include content
-            content = file_data.get('content', '')
-            if file_data.get('filename', '').endswith(('.txt', '.md', '.csv')) and len(content) < 10000:
-                enhanced_query = f"{query}\n\nFile content from {file_data.get('filename')}:\n\n{content}"
-            else:
-                # For other files, just mention the file
-                enhanced_query = f"{query}\n\nPlease analyze the file: {file_data.get('filename')}"
-            
-        # Create agent
-        agent = Agent(
-            role=role,
-            goal=goal,
-            backstory=backstory,
-            verbose=True,
-            allow_delegation=False,
-            llm=llm
+        return loop.run_until_complete(
+            runner.run_multi_agent_crew(agents, tasks, inputs=inputs)
         )
-        
-        # Create task
-        task = Task(
-            description=enhanced_query,
-            expected_output="A detailed and accurate response",
-            agent=agent
-        )
-        
-        # Create crew with single agent
-        crew = Crew(
-            agents=[agent],
-            tasks=[task],
-            process=Process.sequential,
-            verbose=True
-        )
-        
-        # Run the crew
-        logger.info("Executing CrewAI crew")
-        result = crew.kickoff()
-        
-        return {
-            "output": result,
-            "type": "crewai_result",
-            "agent_role": role,
-            "query": query,
-            "file": file_data.get('filename') if file_data else None
-        }
-            
-    except Exception as e:
-        logger.error(f"Error in run_crewai_agent: {str(e)}")
-        raise Exception(f"CrewAI execution failed: {str(e)}")
+    finally:
+        loop.close()

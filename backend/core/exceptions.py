@@ -23,6 +23,10 @@ class ExecutionError(CrewFlowError):
     """Raised when workflow execution fails"""
     pass
 
+class WorkflowError(CrewFlowError):
+    """Raised when workflow-specific operations fail"""
+    pass
+
 class NodeError(CrewFlowError):
     """Raised when node processing fails"""
     pass
