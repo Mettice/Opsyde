@@ -41,7 +41,7 @@ const FlowCanvasBase = forwardRef(({
   nodeStates = new Map(),
   connectionStates = new Map(),
   isExecuting = false,
-  ...props
+  ...reactFlowProps // All other props go to ReactFlow, not the div
 }, ref) => {
   const { 
     showTemplateGallery,
@@ -96,7 +96,7 @@ const FlowCanvasBase = forwardRef(({
         background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
         ...style 
       }}
-      {...props}
+      // NO PROPS SPREAD HERE - that was causing the warnings
     >
       <ReactFlow
         nodes={enhancedNodes}
@@ -113,6 +113,7 @@ const FlowCanvasBase = forwardRef(({
         fitView
         attributionPosition="bottom-left"
         proOptions={{ hideAttribution: true }}
+        {...reactFlowProps} // All other props go here to ReactFlow
       >
         <Background 
           variant="dots" 

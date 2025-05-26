@@ -201,6 +201,13 @@ class SecurityManager:
         """Check if a token is blacklisted"""
         return token in self.token_blacklist
 
+    def init_app(self, app):
+        """Initialize the security manager with the FastAPI app"""
+        # This method can be used for any app-specific initialization
+        # For now, it's just a placeholder for compatibility
+        logger.info("Security manager initialized with FastAPI app")
+        pass
+
     def validate_password_strength(self, password: str) -> Dict[str, Any]:
         """
         Validate password strength

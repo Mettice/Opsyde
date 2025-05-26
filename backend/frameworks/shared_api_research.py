@@ -55,34 +55,48 @@ class SharedAPIResearch:
             # Build AI prompt
             prompt = ai_config.get('description', '')
             
-            # Use user's LLM configuration
-            if llm_config["provider"] == "openai":
-                from backend.frameworks.openai_runner import run_openai_chat
-                messages = [{"role": "user", "content": prompt}]
-                ai_response = await run_openai_chat(
-                    messages, 
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
-            elif llm_config["provider"] == "anthropic":
-                from backend.frameworks.anthropic_runner import run_anthropic_chat
-                ai_response = await run_anthropic_chat(
-                    prompt,
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
+            # Use OpenRouter for all LLM providers since it supports OpenAI, Anthropic, etc.
+            from backend.frameworks.openrouter_runner import run_openrouter_chat
+            
+            # Map provider-specific models to OpenRouter format
+            model_mapping = {
+                "openai": {
+                    "gpt-4": "openai/gpt-4-turbo",
+                    "gpt-3.5-turbo": "openai/gpt-3.5-turbo"
+                },
+                "anthropic": {
+                    "claude-3-opus": "anthropic/claude-3-opus",
+                    "claude-3-sonnet": "anthropic/claude-3-sonnet",
+                    "claude-3-haiku": "anthropic/claude-3-haiku"
+                },
+                "openrouter": {}  # OpenRouter models can be used directly
+            }
+            
+            # Get the correct model name for OpenRouter
+            provider = llm_config["provider"]
+            model = llm_config["model"]
+            
+            if provider in model_mapping and model in model_mapping[provider]:
+                openrouter_model = model_mapping[provider][model]
+            elif provider == "openrouter":
+                openrouter_model = model
             else:
-                # Fallback to OpenRouter
-                from backend.frameworks.openrouter_runner import run_openrouter_chat
-                messages = [{"role": "user", "content": prompt}]
-                ai_response = await run_openrouter_chat(
-                    messages, 
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
+                # Default fallback
+                openrouter_model = "openai/gpt-4-turbo"
+            
+            # Use the appropriate API key
+            api_key = llm_config["key"]
+            if provider == "openai" and not api_key:
+                api_key = llm_config.get("openrouter_key")  # Fallback to OpenRouter
+            elif provider == "anthropic" and not api_key:
+                api_key = llm_config.get("openrouter_key")  # Fallback to OpenRouter
+            
+            messages = [{"role": "user", "content": prompt}]
+            ai_response = await run_openrouter_chat(
+                messages, 
+                model=openrouter_model,
+                temperature=0.3
+            )
             
             # Parse AI response into structured plan
             plan = self._parse_ai_response(ai_response)
@@ -101,34 +115,181 @@ class SharedAPIResearch:
             }
     
     def _parse_ai_response(self, ai_response: str) -> Dict[str, Any]:
-        """Parse AI response into structured integration plan"""
+        """Parse AI response into structured integration plan with robust error handling"""
         try:
             import json
+            import re
+            
+            logger.info(f"Parsing AI response (length: {len(ai_response)})")
+            
             # Try to extract JSON from response
+            json_str = None
+            
+            # Method 1: Look for ```json blocks
             if "```json" in ai_response:
                 json_start = ai_response.find("```json") + 7
                 json_end = ai_response.find("```", json_start)
-                json_str = ai_response[json_start:json_end].strip()
-            elif "{" in ai_response and "}" in ai_response:
+                if json_end != -1:
+                    json_str = ai_response[json_start:json_end].strip()
+                    logger.info("Found JSON in code block")
+                else:
+                    # If no closing ```, take everything after ```json
+                    json_str = ai_response[json_start:].strip()
+                    logger.info("Found JSON in code block (no closing backticks)")
+            
+            # Method 1.5: Look for just ``` blocks (sometimes AI uses ``` without json)
+            elif "```" in ai_response and "{" in ai_response:
+                json_start = ai_response.find("```")
+                # Skip the first ``` and any language identifier
+                while json_start < len(ai_response) and ai_response[json_start] not in ['{', '\n']:
+                    json_start += 1
+                if json_start < len(ai_response) and ai_response[json_start] == '\n':
+                    json_start += 1
+                
+                json_end = ai_response.find("```", json_start)
+                if json_end != -1:
+                    json_str = ai_response[json_start:json_end].strip()
+                    logger.info("Found JSON in generic code block")
+                else:
+                    json_str = ai_response[json_start:].strip()
+                    logger.info("Found JSON in generic code block (no closing backticks)")
+            
+            # Method 2: Look for { } blocks
+            if not json_str and "{" in ai_response and "}" in ai_response:
+                # Find the largest JSON-like block
                 json_start = ai_response.find("{")
-                json_end = ai_response.rfind("}") + 1
-                json_str = ai_response[json_start:json_end]
-            else:
+                brace_count = 0
+                json_end = -1
+                
+                for i in range(json_start, len(ai_response)):
+                    if ai_response[i] == "{":
+                        brace_count += 1
+                    elif ai_response[i] == "}":
+                        brace_count -= 1
+                        if brace_count == 0:
+                            json_end = i + 1
+                            break
+                
+                if json_end != -1:
+                    json_str = ai_response[json_start:json_end]
+                    logger.info("Found JSON by brace matching")
+            
+            if not json_str:
                 raise ValueError("No JSON found in AI response")
             
-            plan = json.loads(json_str)
+            # Clean up the JSON string
+            json_str = json_str.strip()
+            logger.info(f"Extracted JSON string (first 200 chars): {json_str[:200]}...")
             
-            # Validate required fields
+            # Try to fix common JSON issues
+            # Fix escaped quotes at the beginning of property names
+            json_str = re.sub(r'\\\"([^"]+)":', r'"\1":', json_str)
+            # Fix escaped quotes in the middle of strings
+            json_str = re.sub(r'\\\"', '"', json_str)
+            
+            # Additional cleanup for unterminated strings
+            # If we find an unterminated string, try to close it
+            lines = json_str.split('\n')
+            cleaned_lines = []
+            for line in lines:
+                # Check if line has an odd number of quotes (indicating unterminated string)
+                quote_count = line.count('"') - line.count('\\"')
+                if quote_count % 2 == 1 and not line.strip().endswith(','):
+                    # Try to close the string
+                    line = line + '"'
+                cleaned_lines.append(line)
+            json_str = '\n'.join(cleaned_lines)
+            
+            # Try to parse
+            try:
+                plan = json.loads(json_str)
+                logger.info("Successfully parsed JSON")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Initial JSON parse failed: {e}")
+                
+                # Try to fix common issues and parse again
+                # Remove trailing commas
+                json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+                
+                # Fix unescaped newlines in strings
+                json_str = re.sub(r'(?<!\\)\n', '\\n', json_str)
+                
+                # Try parsing again
+                try:
+                    plan = json.loads(json_str)
+                    logger.info("Successfully parsed JSON after cleanup")
+                except json.JSONDecodeError as e2:
+                    logger.error(f"JSON parse failed even after cleanup: {e2}")
+                    logger.error(f"Problematic JSON: {json_str[:500]}...")
+                    
+                    # Try to salvage what we can by truncating at the error point
+                    if "Unterminated string" in str(e2):
+                        # Find the error position and try to truncate there
+                        error_pos = getattr(e2, 'pos', None)
+                        if error_pos and error_pos > 100:
+                            # Try to find the last complete object before the error
+                            truncated_json = json_str[:error_pos]
+                            
+                            # Find the last complete closing brace
+                            brace_count = 0
+                            last_valid_pos = 0
+                            
+                            for i, char in enumerate(truncated_json):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                            
+                            if last_valid_pos > 0:
+                                try:
+                                    salvaged_json = truncated_json[:last_valid_pos]
+                                    plan = json.loads(salvaged_json)
+                                    logger.info("Successfully salvaged partial JSON")
+                                    # Continue with the salvaged plan
+                                except:
+                                    pass
+                    
+                    if 'plan' not in locals():
+                        # Return a basic fallback structure
+                        return {
+                            "service_name": "Unknown",
+                            "integration_type": "rest",
+                            "confidence": 0.5,
+                            "error": f"JSON parsing failed: {str(e2)}",
+                            "raw_response": ai_response[:1000]  # First 1000 chars for debugging
+                        }
+            
+            # Validate and ensure required fields
             required_fields = ["service_name", "integration_type", "confidence"]
             for field in required_fields:
                 if field not in plan:
-                    raise ValueError(f"Missing required field: {field}")
+                    if field == "service_name":
+                        plan[field] = "Unknown Service"
+                    elif field == "integration_type":
+                        plan[field] = "rest"
+                    elif field == "confidence":
+                        plan[field] = 0.7
+            
+            # Ensure confidence is a number
+            if not isinstance(plan.get("confidence"), (int, float)):
+                plan["confidence"] = 0.7
             
             return plan
             
         except Exception as e:
             logger.error(f"Failed to parse AI response: {str(e)}")
-            raise ValueError(f"Could not parse AI integration plan: {str(e)}")
+            logger.error(f"Response preview: {ai_response[:500]}...")
+            
+            # Return a basic fallback structure instead of raising
+            return {
+                "service_name": "Unknown Service",
+                "integration_type": "rest",
+                "confidence": 0.3,
+                "error": f"Parsing failed: {str(e)}",
+                "raw_response": ai_response[:1000] if ai_response else "No response"
+            }
 
     async def research_api(
         self,
@@ -185,7 +346,7 @@ class SharedAPIResearch:
             # Step 7: Test connectivity
             connectivity_test = await self._test_basic_connectivity(validated_spec)
             
-            return {
+            final_result = {
                 "success": True,
                 "service_name": service_name,
                 "protocol": protocol,
@@ -193,6 +354,10 @@ class SharedAPIResearch:
                 "api_type": validated_spec.get('api_type', protocol.upper()),
                 "base_url": validated_spec.get('base_url'),
                 "auth_type": validated_spec.get('auth_type', 'api_key'),
+                "auth_required": validated_spec.get('auth_required', True),
+                "auth_header": validated_spec.get('auth_header', 'Authorization'),
+                "auth_format": validated_spec.get('auth_format', 'Bearer {token}'),
+                "auth_instructions": validated_spec.get('auth_instructions', ''),
                 "endpoints": validated_spec.get('endpoints', []),
                 "primary_endpoints": validated_spec.get('primary_endpoints', []),
                 "default_headers": validated_spec.get('default_headers', {}),
@@ -208,6 +373,10 @@ class SharedAPIResearch:
                 "rate_limits": validated_spec.get('rate_limits', 'Unknown'),
                 "webhook_support": validated_spec.get('webhook_support', False)
             }
+            
+            logger.info(f"Final API research result: auth_type={final_result['auth_type']}, auth_required={final_result['auth_required']}")
+            
+            return final_result
             
         except Exception as e:
             logger.error(f"Unified API research failed: {str(e)}")
@@ -290,6 +459,8 @@ Please analyze and return:
    - Authentication method (API key, OAuth2, Bearer token, Basic auth, etc.)
    - Required headers and their format
    - Token/key placement (header, query, body)
+   - Specific instructions for obtaining credentials
+   - Whether authentication is required or optional
 
 3. ENDPOINTS (focus on {purpose.replace('_', ' ')}):
    - Available endpoints relevant to: {description}
@@ -313,6 +484,7 @@ Please analyze and return:
    - CORS considerations
 
 Return a comprehensive JSON response with this structure:
+```json
 {{
     "service_name": "{service_name}",
     "api_type": "{protocol.upper()}",
@@ -320,40 +492,36 @@ Return a comprehensive JSON response with this structure:
     "auth_type": "api_key|bearer_token|oauth2|basic_auth|custom",
     "auth_header": "Authorization|X-API-Key|custom",
     "auth_format": "Bearer {{token}}|{{key}}|custom format",
+    "auth_instructions": "Brief instructions for obtaining credentials",
+    "auth_required": true,
     "endpoints": [
         {{
             "name": "endpoint_name",
             "path": "/api/v1/resource",
             "method": "GET|POST|PUT|DELETE",
-            "description": "What this endpoint does",
-            "purpose": "input|output",
-            "required_params": {{}},
-            "optional_params": {{}},
-            "sample_request": {{}},
-            "sample_response": {{}}
+            "description": "Brief description"
         }}
     ],
     "default_headers": {{
-        "Content-Type": "application/json",
-        "User-Agent": "Workflow-Integration/1.0"
+        "Content-Type": "application/json"
     }},
-    "sample_input": {{}},
-    "sample_output": {{}},
-    "data_mapping": {{
-        "input_field": "api_field_name"
-    }},
-    "protocol_config": {{
-        // Protocol-specific configuration
-    }},
-    "supports_pagination": true|false,
-    "pagination_config": {{}},
-    "rate_limits": "requests per time period",
-    "webhook_support": true|false,
+    "supports_pagination": true,
+    "rate_limits": "Brief rate limit info",
+    "webhook_support": true,
     "documentation_url": "https://docs.{service_name.lower()}.com",
+    "integration_type": "rest",
     "confidence": 0.95
 }}
+```
 
-Ensure accuracy and provide working, testable configuration.
+IMPORTANT: 
+- Return ONLY valid JSON, no additional text
+- Escape all quotes properly in strings
+- Do not include comments in the JSON
+- Ensure all strings are properly terminated
+- For authentication, be specific about what credentials users need to provide
+- Include detailed auth_instructions with step-by-step guidance
+- Set auth_required to true if authentication is needed, false if optional
         """
         
         return prompt
@@ -453,6 +621,21 @@ Ensure accuracy and provide working, testable configuration.
         
         if not validated.get("sample_output"):
             validated["sample_output"] = {"result": "success", "data": {}}
+        
+        # Ensure authentication fields are properly set
+        if not validated.get("auth_required"):
+            validated["auth_required"] = validated.get("auth_type", "none") != "none"
+        
+        if not validated.get("auth_instructions") and validated.get("auth_type"):
+            auth_type = validated.get("auth_type", "api_key")
+            if auth_type == "api_key":
+                validated["auth_instructions"] = f"1. Sign up for a {service_name} account\n2. Go to your account settings or developer section\n3. Generate an API key\n4. Copy the API key and paste it in the field above"
+            elif auth_type == "bearer_token":
+                validated["auth_instructions"] = f"1. Sign up for a {service_name} account\n2. Go to your account settings or developer section\n3. Generate a bearer token\n4. Copy the token and paste it in the field above"
+            elif auth_type == "oauth2":
+                validated["auth_instructions"] = f"1. Create an app in {service_name}'s developer portal\n2. Get your client ID and secret\n3. Complete the OAuth2 flow to get an access token\n4. Use the access token for authentication"
+            elif auth_type == "basic_auth":
+                validated["auth_instructions"] = f"1. Use your {service_name} username and password\n2. Or create an app-specific password if supported\n3. Enter your credentials in the fields above"
         
         return validated
     
