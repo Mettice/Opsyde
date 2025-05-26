@@ -31,6 +31,7 @@ import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPane
 import Notification from '../components/Notification';
 import SmartToolSelector from '../components/templates/SmartToolSelector';
 import HelpTooltip from '../components/HelpTooltip';
+import CrewAIImporter from '../components/CrewAIImporter';
 
 // Data
 import { flowTemplates } from '../data/flowTemplates';
@@ -289,6 +290,8 @@ const BuilderPageContent = () => {
     isExecuting,
     textLogs,
     structuredLogs,
+    setTextLogs,
+    setStructuredLogs,
     executionState,
     runCrew,
     validateFlow,
@@ -520,8 +523,46 @@ const BuilderPageContent = () => {
     onUndo: handleUndo,
     onRedo: handleRedo,
     onToggleExecutionMode: toggleExecutionMode,
+    onShowCrewAIImporter: () => setShowCrewAIImporter(true),
     executionMode
   };
+
+  const [showCrewAIImporter, setShowCrewAIImporter] = useState(false);
+
+  // Add handler for CrewAI import
+  const handleCrewAIImport = useCallback(async (importData) => {
+    try {
+      console.log('Importing CrewAI workflow:', importData);
+      
+      // Clear existing nodes and edges
+      setNodes([]);
+      setEdges([]);
+      
+      // Add imported nodes and edges
+      setNodes(importData.nodes);
+      setEdges(importData.edges);
+      
+      // Show success notification
+      addNotification({
+        message: `Successfully imported ${importData.nodes.length} nodes and ${importData.edges.length} connections from CrewAI YAML`,
+        type: 'success'
+      });
+      
+      // Auto-fit the view to show all imported nodes
+      setTimeout(() => {
+        if (flowInstance.current) {
+          flowInstance.current.fitView({ padding: 0.1 });
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error importing CrewAI workflow:', error);
+      addNotification({
+        message: `Error importing CrewAI workflow: ${error.message}`,
+        type: 'error'
+      });
+    }
+  }, [setNodes, setEdges, addNotification, flowInstance]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -696,6 +737,12 @@ const BuilderPageContent = () => {
             toggleExecutionPanel(false);
             // Clear logs if needed - removed setStructuredLogs since it's not defined
           }}
+          onClearLogs={() => {
+            // Clear both text and structured logs
+            setTextLogs([]);
+            setStructuredLogs([]);
+            console.log('Logs cleared');
+          }}
           executionMode={executionMode}
           pollingInterval={customPollingInterval}
           onPollingIntervalChange={setCustomPollingInterval}
@@ -741,6 +788,14 @@ const BuilderPageContent = () => {
           />
         ))}
       </div>
+
+      {/* CrewAI Importer Modal */}
+      {showCrewAIImporter && (
+        <CrewAIImporter
+          onImport={handleCrewAIImport}
+          onClose={() => setShowCrewAIImporter(false)}
+        />
+      )}
     </div>
   );
 };

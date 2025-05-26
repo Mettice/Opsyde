@@ -1,58 +1,100 @@
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
 import asyncio
+import json
 
 logger = logging.getLogger(__name__)
 
 try:
     from crewai import Agent, Task, Crew, Process
     from crewai.tools import BaseTool
+    # New 0.1.21 imports
+    from crewai.tools import WebSearchTool, CalculatorTool, FileReaderTool
     from langchain.tools import Tool
     CREWAI_AVAILABLE = True
+    CREWAI_VERSION = "0.1.21"
 except ImportError:
     logger.warning("CrewAI not installed - using fallback implementation")
     CREWAI_AVAILABLE = False
+    CREWAI_VERSION = "fallback"
     # Define fallback BaseTool when CrewAI is not available
     class BaseTool:
         """Fallback BaseTool class when CrewAI is not available"""
         pass
 
 class EnhancedCrewAIRunner:
-    """Enhanced CrewAI runner with full framework features"""
+    """Enhanced CrewAI runner with 0.1.21 features support"""
     
     def __init__(self):
         self.agents_cache = {}
         self.tools_cache = {}
+        self.token_usage = {}
+        self.intermediate_steps = []
+    
+    def get_built_in_tools(self) -> Dict[str, BaseTool]:
+        """Get CrewAI 0.1.21 built-in tools"""
+        if not CREWAI_AVAILABLE:
+            return {}
+        
+        try:
+            return {
+                'web_search': WebSearchTool(),
+                'calculator': CalculatorTool(),
+                'file_reader': FileReaderTool(),
+            }
+        except Exception as e:
+            logger.warning(f"Could not load built-in tools: {e}")
+            return {}
     
     def get_llm_for_framework(self, framework_config: Dict[str, Any]):
-        """Get appropriate LLM based on configuration"""
+        """Get appropriate LLM based on configuration with token tracking"""
         provider = framework_config.get('provider', 'openai')
         model = framework_config.get('model', 'gpt-4')
         
+        # Enhanced LLM config for 0.1.21
+        llm_config = {
+            'temperature': framework_config.get('temperature', 0.7),
+            'max_tokens': framework_config.get('max_tokens', 4000),
+            'callbacks': self._get_token_callbacks()  # For token tracking
+        }
+        
         if provider == 'openai':
             from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=model,
-                temperature=framework_config.get('temperature', 0.7),
-                max_tokens=framework_config.get('max_tokens', 4000)
-            )
+            return ChatOpenAI(model=model, **llm_config)
         elif provider == 'anthropic':
             from langchain_anthropic import ChatAnthropic
-            return ChatAnthropic(
-                model=model,
-                temperature=framework_config.get('temperature', 0.7),
-                max_tokens=framework_config.get('max_tokens', 4000)
-            )
+            return ChatAnthropic(model=model, **llm_config)
         # Add other providers as needed
+    
+    def _get_token_callbacks(self):
+        """Get callbacks for token usage tracking"""
+        from langchain.callbacks import get_openai_callback
         
+        def token_callback(tokens_used, cost):
+            self.token_usage = {
+                'tokens': tokens_used,
+                'cost': cost,
+                'timestamp': datetime.now().isoformat()
+            }
+        
+        return [token_callback]
+    
     def create_crewai_tools(self, tool_configs: List[Dict[str, Any]]) -> List[BaseTool]:
-        """Create CrewAI-compatible tools"""
+        """Create CrewAI-compatible tools including built-in ones"""
         tools = []
+        built_in_tools = self.get_built_in_tools()
         
         for tool_config in tool_configs:
             tool_type = tool_config.get('type', 'api')
+            tool_name = tool_config.get('name', '')
             
+            # Check if it's a built-in tool first
+            if tool_name in built_in_tools:
+                tools.append(built_in_tools[tool_name])
+                continue
+            
+            # Create custom tools
             if tool_type == 'search':
                 tools.append(self._create_search_tool(tool_config))
             elif tool_type == 'api':
@@ -69,7 +111,9 @@ class EnhancedCrewAIRunner:
         @tool("search_tool")
         def search(query: str) -> str:
             """Search for information on the internet"""
-            # Implement search logic here
+            # Use built-in WebSearchTool if available
+            if 'web_search' in self.get_built_in_tools():
+                return self.get_built_in_tools()['web_search'].run(query)
             return f"Search results for: {query}"
             
         return search
@@ -89,22 +133,28 @@ class EnhancedCrewAIRunner:
     async def run_crewai_agent(self, agent_config: Dict[str, Any], 
                              task_config: Dict[str, Any],
                              tools: List[Dict[str, Any]] = None,
-                             inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Run CrewAI agent with full framework support"""
+                             inputs: Dict[str, Any] = None,
+                             return_intermediate_steps: bool = True,
+                             chat_mode: bool = False) -> Dict[str, Any]:
+        """Run CrewAI agent with 0.1.21 features support"""
         
         if not CREWAI_AVAILABLE:
             return await self._fallback_execution(agent_config, task_config, inputs)
         
         try:
-            # Create LLM
+            # Reset tracking
+            self.intermediate_steps = []
+            self.token_usage = {}
+            
+            # Create LLM with token tracking
             llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
             
-            # Create tools
+            # Create tools (including built-in ones)
             crewai_tools = []
             if tools:
                 crewai_tools = self.create_crewai_tools(tools)
             
-            # Create Agent
+            # Create Agent with enhanced config
             agent = Agent(
                 role=agent_config.get('role', 'Assistant'),
                 goal=agent_config.get('goal', 'Help the user'),
@@ -114,10 +164,12 @@ class EnhancedCrewAIRunner:
                 tools=crewai_tools,
                 llm=llm,
                 max_iter=agent_config.get('max_iterations', 3),
-                memory=agent_config.get('enableMemory', False)
+                memory=agent_config.get('enableMemory', False),
+                # New 0.1.21 features
+                step_callback=self._step_callback if return_intermediate_steps else None
             )
             
-            # Create Task
+            # Create Task with enhanced output handling
             task_description = task_config.get('description', '')
             if inputs:
                 # Inject inputs into task description
@@ -132,7 +184,7 @@ class EnhancedCrewAIRunner:
                 tools=crewai_tools
             )
             
-            # Create and run Crew
+            # Create Crew with enhanced configuration
             crew = Crew(
                 agents=[agent],
                 tasks=[task],
@@ -141,21 +193,38 @@ class EnhancedCrewAIRunner:
                 memory=agent_config.get('enableMemory', False)
             )
             
-            # Execute crew
-            result = crew.kickoff()
+            # Execute crew with new 0.1.21 methods
+            if chat_mode:
+                # Use new chat mode
+                result = crew.chat(
+                    message=task_description,
+                    return_intermediate_steps=return_intermediate_steps
+                )
+            else:
+                # Use enhanced run method
+                result = crew.run(
+                    inputs=inputs or {},
+                    return_intermediate_steps=return_intermediate_steps
+                )
             
+            # Enhanced result with 0.1.21 features
             return {
                 "type": "crewai_result",
                 "output": str(result),
                 "framework": "crewai",
+                "version": CREWAI_VERSION,
                 "agent_role": agent_config.get('role'),
                 "task_description": task_config.get('description'),
                 "success": True,
                 "metadata": {
                     "tools_used": len(crewai_tools),
                     "memory_enabled": agent_config.get('enableMemory', False),
+                    "chat_mode": chat_mode,
                     "timestamp": datetime.now().isoformat()
-                }
+                },
+                "token_usage": self.token_usage,
+                "intermediate_steps": self.intermediate_steps if return_intermediate_steps else [],
+                "agent_logs": self._get_agent_logs()
             }
             
         except Exception as e:
@@ -164,20 +233,46 @@ class EnhancedCrewAIRunner:
                 "type": "error",
                 "error": str(e),
                 "framework": "crewai",
+                "version": CREWAI_VERSION,
                 "success": False
             }
     
+    def _step_callback(self, step_data: Dict[str, Any]):
+        """Callback for intermediate steps tracking"""
+        self.intermediate_steps.append({
+            "step": len(self.intermediate_steps) + 1,
+            "data": step_data,
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def _get_agent_logs(self) -> List[Dict[str, Any]]:
+        """Get detailed agent execution logs"""
+        return [
+            {
+                "agent": "main",
+                "thoughts": step.get("data", {}),
+                "timestamp": step.get("timestamp")
+            }
+            for step in self.intermediate_steps
+        ]
+
     async def run_multi_agent_crew(self, agents: List[Dict[str, Any]], 
                                  tasks: List[Dict[str, Any]],
                                  process_type: str = "sequential",
-                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Run multi-agent CrewAI workflow"""
+                                 inputs: Dict[str, Any] = None,
+                                 return_intermediate_steps: bool = True,
+                                 chat_mode: bool = False) -> Dict[str, Any]:
+        """Run multi-agent CrewAI workflow with 0.1.21 features"""
         
         if not CREWAI_AVAILABLE:
             return {"error": "CrewAI not available", "success": False}
         
         try:
-            # Create agents
+            # Reset tracking
+            self.intermediate_steps = []
+            self.token_usage = {}
+            
+            # Create agents with enhanced configuration
             crew_agents = []
             for agent_config in agents:
                 llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
@@ -188,49 +283,67 @@ class EnhancedCrewAIRunner:
                     backstory=agent_config.get('backstory'),
                     verbose=agent_config.get('verbose', True),
                     allow_delegation=agent_config.get('allowDelegation', False),
-                    llm=llm
+                    llm=llm,
+                    memory=agent_config.get('enableMemory', False),
+                    step_callback=self._step_callback if return_intermediate_steps else None
                 )
                 crew_agents.append(agent)
             
-            # Create tasks
+            # Create tasks with agent assignment
             crew_tasks = []
             for i, task_config in enumerate(tasks):
                 # Assign agent to task (round-robin if more tasks than agents)
                 assigned_agent = crew_agents[i % len(crew_agents)]
                 
-                task_description = task_config.get('description', '')
-                if inputs:
-                    input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
-                    task_description = f"{task_description}\n\nInput Data:\n{input_lines}"
-                
                 task = Task(
-                    description=task_description,
+                    description=task_config.get('description'),
                     expected_output=task_config.get('expectedOutput', 'Detailed response'),
                     agent=assigned_agent
                 )
                 crew_tasks.append(task)
             
-            # Set process type
-            process = Process.sequential if process_type == "sequential" else Process.hierarchical
+            # Determine process type
+            process = Process.sequential
+            if process_type == "hierarchical":
+                process = Process.hierarchical
             
             # Create and run crew
             crew = Crew(
                 agents=crew_agents,
                 tasks=crew_tasks,
                 process=process,
-                verbose=True
+                verbose=True,
+                memory=any(agent.get('enableMemory', False) for agent in agents)
             )
             
-            result = crew.kickoff()
+            # Execute with new methods
+            if chat_mode:
+                result = crew.chat(
+                    message=f"Execute tasks: {[task.get('description') for task in tasks]}",
+                    return_intermediate_steps=return_intermediate_steps
+                )
+            else:
+                result = crew.run(
+                    inputs=inputs or {},
+                    return_intermediate_steps=return_intermediate_steps
+                )
             
             return {
-                "type": "crew_result",
+                "type": "multi_agent_result",
                 "output": str(result),
                 "framework": "crewai",
+                "version": CREWAI_VERSION,
                 "agents_count": len(crew_agents),
                 "tasks_count": len(crew_tasks),
                 "process_type": process_type,
-                "success": True
+                "success": True,
+                "metadata": {
+                    "chat_mode": chat_mode,
+                    "timestamp": datetime.now().isoformat()
+                },
+                "token_usage": self.token_usage,
+                "intermediate_steps": self.intermediate_steps if return_intermediate_steps else [],
+                "agent_logs": self._get_agent_logs()
             }
             
         except Exception as e:
@@ -239,6 +352,7 @@ class EnhancedCrewAIRunner:
                 "type": "error",
                 "error": str(e),
                 "framework": "crewai",
+                "version": CREWAI_VERSION,
                 "success": False
             }
     
@@ -287,6 +401,96 @@ Task: {task_description}
 # Main entry points for compatibility
 async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
     """Main entry point for CrewAI tool execution"""
+    
+    # Check if this is a tool configuration (has tool_name) or agent configuration
+    if config.get('tool_name') or config.get('frameworkConfig', {}).get('tool_name'):
+        # This is a tool execution request
+        return await run_crewai_individual_tool(config, inputs)
+    else:
+        # This is an agent execution request (legacy behavior)
+        return await run_crewai_agent_legacy(config, inputs)
+
+async def run_crewai_individual_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute individual CrewAI tools"""
+    try:
+        runner = EnhancedCrewAIRunner()
+        
+        # Get tool configuration
+        tool_name = config.get('tool_name') or config.get('frameworkConfig', {}).get('tool_name')
+        tool_config = config.get('config', {}) or config.get('frameworkConfig', {}).get('config', {})
+        
+        # Get built-in tools
+        built_in_tools = runner.get_built_in_tools()
+        
+        if tool_name in built_in_tools:
+            # Execute built-in tool
+            tool = built_in_tools[tool_name]
+            
+            # Prepare input for the tool
+            if tool_name == 'file_reader':
+                # For file_reader, we need to pass the file content or path
+                file_input = inputs.get('file_content') or inputs.get('content') or inputs.get('file_path') or ''
+                if not file_input:
+                    # Try to get from any input value
+                    for key, value in inputs.items():
+                        if isinstance(value, str) and value:
+                            file_input = value
+                            break
+                
+                result = tool.run(file_input)
+            elif tool_name == 'web_search':
+                # For web_search, we need a query
+                query = inputs.get('query') or inputs.get('search_query') or inputs.get('q') or ''
+                if not query:
+                    # Try to get from any input value
+                    for key, value in inputs.items():
+                        if isinstance(value, str) and value:
+                            query = value
+                            break
+                
+                result = tool.run(query)
+            elif tool_name == 'calculator':
+                # For calculator, we need an expression
+                expression = inputs.get('expression') or inputs.get('calculation') or inputs.get('expr') or ''
+                if not expression:
+                    # Try to get from any input value
+                    for key, value in inputs.items():
+                        if isinstance(value, str) and value:
+                            expression = value
+                            break
+                
+                result = tool.run(expression)
+            else:
+                # Generic tool execution
+                input_value = inputs.get('input') or inputs.get('data') or str(inputs)
+                result = tool.run(input_value)
+            
+            return {
+                "success": True,
+                "type": "crewai_tool_result",
+                "output": result,
+                "tool_name": tool_name,
+                "framework": "crewai",
+                "version": CREWAI_VERSION
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown CrewAI tool: {tool_name}. Available tools: {list(built_in_tools.keys())}",
+                "framework": "crewai"
+            }
+            
+    except Exception as e:
+        logger.error(f"CrewAI tool execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "framework": "crewai",
+            "tool_name": tool_name if 'tool_name' in locals() else "unknown"
+        }
+
+async def run_crewai_agent_legacy(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Legacy agent execution for backward compatibility"""
     runner = EnhancedCrewAIRunner()
     
     # Extract agent and task config from the unified config

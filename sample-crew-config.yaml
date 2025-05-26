@@ -1,0 +1,254 @@
+# 🚀 CrewAI 0.1.21 Enhanced Sample Configuration
+# This sample demonstrates all the new features and capabilities
+
+crew:
+  name: "AI Content Marketing Crew"
+  description: "A comprehensive crew for researching, creating, and distributing marketing content"
+  version: "0.1.21"
+
+# 🤖 AI Agents with Enhanced Features
+agents:
+  - name: "Research Specialist"
+    role: "Senior Market Research Analyst"
+    goal: "Conduct thorough market research and competitor analysis to inform content strategy"
+    backstory: |
+      You are an experienced market research analyst with 10+ years in digital marketing.
+      You excel at finding trends, analyzing competitors, and identifying content opportunities.
+      Your research forms the foundation for all marketing decisions.
+    llm:
+      model: "gpt-4"
+      temperature: 0.3
+      max_tokens: 4000
+    tools:
+      - web_search
+      - competitor_analysis
+      - trend_analyzer
+      - file_reader
+    memory: true
+    allow_delegation: false
+    max_iterations: 5
+    verbose: true
+
+  - name: "Content Creator"
+    role: "Creative Content Writer"
+    goal: "Create engaging, SEO-optimized content that converts readers into customers"
+    backstory: |
+      You are a creative content writer with expertise in storytelling and SEO.
+      You transform research insights into compelling narratives that resonate with target audiences.
+      Your content drives engagement and conversions.
+    llm:
+      model: "gpt-4"
+      temperature: 0.7
+      max_tokens: 6000
+    tools:
+      - content_generator
+      - seo_optimizer
+      - readability_checker
+      - file_reader
+    memory: true
+    allow_delegation: true
+    max_iterations: 3
+
+  - name: "Social Media Manager"
+    role: "Social Media Strategy Expert"
+    goal: "Adapt content for different social platforms and maximize engagement"
+    backstory: |
+      You are a social media expert who understands platform-specific best practices.
+      You know how to adapt content for LinkedIn, Twitter, Instagram, and Facebook
+      to maximize reach and engagement on each platform.
+    llm:
+      model: "gpt-3.5-turbo"
+      temperature: 0.8
+      max_tokens: 2000
+    tools:
+      - social_formatter
+      - hashtag_generator
+      - engagement_predictor
+    memory: true
+    allow_delegation: false
+
+  - name: "Quality Reviewer"
+    role: "Content Quality Assurance Specialist"
+    goal: "Ensure all content meets brand standards and quality requirements"
+    backstory: |
+      You are a meticulous editor with an eye for detail and brand consistency.
+      You ensure all content is error-free, on-brand, and optimized for performance
+      before it goes live.
+    llm:
+      model: "gpt-4"
+      temperature: 0.2
+      max_tokens: 3000
+    tools:
+      - grammar_checker
+      - brand_compliance
+      - fact_checker
+    memory: true
+
+# 🔧 Enhanced Tools with Different Types
+tools:
+  - name: "web_search"
+    description: "Search the web for current information and trends"
+    type: "search"
+    config:
+      max_results: 10
+      include_snippets: true
+      
+  - name: "file_reader"
+    description: "Read and analyze files"
+    type: "file"
+    config:
+      supported_formats: ["pdf", "txt", "docx"]
+      max_file_size: "10MB"
+      
+  - name: "competitor_analysis"
+    description: "Analyze competitor content and strategies"
+    type: "api"
+    config:
+      endpoint: "https://api.semrush.com/analytics"
+      method: "GET"
+      
+  - name: "trend_analyzer"
+    description: "Identify trending topics and keywords"
+    type: "api"
+    config:
+      endpoint: "https://trends.google.com/api"
+      
+  - name: "content_generator"
+    description: "Generate content based on research insights"
+    type: "llm"
+    config:
+      model: "gpt-4"
+      temperature: 0.7
+      
+  - name: "seo_optimizer"
+    description: "Optimize content for search engines"
+    type: "api"
+    config:
+      endpoint: "https://api.yoast.com/seo-check"
+      
+  - name: "readability_checker"
+    description: "Check content readability and suggest improvements"
+    type: "api"
+    
+  - name: "social_formatter"
+    description: "Format content for different social media platforms"
+    type: "custom"
+    
+  - name: "hashtag_generator"
+    description: "Generate relevant hashtags for social posts"
+    type: "llm"
+    
+  - name: "engagement_predictor"
+    description: "Predict engagement levels for social content"
+    type: "api"
+    
+  - name: "grammar_checker"
+    description: "Check grammar and spelling"
+    type: "api"
+    config:
+      endpoint: "https://api.grammarly.com/check"
+      
+  - name: "brand_compliance"
+    description: "Ensure content follows brand guidelines"
+    type: "custom"
+    
+  - name: "fact_checker"
+    description: "Verify facts and claims in content"
+    type: "api"
+
+# 📋 Tasks with Dependencies and Enhanced Features
+tasks:
+  - name: "Document Analysis"
+    description: "Analyze uploaded documents for insights and key information"
+    expected_output: "Document analysis report with key insights and extracted information"
+    agent: "Research Specialist"
+    tools:
+      - file_reader
+      - web_search
+    priority: "high"
+    async: false
+    
+  - name: "Market Research"
+    description: "Conduct comprehensive market research on the target topic"
+    expected_output: "Detailed market research report with trends, competitors, and opportunities"
+    agent: "Research Specialist"
+    depends_on: ["Document Analysis"]
+    tools:
+      - web_search
+      - competitor_analysis
+      - trend_analyzer
+    priority: "high"
+    async: false
+    
+  - name: "Content Strategy"
+    description: "Develop content strategy based on research findings"
+    expected_output: "Content strategy document with key messages and target audience insights"
+    agent: "Research Specialist"
+    depends_on: ["Market Research"]
+    tools:
+      - trend_analyzer
+    priority: "high"
+    
+  - name: "Blog Post Creation"
+    description: "Write a comprehensive blog post based on the research and strategy"
+    expected_output: "SEO-optimized blog post of 1500-2000 words"
+    agent: "Content Creator"
+    depends_on: ["Content Strategy"]
+    tools:
+      - content_generator
+      - seo_optimizer
+      - readability_checker
+      - file_reader
+    priority: "medium"
+    
+  - name: "Social Media Adaptation"
+    description: "Adapt the blog content for different social media platforms"
+    expected_output: "Platform-specific social media posts with optimal formatting"
+    agent: "Social Media Manager"
+    depends_on: ["Blog Post Creation"]
+    tools:
+      - social_formatter
+      - hashtag_generator
+      - engagement_predictor
+    priority: "medium"
+    async: true
+    
+  - name: "Content Review"
+    description: "Review all content for quality, accuracy, and brand compliance"
+    expected_output: "Approved content ready for publication with quality score"
+    agent: "Quality Reviewer"
+    depends_on: ["Blog Post Creation", "Social Media Adaptation"]
+    tools:
+      - grammar_checker
+      - brand_compliance
+      - fact_checker
+    priority: "high"
+    
+  - name: "Final Optimization"
+    description: "Apply final optimizations based on review feedback"
+    expected_output: "Publication-ready content package"
+    agent: "Content Creator"
+    depends_on: ["Content Review"]
+    tools:
+      - seo_optimizer
+      - readability_checker
+    priority: "low"
+
+# ⚙️ Crew Configuration
+process: "sequential"
+memory: true
+verbose: true
+max_rpm: 10
+language: "en"
+
+# 🎯 Execution Settings
+execution:
+  max_execution_time: 3600  # 1 hour
+  retry_attempts: 3
+  parallel_tasks: 2
+  
+# 📊 Monitoring
+monitoring:
+  track_performance: true
+  log_intermediate_steps: true
+  save_artifacts: true 

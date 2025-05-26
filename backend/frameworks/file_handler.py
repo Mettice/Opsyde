@@ -95,3 +95,76 @@ class FileData:
         except Exception as e:
             logger.error(f"Error decoding content: {str(e)}")
             return None 
+
+class FileHandler:
+    """Handler for file processing operations"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    async def process_file(self, file_data: FileData) -> Dict:
+        """Process file and extract content"""
+        try:
+            if not file_data or not file_data.is_valid():
+                return {"error": "Invalid file data"}
+            
+            result = {
+                "filename": file_data.filename,
+                "file_type": file_data.file_type,
+                "content": file_data.content
+            }
+            
+            # Extract text content based on file type
+            if file_data.is_pdf():
+                result["extracted_text"] = await self._extract_pdf_text(file_data)
+            elif file_data.file_type == "text/plain":
+                result["extracted_text"] = await self._extract_text_content(file_data)
+            else:
+                result["extracted_text"] = await self._extract_text_content(file_data)
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error processing file: {str(e)}")
+            return {"error": f"File processing failed: {str(e)}"}
+    
+    async def _extract_pdf_text(self, file_data: FileData) -> str:
+        """Extract text from PDF file"""
+        try:
+            content_bytes = file_data.get_content_bytes()
+            if not content_bytes:
+                return "No content available"
+            
+            try:
+                import PyPDF2
+                import io
+                
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(content_bytes))
+                text = ""
+                for page in pdf_reader.pages:
+                    text += page.extract_text() + "\n"
+                return text.strip()
+            except ImportError:
+                return f"PDF file ({len(content_bytes)} bytes) - Install PyPDF2 for text extraction"
+            except Exception as e:
+                return f"PDF file ({len(content_bytes)} bytes) - Error extracting text: {str(e)}"
+                
+        except Exception as e:
+            self.logger.error(f"Error extracting PDF text: {str(e)}")
+            return f"Error extracting PDF text: {str(e)}"
+    
+    async def _extract_text_content(self, file_data: FileData) -> str:
+        """Extract text content from file"""
+        try:
+            content_bytes = file_data.get_content_bytes()
+            if not content_bytes:
+                return "No content available"
+            
+            try:
+                return content_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                return f"Binary file content ({len(content_bytes)} bytes)"
+                
+        except Exception as e:
+            self.logger.error(f"Error extracting text content: {str(e)}")
+            return f"Error extracting text content: {str(e)}" 

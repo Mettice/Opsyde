@@ -373,23 +373,21 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       // Enhanced node cleaning with better error handling
       const cleanedNodes = nodes.map(node => {
         try {
+          // Create a copy of the node data and only remove specific problematic properties
+          const cleanedData = { ...node.data };
+          
+          // Remove function references and React-specific properties
+          delete cleanedData.onEdit;
+          delete cleanedData.onDelete;
+          delete cleanedData.onValueChange;
+          delete cleanedData.onChange;
+          delete cleanedData.onClick;
+          delete cleanedData.ref;
+          delete cleanedData.component;
+          
           return cleanDataForFlow({
             ...node,
-            data: {
-              ...node.data,
-              // Remove all function references and React-specific properties
-              onEdit: undefined,
-              onDelete: undefined,
-              onValueChange: undefined,
-              onChange: undefined,
-              onClick: undefined,
-              ref: undefined,
-              component: undefined,
-              // Keep essential data
-              label: node.data?.label || node.label || `Node ${node.id}`,
-              type: node.type,
-              id: node.id
-            }
+            data: cleanedData
           });
         } catch (error) {
           console.warn(`Error cleaning node ${node.id}:`, error);
@@ -873,15 +871,16 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     isExecuting,
     textLogs,
     structuredLogs,
+    setTextLogs,
+    setStructuredLogs,
     executionState,
-    nodeStates, // Export node states
-    connectionStates, // Export connection states
+    nodeStates,
+    connectionStates,
     runCrew,
     validateFlow,
-    updateNodeState, // Export for external use
-    triggerConnectionAnimation, // Export for external use
-    testExecutionStates, // Export test function
-    // Additional utility functions
+    updateNodeState,
+    triggerConnectionAnimation,
+    testExecutionStates,
     cleanDataForFlow,
     extractNodeName,
     getNodeEmoji
