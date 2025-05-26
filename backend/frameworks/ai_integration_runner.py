@@ -398,34 +398,48 @@ Be specific about endpoints and data mapping. Return only valid JSON.
             # Build AI prompt
             prompt = self._build_integration_prompt(output_type, ai_config, data)
             
-            # Use user's LLM configuration
-            if llm_config["provider"] == "openai":
-                from backend.frameworks.openai_runner import run_openai_chat
-                messages = [{"role": "user", "content": prompt}]
-                ai_response = await run_openai_chat(
-                    messages, 
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
-            elif llm_config["provider"] == "anthropic":
-                from backend.frameworks.anthropic_runner import run_anthropic_chat
-                ai_response = await run_anthropic_chat(
-                    prompt,
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
+            # Use OpenRouter for all LLM providers since it supports OpenAI, Anthropic, etc.
+            from backend.frameworks.openrouter_runner import run_openrouter_chat
+            
+            # Map provider-specific models to OpenRouter format
+            model_mapping = {
+                "openai": {
+                    "gpt-4": "openai/gpt-4-turbo",
+                    "gpt-3.5-turbo": "openai/gpt-3.5-turbo"
+                },
+                "anthropic": {
+                    "claude-3-opus": "anthropic/claude-3-opus",
+                    "claude-3-sonnet": "anthropic/claude-3-sonnet",
+                    "claude-3-haiku": "anthropic/claude-3-haiku"
+                },
+                "openrouter": {}  # OpenRouter models can be used directly
+            }
+            
+            # Get the correct model name for OpenRouter
+            provider = llm_config["provider"]
+            model = llm_config["model"]
+            
+            if provider in model_mapping and model in model_mapping[provider]:
+                openrouter_model = model_mapping[provider][model]
+            elif provider == "openrouter":
+                openrouter_model = model
             else:
-                # Fallback to OpenRouter
-                from backend.frameworks.openrouter_runner import run_openrouter_chat
-                messages = [{"role": "user", "content": prompt}]
-                ai_response = await run_openrouter_chat(
-                    messages, 
-                    model=llm_config["model"],
-                    api_key=llm_config["key"],
-                    temperature=0.3
-                )
+                # Default fallback
+                openrouter_model = "openai/gpt-4-turbo"
+            
+            # Use the appropriate API key
+            api_key = llm_config["key"]
+            if provider == "openai" and not api_key:
+                api_key = llm_config.get("openrouter_key")  # Fallback to OpenRouter
+            elif provider == "anthropic" and not api_key:
+                api_key = llm_config.get("openrouter_key")  # Fallback to OpenRouter
+            
+            messages = [{"role": "user", "content": prompt}]
+            ai_response = await run_openrouter_chat(
+                messages, 
+                model=openrouter_model,
+                temperature=0.3
+            )
             
             # Parse AI response into structured plan
             plan = self._parse_ai_response(ai_response)

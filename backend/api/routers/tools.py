@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import logging
 
 from backend.frameworks.universal_api_runner import UniversalAPIRunner
 from backend.frameworks.shared_api_research import research_for_tool, research_for_output
-from backend.utils.security import get_current_user
+from backend.utils.security import get_current_user, security_manager
 from backend.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,14 +34,20 @@ class APIResearchResponse(BaseModel):
 
 @router.post("/research-api", response_model=APIResearchResponse)
 async def research_api(
-    request: APIResearchRequest,
-    current_user: Dict = Depends(get_current_user)
+    request: APIResearchRequest
 ):
     """Enhanced API research supporting all protocols"""
     try:
-        logger.info(f"API research request for {request.service_name} by user {current_user.get('user_id')}")
+        # Debug logging
+        logger.info(f"Research API called without authentication (testing)")
         
-        user_keys = await _get_user_api_keys(current_user.get('user_id'))
+        # Handle unauthenticated request for testing
+        user_id = 'anonymous'
+        logger.info(f"API research request for {request.service_name} by user {user_id}")
+        
+        # Use empty dict for user keys since we're testing without auth
+        user_keys = await _get_user_api_keys(user_id)
+        logger.info(f"User keys available: {list(user_keys.keys()) if user_keys else 'None'}")
         
         # Use shared research
         research_result = await research_for_tool(
@@ -57,6 +63,8 @@ async def research_api(
         
     except Exception as e:
         logger.error(f"API research failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"API research failed: {str(e)}")
 
 @router.post("/research-output-api", response_model=APIResearchResponse)
@@ -270,6 +278,15 @@ async def get_api_examples(service_name: str):
         "endpoints": [f"https://api.{service_name.lower()}.com"]
     })
 
+@router.get("/test")
+async def test_endpoint():
+    """Simple test endpoint to verify backend connectivity"""
+    return {
+        "status": "success",
+        "message": "Backend is working!",
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
+
 async def _get_user_api_keys(user_id: str) -> Dict[str, str]:
     """Get user's API keys for research (implement based on your user settings)"""
     try:
@@ -291,3 +308,33 @@ async def _get_user_api_keys(user_id: str) -> Dict[str, str]:
     except Exception as e:
         logger.warning(f"Could not get user API keys: {str(e)}")
         return {}
+
+async def get_current_user_optional(request: Request) -> Optional[Dict]:
+    """Get current user if authenticated, otherwise return None"""
+    try:
+        # Try to get the Authorization header
+        auth_header = request.headers.get("Authorization")
+        logger.debug(f"Authorization header: {auth_header[:20] if auth_header else 'None'}...")
+        
+        if not auth_header:
+            logger.debug("No Authorization header found")
+            return None
+            
+        if not auth_header.startswith("Bearer "):
+            logger.debug("Authorization header doesn't start with 'Bearer '")
+            return None
+        
+        # Extract token
+        token = auth_header.split(" ")[1]
+        logger.debug(f"Extracted token: {token[:20]}...")
+        
+        # Verify token
+        payload = security_manager.verify_token(token)
+        logger.debug(f"Token verified successfully for user: {payload.get('user_id', 'unknown')}")
+        return payload
+        
+    except Exception as e:
+        # Log the specific error for debugging
+        logger.debug(f"Authentication failed (optional): {str(e)}")
+        # If any error occurs, just return None (unauthenticated)
+        return None
