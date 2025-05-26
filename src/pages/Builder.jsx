@@ -660,7 +660,7 @@ const BuilderPageContent = () => {
             toggleExecutionPanel(true);
           }}
           disabled={isExecuting}
-          className="fixed bottom-6 right-32 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition text-sm"
+          className="fixed bottom-6 right-48 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition text-sm z-40"
           title="Test execution visual states"
         >
           🧪 Test States

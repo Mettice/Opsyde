@@ -45,6 +45,7 @@ const FlowCanvasBase = forwardRef(({
 }, ref) => {
   const { 
     showTemplateGallery,
+    toggleTemplateGallery,
   } = useBuilderUI();
 
   // Enhanced connection validation
@@ -174,6 +175,22 @@ const FlowCanvasBase = forwardRef(({
 
       {/* Template Gallery */}
       {showTemplateGallery && <TemplateGallery />}
+
+      {/* Floating Template Button */}
+      {!showTemplateGallery && (
+        <button
+          onClick={() => toggleTemplateGallery(true)}
+          className="fixed bottom-32 left-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-50 group"
+          title="Browse Templates"
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-xl">📚</span>
+            <span className="hidden group-hover:block text-sm font-medium whitespace-nowrap">
+              Templates
+            </span>
+          </div>
+        </button>
+      )}
 
       {/* Simple Visual Metrics */}
       <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3 text-xs">

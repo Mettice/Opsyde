@@ -1,5 +1,7 @@
 // components/Builder/Toolbar.js
 import React, { useState, useRef, useEffect } from 'react';
+import PropTypes from 'prop-types';
+import { useBuilderUI } from '../../contexts/BuilderUIContext';
 
 const Toolbar = ({
   onAddAgent,
@@ -25,6 +27,8 @@ const Toolbar = ({
   const [activeTooltip, setActiveTooltip] = useState(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showImportDropdown, setShowImportDropdown] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const { toggleTemplateGallery } = useBuilderUI();
   
   // Tooltip content with more detailed descriptions
   const tooltips = {
@@ -127,7 +131,13 @@ const Toolbar = ({
   const handleImportSelect = (optionId) => {
     setShowImportDropdown(false);
     
-    // Create a file input element
+    if (optionId === 'template') {
+      // Show template gallery
+      toggleTemplateGallery(true);
+      return;
+    }
+    
+    // Create a file input element for other import types
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.accept = '.json,.flow';

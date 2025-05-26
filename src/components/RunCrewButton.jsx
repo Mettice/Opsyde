@@ -17,7 +17,7 @@ export default function RunCrewButton({ onClick, isRunning, hasErrors, nodeCount
     <button
       onClick={onClick}
       disabled={isDisabled}
-      className={`fixed bottom-6 right-6 px-6 py-3 text-white rounded-full shadow-lg transition ${
+      className={`fixed bottom-6 right-6 px-6 py-3 text-white rounded-full shadow-lg transition z-50 ${
         isRunning 
           ? "bg-blue-500 animate-pulse" 
           : hasErrors 
