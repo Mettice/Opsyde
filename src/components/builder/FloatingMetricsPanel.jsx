@@ -2,7 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import GraphMetricsPanel from './GraphMetricsPanel';
 import ConnectionRulesPanel from './ConnectionRulesPanel';
 
-export default function FloatingMetricsPanel({ nodes, edges, onHighlightNodes }) {
+export default function FloatingMetricsPanel({ 
+  nodes, 
+  edges, 
+  onHighlightNodes,
+  nodeStates = new Map(),
+  connectionStates = new Map(),
+  isExecuting = false
+}) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('metrics');
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -189,6 +196,9 @@ export default function FloatingMetricsPanel({ nodes, edges, onHighlightNodes })
                     edges={edges} 
                     onHighlightNodes={onHighlightNodes}
                     darkMode={darkMode}
+                    nodeStates={nodeStates}
+                    connectionStates={connectionStates}
+                    isExecuting={isExecuting}
                   />
                 </div>
               )}
