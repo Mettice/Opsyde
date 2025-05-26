@@ -1,23 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 
 /**
- * Enhanced connection animation hook with performance metrics and throughput tracking
+ * Enhanced connection animation hook with real-time execution flow visualization
  */
-export const useConnectionAnimation = (edges, setEdges) => {
+export const useConnectionAnimation = () => {
   const [activeConnections, setActiveConnections] = useState(new Set());
   const [connectionStates, setConnectionStates] = useState(new Map());
   const [performanceMetrics, setPerformanceMetrics] = useState(new Map());
+  const [executionFlow, setExecutionFlow] = useState([]);
+  const [currentExecutingNode, setCurrentExecutingNode] = useState(null);
   const timeoutsRef = useRef(new Map());
 
-  // Enhanced connection state update with performance tracking
+  // Enhanced connection state update with real-time metrics
   const updateConnectionState = useCallback((edgeId, state, options = {}) => {
-    const { 
-      duration = 0, 
-      throughput = 0, 
-      dataSize = 0, 
+    const {
+      throughput = 0,
+      dataSize = 0,
       errorRate = 0,
       latency = 0,
-      dataPreview = null 
+      dataPreview = null,
+      dataType = 'data',
+      animated = false
     } = options;
 
     setConnectionStates(prev => {
@@ -27,378 +30,397 @@ export const useConnectionAnimation = (edges, setEdges) => {
       newStates.set(edgeId, {
         ...currentState,
         state,
-        timestamp: Date.now(),
         throughput,
         dataSize,
         errorRate,
         latency,
-        dataPreview
+        dataPreview,
+        dataType,
+        animated,
+        timestamp: Date.now(),
+        // Enhanced visual properties
+        particles: state === 'active' || state === 'processing',
+        glowing: state === 'active' || state === 'processing' || state === 'success',
+        pulsing: state === 'processing' || errorRate > 0
       });
       
       return newStates;
     });
 
     // Update performance metrics
-    if (throughput > 0 || dataSize > 0) {
-      setPerformanceMetrics(prev => {
-        const newMetrics = new Map(prev);
-        const currentMetrics = newMetrics.get(edgeId) || {
-          totalDataTransferred: 0,
-          averageThroughput: 0,
-          peakThroughput: 0,
-          totalTransactions: 0,
-          averageLatency: 0,
-          errorCount: 0
-        };
+    setPerformanceMetrics(prev => {
+      const newMetrics = new Map(prev);
+      const currentMetrics = newMetrics.get(edgeId) || {
+        totalDataTransferred: 0,
+        averageThroughput: 0,
+        peakThroughput: 0,
+        totalTransactions: 0,
+        averageLatency: 0,
+        errorCount: 0
+      };
 
-        newMetrics.set(edgeId, {
-          totalDataTransferred: currentMetrics.totalDataTransferred + dataSize,
-          averageThroughput: (currentMetrics.averageThroughput + throughput) / 2,
-          peakThroughput: Math.max(currentMetrics.peakThroughput, throughput),
-          totalTransactions: currentMetrics.totalTransactions + 1,
-          averageLatency: (currentMetrics.averageLatency + latency) / 2,
-          errorCount: currentMetrics.errorCount + (state === 'error' ? 1 : 0)
-        });
-
-        return newMetrics;
+      newMetrics.set(edgeId, {
+        ...currentMetrics,
+        totalDataTransferred: currentMetrics.totalDataTransferred + dataSize,
+        averageThroughput: (currentMetrics.averageThroughput + throughput) / 2,
+        peakThroughput: Math.max(currentMetrics.peakThroughput, throughput),
+        totalTransactions: currentMetrics.totalTransactions + 1,
+        averageLatency: (currentMetrics.averageLatency + latency) / 2,
+        errorCount: currentMetrics.errorCount + (errorRate > 0 ? 1 : 0),
+        lastUpdate: Date.now()
       });
-    }
 
-    // Update edge data
-    setEdges(edges => edges.map(edge => {
-      if (edge.id === edgeId) {
-        return {
-          ...edge,
-          data: {
-            ...edge.data,
-            connectionState: state,
-            isActive: state === 'active' || state === 'processing',
-            throughput,
-            errorRate,
-            latency,
-            dataPreview,
-            lastUpdate: Date.now()
-          }
-        };
-      }
-      return edge;
-    }));
+      return newMetrics;
+    });
+  }, []);
 
-    // Auto-clear temporary states
-    if (duration > 0) {
-      const timeoutId = setTimeout(() => {
-        updateConnectionState(edgeId, 'idle');
-      }, duration);
-      
-      timeoutsRef.current.set(edgeId, timeoutId);
-    }
-  }, [setEdges]);
-
-  // Enhanced activation with throughput simulation
+  // Enhanced connection activation with realistic simulation
   const activateConnection = useCallback((edgeId, duration = 3000, options = {}) => {
-    const { 
-      simulateThroughput = true, 
-      maxThroughput = 1.0,
+    const {
       dataType = 'data',
-      dataPreview = null 
+      simulateRealistic = true,
+      onComplete = null
     } = options;
 
     setActiveConnections(prev => new Set([...prev, edgeId]));
-    
-    if (simulateThroughput) {
-      // Simulate realistic throughput patterns
+
+    if (simulateRealistic) {
+      // Simulate realistic data flow with varying throughput
       const startTime = Date.now();
-      const updateInterval = 100; // Update every 100ms
-      
-      const throughputSimulation = setInterval(() => {
+      const interval = setInterval(() => {
         const elapsed = Date.now() - startTime;
         const progress = elapsed / duration;
         
         if (progress >= 1) {
-          clearInterval(throughputSimulation);
-          updateConnectionState(edgeId, 'success', { 
-            throughput: 0, 
-            dataSize: Math.random() * 1000,
-            latency: 50 + Math.random() * 100,
-            dataPreview 
-          });
+          clearInterval(interval);
           setActiveConnections(prev => {
             const newSet = new Set(prev);
             newSet.delete(edgeId);
             return newSet;
           });
+          
+          updateConnectionState(edgeId, 'success', {
+            throughput: 0,
+            dataType,
+            animated: false
+          });
+          
+          if (onComplete) onComplete();
           return;
         }
 
-        // Simulate variable throughput with realistic patterns
-        const basePattern = Math.sin(progress * Math.PI * 2) * 0.3 + 0.7;
-        const noise = (Math.random() - 0.5) * 0.2;
-        const currentThroughput = Math.max(0, Math.min(maxThroughput, basePattern + noise));
+        // Simulate varying throughput with realistic patterns
+        const baseThroughput = 50;
+        const variation = Math.sin(progress * Math.PI * 4) * 30;
+        const randomNoise = (Math.random() - 0.5) * 20;
+        const currentThroughput = Math.max(0, baseThroughput + variation + randomNoise);
         
-        updateConnectionState(edgeId, 'processing', {
+        // Simulate occasional errors
+        const errorRate = Math.random() > 0.95 ? Math.random() * 0.1 : 0;
+        
+        // Simulate latency variations
+        const baseLatency = 50;
+        const latencyVariation = Math.random() * 30;
+        const currentLatency = baseLatency + latencyVariation;
+
+        updateConnectionState(edgeId, 'active', {
           throughput: currentThroughput,
-          dataSize: currentThroughput * 10,
-          latency: 20 + Math.random() * 50,
-          dataPreview
+          dataSize: currentThroughput * 0.1, // Convert to data size
+          errorRate,
+          latency: currentLatency,
+          dataType,
+          animated: true,
+          dataPreview: generateDataPreview(dataType, progress)
         });
-      }, updateInterval);
-      
-      timeoutsRef.current.set(`${edgeId}-simulation`, throughputSimulation);
+      }, 100);
+
+      // Store interval for cleanup
+      timeoutsRef.current.set(edgeId, interval);
     } else {
-      updateConnectionState(edgeId, 'processing', { dataPreview });
-      
-      setTimeout(() => {
-        updateConnectionState(edgeId, 'success');
+      // Simple activation
+      updateConnectionState(edgeId, 'active', {
+        throughput: 75,
+        dataType,
+        animated: true
+      });
+
+      const timeout = setTimeout(() => {
         setActiveConnections(prev => {
           const newSet = new Set(prev);
           newSet.delete(edgeId);
           return newSet;
         });
+        
+        updateConnectionState(edgeId, 'success', {
+          throughput: 0,
+          dataType,
+          animated: false
+        });
+        
+        if (onComplete) onComplete();
       }, duration);
+
+      timeoutsRef.current.set(edgeId, timeout);
     }
   }, [updateConnectionState]);
 
-  // Enhanced error state with error details
-  const setConnectionError = useCallback((edgeId, errorDetails = {}, duration = 2000) => {
-    const { 
-      errorMessage = 'Connection failed',
-      errorCode = 'CONN_ERROR',
-      retryCount = 0 
-    } = errorDetails;
-
-    updateConnectionState(edgeId, 'error', {
-      errorRate: 1.0,
-      dataPreview: `Error: ${errorMessage}`,
-      errorCode,
-      retryCount
-    });
-
-    if (duration > 0) {
-      setTimeout(() => {
-        updateConnectionState(edgeId, 'idle');
-      }, duration);
+  // Generate realistic data preview based on type
+  const generateDataPreview = useCallback((dataType, progress) => {
+    switch (dataType) {
+      case 'file':
+        return `Processing file... ${Math.round(progress * 100)}% complete`;
+      case 'text':
+        return `Text data: "${generateSampleText(progress)}"`;
+      case 'api':
+        return `API Response: ${generateApiResponse(progress)}`;
+      case 'json':
+        return `JSON: {"progress": ${Math.round(progress * 100)}, "status": "processing"}`;
+      default:
+        return `Data transfer: ${Math.round(progress * 100)}% complete`;
     }
-  }, [updateConnectionState]);
+  }, []);
 
-  // Enhanced success state with completion metrics
-  const setConnectionSuccess = useCallback((edgeId, successDetails = {}, duration = 1500) => {
-    const { 
-      dataTransferred = 0,
-      processingTime = 0,
-      resultPreview = null 
-    } = successDetails;
+  const generateSampleText = (progress) => {
+    const texts = [
+      "Analyzing customer feedback...",
+      "Processing natural language...",
+      "Extracting key insights...",
+      "Generating summary report..."
+    ];
+    const index = Math.floor(progress * texts.length);
+    return texts[Math.min(index, texts.length - 1)];
+  };
 
-    updateConnectionState(edgeId, 'success', {
-      throughput: 0,
-      dataSize: dataTransferred,
-      latency: processingTime,
-      dataPreview: resultPreview || 'Success'
-    });
+  const generateApiResponse = (progress) => {
+    const responses = [
+      "Connecting to API...",
+      "Authenticating request...",
+      "Fetching data...",
+      "Processing response..."
+    ];
+    const index = Math.floor(progress * responses.length);
+    return responses[Math.min(index, responses.length - 1)];
+  };
 
-    if (duration > 0) {
-      setTimeout(() => {
-        updateConnectionState(edgeId, 'idle');
-      }, duration);
-    }
-  }, [updateConnectionState]);
-
-  // Batch data flow animation with realistic timing
-  const animateDataFlow = useCallback(async (path, options = {}) => {
-    const { 
-      stepDelay = 800, 
-      batchSize = 3,
-      dataType = 'data',
-      onStepComplete = null 
+  // Enhanced workflow execution with visual flow tracking
+  const animateWorkflowExecution = useCallback(async (edges, options = {}) => {
+    const {
+      stepDelay = 1000,
+      onNodeStart = null,
+      onNodeComplete = null,
+      onWorkflowComplete = null,
+      showRealTimeFlow = true
     } = options;
 
-    for (let i = 0; i < path.length - 1; i += batchSize) {
-      const batch = path.slice(i, i + batchSize);
+    setExecutionFlow([]);
+    
+    // Group edges by execution order (topological sort)
+    const executionOrder = calculateExecutionOrder(edges);
+    
+    for (let i = 0; i < executionOrder.length; i++) {
+      const batch = executionOrder[i];
       
-      // Process batch in parallel
-      const batchPromises = batch.map(async (edgeId, batchIndex) => {
-        const delay = batchIndex * 200; // Stagger within batch
+      // Execute batch of connections in parallel
+      const batchPromises = batch.map(async (edge) => {
+        const { source, target, id } = edge;
         
-        setTimeout(() => {
-          activateConnection(edgeId, stepDelay * 0.8, {
-            simulateThroughput: true,
-            maxThroughput: 0.8 + Math.random() * 0.4,
-            dataType,
-            dataPreview: `${dataType} batch ${Math.floor(i / batchSize) + 1}`
+        // Update execution flow
+        setExecutionFlow(prev => [...prev, {
+          edgeId: id,
+          sourceNode: source,
+          targetNode: target,
+          status: 'starting',
+          timestamp: Date.now()
+        }]);
+
+        // Notify node start
+        if (onNodeStart) {
+          onNodeStart(source, target);
+        }
+
+        setCurrentExecutingNode(source);
+
+        // Activate connection with realistic simulation
+        return new Promise((resolve) => {
+          activateConnection(id, stepDelay, {
+            dataType: edge.data?.dataType || 'data',
+            simulateRealistic: showRealTimeFlow,
+            onComplete: () => {
+              // Update execution flow
+              setExecutionFlow(prev => prev.map(item => 
+                item.edgeId === id 
+                  ? { ...item, status: 'completed', completedAt: Date.now() }
+                  : item
+              ));
+
+              // Notify node completion
+              if (onNodeComplete) {
+                onNodeComplete(source, target);
+              }
+
+              resolve();
+            }
           });
-        }, delay);
+        });
       });
 
+      // Wait for batch to complete
       await Promise.all(batchPromises);
       
-      if (onStepComplete) {
-        onStepComplete(i / batchSize + 1, Math.ceil(path.length / batchSize));
+      // Small delay between batches
+      if (i < executionOrder.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, stepDelay / 2));
       }
-      
-      // Wait before next batch
-      if (i + batchSize < path.length) {
-        await new Promise(resolve => setTimeout(resolve, stepDelay));
-      }
+    }
+
+    setCurrentExecutingNode(null);
+    
+    if (onWorkflowComplete) {
+      onWorkflowComplete();
     }
   }, [activateConnection]);
 
-  // Enhanced workflow execution with performance monitoring
-  const animateWorkflowExecution = useCallback(async (workflow, options = {}) => {
-    const { 
-      stepDelay = 1000, 
-      onStepComplete = null,
-      onComplete = null,
-      enableMetrics = true 
-    } = options;
-
-    const startTime = Date.now();
-    let totalDataProcessed = 0;
-    let totalErrors = 0;
-
-    for (let i = 0; i < workflow.length; i++) {
-      const step = workflow[i];
-      const { edgeId, nodeId, expectedDuration = 1000, dataSize = 100 } = step;
-
-      try {
-        // Simulate step execution with realistic metrics
-        await new Promise((resolve, reject) => {
-          const stepStartTime = Date.now();
-          
-          activateConnection(edgeId, expectedDuration, {
-            simulateThroughput: true,
-            maxThroughput: dataSize / expectedDuration,
-            dataType: step.dataType || 'data',
-            dataPreview: `Processing step ${i + 1}: ${nodeId}`
-          });
-
-          setTimeout(() => {
-            const stepDuration = Date.now() - stepStartTime;
-            const success = Math.random() > 0.1; // 90% success rate
-            
-            if (success) {
-              totalDataProcessed += dataSize;
-              setConnectionSuccess(edgeId, {
-                dataTransferred: dataSize,
-                processingTime: stepDuration,
-                resultPreview: `Step ${i + 1} completed`
-              });
-              resolve();
-            } else {
-              totalErrors++;
-              setConnectionError(edgeId, {
-                errorMessage: `Step ${i + 1} failed`,
-                errorCode: 'STEP_ERROR'
-              });
-              reject(new Error(`Step ${i + 1} failed`));
-            }
-          }, expectedDuration);
-        });
-
-        if (onStepComplete) {
-          onStepComplete(i + 1, workflow.length, {
-            dataProcessed: totalDataProcessed,
-            errors: totalErrors,
-            duration: Date.now() - startTime
-          });
-        }
-
-        // Wait before next step
-        if (i < workflow.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, stepDelay));
-        }
-      } catch (error) {
-        console.warn(`Workflow step ${i + 1} failed:`, error);
-        // Continue with next step even if current fails
-      }
-    }
-
-    const totalDuration = Date.now() - startTime;
+  // Calculate execution order using topological sort
+  const calculateExecutionOrder = useCallback((edges) => {
+    // Simple implementation - group by depth level
+    const levels = [];
+    const processed = new Set();
     
-    if (onComplete) {
-      onComplete({
-        totalSteps: workflow.length,
-        dataProcessed: totalDataProcessed,
-        errors: totalErrors,
-        duration: totalDuration,
-        successRate: ((workflow.length - totalErrors) / workflow.length) * 100
-      });
+    // Find starting edges (no dependencies)
+    const startingEdges = edges.filter(edge => 
+      !edges.some(e => e.target === edge.source)
+    );
+    
+    if (startingEdges.length > 0) {
+      levels.push(startingEdges);
+      startingEdges.forEach(edge => processed.add(edge.id));
     }
-  }, [activateConnection, setConnectionSuccess, setConnectionError]);
+    
+    // Process remaining edges level by level
+    while (processed.size < edges.length) {
+      const nextLevel = edges.filter(edge => 
+        !processed.has(edge.id) && 
+        edges.filter(e => e.target === edge.source).every(e => processed.has(e.id))
+      );
+      
+      if (nextLevel.length === 0) break; // Prevent infinite loop
+      
+      levels.push(nextLevel);
+      nextLevel.forEach(edge => processed.add(edge.id));
+    }
+    
+    return levels;
+  }, []);
 
-  // Real-time performance monitoring
+  // Enhanced connection error handling
+  const setConnectionError = useCallback((edgeId, errorMessage, options = {}) => {
+    const { errorType = 'general', retryable = true } = options;
+    
+    updateConnectionState(edgeId, 'error', {
+      errorRate: 1,
+      dataType: 'error',
+      animated: true,
+      dataPreview: `Error: ${errorMessage}`,
+      errorType,
+      retryable,
+      errorTimestamp: Date.now()
+    });
+
+    setActiveConnections(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(edgeId);
+      return newSet;
+    });
+  }, [updateConnectionState]);
+
+  // Enhanced connection success
+  const setConnectionSuccess = useCallback((edgeId, successData = {}) => {
+    const { 
+      finalThroughput = 0,
+      totalDataTransferred = 0,
+      executionTime = 0
+    } = successData;
+    
+    updateConnectionState(edgeId, 'success', {
+      throughput: finalThroughput,
+      dataSize: totalDataTransferred,
+      errorRate: 0,
+      latency: 0,
+      dataType: 'success',
+      animated: false,
+      dataPreview: `Success: ${totalDataTransferred}KB transferred in ${executionTime}ms`,
+      executionTime
+    });
+
+    setActiveConnections(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(edgeId);
+      return newSet;
+    });
+  }, [updateConnectionState]);
+
+  // Get real-time connection metrics
   const getConnectionMetrics = useCallback((edgeId) => {
     const state = connectionStates.get(edgeId);
     const metrics = performanceMetrics.get(edgeId);
     
     return {
-      currentState: state?.state || 'idle',
+      state: state?.state || 'idle',
       throughput: state?.throughput || 0,
       latency: state?.latency || 0,
       errorRate: state?.errorRate || 0,
       dataPreview: state?.dataPreview,
-      metrics: metrics || null
+      metrics: metrics || null,
+      isActive: activeConnections.has(edgeId)
     };
-  }, [connectionStates, performanceMetrics]);
+  }, [connectionStates, performanceMetrics, activeConnections]);
 
-  // Enhanced connection highlighting with performance context
-  const highlightPath = useCallback((pathEdges, options = {}) => {
+  // Enhanced path highlighting with animation
+  const highlightPath = useCallback((nodeIds, options = {}) => {
     const { 
-      highlightColor = '#3b82f6', 
+      color = '#3b82f6',
       duration = 3000,
-      showMetrics = true 
+      animationType = 'pulse'
     } = options;
 
+    // Find edges that connect the nodes in the path
+    const pathEdges = [];
+    for (let i = 0; i < nodeIds.length - 1; i++) {
+      const sourceId = nodeIds[i];
+      const targetId = nodeIds[i + 1];
+      
+      // Find edge connecting these nodes
+      connectionStates.forEach((state, edgeId) => {
+        // This would need edge source/target info - simplified for now
+        pathEdges.push(edgeId);
+      });
+    }
+
+    // Animate each edge in sequence
     pathEdges.forEach((edgeId, index) => {
       setTimeout(() => {
-        setEdges(edges => edges.map(edge => {
-          if (edge.id === edgeId) {
-            return {
-              ...edge,
-              data: {
-                ...edge.data,
-                highlighted: true,
-                highlightColor,
-                showMetrics
-              },
-              style: {
-                ...edge.style,
-                stroke: highlightColor,
-                strokeWidth: 3,
-                filter: 'drop-shadow(0 0 6px currentColor)'
-              }
-            };
-          }
-          return edge;
-        }));
-      }, index * 200);
-    });
+        updateConnectionState(edgeId, 'active', {
+          throughput: 100,
+          dataType: 'highlight',
+          animated: true,
+          dataPreview: `Path highlight ${index + 1}/${pathEdges.length}`
+        });
 
-    // Clear highlighting after duration
-    setTimeout(() => {
-      setEdges(edges => edges.map(edge => {
-        if (pathEdges.includes(edge.id)) {
-          return {
-            ...edge,
-            data: {
-              ...edge.data,
-              highlighted: false
-            },
-            style: {
-              ...edge.style,
-              stroke: undefined,
-              strokeWidth: undefined,
-              filter: undefined
-            }
-          };
-        }
-        return edge;
-      }));
-    }, duration);
-  }, [setEdges]);
+        // Clear highlight after duration
+        setTimeout(() => {
+          updateConnectionState(edgeId, 'idle', {
+            throughput: 0,
+            animated: false
+          });
+        }, duration);
+      }, index * 500);
+    });
+  }, [connectionStates, updateConnectionState]);
 
   // Cleanup function
   const clearAllAnimations = useCallback(() => {
     // Clear all timeouts
-    timeoutsRef.current.forEach((timeout, key) => {
+    timeoutsRef.current.forEach((timeout) => {
       if (typeof timeout === 'number') {
         clearTimeout(timeout);
       } else {
@@ -407,24 +429,13 @@ export const useConnectionAnimation = (edges, setEdges) => {
     });
     timeoutsRef.current.clear();
 
-    // Reset states
+    // Reset all states
     setActiveConnections(new Set());
     setConnectionStates(new Map());
     setPerformanceMetrics(new Map());
-
-    // Reset edge states
-    setEdges(edges => edges.map(edge => ({
-      ...edge,
-      data: {
-        ...edge.data,
-        connectionState: 'idle',
-        isActive: false,
-        throughput: 0,
-        errorRate: 0,
-        highlighted: false
-      }
-    })));
-  }, [setEdges]);
+    setExecutionFlow([]);
+    setCurrentExecutingNode(null);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -434,143 +445,125 @@ export const useConnectionAnimation = (edges, setEdges) => {
   }, [clearAllAnimations]);
 
   return {
-    // Core functions
+    // State
+    activeConnections,
+    connectionStates,
+    performanceMetrics,
+    executionFlow,
+    currentExecutingNode,
+    
+    // Actions
     updateConnectionState,
     activateConnection,
     setConnectionError,
     setConnectionSuccess,
-    
-    // Advanced animations
-    animateDataFlow,
     animateWorkflowExecution,
     highlightPath,
-    
-    // Monitoring
-    getConnectionMetrics,
-    performanceMetrics,
-    connectionStates,
-    activeConnections,
+    clearAllAnimations,
     
     // Utilities
-    clearAllAnimations
+    getConnectionMetrics
   };
 };
 
 /**
  * Enhanced connection labels hook with dynamic data type detection
  */
-export const useConnectionLabels = (edges, setEdges) => {
-  const [labelStates, setLabelStates] = useState(new Map());
+export const useConnectionLabels = () => {
+  const [connectionLabels, setConnectionLabels] = useState(new Map());
+  const [edgeDataTypes, setEdgeDataTypes] = useState(new Map());
 
-  // Set connection label with enhanced metadata
   const setConnectionLabel = useCallback((edgeId, label, options = {}) => {
     const { 
-      dataType = null, 
-      persistent = false, 
+      persistent = true,
       showPreview = true,
-      metadata = {} 
+      metadata = {}
     } = options;
 
-    setLabelStates(prev => {
-      const newStates = new Map(prev);
-      newStates.set(edgeId, {
+    setConnectionLabels(prev => {
+      const newLabels = new Map(prev);
+      newLabels.set(edgeId, {
         label,
-        dataType,
         persistent,
         showPreview,
         metadata,
         timestamp: Date.now()
       });
-      return newStates;
+      return newLabels;
     });
-
-    setEdges(edges => edges.map(edge => {
-      if (edge.id === edgeId) {
-        return {
-          ...edge,
-          data: {
-            ...edge.data,
-            label,
-            dataType,
-            showPreview,
-            metadata
-          }
-        };
-      }
-      return edge;
-    }));
-  }, [setEdges]);
-
-  // Enhanced auto-detection with machine learning-like patterns
-  const autoDetectDataType = useCallback((sourceNode, targetNode) => {
-    const sourceType = sourceNode?.type?.toLowerCase() || '';
-    const targetType = targetNode?.type?.toLowerCase() || '';
-    
-    // Enhanced detection patterns
-    const detectionRules = [
-      { pattern: /file|upload|document/, type: 'file', confidence: 0.9 },
-      { pattern: /api|webhook|http/, type: 'api', confidence: 0.8 },
-      { pattern: /text|string|message/, type: 'text', confidence: 0.7 },
-      { pattern: /json|object|data/, type: 'json', confidence: 0.8 },
-      { pattern: /image|photo|picture/, type: 'image', confidence: 0.9 },
-      { pattern: /email|mail/, type: 'email', confidence: 0.8 },
-      { pattern: /database|db|sql/, type: 'database', confidence: 0.8 }
-    ];
-
-    const sourceText = `${sourceType} ${sourceNode?.data?.label || ''} ${sourceNode?.data?.description || ''}`.toLowerCase();
-    const targetText = `${targetType} ${targetNode?.data?.label || ''} ${targetNode?.data?.description || ''}`.toLowerCase();
-    const combinedText = `${sourceText} ${targetText}`;
-
-    let bestMatch = { type: 'data', confidence: 0 };
-
-    detectionRules.forEach(rule => {
-      if (rule.pattern.test(combinedText)) {
-        if (rule.confidence > bestMatch.confidence) {
-          bestMatch = { type: rule.type, confidence: rule.confidence };
-        }
-      }
-    });
-
-    return bestMatch;
   }, []);
 
-  // Set data type for edge with auto-labeling
-  const setEdgeDataType = useCallback((edgeId, dataType, autoLabel = true) => {
-    setEdges(edges => edges.map(edge => {
-      if (edge.id === edgeId) {
-        const updatedEdge = {
-          ...edge,
-          data: {
-            ...edge.data,
-            dataType
-          }
-        };
+  const autoDetectDataType = useCallback((sourceNode, targetNode) => {
+    // Enhanced data type detection with more patterns
+    const patterns = {
+      file: /file|document|pdf|doc|upload/i,
+      text: /text|string|content|message|description/i,
+      api: /api|endpoint|request|response|http/i,
+      json: /json|object|data|payload/i,
+      image: /image|photo|picture|img|visual/i,
+      video: /video|movie|clip|media/i,
+      audio: /audio|sound|music|voice/i,
+      database: /database|db|sql|query|table/i,
+      email: /email|mail|message|notification/i,
+      webhook: /webhook|hook|callback|trigger/i
+    };
 
-        if (autoLabel) {
-          const labelMap = {
-            file: '📄 File',
-            api: '🔗 API',
-            text: '📝 Text',
-            json: '📋 JSON',
-            image: '🖼️ Image',
-            email: '📧 Email',
-            database: '🗄️ Database'
-          };
-          
-          updatedEdge.data.label = labelMap[dataType] || '📦 Data';
-        }
+    const sourceText = `${sourceNode?.type || ''} ${sourceNode?.data?.label || ''} ${sourceNode?.data?.description || ''}`.toLowerCase();
+    const targetText = `${targetNode?.type || ''} ${targetNode?.data?.label || ''} ${targetNode?.data?.description || ''}`.toLowerCase();
+    const combinedText = `${sourceText} ${targetText}`;
 
-        return updatedEdge;
+    for (const [type, pattern] of Object.entries(patterns)) {
+      if (pattern.test(combinedText)) {
+        return type;
       }
-      return edge;
-    }));
-  }, [setEdges]);
+    }
+
+    // Default based on node types
+    if (sourceNode?.type === 'input' || targetNode?.type === 'input') return 'input';
+    if (sourceNode?.type === 'output' || targetNode?.type === 'output') return 'output';
+    if (sourceNode?.type === 'agent' || targetNode?.type === 'agent') return 'agent';
+    if (sourceNode?.type === 'task' || targetNode?.type === 'task') return 'task';
+    if (sourceNode?.type === 'tool' || targetNode?.type === 'tool') return 'tool';
+
+    return 'data';
+  }, []);
+
+  const setEdgeDataType = useCallback((edgeId, dataType, autoLabel = true) => {
+    setEdgeDataTypes(prev => {
+      const newTypes = new Map(prev);
+      newTypes.set(edgeId, dataType);
+      return newTypes;
+    });
+
+    if (autoLabel) {
+      const labelMap = {
+        file: 'File Transfer',
+        text: 'Text Data',
+        api: 'API Call',
+        json: 'JSON Data',
+        image: 'Image Data',
+        video: 'Video Stream',
+        audio: 'Audio Data',
+        database: 'Database Query',
+        email: 'Email Message',
+        webhook: 'Webhook Event',
+        input: 'User Input',
+        output: 'Output Data',
+        agent: 'Agent Response',
+        task: 'Task Result',
+        tool: 'Tool Output'
+      };
+
+      setConnectionLabel(edgeId, labelMap[dataType] || 'Data Flow');
+    }
+  }, [setConnectionLabel]);
 
   return {
+    connectionLabels,
+    edgeDataTypes,
     setConnectionLabel,
-    setEdgeDataType,
     autoDetectDataType,
-    labelStates
+    setEdgeDataType
   };
 };
 

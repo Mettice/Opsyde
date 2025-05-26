@@ -283,4 +283,610 @@
   .connection-transition {
     transition: none;
   }
+}
+
+/* Enhanced Connection Line Animations with Beautiful Sea Blue Theme */
+
+/* Flowing particle animations with enhanced trails */
+@keyframes flow-particle {
+  0% {
+    offset-distance: 0%;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  90% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    offset-distance: 100%;
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+@keyframes flow-particle-trail {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  20% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  80% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+}
+
+/* Beautiful glow effects for active connections */
+@keyframes connection-glow {
+  0% {
+    filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(14, 165, 233, 0.8)) drop-shadow(0 0 20px rgba(6, 182, 212, 0.4));
+  }
+  100% {
+    filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.4));
+  }
+}
+
+@keyframes connection-pulse {
+  0% {
+    stroke-width: 2;
+    opacity: 0.8;
+  }
+  50% {
+    stroke-width: 6;
+    opacity: 1;
+  }
+  100% {
+    stroke-width: 2;
+    opacity: 0.8;
+  }
+}
+
+/* Success connection animations with green theme */
+@keyframes success-flow {
+  0% {
+    stroke-dasharray: 0 100;
+    stroke-dashoffset: 0;
+    opacity: 0.6;
+  }
+  50% {
+    stroke-dasharray: 50 50;
+    stroke-dashoffset: -25;
+    opacity: 1;
+  }
+  100% {
+    stroke-dasharray: 100 0;
+    stroke-dashoffset: -100;
+    opacity: 0.8;
+  }
+}
+
+@keyframes success-glow {
+  0% {
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.8)) drop-shadow(0 0 20px rgba(34, 197, 94, 0.4));
+  }
+  100% {
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+  }
+}
+
+/* Error connection animations with red theme */
+@keyframes error-flash {
+  0%, 100% {
+    opacity: 0.6;
+    stroke-width: 2;
+  }
+  25% {
+    opacity: 1;
+    stroke-width: 4;
+  }
+  50% {
+    opacity: 0.8;
+    stroke-width: 3;
+  }
+  75% {
+    opacity: 1;
+    stroke-width: 4;
+  }
+}
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+  20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+/* Data flow animations with throughput visualization */
+@keyframes data-stream {
+  0% {
+    stroke-dasharray: 0 20;
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dasharray: 20 0;
+    stroke-dashoffset: -40;
+  }
+}
+
+@keyframes throughput-indicator {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2) rotate(180deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(360deg);
+    opacity: 0.7;
+  }
+}
+
+/* Connection label animations with glassmorphism */
+@keyframes label-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.8) translateY(10px);
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    backdrop-filter: blur(10px);
+  }
+}
+
+@keyframes label-pulse {
+  0% {
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+  }
+  50% {
+    box-shadow: 0 8px 25px rgba(14, 165, 233, 0.4);
+  }
+  100% {
+    box-shadow: 0 4px 12px rgba(14, 165, 233, 0.2);
+  }
+}
+
+/* Gradient animation for active connections */
+@keyframes gradient-flow {
+  0% {
+    stop-color: var(--gradient-start, #0ea5e9);
+  }
+  33% {
+    stop-color: var(--gradient-mid, #06b6d4);
+  }
+  66% {
+    stop-color: var(--gradient-end, #3b82f6);
+  }
+  100% {
+    stop-color: var(--gradient-start, #0ea5e9);
+  }
+}
+
+/* Particle trail effects */
+@keyframes particle-trail-fade {
+  0% {
+    opacity: 1;
+    r: 4;
+  }
+  100% {
+    opacity: 0;
+    r: 1;
+  }
+}
+
+/* Connection state classes */
+.connection-idle {
+  stroke: #9ca3af;
+  stroke-width: 2;
+  opacity: 0.7;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.connection-active {
+  stroke: url(#active-gradient);
+  stroke-width: 4;
+  opacity: 1;
+  animation: connection-glow 2s ease-in-out infinite, connection-pulse 3s ease-in-out infinite;
+}
+
+.connection-processing {
+  stroke: url(#processing-gradient);
+  stroke-width: 3;
+  opacity: 0.9;
+  stroke-dasharray: 12 8;
+  animation: data-stream 2s linear infinite, connection-glow 2.5s ease-in-out infinite;
+}
+
+.connection-success {
+  stroke: url(#success-gradient);
+  stroke-width: 3;
+  opacity: 0.9;
+  animation: success-flow 2s ease-out, success-glow 1.5s ease-in-out;
+}
+
+.connection-error {
+  stroke: url(#error-gradient);
+  stroke-width: 3;
+  opacity: 1;
+  stroke-dasharray: 8 4;
+  animation: error-flash 1s ease-in-out infinite, error-shake 0.5s ease-in-out infinite;
+}
+
+/* Enhanced particle styles */
+.flowing-particle {
+  animation: flow-particle 2s linear infinite;
+  filter: drop-shadow(0 0 4px currentColor);
+}
+
+.flowing-particle-delayed {
+  animation: flow-particle 2s linear infinite;
+  animation-delay: 0.5s;
+}
+
+.flowing-particle-delayed-2 {
+  animation: flow-particle 2s linear infinite;
+  animation-delay: 1s;
+}
+
+.particle-trail {
+  animation: particle-trail-fade 0.8s ease-out forwards;
+}
+
+/* Connection label styles with glassmorphism */
+.connection-label {
+  animation: label-appear 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.connection-label-active {
+  animation: label-appear 0.4s cubic-bezier(0.4, 0, 0.2, 1), label-pulse 2s ease-in-out infinite 0.4s;
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.connection-label:hover {
+  transform: scale(1.05);
+  box-shadow: 0 8px 25px rgba(14, 165, 233, 0.2);
+}
+
+/* Throughput indicator styles */
+.throughput-indicator {
+  animation: throughput-indicator 3s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px currentColor);
+}
+
+/* Connection thickness variations based on data flow */
+.connection-thin {
+  stroke-width: 1;
+}
+
+.connection-normal {
+  stroke-width: 2;
+}
+
+.connection-thick {
+  stroke-width: 3;
+}
+
+.connection-extra-thick {
+  stroke-width: 4;
+}
+
+.connection-ultra-thick {
+  stroke-width: 6;
+}
+
+/* Smart routing visual indicators */
+.connection-curved {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.connection-curved:hover {
+  stroke-width: calc(var(--stroke-width, 2) + 1);
+  filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.4));
+}
+
+/* Data type specific styles */
+.connection-file {
+  stroke: url(#file-gradient);
+  stroke-dasharray: none;
+}
+
+.connection-text {
+  stroke: url(#text-gradient);
+  stroke-dasharray: none;
+}
+
+.connection-api {
+  stroke: url(#api-gradient);
+  stroke-dasharray: 6 6;
+}
+
+.connection-json {
+  stroke: url(#json-gradient);
+  stroke-dasharray: none;
+}
+
+.connection-image {
+  stroke: url(#image-gradient);
+  stroke-dasharray: none;
+}
+
+.connection-video {
+  stroke: url(#video-gradient);
+  stroke-dasharray: 10 5;
+}
+
+.connection-audio {
+  stroke: url(#audio-gradient);
+  stroke-dasharray: 4 4;
+}
+
+/* Execution flow indicators */
+.execution-flow-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  animation: label-appear 0.3s ease-out;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
+
+/* Real-time metrics display */
+.connection-metrics {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: rgba(14, 165, 233, 0.8);
+  font-weight: 500;
+}
+
+.metric-value {
+  background: rgba(14, 165, 233, 0.1);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(14, 165, 233, 0.2);
+}
+
+/* Hover effects for enhanced UX */
+.connection-hover-zone {
+  stroke-width: 8;
+  stroke: transparent;
+  cursor: pointer;
+}
+
+.connection-hover-zone:hover + .connection-path {
+  stroke-width: calc(var(--stroke-width, 2) + 1);
+  filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.4));
+}
+
+/* Selection indicators */
+.connection-selected {
+  stroke-width: calc(var(--stroke-width, 2) + 2);
+  stroke-dasharray: 8 4;
+  animation: connection-pulse 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.6));
+}
+
+/* Responsive design for different screen sizes */
+@media (max-width: 768px) {
+  .connection-label {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  
+  .flowing-particle {
+    r: 3;
+  }
+  
+  .connection-active {
+    stroke-width: 3;
+  }
+  
+  .connection-thick {
+    stroke-width: 2;
+  }
+}
+
+@media (max-width: 480px) {
+  .connection-label {
+    font-size: 9px;
+    padding: 3px 6px;
+  }
+  
+  .flowing-particle {
+    r: 2;
+  }
+  
+  .connection-metrics {
+    font-size: 8px;
+    gap: 4px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .connection-idle {
+    stroke: #000000;
+    stroke-width: 3;
+  }
+  
+  .connection-active {
+    stroke: #0066cc;
+    stroke-width: 4;
+  }
+  
+  .connection-success {
+    stroke: #008800;
+    stroke-width: 4;
+  }
+  
+  .connection-error {
+    stroke: #cc0000;
+    stroke-width: 4;
+  }
+  
+  .connection-label {
+    background: #ffffff;
+    border: 2px solid #000000;
+    color: #000000;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .flowing-particle,
+  .connection-glow,
+  .connection-pulse,
+  .success-flow,
+  .success-glow,
+  .error-flash,
+  .error-shake,
+  .data-stream,
+  .throughput-indicator,
+  .label-pulse,
+  .gradient-flow,
+  .particle-trail-fade {
+    animation: none;
+  }
+  
+  .connection-active,
+  .connection-processing,
+  .connection-success,
+  .connection-error {
+    animation: none;
+  }
+  
+  .connection-label,
+  .connection-curved {
+    transition: none;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .connection-label {
+    background: rgba(30, 41, 59, 0.9);
+    border-color: rgba(14, 165, 233, 0.3);
+    color: #e2e8f0;
+  }
+  
+  .connection-label-active {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.4);
+  }
+  
+  .execution-flow-indicator {
+    background: rgba(59, 130, 246, 0.9);
+    color: #ffffff;
+  }
+  
+  .metric-value {
+    background: rgba(14, 165, 233, 0.2);
+    border-color: rgba(14, 165, 233, 0.3);
+    color: #e2e8f0;
+  }
+}
+
+/* Performance optimizations */
+.connection-path {
+  will-change: stroke-width, opacity, filter;
+  transform: translateZ(0);
+}
+
+.flowing-particle {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+.connection-label {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* Custom properties for dynamic theming */
+:root {
+  --connection-idle-color: #9ca3af;
+  --connection-active-color: #0ea5e9;
+  --connection-success-color: #10b981;
+  --connection-error-color: #ef4444;
+  --connection-processing-color: #8b5cf6;
+  
+  --connection-glow-intensity: 0.4;
+  --connection-animation-speed: 2s;
+  --connection-particle-size: 4px;
+  
+  --label-bg-opacity: 0.9;
+  --label-border-opacity: 0.2;
+  --label-shadow-opacity: 0.1;
+}
+
+/* Beautiful gradient definitions for different connection states */
+.connection-gradients {
+  display: none;
+}
+
+.connection-gradients defs {
+  /* Ocean theme gradients */
+  --ocean-idle-start: #0ea5e9;
+  --ocean-idle-end: #0284c7;
+  --ocean-active-start: #06b6d4;
+  --ocean-active-end: #0891b2;
+  --ocean-success-start: #10b981;
+  --ocean-success-end: #059669;
+  --ocean-error-start: #f43f5e;
+  --ocean-error-end: #e11d48;
+  --ocean-processing-start: #8b5cf6;
+  --ocean-processing-end: #7c3aed;
+}
+
+/* Animation performance classes */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.smooth-animation {
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hardware-accelerated {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 } 

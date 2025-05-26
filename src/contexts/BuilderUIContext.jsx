@@ -27,6 +27,9 @@ export const BuilderUIProvider = ({ children }) => {
   const [showRunnerPanel, setShowRunnerPanel] = useState(false);
   const [showTriggerHistory, setShowTriggerHistory] = useState(false);
   const [showExecutionPanel, setShowExecutionPanel] = useState(false);
+  const [showConnectionGuide, setShowConnectionGuide] = useState(false);
+  const [showConnectionRules, setShowConnectionRules] = useState(false);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
   
   // Minimized states
   const [minimizeRunnerPanel, setMinimizeRunnerPanel] = useState(false);
@@ -88,6 +91,9 @@ export const BuilderUIProvider = ({ children }) => {
     showRunnerPanel, toggleRunnerPanel,
     showTriggerHistory, toggleTriggerHistory,
     showExecutionPanel, toggleExecutionPanel,
+    showConnectionGuide, setShowConnectionGuide,
+    showConnectionRules, setShowConnectionRules,
+    showDebugPanel, setShowDebugPanel,
     
     // Minimized states
     minimizeRunnerPanel, toggleMinimizeRunnerPanel,
