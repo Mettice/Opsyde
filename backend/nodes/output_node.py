@@ -15,7 +15,7 @@ class OutputNode:
     
     def __init__(self):
         self.ai_runner = AIIntegrationRunner()
-        
+
     async def process(
         self, 
         node: Dict[str, Any], 
@@ -67,6 +67,8 @@ class OutputNode:
     ) -> NodeData:
         """Process AI-powered output integration"""
         try:
+            output_type = node_data.get('outputType', 'smart_api')
+            
             # Get user's API keys from context (you'll need to implement this)
             user_keys = context.get('user_keys', {})
             
@@ -75,28 +77,34 @@ class OutputNode:
                 "description": node_data.get('ai_description') or node_data.get('config', {}).get('ai_description'),
                 "service_type": node_data.get('service_type') or node_data.get('config', {}).get('service_type'),
                 "output_format": node_data.get('output_format') or node_data.get('config', {}).get('output_format'),
+                "output_type": output_type,
                 **node_data.get('config', {})
             }
+            
+            # NEW: Add smart email specific configuration
+            if output_type == 'smart_email':
+                ai_config.update({
+                    "recipient_email": node_data.get('recipient_email') or node_data.get('config', {}).get('recipient_email'),
+                    "subject_template": node_data.get('subject_template') or node_data.get('config', {}).get('subject_template'),
+                    "email_style": node_data.get('service_type') or node_data.get('config', {}).get('service_type', 'professional')
+                })
             
             # Validate AI configuration
             if not ai_config.get('description'):
                 return NodeData.from_error("AI description is required for smart integrations")
             
-            # Execute AI integration
-            result = await self.ai_runner.run_smart_output(
-                output_type=node_data.get('outputType', 'smart_api'),
-                ai_config=ai_config,
-                data=output_data,
-                context=context,
-                user_keys=user_keys
-            )
+            # NEW: Different processing for smart email vs smart API
+            if output_type == 'smart_email':
+                result = await self._process_smart_email(ai_config, output_data, context, user_keys)
+            else:
+                result = await self._process_smart_api(ai_config, output_data, context, user_keys)
             
             if result.get('success'):
                 return NodeData.from_value({
                     "success": True,
-                    "output_type": "ai_integration",
+                    "output_type": output_type,
                     "service_detected": result.get('service_detected'),
-                    "summary": result.get('summary', 'AI integration completed successfully'),
+                    "summary": result.get('summary', f'{output_type} completed successfully'),
                     "data": result.get('result'),
                     "metadata": {
                         "execution_time": result.get('execution_time'),
@@ -112,11 +120,86 @@ class OutputNode:
                     )
                 else:
                     return NodeData.from_error(f"AI integration failed: {result.get('error')}")
-                    
+
         except Exception as e:
             logger.error(f"AI integration error: {str(e)}")
             return NodeData.from_error(f"AI integration failed: {str(e)}")
-    
+
+    async def _process_smart_email(
+        self, 
+        ai_config: Dict[str, Any], 
+        output_data: Dict[str, Any], 
+        context: Dict[str, Any],
+        user_keys: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Process smart email with AI formatting"""
+        try:
+            # Use AI to format email content
+            email_result = await self.ai_runner.run_smart_output(
+                output_type="smart_email",
+                ai_config=ai_config,
+                data=output_data,
+                context=context,
+                user_keys=user_keys
+            )
+            
+            if email_result.get('success'):
+                # Extract email details from AI result
+                email_data = email_result.get('result', {})
+                recipient = ai_config.get('recipient_email') or email_data.get('recipient')
+                subject = email_data.get('subject') or ai_config.get('subject_template', 'AI-Generated Report')
+                body = email_data.get('formatted_content') or email_data.get('body')
+                
+                if not recipient:
+                    return {"success": False, "error": "No recipient email specified"}
+                
+                # Send the formatted email
+                from backend.frameworks.email_notifier import send_email
+                send_result = await send_email(recipient, subject, body)
+                
+                return {
+                    "success": True,
+                    "service_detected": "Smart Email",
+                    "summary": f"AI-formatted email sent to {recipient}",
+                    "result": {
+                        "recipient": recipient,
+                        "subject": subject,
+                        "email_style": ai_config.get('email_style', 'professional'),
+                        "send_result": send_result
+                    },
+                    "confidence": email_result.get('confidence', 0.9)
+                }
+            else:
+                return email_result
+                
+        except Exception as e:
+            logger.error(f"Smart email processing failed: {str(e)}")
+            return {"success": False, "error": f"Smart email failed: {str(e)}"}
+
+    async def _process_smart_api(
+        self, 
+        ai_config: Dict[str, Any], 
+        output_data: Dict[str, Any], 
+        context: Dict[str, Any],
+        user_keys: Dict[str, str]
+    ) -> Dict[str, Any]:
+        """Process smart API integration"""
+        try:
+            # Execute AI integration
+            result = await self.ai_runner.run_smart_output(
+                output_type="smart_api",
+                ai_config=ai_config,
+                data=output_data,
+                context=context,
+                user_keys=user_keys
+            )
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Smart API processing failed: {str(e)}")
+            return {"success": False, "error": f"Smart API failed: {str(e)}"}
+
     async def _process_traditional_output(
         self, 
         node_data: Dict[str, Any], 

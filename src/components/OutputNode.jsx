@@ -60,6 +60,28 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
 
   const outputType = data.outputType || 'webhook';
   
+  // NEW: Get appropriate icon and label for output type
+  const getOutputTypeDisplay = (type) => {
+    switch (type) {
+      case 'smart_email':
+        return { icon: '🤖📧', label: 'Smart Email', description: 'AI-powered email formatting' };
+      case 'smart_api':
+        return { icon: '🤖🔗', label: 'AI Integration', description: 'AI-powered API integration' };
+      case 'webhook':
+        return { icon: '🔗', label: 'Webhook', description: 'HTTP webhook' };
+      case 'email':
+        return { icon: '📧', label: 'Email', description: 'Direct email' };
+      case 'discord':
+        return { icon: '💬', label: 'Discord', description: 'Discord webhook' };
+      case 'sheets':
+        return { icon: '📊', label: 'Google Sheets', description: 'Spreadsheet integration' };
+      default:
+        return { icon: '📤', label: 'Output', description: type };
+    }
+  };
+
+  const typeDisplay = getOutputTypeDisplay(outputType);
+  
   return (
     <div className={`bg-white border-2 ${selected ? 'border-blue-500' : 'border-gray-200'} rounded-lg p-4 min-w-[240px] shadow-md`}>
       <Handle
@@ -78,15 +100,45 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
       
       <div className="flex items-start justify-between">
         <div className="flex items-center">
-          <span className="text-xl mr-2">📤</span>
+          <span className="text-xl mr-2">{typeDisplay.icon}</span>
           <div>
             <h3 className="font-medium text-gray-800">{data.label || 'Output'}</h3>
-            <div className="text-sm text-gray-500 mt-1">{outputType}</div>
+            <div className="text-sm text-gray-500 mt-1">{typeDisplay.label}</div>
+            <div className="text-xs text-gray-400">{typeDisplay.description}</div>
           </div>
         </div>
+        {/* NEW: AI-Powered badge for smart outputs */}
+        {outputType.startsWith('smart_') && (
+          <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">
+            AI-Powered
+          </span>
+        )}
       </div>
       
       {/* Configuration section */}
+      {/* NEW: Smart output configuration display */}
+      {outputType.startsWith('smart_') && (
+        <div className="mt-3 bg-purple-50 p-2 rounded text-xs">
+          <div className="text-purple-800 font-medium mb-1">AI Configuration:</div>
+          {data.ai_description && (
+            <div className="text-purple-700 mb-1">
+              <strong>Task:</strong> {data.ai_description.substring(0, 50)}...
+            </div>
+          )}
+          {data.service_type && (
+            <div className="text-purple-700 mb-1">
+              <strong>Type:</strong> {data.service_type}
+            </div>
+          )}
+          {outputType === 'smart_email' && data.recipient_email && (
+            <div className="text-purple-700">
+              <strong>Recipient:</strong> {data.recipient_email}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Traditional configuration displays */}
       {outputType === 'webhook' && data.webhook && (
         <div className="mt-3 text-sm">
           <button

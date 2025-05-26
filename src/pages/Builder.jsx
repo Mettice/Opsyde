@@ -516,7 +516,7 @@ const BuilderPageContent = () => {
     onToggleExecutionMode: toggleExecutionMode,
     executionMode
   };
-  
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       <NavHeader 
@@ -612,7 +612,7 @@ const BuilderPageContent = () => {
       )}
       
       {showPreview && (
-        <PreviewMode
+        <PreviewMode 
           nodes={nodes}
           edges={edges}
           onClose={closePreview}

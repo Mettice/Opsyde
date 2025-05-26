@@ -1,207 +1,134 @@
 import logging
 from typing import Dict, Any, List, Optional
-import autogen
+import asyncio
 from datetime import datetime
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def get_config_for_agent(agent_config: Dict[str, Any]) -> Dict[str, Any]:
-    """Get AutoGen configuration for an agent"""
-    llm_config = {
-        "model": agent_config.get("llmModel", "gpt-4"),
-        "temperature": float(agent_config.get("temperature", 0.7)),
-        "config_list": [{"model": agent_config.get("llmModel", "gpt-4")}]
-    }
-    
-    return {
-        "name": agent_config.get("label", "Assistant"),
-        "llm_config": llm_config,
-        "system_message": agent_config.get("backstory", ""),
-        "human_input_mode": "NEVER" if not agent_config.get("allowHumanInput") else "TERMINATE"
-    }
-
-def create_agent(agent_type: str, config: Dict[str, Any]) -> Any:
-    """Create an AutoGen agent based on type"""
-    if agent_type == "assistant":
-        return autogen.AssistantAgent(
-            **get_config_for_agent(config)
-        )
-    elif agent_type == "user_proxy":
-        return autogen.UserProxyAgent(
-            **get_config_for_agent(config)
-        )
-    elif agent_type == "researcher":
-        return autogen.AssistantAgent(
-            **get_config_for_agent(config),
-            system_message="I am a research assistant. I help with gathering and analyzing information."
-        )
-    elif agent_type == "coder":
-        return autogen.AssistantAgent(
-            **get_config_for_agent(config),
-            system_message="I am a coding assistant. I help with writing and debugging code."
-        )
-    else:
-        raise ValueError(f"Unsupported agent type: {agent_type}")
+try:
+    import autogen
+    AUTOGEN_AVAILABLE = True
+except ImportError:
+    logger.warning("AutoGen not installed")
+    AUTOGEN_AVAILABLE = False
 
 async def run_autogen_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Run an AutoGen tool with the given configuration and inputs
+    """Enhanced AutoGen runner with full features"""
     
-    Args:
-        config: Tool configuration including agent type, chat type, etc.
-        inputs: Input data for the agents
-        
-    Returns:
-        Dictionary containing the result and metadata
-    """
+    if not AUTOGEN_AVAILABLE:
+        return await _autogen_fallback(config, inputs)
+    
     try:
         # Extract configuration
-        agent_type = config.get("agent_type", "assistant")
-        chat_type = config.get("chat_type", "single")
-        task = inputs.get("task", "")
+        agent_type = config.get("agentType", "assistant")
+        system_message = config.get("systemMessage", "You are a helpful assistant.")
+        human_input_mode = config.get("humanInputMode", "NEVER")
+        max_consecutive_auto_reply = config.get("maxConsecutiveAutoReply", 10)
+        code_execution = config.get("codeExecution", False)
         
-        if chat_type == "single":
-            # Single agent chat
-            assistant = create_agent("assistant", config)
-            user_proxy = autogen.UserProxyAgent(
-                name="User",
-                human_input_mode="NEVER",
-                max_consecutive_auto_reply=10
+        # Get LLM configuration
+        llm_config = config.get("llm", {})
+        autogen_llm_config = {
+            "model": llm_config.get("model", "gpt-4"),
+            "temperature": llm_config.get("temperature", 0.7),
+            "max_tokens": llm_config.get("max_tokens", 1000),
+            "config_list": [{
+                "model": llm_config.get("model", "gpt-4"),
+                "api_key": llm_config.get("api_key", ""),
+                "base_url": llm_config.get("base_url", "")
+            }]
+        }
+        
+        # Create agents based on type
+        if agent_type == "assistant":
+            agent = autogen.AssistantAgent(
+                name="Assistant",
+                system_message=system_message,
+                llm_config=autogen_llm_config
             )
-            
-            # Start chat
-            user_proxy.initiate_chat(
-                assistant,
-                message=task
+        elif agent_type == "user_proxy":
+            agent = autogen.UserProxyAgent(
+                name="UserProxy",
+                human_input_mode=human_input_mode,
+                max_consecutive_auto_reply=max_consecutive_auto_reply,
+                code_execution_config={"work_dir": "autogen_workspace"} if code_execution else False
             )
-            
-            # Get chat history
-            history = user_proxy.chat_messages[assistant]
-            result = history[-1]["content"] if history else "No response generated"
-            
-        elif chat_type == "group":
-            # Group chat
-            agents = []
-            for agent_config in config.get("agents", []):
-                agent = create_agent(
-                    agent_config.get("type", "assistant"),
-                    agent_config
-                )
-                agents.append(agent)
-            
-            # Create group chat
-            groupchat = autogen.GroupChat(
-                agents=agents,
-                messages=[],
-                max_round=10
+        elif agent_type == "conversable":
+            agent = autogen.ConversableAgent(
+                name="Conversable",
+                system_message=system_message,
+                llm_config=autogen_llm_config,
+                human_input_mode=human_input_mode
             )
-            manager = autogen.GroupChatManager(groupchat=groupchat)
-            
-            # Start group chat
-            user_proxy = autogen.UserProxyAgent(
-                name="User",
-                human_input_mode="NEVER"
-            )
-            user_proxy.initiate_chat(
-                manager,
-                message=task
-            )
-            
-            # Get chat history
-            history = groupchat.messages
-            result = history[-1]["content"] if history else "No response generated"
-            
         else:
-            raise ValueError(f"Unsupported chat type: {chat_type}")
-
+            raise ValueError(f"Unsupported agent type: {agent_type}")
+        
+        # Create user proxy for interaction
+        user_proxy = autogen.UserProxyAgent(
+            name="User",
+            human_input_mode="NEVER",
+            max_consecutive_auto_reply=0
+        )
+        
+        # Get message from inputs
+        message = inputs.get("message", inputs.get("input", "Hello"))
+        
+        # Start conversation
+        chat_result = user_proxy.initiate_chat(
+            agent,
+            message=message,
+            max_turns=max_consecutive_auto_reply
+        )
+        
+        # Extract result
+        chat_history = user_proxy.chat_messages.get(agent, [])
+        last_message = chat_history[-1]["content"] if chat_history else "No response"
+        
         return {
             "type": "autogen_result",
-            "output": result,
+            "output": last_message,
+            "framework": "autogen",
+            "success": True,
             "metadata": {
                 "agent_type": agent_type,
-                "chat_type": chat_type,
+                "chat_turns": len(chat_history),
                 "timestamp": datetime.now().isoformat()
             }
         }
-
+        
     except Exception as e:
-        logger.error(f"Error in AutoGen tool: {str(e)}")
+        logger.error(f"AutoGen execution failed: {str(e)}")
         return {
             "type": "error",
             "error": str(e),
-            "metadata": {
-                "agent_type": config.get("agent_type"),
-                "chat_type": config.get("chat_type"),
-                "timestamp": datetime.now().isoformat()
-            }
+            "framework": "autogen",
+            "success": False
         }
 
-def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 
-               tools: List[Dict[str, Any]] = None, memory: Dict[str, Any] = None, 
-               inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Run a workflow with multiple agents and tasks using AutoGen
+async def _autogen_fallback(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Fallback when AutoGen is not available"""
+    from .openrouter_runner import run_openrouter_chat
     
-    Args:
-        agents: List of agent configurations
-        tasks: List of task configurations
-        tools: Optional list of tool configurations
-        memory: Optional memory configuration
-        inputs: Optional input data
-        
-    Returns:
-        Dictionary containing the workflow results
-    """
-    try:
-        if inputs is None:
-            inputs = {}
-            
-        results = []
-        
-        # Process each agent-task pair
-        for agent, task in zip(agents, tasks):
-            # Configure agent
-            agent_config = {
-                "agent_type": agent.get("agentType", "assistant"),
-                "chat_type": "single",
-                "llmModel": agent.get("llmModel", "gpt-4"),
-                "temperature": float(agent.get("temperature", 0.7)),
-                "allowHumanInput": agent.get("allowHumanInput", False),
-                "backstory": agent.get("backstory", "")
-            }
-            
-            # Add task-specific inputs
-            task_inputs = {
-                "task": task.get("description", ""),
-                **inputs
-            }
-            
-            # Run the agent
-            result = run_autogen_tool(agent_config, task_inputs)
-            results.append({
-                "agent_id": agent.get("nodeId"),
-                "task_id": task.get("nodeId"),
-                "result": result
-            })
-        
-        return {
-            "type": "workflow_result",
-            "results": results,
-            "metadata": {
-                "agent_count": len(agents),
-                "task_count": len(tasks),
-                "timestamp": datetime.now().isoformat()
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in AutoGen workflow: {str(e)}")
-        return {
-            "type": "error",
-            "error": str(e),
-            "metadata": {
-                "timestamp": datetime.now().isoformat()
-            }
-        }
+    system_message = config.get("systemMessage", "You are a helpful assistant.")
+    message = inputs.get("message", inputs.get("input", "Hello"))
+    
+    llm_config = config.get("llm", {})
+    
+    messages = [
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": message}
+    ]
+    
+    response = await run_openrouter_chat(
+        messages=messages,
+        model=llm_config.get("model", "gpt-4"),
+        temperature=llm_config.get("temperature", 0.7)
+    )
+    
+    return {
+        "type": "autogen_fallback",
+        "output": response,
+        "framework": "autogen_fallback",
+        "success": True,
+        "note": "AutoGen not available - using fallback"
+    }

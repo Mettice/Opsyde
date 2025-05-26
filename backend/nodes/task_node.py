@@ -42,7 +42,16 @@ class TaskNode:
             formatted_inputs = {}
             if inputs:
                 for key, value in inputs.items():
-                    if isinstance(value, dict):
+                    if hasattr(value, 'value') and isinstance(value.value, dict):
+                        # Handle NodeData objects - extract the nested value
+                        nested_value = value.value
+                        if 'value' in nested_value and isinstance(nested_value['value'], dict):
+                            # Double nested (NodeData.value.value)
+                            formatted_inputs[key] = nested_value['value']
+                        else:
+                            # Single nested (NodeData.value)
+                            formatted_inputs[key] = nested_value
+                    elif isinstance(value, dict):
                         if 'output' in value:
                             formatted_inputs[key] = value['output']
                         elif 'value' in value:
@@ -54,8 +63,64 @@ class TaskNode:
                     else:
                         formatted_inputs[key] = value
 
-            # Check for connected agents
-            connected_agents = inputs.get('connected_agents', [])
+            # DEBUG: Log what inputs we're receiving
+            logger.info(f"Task {task_name} received inputs: {list(inputs.keys())}")
+            for key, value in inputs.items():
+                logger.info(f"Input '{key}': type={type(value)}, value={value}")
+            logger.info(f"Formatted inputs: {formatted_inputs}")
+
+            # Check for connected agents - look in actual inputs from connected nodes
+            connected_agents = []
+            
+            # Look for agent results in the inputs
+            for key, value in formatted_inputs.items():
+                if isinstance(value, dict):
+                    # Check if this is an agent result
+                    if (value.get('type') == 'agent_result' or 
+                        'agent_name' in value or 
+                        'role' in value or
+                        key.startswith('agent-') or
+                        key.startswith('input_from_agent-')):
+                        
+                        # Extract agent info from the result or metadata
+                        metadata = value.get('metadata', {})
+                        data = value.get('data', {})
+                        
+                        agent_info = {
+                            "role": (data.get("role") or metadata.get("role") or "Assistant"),
+                            "goal": (data.get("goal") or metadata.get("goal") or "Help the user"),
+                            "backstory": (data.get("backstory") or metadata.get("backstory") or ""),
+                            "framework": (metadata.get("framework") or data.get("framework") or "crewai"),
+                            "llmModel": (data.get("llm_model") or metadata.get("llm_model") or "gpt-4"),
+                            "temperature": (data.get("temperature") or metadata.get("temperature") or 0.7),
+                            "max_tokens": (data.get("max_tokens") or metadata.get("max_tokens") or 4000),
+                            "allowDelegation": (data.get("allow_delegation") or metadata.get("allow_delegation") or False)
+                        }
+                        connected_agents.append(agent_info)
+                        logger.info(f"Found connected agent: {agent_info['role']} (framework: {agent_info['framework']})")
+            
+            # If no agents found in formatted inputs, check the original inputs
+            if not connected_agents:
+                for key, value in inputs.items():
+                    if hasattr(value, 'value') and isinstance(value.value, dict):
+                        agent_data = value.value
+                        if (agent_data.get('type') == 'agent_result' or 
+                            'agent_name' in agent_data or 
+                            'role' in agent_data):
+                            
+                            agent_info = {
+                                "role": agent_data.get("role", "Assistant"),
+                                "goal": agent_data.get("goal", "Help the user"),
+                                "backstory": agent_data.get("backstory", ""),
+                                "framework": agent_data.get("framework", "crewai"),
+                                "llmModel": agent_data.get("llm_model", "gpt-4"),
+                                "temperature": agent_data.get("temperature", 0.7),
+                                "max_tokens": agent_data.get("max_tokens", 4000),
+                                "allowDelegation": agent_data.get("allow_delegation", False)
+                            }
+                            connected_agents.append(agent_info)
+                            logger.info(f"Found connected agent in NodeData: {agent_info['role']}")
+            
             if not connected_agents:
                 logger.warning(f"No agents connected to task: {task_name}")
                 return {
@@ -139,27 +204,38 @@ class TaskNode:
                 if agent_framework == "crewai":
                     # Try to use the crewai runner
                     try:
-                        from backend.frameworks.crewai_runner import run_crewai_agent
+                        from backend.frameworks.crewai_runner import EnhancedCrewAIRunner
                         logger.info("Using CrewAI framework for agent task")
+                        
+                        # Create CrewAI runner instance
+                        crewai_runner = EnhancedCrewAIRunner()
                         
                         # Prepare data for crewai_runner
                         agent_data = {
                             "role": agent_role,
                             "goal": agent_goal,
                             "backstory": primary_agent.get("backstory", ""),
-                            "llm_config": {
+                            "frameworkConfig": {
+                                "provider": primary_agent.get("framework", "openai"),
                                 "model": primary_agent.get("llmModel", "gpt-4"),
                                 "temperature": primary_agent.get("temperature", 0.7),
                                 "max_tokens": primary_agent.get("max_tokens", 4000)
                             },
-                            "allow_delegation": primary_agent.get("allowDelegation", False)
+                            "allowDelegation": primary_agent.get("allowDelegation", False),
+                            "enableMemory": False,
+                            "verbose": True
                         }
                         
-                        # Run the agent with the file if available
-                        result = await run_crewai_agent(
-                            agent_data=agent_data, 
-                            query=user_query,
-                            file_data=file_data
+                        task_data = {
+                            "description": user_query,
+                            "expectedOutput": expected_output or "Detailed response to the query"
+                        }
+                        
+                        # Run the agent
+                        result = await crewai_runner.run_crewai_agent(
+                            agent_config=agent_data, 
+                            task_config=task_data,
+                            inputs=formatted_inputs
                         )
                         agent_response = result.get("output", "No response from CrewAI agent")
                     except ImportError as e:
@@ -168,7 +244,7 @@ class TaskNode:
                     except Exception as e:
                         logger.error(f"CrewAI execution error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
-                        
+                    
                 elif agent_framework == "openai":
                     # Try to use direct OpenAI API
                     agent_response = await self._execute_openai_query(primary_agent, user_query)
@@ -353,6 +429,78 @@ class TaskNode:
         return config.dependencies if config else []
 
     def is_async(self, node: Node) -> bool:
-        """Check if task is asynchronous"""
+        """Check if task should be executed asynchronously"""
         config = node.get_config()
-        return config.async_execution if config else False 
+        return config.async_execution
+
+
+# Standalone function for node processor compatibility
+async def process_task_node(
+    node_data: Dict[str, Any], 
+    inputs: Dict[str, NodeData], 
+    context: Dict[str, Any] = None
+) -> NodeData:
+    """
+    Process task node - standalone function for node processor
+    """
+    try:
+        from backend.models.data import NodeData
+        from backend.models.workflow import ExecutionContext
+        
+        # Create TaskNode instance
+        task_node = TaskNode()
+        
+        # Convert context to ExecutionContext if needed
+        if context and not isinstance(context, ExecutionContext):
+            exec_context = ExecutionContext(
+                execution_id=context.get('execution_id', 'unknown'),
+                workflow_id=context.get('workflow_id', 'unknown'),
+                user_id=context.get('user_id'),
+                metadata=context.get('metadata', {})
+            )
+        else:
+            exec_context = context or ExecutionContext(
+                execution_id='unknown',
+                workflow_id='unknown'
+            )
+        
+        # Create a Node object from node_data
+        from backend.models.nodes import Node, NodeType
+        node = Node(
+            id=node_data.get('nodeId', node_data.get('id', 'unknown')),
+            type=NodeType.TASK,
+            data=node_data,
+            position=node_data.get('position', {'x': 0, 'y': 0})
+        )
+        
+        # Process the node
+        result = await task_node.process(node, inputs, exec_context)
+        
+        # Ensure result is wrapped in NodeData
+        if isinstance(result, NodeData):
+            return result
+        else:
+            return NodeData(
+                value=result,
+                metadata={
+                    'node_id': node.id,
+                    'node_type': 'task',
+                    'timestamp': datetime.now().isoformat()
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in process_task_node: {str(e)}")
+        return NodeData(
+            value={
+                "success": False,
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            },
+            metadata={
+                'node_id': node_data.get('nodeId', 'unknown'),
+                'node_type': 'task',
+                'error': True
+            }
+        ) 

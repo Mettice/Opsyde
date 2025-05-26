@@ -4,13 +4,13 @@ from typing import Dict, Any, Optional
 import json
 import aiohttp
 from datetime import datetime
-from framework_registry import run_framework_tool
-
+from backend.framework_registry import run_framework_tool
+from backend.frameworks.shared_api_research import research_for_output
 
 logger = logging.getLogger(__name__)
 
 class AIIntegrationRunner:
-    """AI-powered integration runner that adapts to any service"""
+    """Enhanced to use shared research"""
     
     async def run_smart_output(
         self,
@@ -18,26 +18,50 @@ class AIIntegrationRunner:
         ai_config: Dict[str, Any],
         data: Any,
         context: Dict[str, Any],
-        user_keys: Dict[str, str]  # NEW: User's API keys
+        user_keys: Dict[str, str]
     ) -> Dict[str, Any]:
-        """Run AI-powered output with user's keys"""
+        """Enhanced smart output with shared research"""
         
-        # Select best available LLM based on user's keys
-        llm_config = self._select_best_llm(user_keys, ai_config)
+        # If no existing research, perform it
+        if not ai_config.get('api_research_result'):
+            service_name = self._extract_service_name(ai_config.get('description', ''))
+            
+            research_result = await research_for_output(
+                service_name=service_name,
+                description=ai_config.get('description', ''),
+                endpoint_hint=ai_config.get('manual_endpoint'),
+                user_keys=user_keys
+            )
+            
+            if research_result.get('success'):
+                ai_config['api_research_result'] = research_result
+            else:
+                return research_result
         
-        if not llm_config:
-            return {
-                "success": False,
-                "error": "No valid API keys found. Please add your API keys in settings.",
-                "setup_required": True
-            }
-        
-        # Generate integration plan using user's LLM
-        integration_plan = await self._generate_integration_plan_with_user_key(
-            output_type, ai_config, data, llm_config
+        # Execute with research results
+        return await self._execute_integration_plan(
+            ai_config['api_research_result'], 
+            data, 
+            user_keys
         )
+    
+    def _extract_service_name(self, description: str) -> str:
+        """Extract service name from description"""
+        # Simple extraction logic - can be enhanced
+        common_services = ['hubspot', 'slack', 'notion', 'discord', 'airtable', 'linear', 'webflow']
+        description_lower = description.lower()
         
-        return await self._execute_integration_plan(integration_plan["plan"], data, user_keys)
+        for service in common_services:
+            if service in description_lower:
+                return service
+        
+        # Try to extract from common patterns
+        words = description_lower.split()
+        for word in words:
+            if len(word) > 3 and word.endswith('api'):
+                return word.replace('api', '')
+        
+        return 'unknown_service'
     
     def _select_best_llm(self, user_keys: Dict[str, str], ai_config: Dict[str, Any]) -> Optional[Dict]:
         """Select best available LLM based on user's keys and task"""

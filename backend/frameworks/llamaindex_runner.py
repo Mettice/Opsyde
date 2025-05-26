@@ -1,144 +1,142 @@
+# Enhanced LlamaIndex Runner
 import logging
-import json
+from typing import Dict, Any
 from datetime import datetime
-from typing import Dict, Any, Optional
-from llama_index.core import (
-    VectorStoreIndex,
-    ListIndex,
-    TreeIndex,
-    KeywordTableIndex,
-    Document,
-    Settings,
-    ServiceContext
-)
-from llama_index.llms.openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-async def run_llamaindex_tool(tool_data: Dict[str, Any], inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Run a LlamaIndex-based tool with the given configuration
-    """
+try:
+    from llama_index.core import VectorStoreIndex, Document, Settings, ServiceContext
+    from llama_index.core.query_engine import RetrieverQueryEngine
+    from llama_index.core.retrievers import VectorIndexRetriever
+    from llama_index.embeddings.openai import OpenAIEmbedding
+    from llama_index.llms.openai import OpenAI
+    LLAMAINDEX_AVAILABLE = True
+except ImportError:
+    logger.warning("LlamaIndex not installed")
+    LLAMAINDEX_AVAILABLE = False
+
+async def run_llamaindex_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Enhanced LlamaIndex runner with full RAG capabilities"""
+    
+    if not LLAMAINDEX_AVAILABLE:
+        return await _llamaindex_fallback(config, inputs)
+    
     try:
         # Extract configuration
-        config = tool_data.get("frameworkConfig", {})
-        index_type = config.get("index_type", "vector")
-        query_mode = config.get("query_mode", "default")
-        llm_model = config.get("llm_model", "gpt-4")
-        temperature = float(config.get("temperature", 0.7))
-        max_tokens = int(config.get("max_tokens", 4000))
-        prompt_template = config.get("prompt", "")
-
-        # Extract input text
-        input_text = None
-        if inputs:
-            # Try to get text from various input structures
-            for key, value in inputs.items():
-                if isinstance(value, dict):
-                    # Case 1: Input node result
-                    if value.get("type") == "input_result" and "data" in value:
-                        for data_key, data_value in value["data"].items():
-                            if isinstance(data_value, dict) and "value" in data_value:
-                                input_text = str(data_value["value"])
-                                break
-                    # Case 2: Direct value in data
-                    elif "data" in value and isinstance(value["data"], dict):
-                        for data_key, data_value in value["data"].items():
-                            if isinstance(data_value, dict) and "value" in data_value:
-                                input_text = str(data_value["value"])
-                                break
-                    # Case 3: Nested input structure
-                    elif "inputs" in value and isinstance(value["inputs"], dict):
-                        for input_key, input_value in value["inputs"].items():
-                            if isinstance(input_value, dict) and "value" in input_value:
-                                input_text = str(input_value["value"])
-                                break
-                    # Case 4: Direct value
-                    elif "value" in value:
-                        input_text = str(value["value"])
-                    # Case 5: Text input field
-                    elif "text_input" in value:
-                        input_text = str(value["text_input"])
-                elif isinstance(value, str):
-                    input_text = value
-
-                if input_text:
-                    break
-
-        # Build prompt with input text
-        if input_text:
-            prompt = f"{prompt_template}\n\nInput: {input_text}" if prompt_template else input_text
-        else:
-            prompt = prompt_template
-
-        # Ensure prompt is not empty
-        prompt = prompt.strip()
-        if not prompt:
-            logger.warning("Empty prompt after processing, using default")
-            prompt = "Please provide a helpful response."
-
-        # Configure LLM
-        llm = OpenAI(
-            model=llm_model,
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-
-        # Update global settings
-        Settings.llm = llm
-        Settings.chunk_size = 512
-        Settings.chunk_overlap = 20
-
-        # Create document from prompt
-        doc = Document(text=prompt)
+        index_type = config.get("indexType", "vector")
+        documents_source = config.get("documentsSource", "text")
+        query_mode = config.get("queryMode", "default")
+        similarity_top_k = config.get("similarityTopK", 3)
+        chunk_size = config.get("chunkSize", 512)
+        chunk_overlap = config.get("chunkOverlap", 20)
         
-        # Create appropriate index based on type
-        if index_type == "vector":
-            index = VectorStoreIndex.from_documents([doc])
-        elif index_type == "list":
-            index = ListIndex.from_documents([doc])
-        elif index_type == "tree":
-            index = TreeIndex.from_documents([doc])
-        elif index_type == "keyword":
-            index = KeywordTableIndex.from_documents([doc])
+        # Get LLM configuration
+        llm_config = config.get("llm", {})
+        
+        # Setup LLM
+        llm = OpenAI(
+            model=llm_config.get("model", "gpt-4"),
+            temperature=llm_config.get("temperature", 0.7),
+            max_tokens=llm_config.get("max_tokens", 1000)
+        )
+        
+        # Setup embeddings
+        embed_model = OpenAIEmbedding()
+        
+        # Configure settings
+        Settings.llm = llm
+        Settings.embed_model = embed_model
+        Settings.chunk_size = chunk_size
+        Settings.chunk_overlap = chunk_overlap
+        
+        # Create documents based on source
+        if documents_source == "text":
+            text = inputs.get("text", inputs.get("input", "Sample document"))
+            documents = [Document(text=text)]
+        elif documents_source == "upload":
+            # Handle uploaded files
+            file_content = inputs.get("file_content", "")
+            documents = [Document(text=file_content)]
         else:
-            return {
-                "type": "error",
-                "error": f"Unsupported index type: {index_type}",
-                "timestamp": datetime.now().isoformat()
-            }
-
-        # Query the index
-        query_engine = index.as_query_engine()
-        response = query_engine.query(prompt)
-
+            # Default document
+            documents = [Document(text="No documents provided")]
+        
+        # Create index based on type
+        if index_type == "vector":
+            index = VectorStoreIndex.from_documents(documents)
+        else:
+            # Fallback to vector index
+            index = VectorStoreIndex.from_documents(documents)
+        
+        # Create query engine
+        if query_mode == "embedding":
+            retriever = VectorIndexRetriever(
+                index=index,
+                similarity_top_k=similarity_top_k
+            )
+            query_engine = RetrieverQueryEngine(retriever=retriever)
+        else:
+            query_engine = index.as_query_engine(
+                similarity_top_k=similarity_top_k
+            )
+        
+        # Execute query
+        query = inputs.get("query", inputs.get("question", "What is this about?"))
+        response = query_engine.query(query)
+        
         return {
-            "type": "tool_result",
+            "type": "llamaindex_result",
             "output": str(response),
             "framework": "llamaindex",
+            "success": True,
             "metadata": {
                 "index_type": index_type,
                 "query_mode": query_mode,
-                "llm_model": llm_model,
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-                "prompt_length": len(prompt),
-                "input_text": input_text,
+                "documents_count": len(documents),
+                "similarity_top_k": similarity_top_k,
                 "timestamp": datetime.now().isoformat()
             }
         }
-
-    except ImportError as e:
-        logger.error(f"Import error in LlamaIndex tool: {str(e)}")
-        return {
-            "type": "error",
-            "error": f"LlamaIndex package is not installed correctly: {str(e)}",
-            "timestamp": datetime.now().isoformat()
-        }
+        
     except Exception as e:
-        logger.error(f"Error in LlamaIndex tool: {str(e)}")
+        logger.error(f"LlamaIndex execution failed: {str(e)}")
         return {
             "type": "error",
             "error": str(e),
-            "timestamp": datetime.now().isoformat()
+            "framework": "llamaindex",
+            "success": False
         }
+
+async def _llamaindex_fallback(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Fallback when LlamaIndex is not available"""
+    from .openrouter_runner import run_openrouter_chat
+    
+    query = inputs.get("query", inputs.get("question", "What is this about?"))
+    context = inputs.get("text", inputs.get("input", "No context provided"))
+    
+    llm_config = config.get("llm", {})
+    
+    prompt = f"""Based on the following context, answer the question:
+
+Context: {context}
+
+Question: {query}
+
+Answer:"""
+    
+    messages = [{"role": "user", "content": prompt}]
+    
+    response = await run_openrouter_chat(
+        messages=messages,
+        model=llm_config.get("model", "gpt-4"),
+        temperature=llm_config.get("temperature", 0.7)
+    )
+    
+    return {
+        "type": "llamaindex_fallback",
+        "output": response,
+        "framework": "llamaindex_fallback",
+        "success": True,
+        "note": "LlamaIndex not available - using fallback"
+    }

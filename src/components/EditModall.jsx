@@ -1,3 +1,4 @@
+// Enhanced EditModal with LLM/Framework Separation
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { toast } from 'react-hot-toast';
@@ -13,10 +14,128 @@ import TriggerEditor from './editmodal/TriggerEditor';
 import LogicEditor from './editmodal/LogicEditor';
 import InputEditor from './editmodal/InputEditor';
 import OutputEditor from './editmodal/OutputEditor';
-import InheritanceSelector from './editmodal/shared/InheritanceSelector';
 
+// Framework and LLM constants (separated)
+export const AVAILABLE_FRAMEWORKS = [
+  { value: 'crewai', label: 'CrewAI', description: 'Multi-agent orchestration framework' },
+  { value: 'langchain', label: 'LangChain', description: 'Chain-based LLM workflows' },
+  { value: 'autogen', label: 'AutoGen', description: 'Multi-agent conversations' },
+  { value: 'llamaindex', label: 'LlamaIndex', description: 'Document indexing and RAG' },
+  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' }
+];
 
-// Tool type constants
+export const AVAILABLE_LLM_PROVIDERS = [
+  { value: 'openai', label: 'OpenAI', description: 'GPT models' },
+  { value: 'anthropic', label: 'Anthropic', description: 'Claude models' },
+  { value: 'openrouter', label: 'OpenRouter', description: 'Multiple models via API' },
+  { value: 'gemini', label: 'Google Gemini', description: 'Google\'s AI models' },
+  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' }
+];
+
+// LLM Models mapping
+export const LLM_MODELS = {
+  openai: [
+    { value: 'gpt-4', label: 'GPT-4', context: '8K', cost: 'High' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', context: '128K', cost: 'High' },
+    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', context: '4K', cost: 'Medium' }
+  ],
+  anthropic: [
+    { value: 'claude-3-opus', label: 'Claude 3 Opus', context: '200K', cost: 'High' },
+    { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet', context: '200K', cost: 'Medium' },
+    { value: 'claude-3-haiku', label: 'Claude 3 Haiku', context: '200K', cost: 'Low' }
+  ],
+  openrouter: [
+    { value: 'openai/gpt-4', label: 'GPT-4 (via OpenRouter)', context: '8K', cost: 'High' },
+    { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus (via OpenRouter)', context: '200K', cost: 'High' },
+    { value: 'meta-llama/llama-2-70b-chat', label: 'Llama 2 70B', context: '4K', cost: 'Medium' }
+  ],
+  gemini: [
+    { value: 'gemini-pro', label: 'Gemini Pro', context: '32K', cost: 'Medium' },
+    { value: 'gemini-pro-vision', label: 'Gemini Pro Vision', context: '16K', cost: 'High' }
+  ],
+  huggingface: [
+    { value: 'microsoft/DialoGPT-medium', label: 'DialoGPT Medium', context: '1K', cost: 'Low' },
+    { value: 'microsoft/phi-2', label: 'Phi-2', context: '2K', cost: 'Low' },
+    { value: 'mistralai/Mistral-7B-Instruct-v0.2', label: 'Mistral 7B', context: '8K', cost: 'Low' }
+  ]
+};
+
+// Framework compatibility with LLMs
+export const FRAMEWORK_LLM_COMPATIBILITY = {
+  crewai: ['openai', 'anthropic', 'openrouter', 'gemini'],
+  langchain: ['openai', 'anthropic', 'openrouter', 'huggingface'],
+  autogen: ['openai', 'anthropic', 'openrouter'],
+  llamaindex: ['openai', 'anthropic', 'openrouter', 'huggingface'],
+  huggingface: [] // Uses models directly, no external LLM needed
+};
+
+// Framework-specific field requirements
+export const FRAMEWORK_REQUIREMENTS = {
+  crewai: {
+    agent: {
+      required: ['role', 'goal', 'backstory'],
+      optional: ['allowDelegation', 'verbose', 'maxIterations']
+    },
+    task: {
+      required: ['description', 'expectedOutput'],
+      optional: ['context', 'outputFile']
+    }
+  },
+  langchain: {
+    agent: {
+      required: ['systemMessage', 'chainType'],
+      optional: ['tools', 'memoryType', 'outputParser']
+    },
+    task: {
+      required: ['prompt'],
+      optional: ['inputVariables', 'examples']
+    }
+  },
+  autogen: {
+    agent: {
+      required: ['systemMessage', 'agentType'],
+      optional: ['humanInputMode', 'maxConsecutiveAutoReply', 'codeExecution']
+    },
+    task: {
+      required: ['message'],
+      optional: ['maxRounds', 'summary']
+    }
+  },
+  llamaindex: {
+    agent: {
+      required: ['indexType', 'documentsSource'],
+      optional: ['chunkSize', 'chunkOverlap', 'embeddingModel']
+    },
+    task: {
+      required: ['query', 'queryMode'],
+      optional: ['similarityTopK', 'responseMode']
+    }
+  },
+  huggingface: {
+    agent: {
+      required: ['modelName', 'taskType'],
+      optional: ['maxLength', 'temperature', 'doSample']
+    },
+    task: {
+      required: ['input'],
+      optional: ['context', 'question']
+    }
+  }
+};
+
+// Framework options for different tool types
+export const FRAMEWORK_OPTIONS = {
+  API: [
+    { value: 'api', label: 'Generic API', description: 'Standard REST API calls' },
+    { value: 'openai', label: 'OpenAI API', description: 'OpenAI API integration' },
+    { value: 'anthropic', label: 'Anthropic API', description: 'Claude API integration' },
+    { value: 'webhook', label: 'Webhook', description: 'HTTP webhook calls' },
+    { value: 'custom', label: 'Custom Integration', description: 'Custom tool implementation' },
+    { value: 'universal_api', label: 'Universal API', description: 'AI-powered API integration' }
+  ]
+};
+
+// Tool type definitions
 export const ToolType = {
   LLM: 'llm',
   API: 'api',
@@ -24,85 +143,7 @@ export const ToolType = {
   CUSTOM: 'custom'
 };
 
-// Framework constants
-export const FRAMEWORK_OPTIONS = {
-  AGENT: [
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'crewai', label: 'CrewAI' },
-    { value: 'anthropic', label: 'Anthropic' },
-    { value: 'autogen', label: 'Autogen' },
-    { value: 'openrouter', label: 'OpenRouter' },
-    { value: 'huggingface', label: 'HuggingFace' },
-    { value: 'llamaindex', label: 'LlamaIndex' },
-    { value: 'webhook', label: 'Webhook' }
-  ],
-  LLM: [
-    { value: 'openai', label: 'OpenAI' },
-    { value: 'openrouter', label: 'OpenRouter' },
-    { value: 'huggingface', label: 'HuggingFace' }
-  ],
-  API: [
-    { value: 'webhook', label: 'Webhook' },
-    { value: 'api', label: 'API' },
-    { value: 'custom', label: 'Custom' }
-  ]
-};
-
-// Function to get output schema for each node type
-const getOutputSchemaForNode = (nodeData, nodeType) => {
-  const schemas = {
-    agent: {
-      response: { type: 'string', sample: 'AI agent response text' },
-      status: { type: 'string', sample: 'completed' },
-      token_usage: { type: 'number', sample: 150 },
-      execution_time: { type: 'number', sample: 2.5 },
-      'data.result': { type: 'string', sample: 'Agent execution result' },
-      'data.status': { type: 'string', sample: 'completed|error' }
-    },
-    task: {
-      result: { type: 'string', sample: 'Task execution result' },
-      status: { type: 'string', sample: 'success' },
-      output: { type: 'object', sample: '{data: "processed"}' },
-      duration: { type: 'number', sample: 1.5 },
-      'data.result': { type: 'string', sample: 'Task output' },
-      'data.status': { type: 'string', sample: 'completed|failed' },
-      'data.task_name': { type: 'string', sample: 'Task name' }
-    },
-    tool: {
-      response: { type: 'object', sample: '{result: "tool output"}' },
-      status_code: { type: 'number', sample: 200 },
-      success: { type: 'boolean', sample: true },
-      error: { type: 'string', sample: null }
-    },
-    input: {
-      value: { type: 'string', sample: 'User input text' },
-      type: { type: 'string', sample: 'text' },
-      timestamp: { type: 'number', sample: Date.now() }
-    },
-    chatbot: {
-      message: { type: 'string', sample: 'Chatbot response' },
-      conversation_id: { type: 'string', sample: 'conv_123' },
-      user_input: { type: 'string', sample: 'User message' }
-    },
-    trigger: {
-      triggered: { type: 'boolean', sample: true },
-      trigger_time: { type: 'string', sample: '2024-01-01T12:00:00Z' },
-      payload: { type: 'object', sample: '{data: "trigger data"}' }
-    },
-    delay: {
-      completed: { type: 'boolean', sample: true },
-      duration: { type: 'string', sample: '5s' },
-      start_time: { type: 'string', sample: '2024-01-01T12:00:00Z' }
-    }
-  };
-  
-  return schemas[nodeType] || {};
-};
-
-/**
- * Modal component for editing node properties
- */
-const EditModal = ({ 
+const EnhancedEditModal = ({ 
   isOpen, 
   onClose, 
   onSave, 
@@ -112,169 +153,179 @@ const EditModal = ({
   connectedNodes = [],
   workflowNodes = []
 }) => {
-  // Initialize form data with default values
+  // Enhanced form data structure with separated LLM and framework configs
   const [formData, setFormData] = useState({
+    // Basic node info
     label: '',
-    role: '',
     description: '',
-    goal: '',
-    backstory: '',
-    llmModel: 'gpt-4',
-    allowDelegation: false,
-    verbose: true,
-    toolType: 'api',
-    apiEndpoint: '',
-    apiKey: '',
-    parameters: '',
-    expectedOutput: '',
-    async: false,
-    dependencies: [],
-    webhookType: 'send-output',
-    flowMode: 'replace',
-    webhook_url: '',
-    secretToken: '',
-    prompt: '',
-    model: 'gpt-4',
-    enableMemory: false,
-    condition: '',
-    temperature: 0.7,
-    max_tokens: 500,
-    duration: '5s',
-    triggerType: 'manual',
-    runAt: '',
-    scheduleType: 'once',
-    scheduleDays: [],
-    scheduleWeekday: 'monday',
-    scheduleMonthDay: 1,
-    inputType: 'text',
-    variableName: '',
-    isRequired: false,
-    outputType: 'webhook',
-    webhookUrl: '',
-    sheetId: '',
-    email: '',
+    
+    // Framework configuration
     framework: '',
-    agentConfig: '',
-    frameworkConfig: {
+    
+    // LLM configuration (separated)
+    llm: {
+      provider: '',
       model: '',
       temperature: 0.7,
-      max_tokens: 2000,
-      url: '',
-      task: '',
-      index_type: ''
-    }
+      max_tokens: 1000,
+      api_key: '',
+      base_url: ''
+    },
+    
+    // Framework-specific fields
+    frameworkConfig: {},
+    
+    // Legacy fields for backward compatibility
+    role: '',
+    goal: '',
+    backstory: '',
+    systemMessage: '',
+    chainType: '',
+    agentType: '',
+    modelName: '',
+    taskType: '',
+    indexType: '',
+    documentsSource: '',
+    queryMode: ''
   });
 
-  // Track if form has been modified
   const [isModified, setIsModified] = useState(false);
-  
-  // Add error state
   const [error, setError] = useState(null);
-  
-  // For logic node testing
-  const [testInput, setTestInput] = useState('{\n  "value": 15,\n  "status": "approved",\n  "message": "Success"\n}');
+  const [availableLLMs, setAvailableLLMs] = useState([]);
+  const [availableModels, setAvailableModels] = useState([]);
+  const [frameworkMetadata, setFrameworkMetadata] = useState({});
+
+  // NEW: Add missing state for ToolEditor
+  const [testInput, setTestInput] = useState('');
   const [testResult, setTestResult] = useState(null);
   const [savedTestInputs, setSavedTestInputs] = useState([]);
 
-  // Use a default value if nodeType is undefined
   const currentNodeType = nodeType || 'agent';
 
-  // Function to get connected nodes with their output schemas
-  const getConnectedNodesWithSchemas = () => {
-    return connectedNodes.map(node => ({
-      id: node.id,
-      type: node.type || node.nodeType,
-      outputs: getOutputSchemaForNode(node.data, node.type || node.nodeType)
-    }));
-  };
+  // Load framework metadata when framework changes
+  useEffect(() => {
+    if (formData.framework) {
+      loadFrameworkMetadata(formData.framework);
+      updateAvailableLLMs(formData.framework);
+    }
+  }, [formData.framework]);
+
+  // Load available models when LLM provider changes
+  useEffect(() => {
+    const provider = formData.llm?.provider || formData.llmProvider;
+    if (provider) {
+      updateAvailableModels(provider);
+    }
+  }, [formData.llm?.provider, formData.llmProvider]);
 
   // Populate form data when nodeData changes
   useEffect(() => {
     if (nodeData) {
-      console.log("Setting form data from node data:", nodeData);
+      console.log("Setting enhanced form data:", nodeData);
       
-      // Create a clean copy without any potential circular references
-      const cleanData = {
-        label: nodeData.label || '',
-        role: nodeData.role || '',
-        description: nodeData.description || '',
-        goal: nodeData.goal || '',
-        backstory: nodeData.backstory || '',
-        llmModel: nodeData.llmModel || 'gpt-4',
-        allowDelegation: nodeData.allowDelegation || false,
-        verbose: nodeData.verbose !== undefined ? nodeData.verbose : true,
-        toolType: nodeData.toolType || 'api',
-        apiEndpoint: nodeData.apiEndpoint || '',
-        apiKey: nodeData.apiKey || '',
-        parameters: nodeData.parameters || '',
-        expectedOutput: nodeData.expectedOutput || '',
-        async: nodeData.async || false,
-        dependencies: nodeData.dependencies || [],
-        webhookType: nodeData.webhookType || 'send-output',
-        flowMode: nodeData.flowMode || 'replace',
-        webhook_url: nodeData.webhook_url || '',
-        secretToken: nodeData.secretToken || '',
-        prompt: nodeData.prompt || '',
-        model: nodeData.model || 'gpt-4',
-        enableMemory: nodeData.enableMemory || false,
-        condition: nodeData.condition || '',
-        temperature: nodeData.temperature || 0.7,
-        max_tokens: nodeData.max_tokens || 500,
-        duration: nodeData.duration || '5s',
-        triggerType: nodeData.triggerType || 'manual',
-        runAt: nodeData.runAt || '',
-        scheduleType: nodeData.scheduleType || 'once',
-        scheduleDays: nodeData.scheduleDays || [],
-        scheduleWeekday: nodeData.scheduleWeekday || 'monday',
-        scheduleMonthDay: nodeData.scheduleMonthDay || 1,
-        inputType: nodeData.inputType || 'text',
-        variableName: nodeData.variableName || '',
-        isRequired: nodeData.isRequired || false,
-        outputType: nodeData.outputType || 'webhook',
-        webhookUrl: nodeData.webhookUrl || '',
-        sheetId: nodeData.sheetId || '',
-        email: nodeData.email || '',
-        framework: nodeData.framework || '',
-        agentConfig: nodeData.agentConfig || '',
-        frameworkConfig: nodeData.frameworkConfig || {}
-      };
+      // Handle both old and new data structures
+      const migratedData = migrateNodeData(nodeData);
       
-      // Parse runAt into runDate and runTime if it exists
-      if (nodeData.runAt) {
-        try {
-          const [date, time] = nodeData.runAt.split(' ');
-          cleanData.runDate = date;
-          cleanData.runTime = time;
-        } catch (e) {
-          console.error('Error parsing runAt:', e);
-        }
-      }
-      
-      // Set framework-specific configuration
-      if (nodeData.framework && nodeData.frameworkConfig) {
-        cleanData.frameworkConfig = {
-          ...cleanData.frameworkConfig,
-          ...nodeData.frameworkConfig
-        };
-      }
-      
-      setFormData(cleanData);
+      setFormData(migratedData);
       setIsModified(false);
     }
   }, [nodeData]);
-  
-  // Generic handler for input changes
+
+  const loadFrameworkMetadata = async (framework) => {
+    try {
+      // In a real app, this would be an API call
+      // const response = await fetch(`/api/frameworks/metadata/${framework}`);
+      // const metadata = await response.json();
+      
+      // For now, use static data
+      const metadata = FRAMEWORK_REQUIREMENTS[framework] || {};
+      setFrameworkMetadata(metadata);
+    } catch (error) {
+      console.error('Failed to load framework metadata:', error);
+    }
+  };
+
+  const updateAvailableLLMs = (framework) => {
+    const compatibleLLMs = FRAMEWORK_LLM_COMPATIBILITY[framework] || [];
+    const filteredLLMs = AVAILABLE_LLM_PROVIDERS.filter(llm => 
+      compatibleLLMs.includes(llm.value)
+    );
+    setAvailableLLMs(filteredLLMs);
+    
+    // Reset LLM selection if current one is not compatible
+    const currentProvider = formData.llm?.provider || formData.llmProvider;
+    if (currentProvider && !compatibleLLMs.includes(currentProvider)) {
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          provider: '',
+          model: ''
+        },
+        llmProvider: '', // Also reset the top-level field
+        llmModel: ''     // Also reset the top-level field
+      }));
+    }
+  };
+
+  const updateAvailableModels = (provider) => {
+    const models = LLM_MODELS[provider] || [];
+    setAvailableModels(models);
+    
+    // Auto-select first model if none selected
+    const currentModel = formData.llm?.model || formData.llmModel;
+    if (!currentModel && models.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          model: models[0].value
+        },
+        llmModel: models[0].value // Also set the top-level field
+      }));
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     
-    if (name.startsWith('frameworkConfig.')) {
-      const configKey = name.split('.')[1];
+    if (name.startsWith('llm.')) {
+      const llmField = name.split('.')[1];
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          [llmField]: type === 'checkbox' ? checked : value
+        }
+      }));
+    } else if (name.startsWith('frameworkConfig.')) {
+      const configField = name.split('.')[1];
       setFormData(prev => ({
         ...prev,
         frameworkConfig: {
           ...prev.frameworkConfig,
-          [configKey]: value
+          [configField]: type === 'checkbox' ? checked : value
         }
+      }));
+    } else if (name === 'llmProvider') {
+      // Map llmProvider to llm.provider
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          provider: type === 'checkbox' ? checked : value
+        },
+        llmProvider: type === 'checkbox' ? checked : value // Keep for backward compatibility
+      }));
+    } else if (name === 'llmModel') {
+      // Map llmModel to llm.model
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          model: type === 'checkbox' ? checked : value
+        },
+        llmModel: type === 'checkbox' ? checked : value // Keep for backward compatibility
       }));
     } else {
       setFormData(prev => ({
@@ -282,55 +333,190 @@ const EditModal = ({
         [name]: type === 'checkbox' ? checked : value
       }));
     }
+    
     setIsModified(true);
   };
 
-  // Validate form and trigger save
-  const handleSave = async () => {
-    setError(null); // Clear any previous errors
+  const handleFrameworkChange = (e) => {
+    const framework = e.target.value;
     
-    // Validate required fields
-    const requiredFields = ['label'];
-    if (currentNodeType === 'agent') {
-      requiredFields.push('role', 'goal', 'backstory', 'framework');
-    }
+    setFormData(prev => ({
+      ...prev,
+      framework,
+      frameworkConfig: {}, // Reset framework config
+      llm: {
+        ...prev.llm,
+        provider: '', // Reset LLM provider
+        model: ''     // Reset model
+      }
+    }));
+    
+    setIsModified(true);
+  };
 
-    const missingFields = requiredFields.filter(field => !formData[field]);
+  const validateConfiguration = () => {
+    const errors = [];
     
-    // Framework specific validation
-    if (formData.framework) {
-      if (formData.framework === 'webhook') {
-        if (!formData.frameworkConfig?.url) {
-          missingFields.push('webhook URL');
-        }
-      } else if (!formData.frameworkConfig?.model) {
-        missingFields.push('model');
+    // Basic validation
+    if (!formData.label) {
+      errors.push('Label is required');
+    }
+    
+    // Framework validation (only for nodes that need their own framework)
+    const nodesThatRequireFramework = ['agent', 'tool'];
+    if (nodesThatRequireFramework.includes(currentNodeType) && !formData.framework) {
+      errors.push('Framework is required');
+    }
+    
+    // Output-specific validation
+    if (currentNodeType === 'output') {
+      if (!formData.outputType) {
+        errors.push('Output type is required');
+      }
+      
+      // Validate output-specific fields
+      if (formData.outputType === 'webhook' && !formData.webhookUrl) {
+        errors.push('Webhook URL is required');
+      }
+      if (formData.outputType === 'email' && !formData.email) {
+        errors.push('Email address is required');
+      }
+      if (formData.outputType === 'discord' && !formData.webhookUrl) {
+        errors.push('Discord webhook URL is required');
+      }
+      if (formData.outputType === 'sheets' && !formData.sheetId) {
+        errors.push('Sheet ID is required');
+      }
+      if ((formData.outputType === 'smart_api' || formData.outputType === 'smart_email') && !formData.ai_description) {
+        errors.push('AI description is required for smart outputs');
       }
     }
+    
+    // Framework-specific validation (only for nodes that have their own framework)
+    if (nodesThatRequireFramework.includes(currentNodeType)) {
+      const requirements = FRAMEWORK_REQUIREMENTS[formData.framework];
+      if (requirements && requirements[currentNodeType]) {
+        const required = requirements[currentNodeType].required || [];
+        
+        for (const field of required) {
+          if (!formData[field] && !formData.frameworkConfig[field]) {
+            errors.push(`${field} is required for ${formData.framework}`);
+          }
+        }
+      }
+      
+      // LLM validation (if framework requires LLM)
+      const compatibleLLMs = FRAMEWORK_LLM_COMPATIBILITY[formData.framework];
+      if (compatibleLLMs && compatibleLLMs.length > 0) {
+        // Check for LLM provider in multiple possible locations
+        const llmProvider = formData.llm?.provider || formData.llmProvider;
+        const llmModel = formData.llm?.model || formData.llmModel;
+        
+        if (!llmProvider) {
+          errors.push('LLM provider is required');
+        }
+        if (!llmModel) {
+          errors.push('LLM model is required');
+        }
+      }
+    }
+    
+    return errors;
+  };
 
-    if (missingFields.length > 0) {
-      setError(`Please fill in all required fields: ${missingFields.join(', ')}`);
+  const handleSave = async () => {
+    setError(null);
+    
+    const validationErrors = validateConfiguration();
+    if (validationErrors.length > 0) {
+      setError(validationErrors.join(', '));
       return;
     }
-
+    
     try {
-      // Clean the form data
-      const cleanedData = {
+      // Prepare clean data for saving
+      let cleanedData = {
         ...formData,
+        // Ensure framework config is cleaned
         frameworkConfig: Object.fromEntries(
           Object.entries(formData.frameworkConfig || {})
             .filter(([_, value]) => value !== '' && value !== undefined)
-        )
+        ),
+        // Consolidate LLM config from multiple possible sources
+        llm: {
+          provider: formData.llm?.provider || formData.llmProvider || '',
+          model: formData.llm?.model || formData.llmModel || '',
+          temperature: formData.llm?.temperature || formData.temperature || 0.7,
+          max_tokens: formData.llm?.max_tokens || formData.max_tokens || 1000,
+          api_key: formData.llm?.api_key || formData.apiKey || '',
+          base_url: formData.llm?.base_url || formData.baseUrl || ''
+        }
       };
-
-      // For input nodes, ensure inputType is explicitly set
-      if (currentNodeType === 'input') {
-        // Make sure inputType is properly set
-        cleanedData.inputType = formData.inputType || 'text';
-        console.log('Saving input node with type:', cleanedData.inputType);
+      
+      // Clean empty values from LLM config
+      cleanedData.llm = Object.fromEntries(
+        Object.entries(cleanedData.llm)
+          .filter(([_, value]) => value !== '' && value !== undefined)
+      );
+      
+      // Special handling for tool nodes
+      if (currentNodeType === 'tool') {
+        // Ensure tool_type is set (map from toolType if needed)
+        if (!cleanedData.tool_type && cleanedData.toolType) {
+          cleanedData.tool_type = cleanedData.toolType;
+        }
+        
+        // Parse parameters from string to object if needed
+        if (cleanedData.parameters && typeof cleanedData.parameters === 'string') {
+          try {
+            cleanedData.parameters = JSON.parse(cleanedData.parameters);
+          } catch (e) {
+            // If JSON parsing fails, try to parse as key-value pairs
+            const lines = cleanedData.parameters.split('\n').filter(line => line.trim());
+            const paramObj = {};
+            
+            lines.forEach(line => {
+              const [key, ...valueParts] = line.split(':');
+              if (key && valueParts.length > 0) {
+                const value = valueParts.join(':').trim();
+                // Try to parse as number if possible
+                if (!isNaN(value) && value !== '') {
+                  paramObj[key.trim()] = Number(value);
+                } else {
+                  paramObj[key.trim()] = value;
+                }
+              } else if (key && key.trim()) {
+                // If no colon, treat as a boolean flag or string
+                paramObj[key.trim()] = true;
+              }
+            });
+            
+            cleanedData.parameters = paramObj;
+          }
+        }
+        
+        // Ensure parameters is an object
+        if (!cleanedData.parameters || typeof cleanedData.parameters !== 'object') {
+          cleanedData.parameters = {};
+        }
+        
+        // Set default framework if not set
+        if (!cleanedData.framework) {
+          if (cleanedData.toolType === 'api' || cleanedData.tool_type === 'api') {
+            cleanedData.framework = 'api';
+          } else if (cleanedData.toolType === 'webhook' || cleanedData.tool_type === 'webhook') {
+            cleanedData.framework = 'webhook';
+          } else if (cleanedData.toolType === 'custom' || cleanedData.tool_type === 'custom') {
+            cleanedData.framework = 'custom';
+          } else if (cleanedData.toolType === 'universal_api' || cleanedData.tool_type === 'universal_api') {
+            cleanedData.framework = 'universal_api';
+          } else {
+            cleanedData.framework = 'api'; // default
+          }
+        }
       }
-
-      console.log('Saving node with data:', cleanedData);
+      
+      console.log('Saving enhanced node with data:', cleanedData);
       
       await onSave(cleanedData);
       setIsModified(false);
@@ -341,139 +527,147 @@ const EditModal = ({
     }
   };
 
-  // Function to handle framework change
-  const handleFrameworkChange = (e) => {
-    const framework = e.target.value;
+  // Migration function to handle old node data formats
+  const migrateNodeData = (data) => {
+    // First, handle legacy field mappings
+    let migrated = { ...data };
     
-    // Set appropriate default configuration based on node type and tool type
-    let defaultConfig = {};
+    if (migrated.name && !migrated.label) {
+      migrated.label = migrated.name;
+    }
     
+    // Then apply the enhanced data structure
+    const cleanData = {
+      label: migrated.label || '',
+      description: migrated.description || '',
+      framework: migrated.framework || '',
+      
+      // Enhanced LLM configuration
+      llm: {
+        provider: migrated.llm?.provider || migrated.llmProvider || '',
+        model: migrated.llm?.model || migrated.llmModel || migrated.model || '',
+        temperature: migrated.llm?.temperature || migrated.temperature || 0.7,
+        max_tokens: migrated.llm?.max_tokens || migrated.max_tokens || 1000,
+        api_key: migrated.llm?.api_key || migrated.apiKey || '',
+        base_url: migrated.llm?.base_url || migrated.baseUrl || ''
+      },
+      
+      // Framework-specific configuration
+      frameworkConfig: migrated.frameworkConfig || {},
+      
+      // Legacy fields for backward compatibility
+      role: migrated.role || '',
+      goal: migrated.goal || '',
+      backstory: migrated.backstory || '',
+      systemMessage: migrated.systemMessage || '',
+      chainType: migrated.chainType || '',
+      agentType: migrated.agentType || '',
+      modelName: migrated.modelName || '',
+      taskType: migrated.taskType || '',
+      indexType: migrated.indexType || '',
+      documentsSource: migrated.documentsSource || '',
+      queryMode: migrated.queryMode || '',
+      
+      // Copy all other fields
+      ...migrated
+    };
+    
+    // Handle tool node migration
     if (currentNodeType === 'tool') {
-      // Handle tool node framework changes
-      if (formData.toolType === ToolType.LLM) {
-        defaultConfig = {
-          model: framework === 'openai' ? 'gpt-4' : 
-                 framework === 'anthropic' ? 'claude-3-sonnet' :
-                 framework === 'openrouter' ? 'meta-llama/llama-2-70b-chat' : '',
-          temperature: 0.7,
-          max_tokens: 4000
-        };
-      } else if (formData.toolType === ToolType.API || 
-                 formData.toolType === ToolType.WEBHOOK || 
-                 formData.toolType === ToolType.CUSTOM) {
-        defaultConfig = {
-          method: 'POST',
-          headers: {},
-          body: {}
-        };
+      // Ensure tool_type is set
+      if (!cleanData.tool_type && !cleanData.toolType) {
+        cleanData.toolType = 'api'; // default
+        cleanData.tool_type = 'api';
+      } else if (cleanData.toolType && !cleanData.tool_type) {
+        cleanData.tool_type = cleanData.toolType;
+      } else if (cleanData.tool_type && !cleanData.toolType) {
+        cleanData.toolType = cleanData.tool_type;
       }
-    } else if (currentNodeType === 'agent') {
-      // Handle agent node framework changes (existing logic)
-      if (framework === 'webhook') {
-        defaultConfig = {
-          url: '',
-          method: 'POST',
-          headers: {},
-          body: {}
-        };
-      } else {
-        defaultConfig = {
-          model: framework === 'openai' ? 'gpt-4' : 
-                 framework === 'anthropic' ? 'claude-3-sonnet' :
-                 framework === 'crewai' ? 'gpt-4' : 
-                 framework === 'autogen' ? 'gpt-4' : '',
-          temperature: 0.7,
-          max_tokens: 2000
-        };
+      
+      // Ensure framework is set
+      if (!cleanData.framework) {
+        cleanData.framework = cleanData.tool_type || cleanData.toolType || 'api';
+      }
+      
+      // Ensure parameters is an object
+      if (!cleanData.parameters) {
+        cleanData.parameters = {};
+      } else if (typeof cleanData.parameters === 'string') {
+        try {
+          cleanData.parameters = JSON.parse(cleanData.parameters);
+        } catch (e) {
+          // Convert string to object
+          const lines = cleanData.parameters.split('\n').filter(line => line.trim());
+          const paramObj = {};
+          lines.forEach(line => {
+            const [key, ...valueParts] = line.split(':');
+            if (key && valueParts.length > 0) {
+              paramObj[key.trim()] = valueParts.join(':').trim();
+            } else if (key && key.trim()) {
+              paramObj[key.trim()] = true;
+            }
+          });
+          cleanData.parameters = paramObj;
+        }
+      }
+      
+      // Ensure frameworkConfig exists
+      if (!cleanData.frameworkConfig) {
+        cleanData.frameworkConfig = {};
       }
     }
-  
-    console.log('Framework changed to:', framework, 'with config:', defaultConfig);
-  
-    setFormData(prev => ({
-      ...prev,
-      framework,
-      frameworkConfig: defaultConfig
-    }));
     
-    setIsModified(true);
+    return cleanData;
   };
 
-  // Return null if modal is not open
+  // NEW: Add saveTestInput function
+  const saveTestInput = () => {
+    if (!testInput.trim()) return;
+    
+    const inputName = prompt('Enter a name for this test input:');
+    if (!inputName) return;
+    
+    const newTestInput = {
+      name: inputName,
+      input: testInput,
+      timestamp: Date.now()
+    };
+    
+    setSavedTestInputs(prev => [...prev, newTestInput]);
+  };
+
   if (!isOpen) return null;
 
-  // Save test input function
-  const saveTestInput = () => {
-    try {
-      // Parse to validate it's valid JSON
-      const parsedInput = JSON.parse(testInput);
-      
-      // Create a name for the saved input
-      const inputName = `Test ${savedTestInputs.length + 1}`;
-      
-      // Add to saved inputs
-      setSavedTestInputs([
-        ...savedTestInputs,
-        { name: inputName, input: testInput, timestamp: Date.now() }
-      ]);
-      
-      toast.success('Test input saved');
-    } catch (error) {
-      toast.error('Invalid JSON: ' + error.message);
-    }
-  };
-
-
-
-  const getInheritableNodes = () => {
-    return workflowNodes.filter(node => 
-      node.id !== nodeData?.nodeId && // Can't inherit from self
-      node.type !== nodeType // Usually can't inherit from same type
-    );
-  };
-
-  // Render the appropriate node editor based on node type
   const renderNodeEditor = () => {
     const editorProps = {
-      formData, 
+      formData,
       setFormData,
       handleInputChange,
       handleFrameworkChange,
+      availableLLMs,
+      availableModels,
+      frameworkMetadata,
+      connectedNodes
+    };
+
+    // NEW: Add tool-specific props for ToolEditor
+    const toolEditorProps = {
+      ...editorProps,
       testInput,
       setTestInput,
       testResult,
       setTestResult,
       savedTestInputs,
-      saveTestInput,
-      connectedNodes: getConnectedNodesWithSchemas() // Pass processed connected nodes
+      saveTestInput
     };
-
-
-  
-    const inheritanceSelector = (
-      <InheritanceSelector
-        formData={formData}
-        handleInputChange={handleInputChange}
-        availableNodes={getInheritableNodes()}
-        nodeType={currentNodeType}
-      />
-    );
 
     switch (currentNodeType) {
       case 'agent':
         return <AgentEditor {...editorProps} />;
       case 'task':
-        return (
-          <>
-          {inheritanceSelector}
-          <TaskEditor {...editorProps} availableDependencies={availableDependencies} />
-          </>
-        );
+        return <TaskEditor {...editorProps} availableDependencies={availableDependencies} />;
       case 'tool':
-        return (<>
-        {inheritanceSelector}
-        <ToolEditor {...editorProps} />
-        </>);
+        return <ToolEditor {...toolEditorProps} />;
       case 'chatbot':
         return <ChatbotEditor {...editorProps} />;
       case 'delay':
@@ -495,7 +689,6 @@ const EditModal = ({
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       onClick={(e) => {
-        // Close when clicking the backdrop, but not when clicking the modal itself
         if (e.target === e.currentTarget) {
           if (isModified) {
             if (window.confirm('You have unsaved changes. Are you sure you want to close?')) {
@@ -507,18 +700,19 @@ const EditModal = ({
         }
       }}
     >
-      <div className="bg-white p-6 rounded-lg w-[600px] max-h-[90vh] overflow-y-auto" onClick={(e) => { if (e) e.stopPropagation(); }}>
+      <div className="bg-white p-6 rounded-lg w-[700px] max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         {error && (
           <div className="mb-4 p-3 bg-red-100 border border-red-300 text-red-700 rounded">
             {error}
           </div>
         )}
+        
         <h2 className="text-xl font-bold mb-4 flex items-center">
-          Edit {currentNodeType === 'agent' ? 'Agent' : currentNodeType === 'task' ? 'Task' : currentNodeType === 'chatbot' ? 'Chatbot' : currentNodeType === 'delay' ? 'Delay' : currentNodeType === 'trigger' ? 'Trigger' : currentNodeType === 'logic' ? 'Logic' : 'Tool'}
+          Edit {currentNodeType.charAt(0).toUpperCase() + currentNodeType.slice(1)}
           <HelpTooltip type={currentNodeType} />
         </h2>
 
-        {/* Common fields like name/label */}
+        {/* Common fields */}
         <CommonFields formData={formData} handleInputChange={handleInputChange} nodeType={currentNodeType} />
         
         {/* Node-specific editor */}
@@ -535,30 +729,15 @@ const EditModal = ({
   );
 };
 
-// Define PropTypes AFTER the component declaration
-EditModal.propTypes = {
+EnhancedEditModal.propTypes = {
   isOpen: PropTypes.bool.isRequired,
   onClose: PropTypes.func.isRequired,
   onSave: PropTypes.func.isRequired,
   nodeData: PropTypes.object,
-  nodeType: PropTypes.oneOf([
-    'agent', 
-    'task', 
-    'tool', 
-    'chatbot', 
-    'delay', 
-    'trigger', 
-    'logic',
-    'input',
-    'output'
-  ]),
-  availableDependencies: PropTypes.arrayOf(
-    PropTypes.shape({
-      label: PropTypes.string.isRequired,
-      name: PropTypes.string
-    })
-  ),
-  connectedNodes: PropTypes.array
+  nodeType: PropTypes.string,
+  availableDependencies: PropTypes.array,
+  connectedNodes: PropTypes.array,
+  workflowNodes: PropTypes.array
 };
 
-export default EditModal;
+export default EnhancedEditModal;

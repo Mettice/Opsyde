@@ -7,11 +7,15 @@ from backend.models.api_models import (
     WorkflowExecutionResponse, WorkflowExecutionListResponse,
     WorkflowValidationResponse, WorkflowExportResponse, ErrorCode
 )
-from backend.models.workflow import Workflow
+from backend.models.workflow import Workflow, WorkflowValidationResult
 from backend.services.workflow_service import WorkflowService
 from backend.utils.security import security_manager
 from backend.utils.logging import get_logger
 from backend.utils.api_utils import handle_exception
+from backend.core.runner import UnifiedRunner
+from backend.auth.dependencies import get_current_user
+from backend.core.exceptions import WorkflowError
+from backend.framework_registry import validate_framework_llm_combination, get_available_frameworks
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
@@ -179,6 +183,108 @@ async def validate_workflow(
         validation_result = await workflow_service.validate_workflow(workflow_id)
         response = WorkflowValidationResponse(**validation_result)
         return APIResponse.success_response(response)
+    except Exception as e:
+        return handle_exception(e)
+
+# NEW: Enhanced validation endpoint with framework compatibility checking
+@router.post("/validate-enhanced", response_model=APIResponse[Dict[str, Any]])
+async def validate_workflow_enhanced(
+    workflow_data: Dict[str, Any]
+):
+    """Enhanced workflow validation including framework compatibility"""
+    try:
+        validation_errors = []
+        validation_warnings = []
+        framework_issues = []
+        
+        nodes = workflow_data.get("nodes", [])
+        edges = workflow_data.get("edges", [])
+        
+        # Get available frameworks
+        available_frameworks = get_available_frameworks()
+        
+        # Validate each node
+        for node in nodes:
+            node_id = node.get("id", "unknown")
+            node_type = node.get("type")
+            node_data = node.get("data", {})
+            
+            # Framework validation for nodes that use frameworks
+            framework = node_data.get("framework")
+            if framework:
+                # Check if framework is available
+                if framework not in available_frameworks:
+                    framework_issues.append({
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "issue": f"Framework '{framework}' not available",
+                        "available_frameworks": available_frameworks,
+                        "severity": "error"
+                    })
+                    continue
+                
+                # Validate framework/LLM combination
+                llm_config = node_data.get("frameworkConfig", {})
+                llm_provider = llm_config.get("provider") or node_data.get("llmProvider")
+                
+                if llm_provider:
+                    validation = validate_framework_llm_combination(framework, llm_provider)
+                    if not validation["valid"]:
+                        framework_issues.append({
+                            "node_id": node_id,
+                            "node_type": node_type,
+                            "framework": framework,
+                            "llm_provider": llm_provider,
+                            "issue": validation["error"],
+                            "severity": "error"
+                        })
+                
+                # Check for required configuration
+                if node_type in ["agent", "task", "tool"] and not llm_config.get("api_key"):
+                    validation_warnings.append({
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "issue": "No API key configured - execution may fail",
+                        "severity": "warning"
+                    })
+        
+        # Basic workflow structure validation
+        if not nodes:
+            validation_errors.append("Workflow must contain at least one node")
+        
+        # Check for disconnected nodes
+        connected_nodes = set()
+        for edge in edges:
+            connected_nodes.add(edge.get("source"))
+            connected_nodes.add(edge.get("target"))
+        
+        disconnected_nodes = [
+            node["id"] for node in nodes 
+            if node["id"] not in connected_nodes and len(nodes) > 1
+        ]
+        
+        if disconnected_nodes:
+            validation_warnings.append({
+                "issue": f"Disconnected nodes found: {', '.join(disconnected_nodes)}",
+                "severity": "warning"
+            })
+        
+        # Determine overall validation status
+        is_valid = len(validation_errors) == 0 and len(framework_issues) == 0
+        
+        response = {
+            "is_valid": is_valid,
+            "validation_errors": validation_errors,
+            "validation_warnings": validation_warnings,
+            "framework_issues": framework_issues,
+            "available_frameworks": available_frameworks,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "validation_timestamp": datetime.now().isoformat()
+        }
+        
+        return APIResponse.success_response(response)
+        
     except Exception as e:
         return handle_exception(e)
 

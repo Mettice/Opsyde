@@ -53,3 +53,29 @@ class Workflow(BaseModel):
         """Get nodes with no outgoing edges (end nodes)"""
         source_nodes = {edge.source for edge in self.edges}
         return [node for node in self.nodes if node.id not in source_nodes]
+
+class WorkflowValidationResult(BaseModel):
+    """Result of workflow validation"""
+    is_valid: bool
+    errors: List[str] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+    node_count: int = 0
+    edge_count: int = 0
+    validation_details: Dict[str, Any] = Field(default_factory=dict)
+    
+    def add_error(self, error: str):
+        """Add an error to the validation result"""
+        self.errors.append(error)
+        self.is_valid = False
+    
+    def add_warning(self, warning: str):
+        """Add a warning to the validation result"""
+        self.warnings.append(warning)
+    
+    def has_errors(self) -> bool:
+        """Check if there are any errors"""
+        return len(self.errors) > 0
+    
+    def has_warnings(self) -> bool:
+        """Check if there are any warnings"""
+        return len(self.warnings) > 0

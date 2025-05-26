@@ -3,200 +3,156 @@ import logging
 from datetime import datetime
 from enum import Enum
 
-from backend.models.nodes import Node, NodeType
+from backend.models.nodes import Node, NodeType, AgentConfig
 from backend.models.workflow import ExecutionContext
 from backend.models.results import NodeResult, ExecutionStatus
 from backend.core.exceptions import ValidationError, FrameworkError
 from backend.models.data import NodeData
 
+# Import the enhanced framework registry
+from backend.framework_registry import framework_registry
+
 logger = logging.getLogger(__name__)
 
-class LLMProvider(str, Enum):
-    """LLM Providers"""
+class LLMProvider(Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     OPENROUTER = "openrouter"
+    HUGGINGFACE = "huggingface"
 
-class AgentFramework(str, Enum):
-    """Agent Frameworks"""
+class AgentFramework(Enum):
     CREWAI = "crewai"
     AUTOGEN = "autogen"
-    LLAMAINDEX = "llamaindex"
-    CUSTOM = "custom"
+    LANGCHAIN = "langchain"
 
 class AgentNode:
-    """Handles execution of agent nodes using the unified runner"""
+    """Enhanced agent node with framework registry integration"""
 
     def __init__(self):
         pass
 
-    async def process(self, node: Union[Node, Dict[str, Any]], inputs: Dict[str, Any], context: ExecutionContext) -> NodeData:
-        """Process an agent node without recursive calls to node_processor"""
+    async def process(self, node: Node, inputs: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
+        """Process an agent node using the framework registry"""
         try:
-            # Extract and validate configuration
-            config = node.get("data", {}) if isinstance(node, dict) else node.get_config()
-            self.validate_config(config)
+            # Migrate old node data format if needed
+            node_data = self._migrate_node_data(node.data)
             
-            # Get node ID for logging and tracking
-            node_id = node.get("id") if isinstance(node, dict) else node.id
-            logger.info(f"Processing agent node {node_id}: {config.get('label', 'Unnamed Agent')}")
+            # Extract and validate agent configuration
+            config = AgentConfig(**node_data)
+            framework = config.framework
+            framework_config = config.framework_config
             
-            # Create base result structure with agent configuration
-            base_result = self._create_base_result(node, config, inputs, context)
-            
-            # Determine the appropriate framework runner to use
-            framework = config.get('framework')
-            provider = config.get('llm_provider')
-            
-            # Execute the agent based on framework
-            execution_result = await self._execute_with_framework(framework, provider, config, inputs)
-            
-            # Update base result with execution outcome
-            base_result.update({
-                "status": "completed" if not execution_result.get("error") else "error",
-                "result": execution_result.get("output"),
-                "error": execution_result.get("error")
-            })
-            
-            # Handle memory if enabled
-            if config.get('enable_memory'):
-                memory_result = await self._handle_memory(config, base_result, context)
-                base_result["memory"] = memory_result
-            
-            # Return as NodeData - no recursive nesting
-            return NodeData(
-                value={
-                    "type": "agent_result",
-                    "data": base_result
-                },
-                metadata={
-                    "node_id": node_id,
-                    "node_type": "agent",
-                    "timestamp": datetime.now().isoformat()
+            # Validate configuration
+            if not self.validate_config(config.dict()):
+                return {
+                    "success": False,
+                    "type": "error",
+                    "error": "Invalid agent configuration"
                 }
+
+            # Get framework handler from registry
+            framework_handler = framework_registry._frameworks.get(framework)
+            if not framework_handler:
+                # Try to re-register frameworks in case they were missed during startup
+                logger.warning(f"Framework '{framework}' not found in registry. Available frameworks: {list(framework_registry._frameworks.keys())}")
+                logger.info("Attempting to re-register frameworks...")
+                framework_registry.register_all_frameworks()
+                
+                # Try again after re-registration
+                framework_handler = framework_registry._frameworks.get(framework)
+                if not framework_handler:
+                    available_frameworks = list(framework_registry._frameworks.keys())
+                    logger.error(f"Framework '{framework}' still not available after re-registration. Available: {available_frameworks}")
+                    return {
+                        "success": False,
+                        "type": "error",
+                        "error": f"Framework '{framework}' not available or not registered. Available frameworks: {available_frameworks}"
+                    }
+
+            # Execute with the framework handler
+            result = await self._execute_with_framework(
+                framework_handler, 
+                framework_config, 
+                config.dict(), 
+                inputs, 
+                context
             )
 
-        except ValidationError as ve:
-            logger.error(f"Validation error in agent node: {str(ve)}")
-            return NodeData.from_error(str(ve))
-        except FrameworkError as fe:
-            logger.error(f"Framework error in agent node: {str(fe)}")
-            return NodeData.from_error(str(fe))
-        except Exception as e:
-            logger.error(f"Unexpected error in agent node: {str(e)}")
-            return NodeData.from_error(str(e))
-
-    async def _execute_with_framework(self, framework: str, provider: str, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute agent with the appropriate framework"""
-        try:
-            # Standardize framework and provider values to handle different formats
-            framework = framework.lower() if framework else "openai"
-            provider = provider.lower() if provider else "openai"
-            
-            # Initialize default result structure
-            result = {
-                "output": "Agent execution not implemented for this framework",
-                "error": None
+            # Add agent metadata
+            result["metadata"] = {
+                "node_id": node.id,
+                "framework": framework,
+                "execution_id": context.execution_id,
+                "agent_type": config.dict().get("type", "unknown"),
+                **result.get("metadata", {})
             }
-            
-            # Handle framework selection
-            if framework == "crewai" or framework == AgentFramework.CREWAI.value:
-                # Import crewai runner
-                from backend.frameworks.crewai_runner import run_agent_chat
-                
-                # Extract relevant inputs
-                # Make sure we're not passing NodeData objects, extract values
-                formatted_inputs = {}
-                for key, value in inputs.items():
-                    if hasattr(value, 'get_value') and callable(getattr(value, 'get_value')):
-                        try:
-                            formatted_inputs[key] = value.get_value()
-                        except:
-                            # If there's an error getting value, use string representation
-                            formatted_inputs[key] = str(value)
-                    else:
-                        formatted_inputs[key] = value
-                
-                # Execute with CrewAI framework
-                output = run_agent_chat(config, formatted_inputs)
-                result = {
-                    "output": output,
-                    "framework": "crewai"
-                }
-                
-            elif framework == "openai" or provider == "openai":
-                # Import openai runner
-                from backend.frameworks.openrouter_runner import run_openrouter_chat_sync
-                
-                # Format prompt
-                system_message = f"""Role: {config.get('role', 'Assistant')}
-Goal: {config.get('goal', '')}
-Backstory: {config.get('backstory', '')}
 
-You are an AI assistant helping with this task."""
-
-                # Format input message
-                input_message = ""
-                for key, val in inputs.items():
-                    # Extract value from NodeData if needed
-                    if hasattr(val, 'get_value') and callable(getattr(val, 'get_value')):
-                        try:
-                            input_message += f"{key}: {val.get_value()}\n"
-                        except:
-                            input_message += f"{key}: {str(val)}\n"
-                    else:
-                        input_message += f"{key}: {val}\n"
-                
-                if not input_message:
-                    input_message = "Hello, I need your help with a task."
-                
-                # Create messages array
-                messages = [
-                    {"role": "system", "content": system_message},
-                    {"role": "user", "content": input_message}
-                ]
-                
-                # Execute chat
-                try:
-                    # Use synchronous version to avoid coroutine object in result
-                    output = run_openrouter_chat_sync(
-                        messages=messages,
-                        model=config.get("llm_model", "gpt-4"),
-                        temperature=float(config.get("temperature", 0.7)),
-                        max_tokens=int(config.get("max_tokens", 2000))
-                    )
-                    result = {
-                        "output": output,
-                        "framework": "openai"
-                    }
-                except Exception as e:
-                    result = {
-                        "output": None,
-                        "error": f"OpenAI execution error: {str(e)}",
-                        "framework": "openai"
-                    }
-            
-            elif framework == "anthropic" or provider == "anthropic":
-                # Use similar approach to OpenAI but with Anthropic's API
-                # This is a placeholder; the actual implementation would use Anthropic's client
-                result = {
-                    "output": "Anthropic agent execution would happen here",
-                    "framework": "anthropic"
-                }
-                
-            else:
-                # Default/fallback for unknown frameworks
-                result = {
-                    "output": f"Agent execution not implemented for framework: {framework}",
-                    "error": f"Unsupported framework: {framework}"
-                }
-                
             return result
-                
+
         except Exception as e:
-            logger.error(f"Error executing agent with framework {framework}: {str(e)}")
+            logger.error(f"Error in agent node: {str(e)}")
             return {
-                "output": None,
+                "success": False,
+                "type": "error",
+                "error": str(e),
+                "framework": framework if 'framework' in locals() else "unknown",
+                "timestamp": datetime.now().isoformat()
+            }
+
+    async def _execute_with_framework(
+        self, 
+        framework_handler, 
+        framework_config: Dict[str, Any], 
+        agent_config: Dict[str, Any], 
+        inputs: Dict[str, Any], 
+        context: ExecutionContext
+    ) -> Dict[str, Any]:
+        """Execute agent using the framework handler from registry"""
+        try:
+            # Get the LLM provider from framework_config
+            llm_provider = framework_config.get("provider", "openai")
+            
+            # Prepare execution parameters in the format expected by framework registry
+            execution_params = {
+                "config": {
+                    "llm": {
+                        "provider": llm_provider,
+                        "model": framework_config.get("model", "gpt-4"),
+                        "temperature": framework_config.get("temperature", 0.7),
+                        "max_tokens": framework_config.get("max_tokens", 4000),
+                        "api_key": framework_config.get("api_key")
+                    },
+                    "agent": agent_config,
+                    "framework_config": framework_config
+                },
+                "inputs": inputs
+            }
+
+            # Execute with the framework handler - unpack the execution_params
+            result = await framework_handler(**execution_params)
+            
+            if result.get("success", False):
+                return {
+                    "success": True,
+                    "type": "agent_result",
+                    "data": result.get("data", {}),
+                    "metadata": result.get("metadata", {}),
+                    "execution_time": result.get("execution_time"),
+                    "memory": result.get("memory", {})
+                }
+            else:
+                return {
+                    "success": False,
+                    "type": "agent_error",
+                    "error": result.get("error", "Agent execution failed"),
+                    "details": result.get("details", {})
+                }
+
+        except Exception as e:
+            logger.error(f"Framework execution error: {str(e)}")
+            return {
+                "success": False,
+                "type": "error",
                 "error": f"Framework execution error: {str(e)}"
             }
 
@@ -306,4 +262,166 @@ You are an AI assistant helping with this task."""
             "supports_memory": True,
             "llm_providers": [p.value for p in LLMProvider],
             "frameworks": [f.value for f in AgentFramework]
-        } 
+        }
+
+    def _migrate_node_data(self, node_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Migrate old agent node data format to new format"""
+        migrated = dict(node_data)
+        
+        # Handle legacy field mappings
+        if 'name' in migrated and 'label' not in migrated:
+            migrated['label'] = migrated['name']
+        
+        # Ensure label is always present
+        if 'label' not in migrated:
+            migrated['label'] = migrated.get('role', 'Agent')
+        
+        # Ensure framework is set
+        if 'framework' not in migrated:
+            migrated['framework'] = 'crewai'  # default framework for agents
+        
+        # Ensure framework_config exists and has LLM provider
+        if 'framework_config' not in migrated:
+            migrated['framework_config'] = {}
+        
+        # Handle frameworkConfig -> framework_config mapping
+        if 'frameworkConfig' in migrated and not migrated['framework_config']:
+            migrated['framework_config'] = migrated['frameworkConfig']
+        
+        # Ensure LLM provider is set in framework_config
+        if 'provider' not in migrated['framework_config']:
+            # Try to get from various possible fields
+            llm_provider = (
+                migrated.get('llmProvider') or 
+                migrated.get('llm_provider') or 
+                migrated.get('framework_config', {}).get('llm_provider') or
+                'openai'  # default
+            )
+            migrated['framework_config']['provider'] = llm_provider
+        
+        # Ensure model is set
+        if 'model' not in migrated['framework_config']:
+            model = (
+                migrated.get('llmModel') or 
+                migrated.get('llm_model') or 
+                migrated.get('framework_config', {}).get('model') or
+                'gpt-4'  # default
+            )
+            migrated['framework_config']['model'] = model
+        
+        # Ensure temperature is set
+        if 'temperature' not in migrated['framework_config']:
+            temperature = (
+                migrated.get('temperature') or 
+                migrated.get('framework_config', {}).get('temperature') or
+                0.7  # default
+            )
+            migrated['framework_config']['temperature'] = temperature
+        
+        # Ensure max_tokens is set
+        if 'max_tokens' not in migrated['framework_config']:
+            max_tokens = (
+                migrated.get('max_tokens') or 
+                migrated.get('framework_config', {}).get('max_tokens') or
+                4000  # default
+            )
+            migrated['framework_config']['max_tokens'] = max_tokens
+        
+        # Ensure required agent fields have defaults
+        if 'role' not in migrated:
+            migrated['role'] = 'Assistant'
+        
+        if 'goal' not in migrated:
+            migrated['goal'] = 'Help the user with their request'
+        
+        if 'backstory' not in migrated:
+            migrated['backstory'] = ''
+        
+        if 'llm_model' not in migrated:
+            migrated['llm_model'] = migrated['framework_config'].get('model', 'gpt-4')
+        
+        if 'temperature' not in migrated:
+            migrated['temperature'] = migrated['framework_config'].get('temperature', 0.7)
+        
+        if 'max_tokens' not in migrated:
+            migrated['max_tokens'] = migrated['framework_config'].get('max_tokens', 4000)
+        
+        if 'allow_delegation' not in migrated:
+            migrated['allow_delegation'] = False
+        
+        if 'enable_memory' not in migrated:
+            migrated['enable_memory'] = False
+        
+        return migrated 
+
+
+# Standalone function for node processor compatibility
+async def process_agent_node(
+    node_data: Dict[str, Any], 
+    inputs: Dict[str, NodeData], 
+    context: Dict[str, Any] = None
+) -> NodeData:
+    """
+    Process agent node - standalone function for node processor
+    """
+    try:
+        from backend.models.data import NodeData
+        from backend.models.workflow import ExecutionContext
+        
+        # Create AgentNode instance
+        agent_node = AgentNode()
+        
+        # Convert context to ExecutionContext if needed
+        if context and not isinstance(context, ExecutionContext):
+            exec_context = ExecutionContext(
+                execution_id=context.get('execution_id', 'unknown'),
+                workflow_id=context.get('workflow_id', 'unknown'),
+                user_id=context.get('user_id'),
+                metadata=context.get('metadata', {})
+            )
+        else:
+            exec_context = context or ExecutionContext(
+                execution_id='unknown',
+                workflow_id='unknown'
+            )
+        
+        # Create a Node object from node_data
+        from backend.models.nodes import Node, NodeType
+        node = Node(
+            id=node_data.get('nodeId', node_data.get('id', 'unknown')),
+            type=NodeType.AGENT,
+            data=node_data,
+            position=node_data.get('position', {'x': 0, 'y': 0})
+        )
+        
+        # Process the node
+        result = await agent_node.process(node, inputs, exec_context)
+        
+        # Ensure result is wrapped in NodeData
+        if isinstance(result, NodeData):
+            return result
+        else:
+            return NodeData(
+                value=result,
+                metadata={
+                    'node_id': node.id,
+                    'node_type': 'agent',
+                    'timestamp': datetime.now().isoformat()
+                }
+            )
+            
+    except Exception as e:
+        logger.error(f"Error in process_agent_node: {str(e)}")
+        return NodeData(
+            value={
+                "success": False,
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            },
+            metadata={
+                'node_id': node_data.get('nodeId', 'unknown'),
+                'node_type': 'agent',
+                'error': True
+            }
+        ) 

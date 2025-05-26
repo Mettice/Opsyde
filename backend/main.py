@@ -25,7 +25,7 @@ from core.exceptions import CrewFlowError, ValidationError, ExecutionError
 # API routers
 from api.routers.workflow_router import router as workflow_router
 from api.routers.node_router import router as node_router
-from api.routers.tool_router import router as tool_router
+from api.routers.tools import router as tools_router
 from api.routers.auth_router import router as auth_router
 from api.routers.trigger_router import router as trigger_router, root_router as trigger_root_router
 from api.routers.output_router import router as output_router
@@ -211,7 +211,7 @@ async def shutdown_event():
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(workflow_router, prefix="/api/workflows")
 app.include_router(node_router, prefix="/api/nodes")
-app.include_router(tool_router, prefix="/api/tools")
+app.include_router(tools_router, prefix="/api/tools")
 app.include_router(trigger_router, prefix="/api/triggers")
 app.include_router(trigger_root_router)
 app.include_router(output_router, prefix="/api/outputs")
