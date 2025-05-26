@@ -32,6 +32,9 @@ import Notification from '../components/Notification';
 import SmartToolSelector from '../components/templates/SmartToolSelector';
 import HelpTooltip from '../components/HelpTooltip';
 
+// Data
+import { flowTemplates } from '../data/flowTemplates';
+
 // Custom Hooks
 import { useNodeManagement } from '../hooks/useNodeManagement';
 import { useFlowExecution } from '../hooks/useFlowExecution';
@@ -665,6 +668,7 @@ const BuilderPageContent = () => {
         <UnifiedExecutionPanel
           logs={textLogs}
           structuredLogs={structuredLogs}
+          nodes={nodes}
           isMinimized={minimizeExecutionPanel}
           onToggleMinimize={toggleMinimizeExecutionPanel}
           onClose={() => {
