@@ -100,7 +100,10 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
     temperature: data.temperature || 0.7,
     max_tokens: data.max_tokens || 4000,
     enableMemory: data.enableMemory || false,
-    prompt: data.prompt || ''
+    prompt: data.prompt || '',
+    streamIntermediateSteps: data.streamIntermediateSteps || false,
+    allowDelegation: data.allowDelegation || false,
+    max_iterations: data.max_iterations || 3
   };
 
   return (
@@ -241,14 +244,58 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
             <span className="flex items-center gap-1 text-gray-600">
               💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
             </span>
+            {/* Token usage display */}
+            {data.tokenUsage && (
+              <span className="flex items-center gap-1 text-purple-600" title="Tokens used">
+                🔤 {data.tokenUsage.tokens || 0}
+              </span>
+            )}
           </div>
-          {safeData.enableMemory && (
-            <span className="flex items-center gap-1 text-purple-600">
-              🧠 Memory
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {safeData.enableMemory && (
+              <span className="flex items-center gap-1 text-purple-600">
+                🧠 Memory
+              </span>
+            )}
+            {/* CrewAI 0.1.21 features indicator */}
+            {frameworkId === 'crewai' && (
+              <span className="flex items-center gap-1 text-blue-600" title="CrewAI 0.1.21 Enhanced">
+                ✨ Enhanced
+              </span>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Intermediate Steps Toggle - New 0.1.21 Feature */}
+      {frameworkId === 'crewai' && (
+        <div className="px-4 pb-3">
+          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/50">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-700">Stream Thoughts:</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={safeData.streamIntermediateSteps || false}
+                  onChange={(e) => {
+                    if (data.onChange) {
+                      data.onChange({
+                        ...data,
+                        streamIntermediateSteps: e.target.checked
+                      });
+                    }
+                  }}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            <div className="text-xs text-gray-500">
+              Show agent reasoning steps during execution
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Configuration Details */}
       <div className="px-4 pb-4">
@@ -272,7 +319,39 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
                 {safeData.enableMemory ? 'On' : 'Off'}
               </div>
             </div>
+            {/* CrewAI specific features */}
+            {frameworkId === 'crewai' && (
+              <>
+                <div>
+                  <span className="font-medium text-gray-600">Delegation:</span>
+                  <div className={safeData.allowDelegation ? 'text-green-600' : 'text-gray-400'}>
+                    {safeData.allowDelegation ? 'On' : 'Off'}
+                  </div>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">Max Iter:</span>
+                  <div className="text-gray-800">{safeData.max_iterations || 3}</div>
+                </div>
+              </>
+            )}
           </div>
+          
+          {/* Token usage details */}
+          {data.tokenUsage && (
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <div className="text-xs font-medium text-gray-700 mb-1">Token Usage:</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-gray-600">Used:</span>
+                  <span className="ml-1 font-mono">{data.tokenUsage.tokens}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Cost:</span>
+                  <span className="ml-1 font-mono">${data.tokenUsage.cost?.toFixed(4) || '0.0000'}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -332,7 +411,9 @@ AgentCard.propTypes = {
     max_tokens: PropTypes.number,
     enableMemory: PropTypes.bool,
     prompt: PropTypes.string,
-    executionState: PropTypes.object
+    executionState: PropTypes.object,
+    tokenUsage: PropTypes.object,
+    onChange: PropTypes.func
   }).isRequired,
   selected: PropTypes.bool,
   isConnectable: PropTypes.bool

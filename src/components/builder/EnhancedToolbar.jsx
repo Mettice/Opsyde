@@ -363,6 +363,16 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
         </div>
         
+        {/* CrewAI Import button */}
+        <button 
+          onClick={toolbarProps.onShowCrewAIImporter}
+          className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm flex items-center"
+          title="Import CrewAI YAML Configuration"
+        >
+          <span className="text-lg mr-1">🤖</span>
+          Import CrewAI
+        </button>
+        
         {/* Export dropdown */}
         <div className="relative" ref={exportDropdownRef}>
           <button 

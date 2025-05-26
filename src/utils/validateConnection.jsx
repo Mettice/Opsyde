@@ -33,7 +33,7 @@ export const validateConnection = (params, nodes, edges, toast) => {
   // Log node types
   console.log('Connecting nodes:', { from, to, sourceHandle, targetHandle });
   
-  // Define basic valid connection patterns
+  // Define comprehensive valid connection patterns for multi-agent workflows
   const validConnections = [
     // Basic flow patterns
     ['trigger', 'agent'],
@@ -42,14 +42,17 @@ export const validateConnection = (params, nodes, edges, toast) => {
     ['trigger', 'chatbot'],
     ['trigger', 'logic'],
     ['trigger', 'delay'],
+    ['trigger', 'input'],
     
     // Input connections
     ['input', 'agent'],
     ['input', 'task'],
     ['input', 'tool'],
     ['input', 'chatbot'],
+    ['input', 'logic'],
     
-    // Agent connections
+    // Agent connections (including agent-to-agent for multi-agent workflows)
+    ['agent', 'agent'],     // 🔥 CRITICAL: Agent-to-agent communication
     ['agent', 'task'],
     ['agent', 'tool'],
     ['agent', 'chatbot'],
@@ -69,6 +72,7 @@ export const validateConnection = (params, nodes, edges, toast) => {
     // Tool connections
     ['tool', 'agent'],
     ['tool', 'task'],
+    ['tool', 'tool'],       // Tool chaining
     ['tool', 'chatbot'],
     ['tool', 'output'],
     ['tool', 'delay'],
@@ -81,6 +85,7 @@ export const validateConnection = (params, nodes, edges, toast) => {
     ['logic', 'chatbot'],
     ['logic', 'output'],
     ['logic', 'delay'],
+    ['logic', 'logic'],     // Logic chaining
     
     // Delay connections
     ['delay', 'agent'],
@@ -94,6 +99,7 @@ export const validateConnection = (params, nodes, edges, toast) => {
     ['chatbot', 'agent'],
     ['chatbot', 'task'],
     ['chatbot', 'tool'],
+    ['chatbot', 'chatbot'], // Chatbot chaining
     ['chatbot', 'output'],
     ['chatbot', 'delay'],
     ['chatbot', 'logic']
@@ -107,9 +113,34 @@ export const validateConnection = (params, nodes, edges, toast) => {
   if (!isValidPattern) {
     console.warn(`Invalid connection pattern: ${from} -> ${to}`);
     if (toast) {
-      toast.error(`Cannot connect ${from} to ${to}`);
+      toast.error(`Cannot connect ${from} to ${to}. This connection type is not supported.`);
     }
     return false;
+  }
+  
+  // Special handling for agent-to-agent connections
+  if (from === 'agent' && to === 'agent') {
+    console.log('🤖 Agent-to-agent connection established for multi-agent workflow');
+    
+    // Update target agent with source agent information for collaboration
+    const targetNodeIndex = nodes.findIndex(n => n.id === target);
+    if (targetNodeIndex !== -1) {
+      nodes[targetNodeIndex] = {
+        ...nodes[targetNodeIndex],
+        data: {
+          ...nodes[targetNodeIndex].data,
+          collaboratingAgents: [
+            ...(nodes[targetNodeIndex].data?.collaboratingAgents || []),
+            {
+              id: sourceNode.id,
+              name: sourceNode.data?.label || 'Unknown Agent',
+              role: sourceNode.data?.role || 'Assistant',
+              framework: sourceNode.data?.framework || 'openrouter'
+            }
+          ]
+        }
+      };
+    }
   }
   
   // Special handling for agent-task connections
@@ -126,13 +157,38 @@ export const validateConnection = (params, nodes, edges, toast) => {
           ...nodes[taskNodeIndex].data,
           agentId: sourceNode.id,
           agentName: sourceNode.data?.label || 'Unknown Agent',
-          agentRole: sourceNode.data?.role || 'Assistant'
+          agentRole: sourceNode.data?.role || 'Assistant',
+          agentFramework: sourceNode.data?.framework || 'openrouter'
         }
       };
     }
   }
   
-  console.log('Connection validated successfully:', { from, to });
+  // Special handling for task-to-agent connections (task delegation)
+  if (from === 'task' && to === 'agent') {
+    console.log('📋 Task-to-agent delegation connection established');
+    
+    // Update agent with task delegation information
+    const targetNodeIndex = nodes.findIndex(n => n.id === target);
+    if (targetNodeIndex !== -1) {
+      nodes[targetNodeIndex] = {
+        ...nodes[targetNodeIndex],
+        data: {
+          ...nodes[targetNodeIndex].data,
+          delegatedTasks: [
+            ...(nodes[targetNodeIndex].data?.delegatedTasks || []),
+            {
+              id: sourceNode.id,
+              name: sourceNode.data?.label || 'Unknown Task',
+              description: sourceNode.data?.description || ''
+            }
+          ]
+        }
+      };
+    }
+  }
+  
+  console.log('✅ Connection validated successfully:', { from, to });
   return true;
 };
   

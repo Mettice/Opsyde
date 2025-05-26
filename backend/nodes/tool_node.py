@@ -170,19 +170,8 @@ class ToolNode:
     ) -> Dict[str, Any]:
         """Execute tool using framework handler from registry"""
         try:
-            # Prepare execution parameters
-            execution_params = {
-                "framework_config": framework_config,
-                "inputs": inputs,
-                "context": {
-                    "execution_id": context.execution_id,
-                    "workflow_id": context.workflow_id,
-                    "metadata": context.metadata
-                }
-            }
-
-            # Execute with the framework handler
-            result = await framework_handler(execution_params)
+            # Execute with the framework handler - pass config and inputs as separate parameters
+            result = await framework_handler(config=framework_config, inputs=inputs)
             
             if result.get("success", False):
                 return {
