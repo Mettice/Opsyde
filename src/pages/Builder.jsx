@@ -46,6 +46,9 @@ import useThrottledViewport from '../hooks/useThrottledViewport';
 import useThrottledZoom from '../hooks/useThrottledZoom';
 import { useSmartToolSelector } from '../hooks/useToolExecution';
 
+// Utility imports
+import { duplicateFlow } from '../utils/flowUtils';
+
 // The main content component (using contexts)
 const BuilderPageContent = () => {
   const { 
@@ -429,6 +432,45 @@ const BuilderPageContent = () => {
     }
   };
 
+  // Handle duplicating the current flow
+  const handleDuplicateFlow = () => {
+    if (nodes.length === 0) {
+      addNotification({
+        message: "No nodes to duplicate. Create some nodes first.",
+        type: "warning"
+      });
+      return;
+    }
+
+    try {
+      // Use the duplicateFlow utility to create duplicates
+      const { nodes: duplicatedNodes, edges: duplicatedEdges } = duplicateFlow(nodes, edges);
+      
+      // Add the duplicated nodes and edges to the current flow
+      setNodes(currentNodes => [...currentNodes, ...duplicatedNodes]);
+      setEdges(currentEdges => [...currentEdges, ...duplicatedEdges]);
+      
+      addNotification({
+        message: `Successfully duplicated ${duplicatedNodes.length} nodes and ${duplicatedEdges.length} connections`,
+        type: "success"
+      });
+
+      // Auto-fit the view to show all nodes including duplicates
+      setTimeout(() => {
+        if (flowInstance.current) {
+          flowInstance.current.fitView({ padding: 0.1 });
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error duplicating flow:', error);
+      addNotification({
+        message: `Error duplicating flow: ${error.message}`,
+        type: "error"
+      });
+    }
+  };
+
   const getConnectedNodes = useCallback((nodeId) => {
     if (!nodeId) return [];
     
@@ -524,6 +566,7 @@ const BuilderPageContent = () => {
     onRedo: handleRedo,
     onToggleExecutionMode: toggleExecutionMode,
     onShowCrewAIImporter: () => setShowCrewAIImporter(true),
+    onDuplicateFlow: handleDuplicateFlow,
     executionMode
   };
 
@@ -756,6 +799,7 @@ const BuilderPageContent = () => {
           onClose={closeWebhookFlowModal}
           onReplace={handleReplaceFlow}
           onMerge={handleMergeFlow}
+          onDuplicate={handleDuplicateFlow}
           flowData={incomingFlow}
         />
       )}

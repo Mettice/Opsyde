@@ -10,8 +10,8 @@ export default function InputPanel({ inputs, setInputs, inputSchema = [], nodes 
 
   // Extract expected inputs from nodes
   const expectedInputs = React.useMemo(() => {
-    return nodes
-      .filter(n => n.type === "tool" && n.data?.input_key)
+    return (nodes || [])
+      .filter(n => n && n.type === "tool" && n.data?.input_key)
       .map(n => ({
         name: n.data.input_key,
         hint: n.data.description || "No description"
