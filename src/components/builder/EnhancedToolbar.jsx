@@ -361,6 +361,17 @@ export default function EnhancedToolbar({ toolbarProps }) {
             </svg>
             Load
           </button>
+          
+          <button 
+            onClick={toolbarProps.onDuplicateFlow}
+            className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm flex items-center"
+            title="Duplicate the entire workflow"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Duplicate
+          </button>
         </div>
         
         {/* CrewAI Import button */}

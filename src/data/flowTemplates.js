@@ -91,6 +91,31 @@ const baseTemplates = [
             nodeId: 'task-strategic-recommendations-1',
             nodeType: 'task'
           }
+        },
+        {
+          id: 'output-automation-1',
+          type: 'output',
+          position: { x: 850, y: 200 },
+          data: {
+            label: 'Market Research Report',
+            description: 'Comprehensive automation platform market analysis with insights and recommendations',
+            outputFormat: 'rich_content',
+            displayOptions: {
+              showCharts: true,
+              showInsights: true,
+              enableSharing: true
+            },
+            metadata: {
+              postable: true,
+              contentType: 'market_research',
+              shareableFormats: ['linkedin', 'twitter', 'email', 'notion', 'slack'],
+              autoInsights: true,
+              chartTypes: ['market_share', 'growth_trends', 'competitive_matrix'],
+              tags: ['automation', 'market-research', 'competitive-analysis', 'saas']
+            },
+            nodeId: 'output-automation-1',
+            nodeType: 'output'
+          }
         }
       ],
       edges: [
@@ -121,6 +146,13 @@ const baseTemplates = [
           target: 'task-strategic-recommendations-1',
           type: 'smoothstep',
           animated: true
+        },
+        {
+          id: 'edge-strategy-output',
+          source: 'task-strategic-recommendations-1',
+          target: 'output-automation-1',
+          type: 'smoothstep',
+          animated: true
         }
       ],
       tags: ['Market Research', 'Automation', 'Competitive Analysis', 'n8n', 'Make.com', 'Zapier', 'Strategic Planning'],
@@ -136,7 +168,8 @@ const baseTemplates = [
         industry: ['SaaS', 'Automation', 'No-Code', 'Enterprise Software'],
         outputFormat: 'Comprehensive Market Research Report',
         aiCapabilities: ['Market Analysis', 'Competitive Intelligence', 'Strategic Planning'],
-        businessValue: 'Very High - Provides deep market insights for strategic decision-making'
+        businessValue: 'Very High - Provides deep market insights for strategic decision-making',
+        features: ['Rich Content Display', 'Auto Insights', 'Social Sharing', 'Chart Generation']
       }
     },
     {

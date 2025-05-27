@@ -40,6 +40,7 @@ from datetime import datetime, timedelta
 import asyncio
 import base64
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -748,6 +749,181 @@ async def legacy_executed_triggers():
             "version": "1.0.0"
         }
     }
+
+@app.post("/api/post-to-platform")
+async def post_to_platform(request: Request):
+    """Post content to various social media and communication platforms"""
+    try:
+        data = await request.json()
+        platform = data.get('platform', '').lower()
+        content = data.get('content', '')
+        metadata = data.get('metadata', {})
+        
+        # Get user credentials (you'll need to implement user auth and credential storage)
+        # user_credentials = get_user_credentials(platform)
+        
+        result = {"success": False, "message": ""}
+        
+        if platform == 'linkedin':
+            # LinkedIn API integration
+            result = await post_to_linkedin(content, metadata)
+        elif platform == 'twitter':
+            # Twitter API integration
+            result = await post_to_twitter(content, metadata)
+        elif platform == 'email':
+            # Email sending
+            result = await send_email(content, metadata)
+        elif platform == 'notion':
+            # Notion API integration
+            result = await post_to_notion(content, metadata)
+        elif platform == 'slack':
+            # Slack webhook integration
+            result = await post_to_slack(content, metadata)
+        else:
+            result = {"success": False, "message": f"Platform {platform} not supported"}
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error posting to platform: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+@app.post("/api/generate-insights")
+async def generate_insights(request: Request):
+    """Generate AI insights from data"""
+    try:
+        data = await request.json()
+        content = data.get('content', '')
+        content_type = data.get('contentType', 'text')
+        analysis_type = data.get('analysisType', 'basic')
+        
+        # Use AI to analyze the content and generate insights
+        insights = await analyze_content_with_ai(content, content_type, analysis_type)
+        
+        return {
+            "success": True,
+            "insights": insights
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating insights: {str(e)}")
+        return {"success": False, "message": str(e)}
+
+# Platform-specific posting functions
+async def post_to_linkedin(content, metadata):
+    """Post content to LinkedIn"""
+    try:
+        # Mock implementation - replace with actual LinkedIn API
+        await asyncio.sleep(1)  # Simulate API call
+        return {
+            "success": True,
+            "message": "Posted to LinkedIn successfully",
+            "post_id": f"linkedin_post_{int(time.time())}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def post_to_twitter(content, metadata):
+    """Post content to Twitter"""
+    try:
+        # Mock implementation - replace with actual Twitter API
+        await asyncio.sleep(1)  # Simulate API call
+        return {
+            "success": True,
+            "message": "Posted to Twitter successfully",
+            "post_id": f"twitter_post_{int(time.time())}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def send_email(content, metadata):
+    """Send content via email"""
+    try:
+        # Mock implementation - replace with actual email sending
+        await asyncio.sleep(1)  # Simulate email sending
+        return {
+            "success": True,
+            "message": "Email sent successfully",
+            "email_id": f"email_{int(time.time())}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def post_to_notion(content, metadata):
+    """Post content to Notion"""
+    try:
+        # Mock implementation - replace with actual Notion API
+        await asyncio.sleep(1)  # Simulate API call
+        return {
+            "success": True,
+            "message": "Posted to Notion successfully",
+            "page_id": f"notion_page_{int(time.time())}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def post_to_slack(content, metadata):
+    """Post content to Slack"""
+    try:
+        # Mock implementation - replace with actual Slack webhook
+        await asyncio.sleep(1)  # Simulate API call
+        return {
+            "success": True,
+            "message": "Posted to Slack successfully",
+            "message_id": f"slack_msg_{int(time.time())}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+async def analyze_content_with_ai(content, content_type, analysis_type):
+    """Analyze content and generate insights using AI"""
+    try:
+        # Mock implementation - replace with actual AI analysis
+        await asyncio.sleep(2)  # Simulate AI processing
+        
+        insights = {
+            "summary": {
+                "title": "AI-Generated Insights",
+                "points": [
+                    "📈 Performance metrics show positive trends",
+                    "🎯 Key opportunities identified in data patterns",
+                    "⚡ Automation efficiency can be improved by 25%"
+                ]
+            },
+            "trends": [
+                {"metric": "Efficiency", "change": "+18%", "direction": "up"},
+                {"metric": "Cost Savings", "change": "+12%", "direction": "up"},
+                {"metric": "Error Rate", "change": "-8%", "direction": "down"}
+            ],
+            "chartData": {
+                "type": "bar",
+                "title": "Performance Analysis",
+                "data": {
+                    "labels": ["Efficiency", "Quality", "Speed", "Cost"],
+                    "datasets": [{
+                        "label": "Performance Score",
+                        "data": [85, 92, 78, 88],
+                        "backgroundColor": [
+                            "rgba(59, 130, 246, 0.8)",
+                            "rgba(16, 185, 129, 0.8)",
+                            "rgba(245, 158, 11, 0.8)",
+                            "rgba(239, 68, 68, 0.8)"
+                        ]
+                    }]
+                }
+            },
+            "recommendations": [
+                "Consider implementing automated quality checks",
+                "Optimize workflow for better speed performance",
+                "Monitor cost metrics more frequently"
+            ]
+        }
+        
+        return insights
+        
+    except Exception as e:
+        logger.error(f"Error in AI analysis: {str(e)}")
+        raise e
 
 if __name__ == "__main__":
     import uvicorn

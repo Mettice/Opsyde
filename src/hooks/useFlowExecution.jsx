@@ -218,7 +218,9 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
   // Create enhanced node and connection maps for logging
   const createNodeMaps = useCallback(() => {
     // Map nodes to their details with better error handling
-    const nodeMap = nodes.reduce((acc, node) => {
+    const nodeMap = (nodes || []).reduce((acc, node) => {
+      if (!node || !node.id) return acc;
+      
       try {
         acc[node.id] = {
           id: node.id,
@@ -240,7 +242,9 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     
     // Create connections map with error handling
     const connectionsMap = {};
-    edges.forEach(edge => {
+    (edges || []).forEach(edge => {
+      if (!edge || !edge.source || !edge.target) return;
+      
       try {
         if (!connectionsMap[edge.source]) {
           connectionsMap[edge.source] = [];
@@ -296,7 +300,8 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
 
   // Add connection animation trigger function
   const triggerConnectionAnimation = useCallback((sourceNodeId, targetNodeId, dataType = 'data', duration = 2000) => {
-    const edgeId = edges.find(edge => edge.source === sourceNodeId && edge.target === targetNodeId)?.id;
+    const safeEdges = (edges || []).filter(edge => edge && edge.source && edge.target && edge.id);
+    const edgeId = safeEdges.find(edge => edge.source === sourceNodeId && edge.target === targetNodeId)?.id;
     if (edgeId) {
       setConnectionStates(prev => {
         const newStates = new Map(prev);
@@ -343,7 +348,8 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
 
     // Trigger connection animations when node starts processing
     if (state === 'processing') {
-      const connectedEdges = edges.filter(edge => edge.source === nodeId);
+      const safeEdges = (edges || []).filter(edge => edge && edge.source && edge.target);
+      const connectedEdges = safeEdges.filter(edge => edge.source === nodeId);
       connectedEdges.forEach(edge => {
         setTimeout(() => {
           triggerConnectionAnimation(edge.source, edge.target, 'processing', 3000);
@@ -366,12 +372,16 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       
       // Initialize all nodes to idle state
       console.log('🚀 Initializing nodes to idle state...');
-      nodes.forEach(node => {
-        updateNodeState(node.id, 'idle', 0);
+      (nodes || []).forEach(node => {
+        if (node && node.id) {
+          updateNodeState(node.id, 'idle', 0);
+        }
       });
 
       // Enhanced node cleaning with better error handling
-      const cleanedNodes = nodes.map(node => {
+      const cleanedNodes = (nodes || []).map(node => {
+        if (!node || !node.id) return null;
+        
         try {
           // Create a copy of the node data and only remove specific problematic properties
           const cleanedData = { ...node.data };
@@ -400,9 +410,9 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
             }
           };
         }
-      });
+      }).filter(Boolean);
       
-      const cleanedEdges = edges.map(edge => cleanDataForFlow(edge));
+      const cleanedEdges = (edges || []).map(edge => edge ? cleanDataForFlow(edge) : null).filter(Boolean);
       
       // Log starting execution with enhanced information
       addNotification({
@@ -413,24 +423,27 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       const startTime = new Date().toLocaleTimeString();
       setTextLogs(prev => [...prev, 
         `🚀 Starting flow execution at ${startTime}`,
-        `📊 Flow contains ${nodes.length} nodes and ${edges.length} connections`,
+        `📊 Flow contains ${(nodes || []).length} nodes and ${(edges || []).length} connections`,
         '📋 Node Overview:'
       ]);
       
       // Log each node with enhanced information
-      nodes.forEach(node => {
-        const emoji = getNodeEmoji(node.type);
-        const nodeName = extractNodeName(node, null);
-        setTextLogs(prev => [...prev, 
-          `  ${emoji} ${nodeName} (${node.type || 'unknown'})`
-        ]);
+      (nodes || []).forEach(node => {
+        if (node && node.id) {
+          const emoji = getNodeEmoji(node.type);
+          const nodeName = extractNodeName(node, null);
+          setTextLogs(prev => [...prev, 
+            `  ${emoji} ${nodeName} (${node.type || 'unknown'})`
+          ]);
+        }
       });
       
       setTextLogs(prev => [...prev, '⚡ Starting execution...']);
       
       // Mark first node as processing to show immediate visual feedback
-      if (nodes.length > 0) {
-        const firstNode = nodes[0];
+      const safeNodes = (nodes || []).filter(node => node && node.id);
+      if (safeNodes.length > 0) {
+        const firstNode = safeNodes[0];
         console.log('🎯 Setting first node to processing:', firstNode.id);
         updateNodeState(firstNode.id, 'processing', 10);
       }
@@ -607,21 +620,25 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         setExecutionState(nodeResults);
         
         // Mark all nodes as completed
-        nodes.forEach(node => {
-          updateNodeState(node.id, 'success', 100);
+        (nodes || []).forEach(node => {
+          if (node && node.id) {
+            updateNodeState(node.id, 'success', 100);
+          }
         });
         
         // Mark all connections as success
-        edges.forEach(edge => {
-          setConnectionStates(prev => {
-            const newStates = new Map(prev);
-            newStates.set(edge.id, {
-              state: 'success',
-              dataType: 'completed',
-              timestamp: Date.now()
+        (edges || []).forEach(edge => {
+          if (edge && edge.id) {
+            setConnectionStates(prev => {
+              const newStates = new Map(prev);
+              newStates.set(edge.id, {
+                state: 'success',
+                dataType: 'completed',
+                timestamp: Date.now()
+              });
+              return newStates;
             });
-            return newStates;
-          });
+          }
         });
         
         // Count processed nodes
@@ -655,8 +672,10 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         console.error("Error processing flow execution result:", error);
         
         // Mark all nodes as error
-        nodes.forEach(node => {
-          updateNodeState(node.id, 'error', 0, { error: error.message });
+        (nodes || []).forEach(node => {
+          if (node && node.id) {
+            updateNodeState(node.id, 'error', 0, { error: error.message });
+          }
         });
         
         // Add error to structured logs
@@ -685,8 +704,10 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       console.error('Error executing flow:', error);
       
       // Mark all nodes as error
-      nodes.forEach(node => {
-        updateNodeState(node.id, 'error', 0, { error: error.message });
+      (nodes || []).forEach(node => {
+        if (node && node.id) {
+          updateNodeState(node.id, 'error', 0, { error: error.message });
+        }
       });
       
       setStructuredLogs(prev => [...prev, {
@@ -724,8 +745,12 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     const issues = [];
     
     try {
+      // Ensure nodes and edges are arrays and filter out null/undefined values
+      const safeNodes = (nodes || []).filter(node => node && node.id);
+      const safeEdges = (edges || []).filter(edge => edge && edge.source && edge.target);
+      
       // Check for empty flow
-      if (nodes.length === 0) {
+      if (safeNodes.length === 0) {
         issues.push({
           type: 'error',
           message: 'Flow is empty. Add nodes to create a workflow.'
@@ -734,8 +759,8 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       }
       
       // Check for nodes without connections
-      const isolatedNodes = nodes.filter(node => {
-        const hasConnections = edges.some(edge => 
+      const isolatedNodes = safeNodes.filter(node => {
+        const hasConnections = safeEdges.some(edge => 
           edge.source === node.id || edge.target === node.id
         );
         return !hasConnections && node.type !== 'trigger' && node.type !== 'input';
@@ -754,7 +779,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       }
       
       // Check for missing required inputs
-      const inputNodes = nodes.filter(node => node.type === 'input');
+      const inputNodes = safeNodes.filter(node => node.type === 'input');
       const missingRequiredInputs = inputNodes.filter(node => {
         const variableName = node.data?.variableName || node.data?.name || node.id;
         return node.data?.isRequired && 
@@ -786,7 +811,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         visited.add(nodeId);
         path.push(nodeId);
         
-        const outgoingEdges = edges.filter(edge => edge.source === nodeId);
+        const outgoingEdges = safeEdges.filter(edge => edge.source === nodeId);
         for (const edge of outgoingEdges) {
           const cycle = checkCircular(edge.target, visited, [...path]);
           if (cycle) {
@@ -797,14 +822,14 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         return null;
       };
       
-      for (const node of nodes) {
+      for (const node of safeNodes) {
         const cycle = checkCircular(node.id);
         if (cycle) {
           issues.push({
             type: 'error',
             message: 'Circular dependency detected in flow',
             cycle: cycle.map(nodeId => {
-              const node = nodes.find(n => n.id === nodeId);
+              const node = safeNodes.find(n => n.id === nodeId);
               return {
                 id: nodeId,
                 name: extractNodeName(node, null)
@@ -830,7 +855,9 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
   const testExecutionStates = useCallback(() => {
     console.log('🧪 Testing execution states...');
     
-    if (nodes.length === 0) {
+    const safeNodes = (nodes || []).filter(node => node && node.id);
+    
+    if (safeNodes.length === 0) {
       console.log('❌ No nodes to test');
       return;
     }
@@ -838,9 +865,9 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     setIsExecuting(true);
     
     // Test each node sequentially
-    nodes.forEach((node, index) => {
+    safeNodes.forEach((node, index) => {
       setTimeout(() => {
-        console.log(`🎯 Testing node ${node.id} (${index + 1}/${nodes.length})`);
+        console.log(`🎯 Testing node ${node.id} (${index + 1}/${safeNodes.length})`);
         
         // Start processing
         updateNodeState(node.id, 'processing', 25);
@@ -855,7 +882,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
           updateNodeState(node.id, 'success', 100);
           
           // If this is the last node, end execution
-          if (index === nodes.length - 1) {
+          if (index === safeNodes.length - 1) {
             setTimeout(() => {
               setIsExecuting(false);
               console.log('✅ Test execution completed');

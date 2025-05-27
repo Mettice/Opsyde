@@ -128,8 +128,10 @@ class AgentNode:
             
             return {
                 "success": True,
-                "type": "agent_result",
+                "type": "text",
                 "output": result,
+                "text_output": result,  # Clean text for display
+                "result": result,       # For compatibility
                 "agent_name": node_data.get("label", agent_config["role"]),
                 "role": agent_config["role"],
                 "framework": framework,
@@ -137,9 +139,17 @@ class AgentNode:
                     "node_id": node_id,
                     "node_type": "agent",
                     "timestamp": datetime.now().isoformat(),
-                    "collaborating_agents": collaborating_agents
-                },
-                **agent_result
+                    "collaborating_agents": collaborating_agents,
+                    "agent_result": {
+                        "type": "agent_result",
+                        "agent_name": node_data.get("label", agent_config["role"]),
+                        "role": agent_config["role"],
+                        "framework": framework,
+                        "result": result,
+                        "timestamp": datetime.now().isoformat(),
+                        "collaborating_agents": [agent["name"] for agent in collaborating_agents]
+                    }
+                }
             }
             
         except Exception as e:
@@ -354,13 +364,13 @@ async def process_agent_node(
     context: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    Process agent node - standalone function for compatibility
+    Process an agent node with the given data and inputs
     """
     try:
         agent_node = AgentNode()
         
         # Create execution context with required fields
-            exec_context = ExecutionContext(
+        exec_context = ExecutionContext(
             workflow_id=context.get('workflow_id', 'unknown') if context else 'unknown',
             execution_id=context.get('execution_id', 'direct-execution') if context else 'direct-execution'
         )
@@ -376,13 +386,13 @@ async def process_agent_node(
         # Process the node
         result = await agent_node.process(node, inputs, exec_context)
         
-            return result
-            
+        return result
+        
     except Exception as e:
         logger.error(f"Error in process_agent_node: {str(e)}")
         return {
-                "success": False,
-                "type": "error",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            "success": False,
+            "type": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }

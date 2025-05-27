@@ -12,17 +12,17 @@ const GraphMetricsPanel = ({
   isExecuting = false
 }) => {
   // Ensure nodes and edges are arrays
-  const safeNodes = Array.isArray(nodes) ? nodes : [];
-  const safeEdges = Array.isArray(edges) ? edges : [];
+  const safeNodes = Array.isArray(nodes) ? nodes.filter(node => node && node.id) : [];
+  const safeEdges = Array.isArray(edges) ? edges.filter(edge => edge && edge.id) : [];
 
   // Count nodes by type
-  const agentCount = safeNodes.filter(n => n.type === 'agent').length;
-  const taskCount = safeNodes.filter(n => n.type === 'task').length;
-  const toolCount = safeNodes.filter(n => n.type === 'tool').length;
-  const triggerCount = safeNodes.filter(n => n.type === 'trigger').length;
-  const chatCount = safeNodes.filter(n => n.type === 'chatbot').length;
-  const logicCount = safeNodes.filter(n => n.type === 'logic').length;
-  const delayCount = safeNodes.filter(n => n.type === 'delay').length;
+  const agentCount = safeNodes.filter(n => n && n.type === 'agent').length;
+  const taskCount = safeNodes.filter(n => n && n.type === 'task').length;
+  const toolCount = safeNodes.filter(n => n && n.type === 'tool').length;
+  const triggerCount = safeNodes.filter(n => n && n.type === 'trigger').length;
+  const chatCount = safeNodes.filter(n => n && n.type === 'chatbot').length;
+  const logicCount = safeNodes.filter(n => n && n.type === 'logic').length;
+  const delayCount = safeNodes.filter(n => n && n.type === 'delay').length;
 
   // Count execution states
   const executionStats = {
@@ -33,6 +33,7 @@ const GraphMetricsPanel = ({
   };
 
   safeNodes.forEach(node => {
+    if (!node || !node.id) return;
     const state = nodeStates.get(node.id);
     const status = state?.status || 'idle';
     if (executionStats.hasOwnProperty(status)) {
@@ -51,6 +52,7 @@ const GraphMetricsPanel = ({
   };
 
   safeEdges.forEach(edge => {
+    if (!edge || !edge.id) return;
     const state = connectionStates.get(edge.id);
     const status = state?.state || 'idle';
     if (connectionStats.hasOwnProperty(status)) {
@@ -103,8 +105,10 @@ const GraphMetricsPanel = ({
   // Count valid and invalid connections
   const { validConnections, invalidConnections } = safeEdges.reduce(
     (acc, edge) => {
-      const sourceNode = safeNodes.find(n => n.id === edge.source);
-      const targetNode = safeNodes.find(n => n.id === edge.target);
+      if (!edge || !edge.source || !edge.target) return acc;
+      
+      const sourceNode = safeNodes.find(n => n && n.id === edge.source);
+      const targetNode = safeNodes.find(n => n && n.id === edge.target);
 
       if (!sourceNode || !targetNode) return acc;
 

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useMemo, lazy, Suspense, useRef } from 'react';
 import PropTypes from 'prop-types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -118,7 +118,12 @@ const syntaxHighlight = (json) => {
 const TextRenderer = ({ content }) => {
   if (!content) return null;
   
-  const textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  // Handle extracted content object structure
+  const textContent = typeof content === 'object' && content.content 
+    ? content.content 
+    : typeof content === 'string' 
+      ? content 
+      : JSON.stringify(content, null, 2);
   
   return (
     <div className="text-renderer space-y-2">
@@ -133,7 +138,12 @@ const TextRenderer = ({ content }) => {
 const MarkdownRenderer = ({ content }) => {
   if (!content) return null;
   
-  const markdownContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  // Handle extracted content object structure
+  const markdownContent = typeof content === 'object' && content.content 
+    ? content.content 
+    : typeof content === 'string' 
+      ? content 
+      : JSON.stringify(content, null, 2);
   
   return (
     <div className="markdown-renderer space-y-3">
@@ -175,7 +185,13 @@ const JsonRenderer = ({ content }) => {
   if (!content) return null;
   
   try {
-    const jsonContent = typeof content === 'string' ? JSON.parse(content) : content;
+    // Handle extracted content object structure
+    const jsonContent = typeof content === 'object' && content.content 
+      ? (typeof content.content === 'string' ? JSON.parse(content.content) : content.content)
+      : typeof content === 'string' 
+        ? JSON.parse(content) 
+        : content;
+    
     const formattedJson = JSON.stringify(jsonContent, null, 2);
     
     return (
@@ -188,12 +204,17 @@ const JsonRenderer = ({ content }) => {
       </div>
     );
   } catch (error) {
+    // Handle extracted content object structure for error case
+    const fallbackContent = typeof content === 'object' && content.content 
+      ? content.content 
+      : content;
+      
     return (
       <div className="json-renderer space-y-2">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-700 text-sm">Invalid JSON content</p>
           <pre className="text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
-            {String(content)}
+            {String(fallbackContent)}
           </pre>
         </div>
       </div>
@@ -636,54 +657,133 @@ const isBase64Image = (str) => {
 const detectContentType = (content) => {
   try {
     // Handle null/undefined
-    if (!content) return 'text';
+    if (!content && content !== 0 && content !== false) return 'text';
     
-    // Handle extracted content types (from extractDisplayContent)
+    // Handle extracted content types first
     if (typeof content === 'object' && content !== null && content.type) {
-      return content.type;
+      const type = content.type.toLowerCase();
+      if (['label_value_pair', 'file_info', 'chart', 'table', 'image', 'audio', 'video', 'embed'].includes(type)) {
+        return type;
+      }
     }
-    
+
+    // Check for next_action (Dynamic Feedback Loop)
+    if (typeof content === 'object' && content !== null) {
+      if (content.next_action && content.options && Array.isArray(content.options)) {
+        return 'next_action';
+      }
+    }
+
     // Handle string content
     if (typeof content === 'string') {
-      const trimmed = content.trim();
-      // Check if it looks like markdown using the improved detection
-      if (isMarkdownContent(trimmed)) {
-        return 'markdown';
+      // Check for audio content
+      if (content.startsWith('data:audio/') || 
+          content.match(/\.(mp3|wav|ogg|m4a|aac|flac)(\?|$)/i) ||
+          content.includes('audio/')) {
+        return 'audio';
       }
+
+      // Check for video content  
+      if (content.startsWith('data:video/') ||
+          content.match(/\.(mp4|webm|ogg|avi|mov|wmv|flv|mkv)(\?|$)/i) ||
+          content.includes('video/')) {
+        return 'video';
+      }
+
+      // Check for embed/iframe content
+      if (content.includes('<iframe') || 
+          content.includes('embed') ||
+          (content.startsWith('http') && (
+            content.includes('youtube.com/embed') ||
+            content.includes('vimeo.com/video') ||
+            content.includes('codepen.io/embed') ||
+            content.includes('jsfiddle.net/embedded')
+          ))) {
+        return 'embed';
+      }
+
+      // Check for PDF content
+      if (content.startsWith('data:application/pdf') ||
+          content.match(/\.pdf(\?|$)/i) ||
+          content.includes('application/pdf')) {
+        return 'file';
+      }
+
+      // Check for base64 images
+      if (isBase64Image(content)) return 'image';
+      
+      // Check for HTML content
+      if (isHtmlContent(content)) return 'html';
+      
+      // Check for markdown (prioritize over code)
+      if (isMarkdownContent(content)) return 'markdown';
+      
+      // Check for code content
+      if (isCodeContent(content)) return 'code';
+      
+      // Default to text for strings
       return 'text';
     }
     
     // Handle arrays
     if (Array.isArray(content)) {
-      // Check if it's table data (array of objects with consistent keys)
-      if (content.length > 0 && content.every(item => typeof item === 'object' && item !== null)) {
-        const firstKeys = Object.keys(content[0]);
-        if (firstKeys.length > 0 && content.every(item => 
-          Object.keys(item).some(key => firstKeys.includes(key))
-        )) {
-          return 'table';
-        }
+      // Check if it's table data
+      if (content.length > 0 && 
+          typeof content[0] === 'object' && 
+          content[0] !== null &&
+          !Array.isArray(content[0])) {
+        return 'table';
       }
+      
+      // Check if it's chart data
+      if (content.some(item => 
+        item && typeof item === 'object' && 
+        (item.labels || item.datasets || item.data || item.x || item.y)
+      )) {
+        return 'chart';
+      }
+      
       return 'json';
     }
     
     // Handle objects
     if (typeof content === 'object' && content !== null) {
-      // Check for specific object patterns
+      // Check for chart data patterns
+      if (content.labels && content.datasets) return 'chart';
+      if (content.data && (content.labels || content.type)) return 'chart';
+      if (content.series || content.categories) return 'chart';
+      
+      // Check for image data
+      if (content.src || content.url || content.data) {
+        const src = content.src || content.url || content.data;
+        if (typeof src === 'string' && isBase64Image(src)) return 'image';
+      }
+
+      // Check for audio data
+      if (content.type && content.type.includes('audio')) return 'audio';
+      if (content.audio_url || content.audio_src) return 'audio';
+
+      // Check for video data  
+      if (content.type && content.type.includes('video')) return 'video';
+      if (content.video_url || content.video_src) return 'video';
+
+      // Check for embed data
+      if (content.embed_url || content.iframe_src) return 'embed';
+      
+      // Check for table data
       if (content.headers && content.rows) return 'table';
-      if (content.data && typeof content.data === 'string' && isBase64Image(content.data)) return 'image';
-      if (content.type === 'chart' || (content.data && (content.labels || content.datasets))) return 'chart';
-      if (content.filename || content.file_upload) return 'file';
-      if (content.label && content.value) return 'label_value_pair';
+      if (content.columns && content.data) return 'table';
+      
+      // Check for error patterns
+      if (content.error || content.message) return 'error';
       
       return 'json';
     }
     
-    // Default fallback
+    // Fallback
     return 'text';
-    
   } catch (error) {
-    console.error('Error detecting content type:', error);
+    console.warn('Error detecting content type:', error);
     return 'text';
   }
 };
@@ -762,8 +862,8 @@ const extractDisplayContent = (content) => {
         }
       }
       
-      // Look for common content patterns in objects
-      const contentKeys = ['content', 'text', 'output', 'result', 'data', 'message', 'response', 'body'];
+      // Look for common content patterns in objects - prioritize agent result fields
+      const contentKeys = ['text_output', 'output', 'result', 'content', 'text', 'data', 'message', 'response', 'body'];
       for (const key of contentKeys) {
         if (content[key] && typeof content[key] === 'string' && content[key].trim()) {
           const textContent = content[key].trim();
@@ -958,133 +1058,396 @@ const FileInfoRenderer = ({ content, metadata }) => (
   </div>
 );
 
-// Main Rich Content Renderer Component
-const RichContentRenderer = ({ content, maxHeight = '400px', className = '' }) => {
-  // Enhanced container classes for better layout
-  const containerClasses = `
-    rich-content-container overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100
-    p-4 space-y-2 bg-white rounded-lg border border-gray-200 shadow-sm
-    prose prose-sm max-w-none
-    ${className}
-  `.trim();
+// Send to Platform Buttons Component
+const SendToPlatformButtons = ({ platforms = [], content, metadata }) => {
+  const [isPosting, setIsPosting] = useState(false);
+  const [postStatus, setPostStatus] = useState({});
 
-  const containerStyle = {
-    maxHeight,
+  const platformConfigs = {
+    LinkedIn: {
+      icon: '💼',
+      color: 'bg-blue-600 hover:bg-blue-700',
+      textColor: 'text-white'
+    },
+    Twitter: {
+      icon: '🐦',
+      color: 'bg-sky-500 hover:bg-sky-600',
+      textColor: 'text-white'
+    },
+    Email: {
+      icon: '📧',
+      color: 'bg-gray-600 hover:bg-gray-700',
+      textColor: 'text-white'
+    },
+    Notion: {
+      icon: '📝',
+      color: 'bg-black hover:bg-gray-800',
+      textColor: 'text-white'
+    },
+    Slack: {
+      icon: '💬',
+      color: 'bg-green-600 hover:bg-green-700',
+      textColor: 'text-white'
+    }
+  };
+
+  const handlePost = async (platform) => {
+    setIsPosting(true);
+    setPostStatus(prev => ({ ...prev, [platform]: 'posting' }));
+
+    try {
+      // Format content for the platform
+      const formattedContent = formatContentForPlatform(content, platform);
+      
+      // Call the appropriate posting API
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/api/post-to-platform`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          platform: platform.toLowerCase(),
+          content: formattedContent,
+          metadata: metadata
+        })
+      });
+
+      if (response.ok) {
+        setPostStatus(prev => ({ ...prev, [platform]: 'success' }));
+        setTimeout(() => {
+          setPostStatus(prev => ({ ...prev, [platform]: null }));
+        }, 3000);
+      } else {
+        throw new Error(`Failed to post to ${platform}`);
+      }
+    } catch (error) {
+      console.error(`Error posting to ${platform}:`, error);
+      setPostStatus(prev => ({ ...prev, [platform]: 'error' }));
+      setTimeout(() => {
+        setPostStatus(prev => ({ ...prev, [platform]: null }));
+      }, 3000);
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const formatContentForPlatform = (content, platform) => {
+    switch (platform) {
+      case 'LinkedIn':
+        return `🚀 Automation Insights\n\n${content}\n\n#Automation #AI #BusinessIntelligence`;
+      case 'Twitter':
+        // Truncate for Twitter's character limit
+        const truncated = content.length > 240 ? content.substring(0, 240) + '...' : content;
+        return `🤖 ${truncated}\n\n#AutomationInsights #AI`;
+      case 'Email':
+        return {
+          subject: 'Automation Analysis Results',
+          body: `Hi,\n\nHere are the latest automation insights:\n\n${content}\n\nBest regards,\nYour Automation Team`
+        };
+      case 'Notion':
+        return {
+          title: 'Automation Analysis',
+          content: content,
+          properties: {
+            'Type': 'Analysis',
+            'Generated': new Date().toISOString()
+          }
+        };
+      case 'Slack':
+        return {
+          text: `📊 *Automation Analysis Results*\n\n${content}`,
+          blocks: [
+            {
+              type: 'section',
+              text: {
+                type: 'mrkdwn',
+                text: `📊 *Automation Analysis Results*\n\n${content}`
+              }
+            }
+          ]
+        };
+      default:
+        return content;
+    }
+  };
+
+  const getButtonStatus = (platform) => {
+    const status = postStatus[platform];
+    switch (status) {
+      case 'posting':
+        return { text: 'Posting...', disabled: true };
+      case 'success':
+        return { text: 'Posted ✓', disabled: true };
+      case 'error':
+        return { text: 'Failed ✗', disabled: false };
+      default:
+        return { text: `Post to ${platform}`, disabled: false };
+    }
+  };
+
+  if (!platforms.length) return null;
+
+  return (
+    <div className="send-to-platforms mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+      <h4 className="text-sm font-semibold text-purple-800 mb-3 flex items-center">
+        <span className="mr-2">🚀</span>
+        Share Results
+      </h4>
+      <div className="flex flex-wrap gap-2">
+        {platforms.map(platform => {
+          const config = platformConfigs[platform];
+          const buttonStatus = getButtonStatus(platform);
+          
+          return (
+            <button
+              key={platform}
+              onClick={() => handlePost(platform)}
+              disabled={buttonStatus.disabled || isPosting}
+              className={`
+                inline-flex items-center px-3 py-2 rounded-lg text-sm font-medium
+                transition-all duration-200 transform hover:scale-105
+                ${config.color} ${config.textColor}
+                disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none
+              `}
+            >
+              <span className="mr-2">{config.icon}</span>
+              {buttonStatus.text}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-purple-600 mt-2">
+        💡 Configure your platform credentials in Settings to enable posting
+      </p>
+    </div>
+  );
+};
+
+// Auto Insight Generator Component
+const AutoInsightGenerator = ({ content, contentType, metadata }) => {
+  const [insights, setInsights] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showOptions, setShowOptions] = useState({
+    data: true,
+    summary: false,
+    chart: false
+  });
+
+  const canGenerateInsights = () => {
+    // Only generate insights for actual output/results, not metadata or logs
+    if (!content) return false;
+    
+    // Extract the actual content to analyze
+    const displayContent = extractDisplayContent(content);
+    const actualContent = displayContent.content || displayContent;
+    const contentType = detectContentType(displayContent);
+    
+    // Skip only if this is clearly system metadata (not user results)
+    if (metadata?.node_type && !actualContent) return false;
+    if (metadata?.timestamp && !actualContent) return false;
+    
+    // Generate insights for meaningful content
+    return contentType === 'table' || 
+           contentType === 'json' || 
+           contentType === 'chart' ||
+           (contentType === 'text' && typeof actualContent === 'string' && actualContent.length > 50);
+  };
+
+  const generateInsights = async () => {
+    if (!canGenerateInsights()) return;
+
+    setIsGenerating(true);
+    try {
+      // Extract the display content for analysis
+      const displayContent = extractDisplayContent(content);
+      const analysisContent = displayContent.content || displayContent;
+      
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/generate-insights`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: analysisContent,
+          contentType: detectContentType(displayContent),
+          analysisType: 'comprehensive'
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setInsights(result.insights || result); // Handle both formats
+        // Auto-enable summary and chart if insights are generated
+        setShowOptions(prev => ({
+          ...prev,
+          summary: true,
+          chart: (result.insights?.chartData || result.chartData) ? true : prev.chart
+        }));
+      }
+    } catch (error) {
+      console.error('Error generating insights:', error);
+      // Fallback to mock insights for demo
+      setInsights(generateMockInsights(content, contentType));
+      setShowOptions(prev => ({ ...prev, summary: true, chart: true }));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Check if content is postable
+  const isPostable = metadata?.postable || 
+                    metadata?.shareableFormats?.length > 0 ||
+                    ['chart', 'image', 'table', 'markdown'].includes(detectContentType(extractDisplayContent(content)));
+
+  const containerStyle = useMemo(() => ({
+    maxHeight: displayMode === 'minimal' ? '200px' : maxHeight,
     overflowY: 'auto',
     overflowX: 'hidden',
     wordBreak: 'break-word',
-    lineHeight: '1.7',
-    position: 'relative',
-    zIndex: 1
+    lineHeight: '1.6'
+  }), [maxHeight, displayMode]);
+
+  const renderMainContent = () => {
+    try {
+      const displayContent = extractDisplayContent(content);
+      const contentType = detectContentType(displayContent);
+      
+      // For minimal mode, simplify certain content types
+      if (displayMode === 'minimal') {
+        switch (contentType) {
+          case 'chart':
+            return <div className="text-sm text-gray-600 p-2 bg-blue-50 rounded">📊 Chart data available</div>;
+          case 'image':
+            return <div className="text-sm text-gray-600 p-2 bg-green-50 rounded">🖼️ Image content</div>;
+          case 'audio':
+            return <div className="text-sm text-gray-600 p-2 bg-purple-50 rounded">🎧 Audio content</div>;
+          case 'video':
+            return <div className="text-sm text-gray-600 p-2 bg-red-50 rounded">🎬 Video content</div>;
+          case 'embed':
+            return <div className="text-sm text-gray-600 p-2 bg-yellow-50 rounded">🌐 Embedded content</div>;
+          case 'next_action':
+            return <div className="text-sm text-gray-600 p-2 bg-blue-50 rounded">🤖 Action required</div>;
+        }
+      }
+
+      // Full rendering for immersive and post modes
+      switch (contentType) {
+        case 'next_action':
+          return (
+            <RichNextActionPrompt 
+              action={displayContent.next_action}
+              options={displayContent.options}
+              onAction={onAction}
+              metadata={metadata}
+            />
+          );
+
+        case 'audio':
+          return <AudioRenderer content={displayContent} metadata={metadata} />;
+
+        case 'video':
+          return <VideoRenderer content={displayContent} metadata={metadata} />;
+
+        case 'embed':
+          return <EmbedRenderer content={displayContent} metadata={metadata} />;
+
+        case 'markdown':
+          return <MarkdownRenderer content={displayContent} />;
+
+        case 'html':
+          return <HtmlRenderer content={displayContent.content || displayContent} />;
+
+        case 'json':
+          return <JsonRenderer content={displayContent} />;
+
+        case 'table':
+          return <TableRenderer content={displayContent.content || displayContent} />;
+
+        case 'image':
+          return <ImageRenderer content={displayContent.content || displayContent} />;
+
+        case 'chart':
+          return <ChartRenderer content={displayContent.content || displayContent} />;
+
+        case 'code':
+          return <CodeRenderer content={displayContent} />;
+
+        case 'file':
+          return <FileRenderer content={displayContent} />;
+
+        case 'label_value_pair':
+          return <LabelValueRenderer content={displayContent} />;
+
+        case 'file_info':
+          return <FileInfoRenderer content={displayContent} />;
+
+        case 'error':
+          return <ErrorRenderer content={displayContent} />;
+
+        default:
+          return <TextRenderer content={displayContent} />;
+      }
+    } catch (err) {
+      console.error('Error rendering content:', err);
+      setError(err.message);
+      return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-700 font-medium">Rendering Error</div>
+          <div className="text-red-600 text-sm mt-1">{err.message}</div>
+        </div>
+      );
+    }
   };
 
-  try {
-    // Extract and detect content type
-    const extracted = extractDisplayContent(content);
-    const contentType = detectContentType(extracted.content);
+  return (
+    <div className={containerClasses} style={containerStyle}>
+      {/* Display mode indicator for post mode */}
+      {displayMode === 'post' && (
+        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-blue-200">
+          <span className="text-lg">📤</span>
+          <span className="text-sm font-medium text-blue-700">Ready to Share</span>
+        </div>
+      )}
 
-    // Render based on detected content type
-    switch (contentType) {
-      case 'markdown':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <MarkdownRenderer content={extracted.content} />
-          </div>
-        );
+      {/* Main content */}
+      {renderMainContent()}
 
-      case 'html':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <HtmlRenderer content={extracted.content} />
-          </div>
-        );
+      {/* Auto insights for immersive mode */}
+      {displayMode === 'immersive' && (
+        <AutoInsightGenerator 
+          content={content} 
+          contentType={detectContentType(extractDisplayContent(content))}
+          metadata={metadata}
+        />
+      )}
 
-      case 'json':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <JsonRenderer content={extracted.content} />
-          </div>
-        );
+      {/* Platform sharing buttons for postable content */}
+      {(displayMode === 'immersive' || displayMode === 'post') && isPostable && (
+        <SendToPlatformButtons 
+          platforms={metadata?.platforms || ['LinkedIn', 'Twitter', 'Email']}
+          content={content} 
+          metadata={metadata}
+        />
+      )}
 
-      case 'table':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <TableRenderer content={extracted.content} />
+      {/* Error display */}
+      {error && (
+        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="text-red-700 text-sm">
+            ⚠️ Rendering error: {error}
           </div>
-        );
-
-      case 'image':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <ImageRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'chart':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <ChartRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'code':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <CodeRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'file':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <FileRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'label_value_pair':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <LabelValueRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'file_info':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <FileInfoRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'error':
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <ErrorRenderer content={extracted.content} />
-          </div>
-        );
-
-      case 'text':
-      default:
-        return (
-          <div className={containerClasses} style={containerStyle}>
-            <TextRenderer content={extracted.content} />
-          </div>
-        );
-    }
-  } catch (error) {
-    console.error('❌ Error rendering content:', error);
-    console.log('🔍 Content that caused error:', content);
-    return (
-      <div className={containerClasses} style={containerStyle}>
-        <ErrorRenderer content={`Error rendering content: ${error.message}`} />
-      </div>
-    );
-  }
+        </div>
+      )}
+    </div>
+  );
 };
 
 RichContentRenderer.propTypes = {
   content: PropTypes.any.isRequired,
   maxHeight: PropTypes.string,
   className: PropTypes.string,
+  metadata: PropTypes.object,
+  displayMode: PropTypes.string,
+  onAction: PropTypes.func,
 };
 
 export default RichContentRenderer; 
