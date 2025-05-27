@@ -151,7 +151,7 @@ class AgentNode:
                 "agent_name": node_data.get("label", "Unknown Agent"),
                 "timestamp": datetime.now().isoformat()
             }
-    
+
     def _extract_main_query(self, inputs: Dict[str, Any], node_data: Dict[str, Any]) -> str:
         """Extract the main query/task from inputs"""
         
@@ -360,7 +360,7 @@ async def process_agent_node(
         agent_node = AgentNode()
         
         # Create execution context with required fields
-        exec_context = ExecutionContext(
+            exec_context = ExecutionContext(
             workflow_id=context.get('workflow_id', 'unknown') if context else 'unknown',
             execution_id=context.get('execution_id', 'direct-execution') if context else 'direct-execution'
         )
@@ -376,13 +376,13 @@ async def process_agent_node(
         # Process the node
         result = await agent_node.process(node, inputs, exec_context)
         
-        return result
-        
+            return result
+            
     except Exception as e:
         logger.error(f"Error in process_agent_node: {str(e)}")
         return {
-            "success": False,
-            "type": "error",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        } 
+                "success": False,
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }

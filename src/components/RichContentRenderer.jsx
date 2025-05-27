@@ -114,71 +114,48 @@ const syntaxHighlight = (json) => {
     });
 };
 
-// Text Content Renderer
-const TextRenderer = ({ content, metadata }) => (
-  <div className="text-sm leading-relaxed whitespace-pre-wrap">
-    {metadata?.title && (
-      <h3 className="font-semibold text-gray-800 mb-2">{metadata.title}</h3>
-    )}
-    {content}
-  </div>
-);
-
-// Markdown Content Renderer
-const MarkdownRenderer = ({ content, metadata }) => (
-  <div className="prose prose-sm max-w-none overflow-hidden">
-    {metadata?.title && (
-      <h3 className="font-semibold text-gray-800 mb-2">{metadata.title}</h3>
-    )}
-    <div className="markdown-content">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          code({node, inline, className, children, ...props}) {
-            const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
-              <div className="my-2 overflow-hidden rounded-lg">
-                <SyntaxHighlighter
-                  style={vscDarkPlus}
-                  language={match[1]}
-                  PreTag="div"
-                  customStyle={{
-                    margin: 0,
-                    borderRadius: '0.5rem',
-                    fontSize: '0.875rem',
-                    maxHeight: '200px',
-                    overflow: 'auto'
-                  }}
-                  {...props}
-                >
-                  {String(children).replace(/\n$/, '')}
-                </SyntaxHighlighter>
-              </div>
-            ) : (
-              <code className={`${className} bg-gray-100 px-1 py-0.5 rounded text-sm`} {...props}>
-                {children}
-              </code>
-            );
-          },
-          pre: ({ children }) => (
-            <div className="overflow-auto max-h-48 bg-gray-100 rounded-lg p-3 my-2">
-              {children}
-            </div>
-          ),
-          table: ({ children }) => (
-            <div className="overflow-x-auto my-4">
-              <table className="min-w-full border-collapse border border-gray-300">
-                {children}
-              </table>
-            </div>
-          )
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+// Text Renderer Component
+const TextRenderer = ({ content }) => {
+  if (!content) return null;
+  
+  const textContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  
+  return (
+    <div className="text-renderer space-y-2">
+      <div className="text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+        {textContent}
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+// Markdown Renderer Component
+const MarkdownRenderer = ({ content }) => {
+  if (!content) return null;
+  
+  const markdownContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+  
+  return (
+    <div className="markdown-renderer space-y-3">
+      <div 
+        className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-strong:text-gray-900 prose-ul:space-y-1 prose-ol:space-y-1"
+        dangerouslySetInnerHTML={{ 
+          __html: markdownContent
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>')
+            .replace(/^# (.*$)/gim, '<h1 class="text-xl font-bold mb-3 mt-4">$1</h1>')
+            .replace(/^## (.*$)/gim, '<h2 class="text-lg font-semibold mb-2 mt-3">$1</h2>')
+            .replace(/^### (.*$)/gim, '<h3 class="text-md font-medium mb-2 mt-2">$1</h3>')
+            .replace(/^\- (.*$)/gim, '<li class="ml-4">• $1</li>')
+            .replace(/^\* (.*$)/gim, '<li class="ml-4">• $1</li>')
+            .replace(/\n\n/g, '</p><p class="mb-3">')
+            .replace(/^(?!<[h|l])/gm, '<p class="mb-2">')
+            .replace(/(?<!>)$/gm, '</p>')
+        }}
+      />
+    </div>
+  );
+};
 
 // HTML Content Renderer
 const HtmlRenderer = ({ content, metadata }) => (
@@ -193,115 +170,35 @@ const HtmlRenderer = ({ content, metadata }) => (
   </div>
 );
 
-// JSON Content Renderer with collapsible sections
-const JsonRenderer = ({ content, metadata }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [expandedKeys, setExpandedKeys] = useState(new Set());
+// JSON Content Renderer
+const JsonRenderer = ({ content }) => {
+  if (!content) return null;
   
-  const toggleKey = (key) => {
-    const newExpanded = new Set(expandedKeys);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedKeys(newExpanded);
-  };
-
-  const renderJsonValue = (value, key = '', depth = 0) => {
-    if (depth > 5) return <span className="text-gray-500">...</span>;
+  try {
+    const jsonContent = typeof content === 'string' ? JSON.parse(content) : content;
+    const formattedJson = JSON.stringify(jsonContent, null, 2);
     
-    if (typeof value === 'object' && value !== null) {
-      if (Array.isArray(value)) {
-        return (
-          <div className="ml-4">
-            <button
-              onClick={() => toggleKey(key)}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              [{value.length} items] {expandedKeys.has(key) ? '▼' : '▶'}
-            </button>
-            {expandedKeys.has(key) && (
-              <div className="ml-4 mt-1">
-                {value.map((item, index) => (
-                  <div key={index} className="mb-1">
-                    <span className="text-gray-500">{index}:</span>
-                    {renderJsonValue(item, `${key}[${index}]`, depth + 1)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      } else {
-        const keys = Object.keys(value);
-        return (
-          <div className="ml-4">
-            <button
-              onClick={() => toggleKey(key)}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              {`{${keys.length} keys}`} {expandedKeys.has(key) ? '▼' : '▶'}
-            </button>
-            {expandedKeys.has(key) && (
-              <div className="ml-4 mt-1">
-                {keys.map(objKey => (
-                  <div key={objKey} className="mb-1">
-                    <span className="text-purple-600 font-medium">{objKey}:</span>
-                    {renderJsonValue(value[objKey], `${key}.${objKey}`, depth + 1)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      }
-    } else {
-      const className = typeof value === 'string' ? 'text-green-600' :
-                      typeof value === 'number' ? 'text-blue-600' :
-                      typeof value === 'boolean' ? 'text-orange-600' :
-                      value === null ? 'text-red-600' : 'text-gray-600';
-      
-      return <span className={className}>{JSON.stringify(value)}</span>;
-    }
-  };
-
-  return (
-    <div className="bg-gray-50 rounded-lg p-4">
-      {metadata?.title && (
-        <h3 className="font-semibold text-gray-800 mb-2">{metadata.title}</h3>
-      )}
-      <div className="flex justify-between items-center mb-2">
-        <span className="text-sm text-gray-600">JSON Data</span>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
-        >
-          {isExpanded ? 'Collapse' : 'Expand'} All
-        </button>
+    return (
+      <div className="json-renderer space-y-2">
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 overflow-auto">
+          <pre className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed font-mono">
+            {formattedJson}
+          </pre>
+        </div>
       </div>
-      
-      {isExpanded ? (
-        <div className="overflow-auto max-h-64 bg-white rounded border">
-          <pre 
-            className="text-xs p-3 whitespace-pre-wrap break-words"
-            dangerouslySetInnerHTML={{ 
-              __html: syntaxHighlight(typeof content === 'string' ? content : JSON.stringify(content, null, 2))
-            }}
-          />
+    );
+  } catch (error) {
+    return (
+      <div className="json-renderer space-y-2">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700 text-sm">Invalid JSON content</p>
+          <pre className="text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
+            {String(content)}
+          </pre>
         </div>
-      ) : (
-        <div className="space-y-1 max-h-48 overflow-auto">
-          {Object.keys(content).map(key => (
-            <div key={key} className="text-sm">
-              <span className="text-purple-600 font-medium">{key}:</span>
-              {renderJsonValue(content[key], key, 0)}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+      </div>
+    );
+  }
 };
 
 // Image Content Renderer
@@ -705,15 +602,28 @@ const isHtmlContent = (str) => {
 const isCodeContent = (str) => {
   if (typeof str !== 'string') return false;
   
+  // Check for actual code patterns, not just markdown
   const codePatterns = [
-    /^(function|def|class|import|from|const|let|var)\s+/m,
-    /^(public|private|protected)\s+/m,
-    /^\s*\/\/.*$/m,
-    /^\s*#.*$/m,
-    /^\s*\/\*[\s\S]*?\*\/$/m,
+    /^```[\w]*\n[\s\S]*?\n```$/m,     // Code blocks with language
+    /^function\s+\w+\s*\(/m,          // Function declarations
+    /^class\s+\w+/m,                  // Class declarations
+    /^import\s+.*from/m,              // Import statements
+    /^const\s+\w+\s*=/m,              // Const declarations
+    /^let\s+\w+\s*=/m,                // Let declarations
+    /^var\s+\w+\s*=/m,                // Var declarations
+    /^\s*if\s*\(/m,                   // If statements
+    /^\s*for\s*\(/m,                  // For loops
+    /^\s*while\s*\(/m,                // While loops
+    /^\s*def\s+\w+\s*\(/m,            // Python functions
+    /^\s*public\s+class/m,            // Java classes
+    /^\s*#include\s*</m,              // C/C++ includes
+    /^\s*console\.log\s*\(/m,         // Console logs
+    /^\s*print\s*\(/m,                // Print statements
   ];
   
-  return codePatterns.some(pattern => pattern.test(str));
+  // Must have at least 2 code patterns to be considered code
+  const matches = codePatterns.filter(pattern => pattern.test(str)).length;
+  return matches >= 2;
 };
 
 const isBase64Image = (str) => {
@@ -724,89 +634,58 @@ const isBase64Image = (str) => {
 
 // Enhanced content detection that handles nested agent results
 const detectContentType = (content) => {
-  if (!content) return 'text';
-  
-  // Handle nested agent/task results - look for markdown content first
-  if (typeof content === 'object' && content !== null) {
-    // Check for agent/task result patterns
-    if (content.value && typeof content.value === 'object') {
-      // Look for output or result fields that might contain markdown
-      const output = content.value.output || content.value.result;
-      if (typeof output === 'string') {
-        // Check if it's markdown content
-        if (isMarkdownContent(output)) {
-          return 'markdown';
-        }
-        // If it's a long text, treat as text
-        if (output.length > 100) {
-          return 'text';
-        }
-      }
+  try {
+    // Handle null/undefined
+    if (!content) return 'text';
+    
+    // Handle extracted content types (from extractDisplayContent)
+    if (typeof content === 'object' && content !== null && content.type) {
+      return content.type;
     }
     
-    // Check direct result/output fields
-    const directOutput = content.result || content.output || content.data;
-    if (typeof directOutput === 'string') {
-      if (isMarkdownContent(directOutput)) {
+    // Handle string content
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      // Check if it looks like markdown using the improved detection
+      if (isMarkdownContent(trimmed)) {
         return 'markdown';
       }
-      if (directOutput.length > 100) {
-        return 'text';
+      return 'text';
+    }
+    
+    // Handle arrays
+    if (Array.isArray(content)) {
+      // Check if it's table data (array of objects with consistent keys)
+      if (content.length > 0 && content.every(item => typeof item === 'object' && item !== null)) {
+        const firstKeys = Object.keys(content[0]);
+        if (firstKeys.length > 0 && content.every(item => 
+          Object.keys(item).some(key => firstKeys.includes(key))
+        )) {
+          return 'table';
+        }
       }
+      return 'json';
     }
     
-    // Check if it's chart data
-    if (content.labels && content.datasets) {
-      return 'chart';
+    // Handle objects
+    if (typeof content === 'object' && content !== null) {
+      // Check for specific object patterns
+      if (content.headers && content.rows) return 'table';
+      if (content.data && typeof content.data === 'string' && isBase64Image(content.data)) return 'image';
+      if (content.type === 'chart' || (content.data && (content.labels || content.datasets))) return 'chart';
+      if (content.filename || content.file_upload) return 'file';
+      if (content.label && content.value) return 'label_value_pair';
+      
+      return 'json';
     }
     
-    // Check if it's table data
-    if (Array.isArray(content) && content.length > 0 && 
-        typeof content[0] === 'object' && content[0] !== null) {
-      return 'table';
-    }
+    // Default fallback
+    return 'text';
     
-    // Check if it's an array of objects (table data)
-    if (content.payload && Array.isArray(content.payload) && 
-        content.payload.length > 0 && typeof content.payload[0] === 'object') {
-      return 'table';
-    }
-    
-    // Check for rich output format
-    if (content.output_type) {
-      return content.output_type;
-    }
-    
-    // Default to JSON for complex objects
-    return 'json';
-  }
-  
-  // Handle strings
-  if (typeof content === 'string') {
-    if (isMarkdownContent(content)) {
-      return 'markdown';
-    }
-    if (isHtmlContent(content)) {
-      return 'html';
-    }
-    if (isCodeContent(content)) {
-      return 'code';
-    }
-    if (isBase64Image(content)) {
-      return 'image';
-    }
+  } catch (error) {
+    console.error('Error detecting content type:', error);
     return 'text';
   }
-  
-  // Handle arrays
-  if (Array.isArray(content)) {
-    if (content.length > 0 && typeof content[0] === 'object' && content[0] !== null) {
-      return 'table';
-    }
-    return 'json';
-  }
-  
-  return 'text';
 };
 
 // Enhanced markdown detection
@@ -814,182 +693,389 @@ const isMarkdownContent = (str) => {
   if (typeof str !== 'string') return false;
   
   const markdownPatterns = [
-    /^#{1,6}\s+.+/m,           // Headers
-    /\*\*[^*]+\*\*/,           // Bold
-    /\*[^*]+\*/,               // Italic
-    /`[^`]+`/,                 // Inline code
-    /```[\s\S]*?```/,          // Code blocks
-    /^\s*[-*+]\s+/m,           // Lists
-    /^\s*\d+\.\s+/m,           // Numbered lists
-    /\[([^\]]+)\]\(([^)]+)\)/, // Links
-    /^\s*>\s+/m,               // Blockquotes
-    /\|.*\|.*\|/,              // Tables
+    /^#{1,6}\s+/m,                    // Headers
+    /\*\*.*?\*\*/,                    // Bold text
+    /\*.*?\*/,                        // Italic text
+    /^[-*+]\s+/m,                     // Unordered lists
+    /^\d+\.\s+/m,                     // Ordered lists
+    /\[.*?\]\(.*?\)/,                 // Links
+    /^>\s+/m,                         // Blockquotes
+    /^\|.*\|.*\|/m,                   // Tables
+    /^---+$/m,                        // Horizontal rules
+    /`[^`]+`/,                        // Inline code
   ];
   
-  return markdownPatterns.some(pattern => pattern.test(str));
+  // Check for markdown patterns
+  const matches = markdownPatterns.filter(pattern => pattern.test(str)).length;
+  
+  // If it has markdown patterns and doesn't look like actual code, it's markdown
+  return matches >= 2 && !isCodeContent(str);
 };
 
 // Extract the actual content from nested structures
 const extractDisplayContent = (content) => {
-  if (!content) return content;
-  
-  // Handle nested agent/task results
-  if (typeof content === 'object' && content !== null) {
-    // Look for the actual content in nested structures
-    if (content.value && typeof content.value === 'object') {
-      const output = content.value.output || content.value.result;
-      if (typeof output === 'string' && output.length > 0) {
-        return output;
+  try {
+    // Handle null/undefined
+    if (!content) return { type: 'text', content: 'No content available' };
+    
+    // Handle simple strings - prioritize these
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      // Check if it looks like markdown using the improved detection
+      if (isMarkdownContent(trimmed)) {
+        return { type: 'markdown', content: trimmed };
       }
+      return { type: 'text', content: trimmed };
     }
     
-    // Check direct fields
-    const directOutput = content.result || content.output || content.data;
-    if (typeof directOutput === 'string' && directOutput.length > 0) {
-      return directOutput;
+    // Handle arrays - look for string content first
+    if (Array.isArray(content)) {
+      // If it's an array of strings, join them
+      if (content.every(item => typeof item === 'string')) {
+        const joined = content.join('\n');
+        if (joined.includes('##') || joined.includes('**') || joined.includes('- ')) {
+          return { type: 'markdown', content: joined };
+        }
+        return { type: 'text', content: joined };
+      }
+      // Otherwise return as table data
+      return { type: 'table', content: content };
     }
     
-    // For rich output format, return the payload
-    if (content.output_type && content.payload) {
-      return content.payload;
+    // Handle objects - this is where we need to be more thorough
+    if (typeof content === 'object' && content !== null) {
+      // Check if it has a specific type property
+      if (content.type) {
+        switch (content.type) {
+          case 'label_value_pair':
+            return { type: 'label_value_pair', content };
+          case 'file_info':
+            return { type: 'file_info', content };
+          case 'chart':
+            return { type: 'chart', content };
+          case 'image':
+            return { type: 'image', content };
+          case 'table':
+            return { type: 'table', content: content.data || content };
+          default:
+            break;
+        }
+      }
+      
+      // Look for common content patterns in objects
+      const contentKeys = ['content', 'text', 'output', 'result', 'data', 'message', 'response', 'body'];
+      for (const key of contentKeys) {
+        if (content[key] && typeof content[key] === 'string' && content[key].trim()) {
+          const textContent = content[key].trim();
+          if (isMarkdownContent(textContent)) {
+            return { type: 'markdown', content: textContent };
+          }
+          return { type: 'text', content: textContent };
+        }
+      }
+      
+      // Enhanced recursive search for meaningful text content
+      const findTextContent = (obj, depth = 0, path = '') => {
+        if (depth > 5) return null; // Prevent infinite recursion
+        
+        // Skip React-specific properties
+        if (typeof obj !== 'object' || obj === null) return null;
+        
+        const results = [];
+        
+        for (const [key, value] of Object.entries(obj)) {
+          // Skip React and internal properties
+          if (key.startsWith('_') || key.startsWith('$$') || key === 'ref' || key === 'key') {
+            continue;
+          }
+          
+          const currentPath = path ? `${path}.${key}` : key;
+          
+          if (typeof value === 'string' && value.trim()) {
+            const trimmed = value.trim();
+            // Only include substantial text content (more than just single words)
+            if (trimmed.length > 10 || trimmed.includes('\n') || trimmed.includes('.')) {
+              results.push({
+                path: currentPath,
+                content: trimmed,
+                isMarkdown: isMarkdownContent(trimmed)
+              });
+            }
+          } else if (Array.isArray(value)) {
+            // Handle arrays of strings
+            const stringItems = value.filter(item => typeof item === 'string' && item.trim());
+            if (stringItems.length > 0) {
+              const joined = stringItems.join('\n');
+              results.push({
+                path: currentPath,
+                content: joined,
+                isMarkdown: isMarkdownContent(joined)
+              });
+            } else {
+              // Recursively search array items
+              value.forEach((item, index) => {
+                const subResults = findTextContent(item, depth + 1, `${currentPath}[${index}]`);
+                if (subResults) results.push(...subResults);
+              });
+            }
+          } else if (typeof value === 'object' && value !== null) {
+            const subResults = findTextContent(value, depth + 1, currentPath);
+            if (subResults) results.push(...subResults);
+          }
+        }
+        
+        return results.length > 0 ? results : null;
+      };
+      
+      const textResults = findTextContent(content);
+      if (textResults && textResults.length > 0) {
+        // Sort by content length (longest first) and take the most substantial content
+        textResults.sort((a, b) => b.content.length - a.content.length);
+        
+        // If we have multiple substantial pieces of content, combine them
+        if (textResults.length > 1) {
+          const combinedContent = textResults
+            .slice(0, 5) // Take top 5 results
+            .map(result => {
+              // Add a header for each section if we have a meaningful path
+              const header = result.path.split('.').pop();
+              if (header && header !== 'content' && header !== 'text' && header !== 'output') {
+                return `**${header.charAt(0).toUpperCase() + header.slice(1)}:**\n${result.content}`;
+              }
+              return result.content;
+            })
+            .join('\n\n');
+          
+          return { 
+            type: textResults[0].isMarkdown ? 'markdown' : 'text', 
+            content: combinedContent 
+          };
+        } else {
+          // Single result
+          const result = textResults[0];
+          return { 
+            type: result.isMarkdown ? 'markdown' : 'text', 
+            content: result.content 
+          };
+        }
+      }
+      
+      // Check for image data
+      if (content.data && typeof content.data === 'string' && isBase64Image(content.data)) {
+        return { type: 'image', content };
+      }
+      
+      // Check for table data
+      if (content.headers && content.rows) {
+        return { type: 'table', content };
+      }
+      
+      // Check if it looks like chart data
+      if (content.type === 'chart' || (content.data && (content.labels || content.datasets))) {
+        return { type: 'chart', content };
+      }
+      
+      // Fallback: create a summary of the object
+      const keys = Object.keys(content);
+      if (keys.length > 0) {
+        const summary = keys
+          .filter(key => !key.startsWith('_') && !key.startsWith('$$'))
+          .slice(0, 10) // Limit to first 10 keys
+          .map(key => {
+            const value = content[key];
+            if (typeof value === 'string') {
+              return `**${key}:** ${value.length > 100 ? value.substring(0, 100) + '...' : value}`;
+            } else if (typeof value === 'number') {
+              return `**${key}:** ${value}`;
+            } else if (typeof value === 'boolean') {
+              return `**${key}:** ${value ? 'Yes' : 'No'}`;
+            } else if (Array.isArray(value)) {
+              return `**${key}:** Array with ${value.length} items`;
+            } else if (typeof value === 'object' && value !== null) {
+              return `**${key}:** Object with ${Object.keys(value).length} properties`;
+            }
+            return `**${key}:** ${String(value)}`;
+          })
+          .join('\n');
+        
+        return { type: 'markdown', content: summary };
+      }
+      
+      // Last resort: JSON display
+      return { type: 'json', content };
     }
+    
+    // Handle primitives
+    return { type: 'text', content: String(content) };
+    
+  } catch (error) {
+    console.error('Error extracting display content:', error);
+    return { 
+      type: 'error', 
+      content: `Error processing content: ${error.message}` 
+    };
   }
-  
-  return content;
 };
+
+// Label/Value Pair Renderer
+const LabelValueRenderer = ({ content, metadata }) => (
+  <div className="label-value-container bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+    <div className="flex flex-col space-y-3">
+      <div className="label-section">
+        <span className="text-sm font-semibold text-blue-700 uppercase tracking-wide">Input</span>
+        <div className="mt-1 p-3 bg-white rounded-md border border-blue-100 shadow-sm">
+          <p className="text-gray-800 font-medium">{content.label}</p>
+        </div>
+      </div>
+      <div className="value-section">
+        <span className="text-sm font-semibold text-green-700 uppercase tracking-wide">Value</span>
+        <div className="mt-1 p-3 bg-white rounded-md border border-green-100 shadow-sm">
+          <p className="text-gray-800">{content.value}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// File Info Renderer
+const FileInfoRenderer = ({ content, metadata }) => (
+  <div className="file-info-container bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border border-purple-200">
+    <div className="flex items-center space-x-3">
+      <div className="flex-shrink-0">
+        <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+          <span className="text-2xl">📄</span>
+        </div>
+      </div>
+      <div className="flex-1">
+        <h3 className="text-lg font-semibold text-purple-800">File Upload</h3>
+        <div className="mt-2 space-y-1 text-sm">
+          <div><span className="font-medium text-purple-700">Name:</span> <span className="text-gray-800">{content.filename}</span></div>
+          <div><span className="font-medium text-purple-700">Type:</span> <span className="text-gray-800">{content.type}</span></div>
+          <div><span className="font-medium text-purple-700">Size:</span> <span className="text-gray-800">{(content.size / 1024).toFixed(2)} KB</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 // Main Rich Content Renderer Component
 const RichContentRenderer = ({ content, maxHeight = '400px', className = '' }) => {
-  // Extract the actual content to display
-  const displayContent = extractDisplayContent(content);
-  
-  // Detect the content type
-  const contentType = detectContentType(content);
-  
-  // Get metadata if available
-  const metadata = content?.metadata || {};
-  
-  // Add debug logging
-  console.log('RichContentRenderer Debug:', {
-    originalContent: content,
-    displayContent: displayContent,
-    detectedType: contentType,
-    metadata: metadata
-  });
+  // Enhanced container classes for better layout
+  const containerClasses = `
+    rich-content-container overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100
+    p-4 space-y-2 bg-white rounded-lg border border-gray-200 shadow-sm
+    prose prose-sm max-w-none
+    ${className}
+  `.trim();
 
-  // Enhanced container classes with proper overflow handling
-  const containerClasses = `rich-content-renderer overflow-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 ${className}`;
-  const style = { 
+  const containerStyle = {
     maxHeight,
     overflowY: 'auto',
     overflowX: 'hidden',
     wordBreak: 'break-word',
-    position: 'relative'
+    lineHeight: '1.7',
+    position: 'relative',
+    zIndex: 1
   };
 
   try {
+    // Extract and detect content type
+    const extracted = extractDisplayContent(content);
+    const contentType = detectContentType(extracted.content);
+
+    // Render based on detected content type
     switch (contentType) {
       case 'markdown':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <MarkdownRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <MarkdownRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'html':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <HtmlRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <HtmlRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'json':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <JsonRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <JsonRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'table':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <TableRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <TableRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'image':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <ImageRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <ImageRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'chart':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <ChartRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <ChartRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'code':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <CodeRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <CodeRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'file':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <FileRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <FileRenderer content={extracted.content} />
           </div>
         );
-      
+
+      case 'label_value_pair':
+        return (
+          <div className={containerClasses} style={containerStyle}>
+            <LabelValueRenderer content={extracted.content} />
+          </div>
+        );
+
+      case 'file_info':
+        return (
+          <div className={containerClasses} style={containerStyle}>
+            <FileInfoRenderer content={extracted.content} />
+          </div>
+        );
+
       case 'error':
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <ErrorRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <ErrorRenderer content={extracted.content} />
           </div>
         );
-      
+
       case 'text':
       default:
         return (
-          <div className={containerClasses} style={style}>
-            <div className="p-2">
-              <TextRenderer content={displayContent} metadata={metadata} />
-            </div>
+          <div className={containerClasses} style={containerStyle}>
+            <TextRenderer content={extracted.content} />
           </div>
         );
     }
   } catch (error) {
-    console.error('Error in RichContentRenderer:', error);
+    console.error('❌ Error rendering content:', error);
+    console.log('🔍 Content that caused error:', content);
     return (
-      <div className={`${containerClasses} error-container bg-red-50 border border-red-200 rounded-lg`} style={style}>
-        <div className="p-2">
-          <ErrorRenderer 
-            content={`Rendering error: ${error.message}`} 
-            metadata={{ title: 'Rendering Error' }} 
-          />
-        </div>
+      <div className={containerClasses} style={containerStyle}>
+        <ErrorRenderer content={`Error rendering content: ${error.message}`} />
       </div>
     );
   }
