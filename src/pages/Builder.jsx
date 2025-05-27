@@ -27,7 +27,7 @@ import RunCrewButton from '../components/RunCrewButton';
 import WebRunnerPanel from '../components/webrunners/WebRunnerPanel';
 import WebhookFlowModal from '../components/WebhookFlowModal';
 import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
-import UnifiedExecutionPanel from '../components/webrunners/UnifiedExecutionPanel';
+import UnifiedExecutionPanel from '../components/execution-panel/UnifiedExecutionPanel';
 import Notification from '../components/Notification';
 import SmartToolSelector from '../components/templates/SmartToolSelector';
 import HelpTooltip from '../components/HelpTooltip';
