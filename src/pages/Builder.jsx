@@ -12,7 +12,8 @@ import { NotificationProvider, useNotifications } from '../contexts/Notification
 
 // Components
 import NavHeader from '../components/profile/NavHeader';
-import EnhancedToolbar from '../components/builder/EnhancedToolbar';
+import CleanHeader from '../components/builder/CleanHeader';
+import ModernSidebar from '../components/builder/ModernSidebar';
 import InputPanel from '../components/builder/InputPanel';
 import FlowCanvass from '../components/FlowCanvass';
 import FloatingMetricsPanel from '../components/builder/FloatingMetricsPanel';
@@ -70,7 +71,7 @@ const BuilderPageContent = () => {
     showHelpPanel, closeHelpPanel, toggleHelpPanel,
     showPreview, closePreview, togglePreview,
     showToolTemplates, closeToolTemplates, toggleToolTemplates,
-    showTemplateModal, closeTemplateModal,
+    showTemplateModal, closeTemplateModal, toggleTemplateModal,
     showWebhookFlowModal, closeWebhookFlowModal,
     
     // Panel states
@@ -609,72 +610,136 @@ const BuilderPageContent = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      <NavHeader 
-        showHelp={() => toggleHelpPanel(true)} 
+      {/* Clean Header */}
+      <CleanHeader 
         projectName={projectName}
-        editingProjectName={editingProjectName}
-        setEditingProjectName={setEditingProjectName}
-        setProjectName={setProjectName}
-        isBuilderPage={true}
+        onProjectNameChange={setProjectName}
+        onSave={saveProject}
+        onLoad={loadProject}
+        onRun={() => {
+          runCrew();
+          toggleExecutionPanel(true);
+        }}
+        onPreview={() => togglePreview(true)}
+        onExport={exportProject}
+        onImport={() => setShowCrewAIImporter(true)}
+        onDuplicate={handleDuplicateFlow}
+        isExecuting={isExecuting}
       />
       
-      <EnhancedToolbar toolbarProps={toolbarProps} />
-      
-      <div className="flex items-center space-x-2 px-4 py-2 bg-gray-100">
-        <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
-        <button 
-          className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm ml-2"
-          onClick={() => toggleTriggerHistory(true)}
-        >
-          Trigger History
-        </button>
-      </div>
-      
-      <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
-      
-      <div className="flex-1 relative">
-        <ReactFlowProvider>
-          <FlowCanvass
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={(_, node) => handleNodeEdit(node.id)}
-            onNodeDragStop={onNodeDragStop}
-            onEdgeClick={(_, edge) => {
-              if (window.confirm('Do you want to delete this connection?')) {
-                setEdges(edges => edges.filter(e => e.id !== edge.id));
-              }
-            }}
-            connectionLineType="bezier"
-            defaultEdgeOptions={{
-              type: 'animated',
-              animated: isExecuting,
-              style: {
-                stroke: '#888',
-                strokeWidth: 1.5,
-                strokeDasharray: '5,5'
-              }
-            }}
-            onMove={setViewport}
-            viewport={viewport}
-            ref={flowInstance}
-            nodeStates={nodeStates}
-            connectionStates={connectionStates}
-            isExecuting={isExecuting}
-          />
-        </ReactFlowProvider>
-        
-        <ZoomControls 
-          zoomIn={zoomIn}
-          zoomOut={zoomOut}
-          resetView={resetZoom}
-          fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Modern Sidebar */}
+        <ModernSidebar 
+          onAddNode={(nodeType) => {
+            switch(nodeType) {
+              case 'agent': addAgent(); break;
+              case 'task': addTask(); break;
+              case 'tool': 
+              case 'web_search':
+              case 'file_reader':
+              case 'api_call':
+              case 'database':
+              case 'email':
+              case 'custom_tool':
+                addTool(); break;
+              case 'trigger': addTriggerNode(); break;
+              case 'input': addInputNode(); break;
+              case 'output': addOutputNode(); break;
+              case 'logic': addLogicNode(); break;
+              case 'delay': addDelayNode(); break;
+              default: console.warn('Unknown node type:', nodeType);
+            }
+          }}
+          onOpenTemplates={() => toggleTemplateModal(true)}
+          onOpenToolTemplates={() => toggleToolTemplates(true)}
+          onOpenSmartTools={openSmartTools}
         />
+        
+        {/* Canvas Area */}
+        <div className="flex-1 flex flex-col">
+          {/* Input Panel - Compact */}
+          <div className="border-b border-gray-200 bg-white px-4 py-2">
+            <div className="flex items-center gap-4">
+              <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
+              <button 
+                className="text-sm bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded-lg transition-colors"
+                onClick={() => toggleTriggerHistory(true)}
+              >
+                Trigger History
+              </button>
+            </div>
+          </div>
+          
+          {/* Output Config - Compact */}
+          <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
+          
+          {/* Flow Canvas */}
+          <div className="flex-1 relative bg-gray-50">
+            <ReactFlowProvider>
+              <FlowCanvass
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeClick={(_, node) => handleNodeEdit(node.id)}
+                onNodeDragStop={onNodeDragStop}
+                onEdgeClick={(_, edge) => {
+                  if (window.confirm('Do you want to delete this connection?')) {
+                    setEdges(edges => edges.filter(e => e.id !== edge.id));
+                  }
+                }}
+                connectionLineType="bezier"
+                defaultEdgeOptions={{
+                  type: 'animated',
+                  animated: isExecuting,
+                  style: {
+                    stroke: '#888',
+                    strokeWidth: 1.5,
+                    strokeDasharray: '5,5'
+                  }
+                }}
+                onMove={setViewport}
+                viewport={viewport}
+                ref={flowInstance}
+                nodeStates={nodeStates}
+                connectionStates={connectionStates}
+                isExecuting={isExecuting}
+              />
+            </ReactFlowProvider>
+            
+            {/* Zoom Controls */}
+            <ZoomControls 
+              zoomIn={zoomIn}
+              zoomOut={zoomOut}
+              resetView={resetZoom}
+              fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
+            />
+          </div>
+        </div>
       </div>
       
-      {/* Conditionally rendered modals */}
+      {/* Unified Execution Panel */}
+      {showExecutionPanel && (
+        <UnifiedExecutionPanel
+          logs={textLogs}
+          structuredLogs={structuredLogs}
+          isMinimized={minimizeExecutionPanel}
+          onToggleMinimize={toggleMinimizeExecutionPanel}
+          onClose={() => toggleExecutionPanel(false)}
+          onClearLogs={() => {
+            setTextLogs([]);
+            setStructuredLogs([]);
+          }}
+          executionMode={executionMode}
+          pollingInterval={customPollingInterval}
+          onPollingIntervalChange={setCustomPollingInterval}
+          nodes={nodes}
+        />
+      )}
+      
+      {/* Modals and Overlays */}
       {showEditModal && selectedNode && (
         <EditModall
           isOpen={showEditModal}
@@ -686,7 +751,6 @@ const BuilderPageContent = () => {
         />
       )}
       
-      {/* Traditional Tool Templates */}
       {showToolTemplates && (
         <ToolTemplates
           onClose={closeToolTemplates}
@@ -696,7 +760,6 @@ const BuilderPageContent = () => {
         />
       )}
 
-      {/* Smart Tool Selector */}
       {showSmartTools && (
         <SmartToolSelector
           onToolSelect={handleSmartToolSelect}
@@ -724,43 +787,6 @@ const BuilderPageContent = () => {
         />
       )}
 
-      {/* Run Button */}
-      <RunCrewButton 
-        onClick={() => {
-          runCrew();
-          // Automatically show the execution panel when running a flow
-          toggleExecutionPanel(true);
-        }}
-        isRunning={isExecuting}
-        hasErrors={validateFlow().length > 0}
-        nodeCount={nodes.length}
-      />
-
-      {/* Test Execution Button (for debugging) */}
-      {process.env.NODE_ENV === 'development' && (
-        <button
-          onClick={() => {
-            testExecutionStates();
-            toggleExecutionPanel(true);
-          }}
-          disabled={isExecuting}
-          className="fixed bottom-6 right-48 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition text-sm z-40"
-          title="Test execution visual states"
-        >
-          🧪 Test States
-        </button>
-      )}
-
-      {/* Panels */}
-      {showRunnerPanel && (
-        <WebRunnerPanel
-          logs={textLogs} // Fixed: was executionLogs, should be textLogs
-          onClose={() => toggleRunnerPanel(false)}
-          isMinimized={minimizeRunnerPanel}
-          onToggleMinimize={toggleMinimizeRunnerPanel}
-        />
-      )}
-
       {showTriggerHistory && (
         <TriggerHistoryPanel 
           isVisible={showTriggerHistory}
@@ -769,30 +795,6 @@ const BuilderPageContent = () => {
         />
       )}
 
-      {showExecutionPanel && (
-        <UnifiedExecutionPanel
-          logs={textLogs}
-          structuredLogs={structuredLogs}
-          nodes={nodes}
-          isMinimized={minimizeExecutionPanel}
-          onToggleMinimize={toggleMinimizeExecutionPanel}
-          onClose={() => {
-            toggleExecutionPanel(false);
-            // Clear logs if needed - removed setStructuredLogs since it's not defined
-          }}
-          onClearLogs={() => {
-            // Clear both text and structured logs
-            setTextLogs([]);
-            setStructuredLogs([]);
-            console.log('Logs cleared');
-          }}
-          executionMode={executionMode}
-          pollingInterval={customPollingInterval}
-          onPollingIntervalChange={setCustomPollingInterval}
-        />
-      )}
-
-      {/* Webhook Flow Modal */}
       {showWebhookFlowModal && (
         <WebhookFlowModal
           isOpen={showWebhookFlowModal}
@@ -804,24 +806,15 @@ const BuilderPageContent = () => {
         />
       )}
 
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <div className="fixed bottom-4 right-4 mb-2 flex space-x-2 z-50">
-          <button
-            onClick={clearNotificationHistory}
-            className="px-3 py-1 bg-blue-200 text-blue-700 rounded hover:bg-blue-300"
-          >
-            Reset Notification History
-          </button>
-          <button
-            onClick={clearAllNotifications}
-            className="px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            Clear All Notifications
-          </button>
-        </div>
+      {showCrewAIImporter && (
+        <CrewAIImporter
+          onImport={handleCrewAIImport}
+          onClose={() => setShowCrewAIImporter(false)}
+        />
       )}
-      <div className="fixed bottom-4 right-4 space-y-2 z-50 mt-10">
+
+      {/* Notifications */}
+      <div className="fixed bottom-4 left-4 space-y-2 z-50">
         {notifications.map(notification => (
           <Notification
             key={notification.id}
@@ -832,14 +825,6 @@ const BuilderPageContent = () => {
           />
         ))}
       </div>
-
-      {/* CrewAI Importer Modal */}
-      {showCrewAIImporter && (
-        <CrewAIImporter
-          onImport={handleCrewAIImport}
-          onClose={() => setShowCrewAIImporter(false)}
-        />
-      )}
     </div>
   );
 };
