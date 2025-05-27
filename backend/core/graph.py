@@ -38,13 +38,26 @@ def determine_execution_order(nodes: List[Union[Dict[str, Any], Node]], edges: L
     Returns a list of node IDs in execution order.
     
     This function handles both Pydantic models and dictionaries.
+    Trigger nodes are always prioritized to execute first.
     """
     # Build dependency graph
     graph = {}
+    trigger_nodes = []
+    
     for node in nodes:
         node_id = _get_id(node)
         if node_id:
             graph[node_id] = []
+            
+            # Identify trigger nodes
+            node_type = None
+            if isinstance(node, dict):
+                node_type = node.get("type") or node.get("data", {}).get("nodeType")
+            else:
+                node_type = getattr(node, "type", None)
+            
+            if node_type == "trigger":
+                trigger_nodes.append(node_id)
     
     # Add dependencies from edges
     for edge in edges:
@@ -53,7 +66,7 @@ def determine_execution_order(nodes: List[Union[Dict[str, Any], Node]], edges: L
         if source and target and source in graph and target in graph:
             graph[target].append(source)
     
-    # Topological sort
+    # Topological sort with trigger priority
     visited = set()
     temp = set()
     order = []
@@ -70,7 +83,12 @@ def determine_execution_order(nodes: List[Union[Dict[str, Any], Node]], edges: L
         visited.add(node_id)
         order.append(node_id)
     
-    # Visit all nodes
+    # First, visit all trigger nodes to ensure they come first
+    for trigger_id in trigger_nodes:
+        if trigger_id not in visited:
+            visit(trigger_id)
+    
+    # Then visit remaining nodes
     for node_id in graph:
         if node_id not in visited:
             visit(node_id)

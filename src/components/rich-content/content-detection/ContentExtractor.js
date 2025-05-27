@@ -2,8 +2,76 @@
 import { detectContentType, isMarkdownContent, CONTENT_TYPES } from './ContentDetector';
 
 /**
- * Extract the actual displayable content from nested structures
- * Prioritizes meaningful content over metadata
+ * Deep search for text content in nested objects with enhanced path tracking
+ */
+const deepSearchForText = (obj, maxDepth = 4, currentDepth = 0, visited = new WeakSet()) => {
+  if (currentDepth >= maxDepth || !obj || typeof obj !== 'object' || visited.has(obj)) {
+    return null;
+  }
+  
+  visited.add(obj);
+  
+  // PRIORITY: Check for success/output structure first
+  if (obj.success !== undefined && obj.output && typeof obj.output === 'string') {
+    const text = obj.output.trim();
+    if (text.length > 10) {
+      return text;
+    }
+  }
+  
+  // Priority text keys - order matters, 'output' is now first
+  const textKeys = [
+    'output', 'text_output', 'result', 'text', 'content', 'message', 
+    'data', 'body', 'value', 'response', 'answer', 'summary'
+  ];
+  
+  // Look for text content at current level
+  for (const key of textKeys) {
+    if (obj[key] && typeof obj[key] === 'string') {
+      const text = obj[key].trim();
+      if (text.length > 10) { // Lowered threshold for better detection
+        return text;
+      }
+    }
+  }
+  
+  // Special handling for inputs structure (inputs.agent-xxx.output)
+  if (obj.inputs && typeof obj.inputs === 'object') {
+    for (const inputKey of Object.keys(obj.inputs)) {
+      const inputValue = obj.inputs[inputKey];
+      if (inputValue && typeof inputValue === 'object') {
+        for (const outputKey of textKeys) {
+          if (inputValue[outputKey] && typeof inputValue[outputKey] === 'string') {
+            const text = inputValue[outputKey].trim();
+            if (text.length > 10) {
+              return text;
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // Search in nested objects - prioritize meaningful keys
+  const priorityKeys = ['result', 'output', 'data', 'value', 'response', 'content'];
+  const allKeys = Object.keys(obj);
+  const sortedKeys = [
+    ...priorityKeys.filter(key => allKeys.includes(key)),
+    ...allKeys.filter(key => !priorityKeys.includes(key))
+  ];
+  
+  for (const key of sortedKeys) {
+    if (typeof obj[key] === 'object' && obj[key] !== null && !visited.has(obj[key])) {
+      const found = deepSearchForText(obj[key], maxDepth, currentDepth + 1, visited);
+      if (found) return found;
+    }
+  }
+  
+  return null;
+};
+
+/**
+ * Enhanced content extraction with better error handling and structure detection
  */
 export const extractDisplayContent = (content) => {
   try {
@@ -22,7 +90,12 @@ export const extractDisplayContent = (content) => {
       return { type: contentType, content: trimmed };
     }
     
-    // Handle arrays - look for string content first
+    // Handle primitives
+    if (typeof content === 'number' || typeof content === 'boolean') {
+      return { type: CONTENT_TYPES.TEXT, content: String(content) };
+    }
+    
+    // Handle arrays
     if (Array.isArray(content)) {
       // If it's an array of strings, join them
       if (content.every(item => typeof item === 'string')) {
@@ -40,55 +113,54 @@ export const extractDisplayContent = (content) => {
       return { type: CONTENT_TYPES.JSON, content: content };
     }
     
-    // Handle objects - this is where we need to be thorough but efficient
+    // Handle objects - enhanced logic
     if (typeof content === 'object' && content !== null) {
       // Check if it has a specific type property
       if (content.type && Object.values(CONTENT_TYPES).includes(content.type)) {
         return { type: content.type, content };
       }
       
-      // Look for common content patterns in objects - prioritize meaningful fields
+      // PRIORITY: Handle result objects with success/output structure
+      if (content.success !== undefined && content.output) {
+        const outputContent = content.output;
+        if (typeof outputContent === 'string' && outputContent.trim()) {
+          const contentType = detectContentType(outputContent);
+          return { type: contentType, content: outputContent };
+        }
+      }
+      
+      // Enhanced meaningful content extraction with better priority
       const meaningfulContentKeys = [
-        'result', 'output', 'response', 'text_output', 'content', 'data', 'text', 'message', 'body'
+        'output', 'result', 'response', 'text_output', 'content', 'data', 
+        'text', 'message', 'body', 'value', 'answer', 'summary'
       ];
       
       for (const key of meaningfulContentKeys) {
         if (content[key] !== undefined && content[key] !== null) {
           const extractedContent = content[key];
           
-          // If it's a string with meaningful content
-          if (typeof extractedContent === 'string' && extractedContent.trim()) {
+          // Handle string content
+          if (typeof extractedContent === 'string') {
             const trimmed = extractedContent.trim();
-            const contentType = detectContentType(trimmed);
-            return { type: contentType, content: trimmed };
+            if (trimmed) {
+              const contentType = detectContentType(trimmed);
+              return { type: contentType, content: trimmed };
+            }
           }
           
-          // If it's a number or boolean, treat as text
+          // Handle primitives
           if (typeof extractedContent === 'number' || typeof extractedContent === 'boolean') {
             return { type: CONTENT_TYPES.TEXT, content: String(extractedContent) };
           }
           
-          // For result/output fields, if it's an object with text content, extract it
-          if (typeof extractedContent === 'object' && (key === 'result' || key === 'output' || key === 'response')) {
-            // Look for text content within the result object
-            const textKeys = ['text', 'output', 'content', 'message', 'result', 'data'];
-            for (const textKey of textKeys) {
-              if (extractedContent[textKey] && typeof extractedContent[textKey] === 'string') {
-                const textContent = extractedContent[textKey].trim();
-                if (textContent) {
-                  const contentType = detectContentType(textContent);
-                  return { type: contentType, content: textContent };
-                }
-              }
-            }
-            
-            // If no text content found, recurse
-            return extractDisplayContent(extractedContent);
-          }
-          
-          // If it's an object or array, recurse once
+          // Handle nested objects/arrays
           if (typeof extractedContent === 'object') {
-            return extractDisplayContent(extractedContent);
+            // Try to extract from nested structure
+            const nestedResult = extractDisplayContent(extractedContent);
+            if (nestedResult.type !== CONTENT_TYPES.JSON || 
+                (nestedResult.content && typeof nestedResult.content === 'string')) {
+              return nestedResult;
+            }
           }
         }
       }
@@ -106,21 +178,26 @@ export const extractDisplayContent = (content) => {
         return { type: CONTENT_TYPES.ERROR, content };
       }
       
-      // For objects without clear content fields, create a summary
-      const keys = Object.keys(content);
+      // Enhanced deep search for text content
+      const deepText = deepSearchForText(content);
+      if (deepText && deepText.length > 20) {
+        const contentType = detectContentType(deepText);
+        return { type: contentType, content: deepText };
+      }
       
-      // Filter out technical/React keys
+      // Create intelligent object summary
+      const keys = Object.keys(content);
       const meaningfulKeys = keys.filter(key => 
         !key.startsWith('_') && 
         !key.startsWith('$$') && 
-        !['ref', 'key', 'timestamp', 'node_id', 'metadata'].includes(key)
+        !['ref', 'key', 'timestamp', 'node_id', 'metadata', 'id'].includes(key)
       );
       
       if (meaningfulKeys.length === 0) {
         return { type: CONTENT_TYPES.TEXT, content: 'Empty object' };
       }
       
-      // If there's only one meaningful key, extract its value
+      // Single meaningful key - extract its value
       if (meaningfulKeys.length === 1) {
         const key = meaningfulKeys[0];
         const value = content[key];
@@ -133,56 +210,32 @@ export const extractDisplayContent = (content) => {
         if (typeof value === 'object' && value !== null) {
           return extractDisplayContent(value);
         }
+        
+        return { type: CONTENT_TYPES.TEXT, content: `${key}: ${String(value)}` };
       }
       
-      // Create a formatted summary for objects with multiple keys
-      const summary = meaningfulKeys
-        .slice(0, 5) // Limit to first 5 keys to avoid overwhelming output
-        .map(key => {
-          const value = content[key];
-          let formattedValue;
-          
-          if (typeof value === 'string') {
-            formattedValue = value.length > 100 ? `${value.substring(0, 100)}...` : value;
-          } else if (typeof value === 'number' || typeof value === 'boolean') {
-            formattedValue = String(value);
-          } else if (Array.isArray(value)) {
-            formattedValue = `Array with ${value.length} items`;
-          } else if (typeof value === 'object' && value !== null) {
-            formattedValue = `Object with ${Object.keys(value).length} properties`;
-          } else {
-            formattedValue = String(value);
-          }
-          
-          return `**${key}:** ${formattedValue}`;
-        })
-        .join('\n');
-      
-      // Check if this looks like a result object with primarily text content
-      const hasTextualContent = meaningfulKeys.some(key => {
+      // Multiple keys - create formatted summary for simple objects
+      if (meaningfulKeys.length <= 5 && meaningfulKeys.every(key => {
         const value = content[key];
-        return typeof value === 'string' && value.length > 50;
-      });
-      
-      // If the summary is simple enough and has textual content, use markdown
-      // Otherwise, use JSON for complex objects
-      const isComplexObject = meaningfulKeys.length > 3 || 
-                             meaningfulKeys.some(key => typeof content[key] === 'object' && content[key] !== null);
-      
-      if (hasTextualContent && !isComplexObject) {
-        return { type: CONTENT_TYPES.MARKDOWN, content: summary };
-      } else if (isComplexObject) {
-        return { type: CONTENT_TYPES.JSON, content: content };
+        return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+      })) {
+        const summary = meaningfulKeys.map(key => `**${key}**: ${content[key]}`).join('\n\n');
+        return { 
+          type: CONTENT_TYPES.MARKDOWN, 
+          content: summary 
+        };
       }
       
-      return { type: CONTENT_TYPES.MARKDOWN, content: summary };
+      // For complex objects, return as JSON
+      return { 
+        type: CONTENT_TYPES.JSON, 
+        content: content 
+      };
     }
     
-    // Handle primitives (numbers, booleans, etc.)
     return { type: CONTENT_TYPES.TEXT, content: String(content) };
-    
   } catch (error) {
-    console.error('Error extracting display content:', error);
+    console.error('Error in extractDisplayContent:', error);
     return { 
       type: CONTENT_TYPES.ERROR, 
       content: `Error processing content: ${error.message}` 
@@ -294,4 +347,94 @@ export const getContentPreview = (content, maxLength = 100) => {
   }
   
   return preview;
+};
+
+/**
+ * Extract meaningful content from various data structures
+ */
+export const extractContent = (data, options = {}) => {
+  const { maxDepth = 5, preferText = true } = options;
+  
+  if (!data) return { content: '', type: 'text' };
+  
+  // Handle primitive types
+  if (typeof data === 'string') {
+    return { content: data.trim(), type: 'text' };
+  }
+  
+  if (typeof data === 'number' || typeof data === 'boolean') {
+    return { content: String(data), type: 'text' };
+  }
+  
+  // Handle arrays
+  if (Array.isArray(data)) {
+    return { content: data, type: 'json' };
+  }
+  
+  // Handle objects
+  if (typeof data === 'object' && data !== null) {
+    // Check for error objects first
+    if (data.error || (data.message && data.stack)) {
+      return { 
+        content: data.error || data.message || 'Unknown error', 
+        type: 'error',
+        metadata: data
+      };
+    }
+    
+    // Look for meaningful content in common keys
+    const meaningfulKeys = ['content', 'text', 'message', 'output', 'result', 'data', 'value', 'body'];
+    
+    for (const key of meaningfulKeys) {
+      if (data[key] !== undefined && data[key] !== null) {
+        const extracted = extractContent(data[key], { ...options, maxDepth: maxDepth - 1 });
+        if (extracted.content && String(extracted.content).trim().length > 0) {
+          return {
+            ...extracted,
+            metadata: { ...extracted.metadata, originalKey: key, parentObject: data }
+          };
+        }
+      }
+    }
+    
+    // Try deep search for text content if preferText is true
+    if (preferText && maxDepth > 0) {
+      const deepText = deepSearchForText(data, maxDepth);
+      if (deepText && deepText.length > 20) {
+        // Detect content type for the found text
+        const contentType = detectContentType(deepText);
+        return { 
+          content: deepText, 
+          type: contentType,
+          metadata: { extractedFromDeep: true, originalObject: data }
+        };
+      }
+    }
+    
+    // For objects without clear content fields, return as JSON
+    // But first check if it's a simple object that could be summarized
+    const keys = Object.keys(data);
+    if (keys.length <= 5 && keys.every(key => 
+      typeof data[key] === 'string' || 
+      typeof data[key] === 'number' || 
+      typeof data[key] === 'boolean'
+    )) {
+      // Create a readable summary for simple objects
+      const summary = keys.map(key => `**${key}**: ${data[key]}`).join('\n');
+      return { 
+        content: summary, 
+        type: 'markdown',
+        metadata: { isObjectSummary: true, originalObject: data }
+      };
+    }
+    
+    // For complex objects, return as JSON
+    return { 
+      content: data, 
+      type: 'json',
+      metadata: { isComplexObject: true }
+    };
+  }
+  
+  return { content: String(data), type: 'text' };
 };

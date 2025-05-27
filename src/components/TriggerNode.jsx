@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+import { toast } from 'react-hot-toast';
 
 // Add these utility functions at the top of the file, before the TriggerNode component
 const findConnectedNodes = (nodeId, allNodes, allEdges) => {
@@ -65,6 +66,8 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
+  const [isRegistered, setIsRegistered] = useState(false); // Track registration status
+  const [isRegistering, setIsRegistering] = useState(false); // Track registration in progress
   
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -161,7 +164,12 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
   // Update the registerTrigger function to include connected nodes
   const registerTrigger = useCallback(async () => {
     console.log("Attempting to register trigger:", data);
-    if (!data.nodeId) return;
+    if (!data.nodeId || isRegistering || isRegistered) {
+      console.log("Skipping registration - already registered or in progress");
+      return;
+    }
+    
+    setIsRegistering(true);
     
     try {
       // Try to get the ReactFlow instance to find connected nodes
@@ -233,7 +241,7 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
       };
       
       // Use the backend URL from environment if available, otherwise use default
-      const backendUrl = (window.BACKEND_URL || 'http://localhost:8000') + '/api/register_trigger';
+      const backendUrl = (window.BACKEND_URL || 'http://localhost:8000') + '/api/triggers/register';
       console.log(`Sending trigger registration to: ${backendUrl}`);
       console.log("Registration payload:", JSON.stringify(flow, null, 2));
       
@@ -253,46 +261,72 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
         const result = await response.json();
         console.log("Trigger registration successful:", result);
         
-        // Show a success message to the user
-        alert(`Trigger "${data.label || 'Unnamed'}" has been scheduled successfully!`);
+        setIsRegistered(true);
+        
+        // Show a proper toast notification
+        toast.success(`Trigger "${data.label || 'Unnamed'}" has been scheduled successfully!`, {
+          duration: 4000,
+          position: 'top-right',
+        });
       } else {
         console.error("Trigger registration failed:", response.status, response.statusText);
         // Try to get more details about the error
         try {
           const errorText = await response.text();
           console.error("Error details:", errorText);
-          alert(`Failed to schedule trigger: ${response.statusText}`);
+          toast.error(`Failed to schedule trigger: ${response.statusText}`, {
+            duration: 4000,
+            position: 'top-right',
+          });
         } catch (e) {
           console.error("Could not get error details");
-          alert("Failed to schedule trigger. Check console for details.");
+          toast.error("Failed to schedule trigger. Check console for details.", {
+            duration: 4000,
+            position: 'top-right',
+          });
         }
       }
     } catch (error) {
       console.error('Error registering trigger:', error);
-      alert(`Error registering trigger: ${error.message}`);
+      toast.error(`Error registering trigger: ${error.message}`, {
+        duration: 4000,
+        position: 'top-right',
+      });
+    } finally {
+      setIsRegistering(false);
     }
-  }, [data]);
+  }, [data, isRegistering, isRegistered]);
 
-  // Update the useEffect to register both webhook and scheduled triggers
-  useEffect(() => {
-    // Only register when we have all the necessary data
+  // Check if trigger should be auto-registered
+  const shouldAutoRegister = useCallback(() => {
+    if (isRegistered || isRegistering) return false;
+    
     if (data.triggerType === 'webhook') {
-      console.log("Registering webhook trigger");
-      registerTrigger();
+      return true;
     } else if (data.triggerType === 'schedule') {
       // For scheduled triggers, make sure we have the date and time
       const runDate = data.runDate || (data.runAt ? data.runAt.split(' ')[0] : '');
       const runTime = data.runTime || (data.runAt ? data.runAt.split(' ')[1] : '');
       
       // Only register if we have both date and time or runAt is already set
-      if ((runDate && runTime) || data.runAt) {
-        console.log("Registering schedule trigger with date:", runDate, "time:", runTime);
-        registerTrigger();
-      } else {
-        console.log("Not registering schedule trigger yet - missing date or time");
-      }
+      return (runDate && runTime) || data.runAt;
     }
-  }, [data.triggerType, data.scheduleType, data.runAt, data.runDate, data.runTime, registerTrigger]);
+    
+    return false;
+  }, [data.triggerType, data.scheduleType, data.runAt, data.runDate, data.runTime, isRegistered, isRegistering]);
+
+  // Auto-register trigger when conditions are met
+  useEffect(() => {
+    if (shouldAutoRegister()) {
+      console.log("Auto-registering trigger");
+      registerTrigger();
+    }
+  }, [shouldAutoRegister, registerTrigger]);
+
+  // Reset registration status when trigger data changes significantly
+  useEffect(() => {
+    setIsRegistered(false);
+  }, [data.nodeId, data.triggerType]);
 
   // Add this at the beginning of the component
   useEffect(() => {

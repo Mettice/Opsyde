@@ -151,3 +151,6 @@ node_processor.register_lazy_handler("output", "backend.nodes.output_node", "pro
 node_processor.register_lazy_handler("input", "backend.nodes.input_node", "process_input_node")
 node_processor.register_lazy_handler("Input", "backend.nodes.input_node", "process_input_node")
 node_processor.register_lazy_handler("tool", "backend.nodes.tool_node", "process_tool_node")
+node_processor.register_lazy_handler("trigger", "backend.nodes.trigger_node", "process_trigger_node")
+node_processor.register_lazy_handler("chat", "backend.nodes.chat_node", "process_chat_node")
+node_processor.register_lazy_handler("logic", "backend.nodes.logic_node", "process_logic_node")

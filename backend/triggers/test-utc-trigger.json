@@ -1,0 +1,23 @@
+{
+  "flow": {
+    "trigger_type": "schedule",
+    "edges": [],
+    "nodes": [
+      {
+        "data": {
+          "triggerType": "schedule",
+          "label": "Test UTC Trigger",
+          "runAt": "2025-05-27 20:06",
+          "scheduleType": "once"
+        },
+        "id": "test-utc-trigger",
+        "type": "trigger"
+      }
+    ]
+  },
+  "created_at": "2025-05-27T22:04:36.626020",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "schedule"
+}

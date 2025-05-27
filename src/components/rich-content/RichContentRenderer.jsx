@@ -77,7 +77,8 @@ const RichContentRenderer = ({
   const processedContent = useMemo(() => {
     try {
       const extracted = extractDisplayContent(content);
-      const contentType = detectContentType(extracted);
+      // Use the content type from extraction result, not re-detect
+      const contentType = extracted.type || detectContentType(extracted.content || extracted);
       const classification = classifyContent(content, metadata);
       
       return {

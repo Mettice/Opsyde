@@ -214,6 +214,15 @@ injector = DependencyInjector()
 unified_runner = UnifiedRunner()
 injector.register_instance(UnifiedRunner, unified_runner)
 
+# Create and register TriggerService instance
+from backend.services.trigger_service import TriggerService
+trigger_service = TriggerService()
+injector.register_instance(TriggerService, trigger_service)
+
 async def get_unified_runner() -> UnifiedRunner:
     """FastAPI dependency to get UnifiedRunner instance"""
     return injector.get(UnifiedRunner)
+
+async def get_trigger_service() -> TriggerService:
+    """FastAPI dependency to get TriggerService instance"""
+    return injector.get(TriggerService)

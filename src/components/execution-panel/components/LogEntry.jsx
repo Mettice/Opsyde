@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import RichContentRenderer from '../../rich-content/RichContentRenderer';
-import { safeStringify } from '../../rich-content/utils/safeStringify';
+import ResultDisplayCard from '../../rich-content/renderers/ResultDisplayCard';
 
 const LogEntry = ({ 
   log, 
@@ -13,18 +13,30 @@ const LogEntry = ({
   getLogStyle, 
   debugMode 
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [showMetadata, setShowMetadata] = useState(false);
+
+  // Determine color scheme based on log status/type
+  const getColorScheme = (log) => {
+    if (log.status === 'error' || log.error) return 'orange';
+    if (log.status === 'completed' || log.status === 'success') return 'green';
+    if (log.status === 'processing' || log.status === 'running') return 'blue';
+    if (log.node_type === 'agent') return 'purple';
+    if (log.node_type === 'task') return 'blue';
+    if (log.node_type === 'tool') return 'green';
+    return 'blue';
+  };
+
+  const colorScheme = getColorScheme(log);
 
   if (viewMode === 'structured') {
-    // Structured log rendering
     try {
-      const nodeId = log.nodeId || log.id || 'unknown';
-      const nodeName = log.nodeName || nodeId;
+      const nodeId = log.node_id || log.nodeId || 'unknown';
+      const nodeName = log.node_name || log.nodeName || 'Unknown Node';
       const logType = log.type || 'info';
-      const status = log.status || 'completed';
+      const status = log.status || (log.metadata?.has_error ? 'error' : 'completed');
       
       return (
-        <div className={`${getCardStyle(status, logType)} flex-shrink-0`}>
+        <div key={`log-${index}-${nodeId}`} className={`${getCardStyle(status, logType)} flex-shrink-0`}>
           {/* Glow effect */}
           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300" />
           
@@ -58,7 +70,7 @@ const LogEntry = ({
               </div>
               
               {/* Status Badge */}
-              <div className="flex items-center space-x-2">
+              <div className="flex-shrink-0">
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                   status === 'started' ? 'bg-blue-100 text-blue-800' :
                   status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -68,135 +80,136 @@ const LogEntry = ({
                 }`}>
                   {status.charAt(0).toUpperCase() + status.slice(1)}
                 </span>
-                
-                {/* Expand button */}
-                {(log.result || log.error || log.message || log.metadata) && (
-                  <button
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {isExpanded ? '📄' : '📋'}
-                  </button>
-                )}
               </div>
             </div>
 
-            {/* Content - Always show main content */}
-            <>
-              {/* Result Content */}
-              {log.result && (
-                <div className="mt-3 p-3 bg-white/60 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Result:</h4>
-                  <div className="text-sm text-gray-600">
-                    <RichContentRenderer 
-                      content={log.result} 
-                      maxHeight="250px" 
-                      displayMode="immersive"
-                      showAIInsights={false}
+            {/* Beautiful Result Display */}
+            {log.result && (
+              <div className="mt-4">
+                <ResultDisplayCard
+                  content={log.result}
+                  title="Execution Result"
+                  colorScheme={colorScheme}
+                  defaultExpanded={false}
+                  showMetrics={true}
+                  className="mb-3"
+                />
+              </div>
+            )}
+
+            {/* Error Details */}
+            {log.error && (
+              <div className="mt-3">
+                <ResultDisplayCard
+                  content={log.error}
+                  title="Error Details"
+                  colorScheme="orange"
+                  defaultExpanded={true}
+                  showMetrics={false}
+                  className="mb-3"
+                />
+              </div>
+            )}
+
+            {/* Message */}
+            {log.message && (
+              <div className="mt-3">
+                <ResultDisplayCard
+                  content={log.message}
+                  title="Message"
+                  colorScheme="blue"
+                  defaultExpanded={false}
+                  showMetrics={false}
+                  className="mb-3"
+                />
+              </div>
+            )}
+
+            {/* Metadata Toggle */}
+            {log.metadata && Object.keys(log.metadata).length > 0 && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setShowMetadata(!showMetadata)}
+                  className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-800 transition-colors duration-200"
+                >
+                  <span className={`transform transition-transform duration-200 ${showMetadata ? 'rotate-90' : ''}`}>
+                    ▶
+                  </span>
+                  <span>Metadata ({Object.keys(log.metadata).length} items)</span>
+                </button>
+                
+                {showMetadata && (
+                  <div className="mt-2">
+                    <ResultDisplayCard
+                      content={log.metadata}
+                      title="Metadata"
+                      colorScheme="purple"
+                      defaultExpanded={false}
+                      showMetrics={false}
+                      className="mb-3"
                     />
                   </div>
-                </div>
-              )}
-
-              {/* Error Details */}
-              {log.error && (
-                <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
-                  <h4 className="text-sm font-medium text-red-700 mb-2">Error:</h4>
-                  <div className="text-sm text-red-600">
-                    <RichContentRenderer 
-                      content={log.error} 
-                      maxHeight="150px" 
-                      displayMode="immersive"
-                      showAIInsights={false}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Message */}
-              {log.message && (
-                <div className="mt-3 p-3 bg-blue-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-blue-700 mb-2">Message:</h4>
-                  <div className="text-sm text-blue-600">
-                    <RichContentRenderer 
-                      content={log.message} 
-                      maxHeight="150px" 
-                      displayMode="immersive"
-                      showAIInsights={false}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Metadata - Only show when expanded */}
-              {log.metadata && Object.keys(log.metadata).length > 0 && isExpanded && (
-                <div className="mt-3 p-3 bg-white/40 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-700 mb-2">Metadata:</h4>
-                  <div className="text-xs text-gray-600 font-mono">
-                    <RichContentRenderer 
-                      content={log.metadata} 
-                      maxHeight="120px" 
-                      displayMode="minimal"
-                      showAIInsights={false}
-                    />
-                  </div>
-                </div>
-              )}
-            </>
-
-            {/* Timestamp */}
-            {log.timestamp && (
-              <div className="mt-3 text-xs text-gray-500 flex items-center justify-between">
-                <span>🕒 {new Date(log.timestamp).toLocaleString()}</span>
-                {debugMode && (
-                  <span className="font-mono">ID: {log.id}</span>
                 )}
               </div>
             )}
 
-            {/* Debug Data */}
-            {debugMode && isExpanded && (
+            {/* Debug Information */}
+            {debugMode && (
               <details className="mt-3">
-                <summary className="text-xs text-gray-500 cursor-pointer">Debug: Raw log data</summary>
-                <div className="max-h-32 overflow-auto bg-gray-100 p-2 rounded mt-1">
-                  <pre className="text-xs text-gray-400 whitespace-pre-wrap">
-                    {safeStringify(log)}
-                  </pre>
+                <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700">
+                  🐛 Debug: Raw log data
+                </summary>
+                <div className="mt-2">
+                  <ResultDisplayCard
+                    content={log}
+                    title="Raw Log Data"
+                    colorScheme="orange"
+                    defaultExpanded={false}
+                    showMetrics={true}
+                    className="mb-3"
+                  />
                 </div>
               </details>
+            )}
+
+            {/* Timestamp */}
+            {(log.timestamp || log.metadata?.timestamp) && (
+              <div className="mt-3 text-xs text-gray-500 flex items-center gap-2">
+                <span>🕒</span>
+                <span>{new Date(log.timestamp || log.metadata.timestamp).toLocaleString()}</span>
+              </div>
             )}
           </div>
         </div>
       );
     } catch (error) {
-      console.error('Error rendering structured log entry:', error, log);
+      console.error('Error rendering log entry:', error, log);
       return (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+        <div key={`error-log-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
           <div className="text-red-700 font-medium">Error rendering log entry #{index}</div>
           <div className="text-red-600 text-sm mt-1">
             {error.message}
           </div>
-          {debugMode && (
-            <details className="mt-2">
-              <summary className="text-red-600 text-sm cursor-pointer">Raw log data</summary>
-              <div className="max-h-32 overflow-auto mt-1">
-                <pre className="text-xs text-red-500 whitespace-pre-wrap">
-                  {safeStringify(log)}
-                </pre>
-              </div>
-            </details>
-          )}
+          <details className="mt-2">
+            <summary className="text-red-600 text-sm cursor-pointer">Raw log data</summary>
+            <div className="max-h-32 overflow-auto mt-1">
+              <pre className="text-xs text-red-500 whitespace-pre-wrap">
+                {JSON.stringify(log, null, 2)}
+              </pre>
+            </div>
+          </details>
         </div>
       );
     }
   } else {
-    // Text log rendering
+    // Text logs view with enhanced styling
     try {
       const isDetailLog = log.text && log.text.startsWith('  ');
       const logStyle = getLogStyle(log.text || '');
       
       return (
         <div 
+          key={`text-log-${index}`} 
           className={`group p-3 rounded-xl border transition-all duration-200 hover:shadow-md flex-shrink-0 ${
             isDetailLog 
               ? 'ml-6 bg-gray-50/50 border-gray-200/50' 
@@ -214,27 +227,15 @@ const LogEntry = ({
                 <span className={`text-sm font-medium ${logStyle.textColor}`}>
                   {log.type || 'info'}
                 </span>
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs text-gray-500">
-                    {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Now'}
-                  </span>
-                  {(log.text && log.text.length > 200) && (
-                    <button
-                      onClick={() => setIsExpanded(!isExpanded)}
-                      className="text-xs text-gray-400 hover:text-gray-600"
-                    >
-                      {isExpanded ? 'Less' : 'More'}
-                    </button>
-                  )}
-                </div>
+                <span className="text-xs text-gray-500">
+                  {log.timestamp ? new Date(log.timestamp).toLocaleTimeString() : 'Now'}
+                </span>
               </div>
               <div className="text-sm text-gray-700 leading-relaxed">
                 <RichContentRenderer 
-                  content={isExpanded ? (log.text || log.message || safeStringify(log)) : 
-                    (log.text?.length > 200 ? log.text.substring(0, 200) + '...' : (log.text || log.message || safeStringify(log)))}
-                  maxHeight="150px" 
-                  displayMode="immersive"
-                  showAIInsights={false}
+                  content={log.text || log.message || JSON.stringify(log)} 
+                  maxHeight="400px" 
+                  displayMode="minimal"
                 />
               </div>
             </div>
@@ -244,7 +245,7 @@ const LogEntry = ({
     } catch (error) {
       console.error('Error rendering text log:', error, log);
       return (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+        <div key={`text-error-${index}`} className="p-3 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
           <div className="text-red-700 text-sm">Error rendering text log #{index}</div>
         </div>
       );

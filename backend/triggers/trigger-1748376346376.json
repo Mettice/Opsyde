@@ -1,0 +1,53 @@
+{
+  "flow": {
+    "nodes": [
+      {
+        "id": "trigger-1748376346376",
+        "type": "trigger",
+        "data": {
+          "label": "Trigger",
+          "description": "",
+          "framework": "",
+          "llm": {
+            "temperature": 0.7,
+            "max_tokens": 1000
+          },
+          "frameworkConfig": {},
+          "role": "",
+          "goal": "",
+          "backstory": "",
+          "systemMessage": "",
+          "chainType": "",
+          "agentType": "",
+          "modelName": "",
+          "taskType": "",
+          "indexType": "",
+          "documentsSource": "",
+          "queryMode": "",
+          "triggerType": "schedule",
+          "runAt": "2025-05-27 22:07",
+          "scheduleType": "once",
+          "scheduleDays": [],
+          "scheduleWeekday": "monday",
+          "scheduleMonthDay": 1,
+          "nodeId": "trigger-1748376346376",
+          "nodeType": "trigger",
+          "runDate": "2025-05-27",
+          "runTime": "22:07",
+          "executionState": {
+            "status": "idle",
+            "progress": 0
+          }
+        }
+      }
+    ],
+    "edges": [],
+    "trigger_id": "trigger-1748376346376",
+    "trigger_type": "schedule"
+  },
+  "created_at": "2025-05-27T22:06:00.399436",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "schedule"
+}

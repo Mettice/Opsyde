@@ -130,14 +130,30 @@ export const isMarkdownContent = (str) => {
   const markdownPatterns = [
     /^#{1,6}\s+.+$/m,           // Headers
     /\*\*.*\*\*/,               // Bold
-    /\*.*\*/,                   // Italic
+    /\*.*\*/,                   // Italic (but not bullet points)
     /\[.*\]\(.*\)/,             // Links
     /^[-*+]\s+/m,               // Lists
     /^>\s+/m,                   // Blockquotes
     /`.*`/,                     // Inline code
     /^```[\s\S]*```$/m,         // Code blocks
     /^\|.*\|.*$/m,              // Tables
+    /^\d+\.\s+\*\*.*\*\*/m,     // Numbered lists with bold (like "1. **Cost Efficiency**:")
+    /^\d+\.\s+.+:/m,            // Numbered lists with colons
+    /\*\*[^*]+\*\*:/,           // Bold text followed by colon (like "**Cost Efficiency**:")
   ];
+  
+  // Check for multiple markdown indicators
+  const matchCount = markdownPatterns.filter(pattern => pattern.test(str)).length;
+  
+  // If we have multiple markdown patterns or specific structured content, it's likely markdown
+  if (matchCount >= 2) return true;
+  
+  // Special case: if it has numbered lists with bold text, it's probably markdown
+  if (/^\d+\.\s+\*\*.*\*\*/.test(str)) return true;
+  
+  // Special case: if it has multiple bold sections, it's probably markdown
+  const boldMatches = str.match(/\*\*.*?\*\*/g);
+  if (boldMatches && boldMatches.length >= 2) return true;
   
   return markdownPatterns.some(pattern => pattern.test(str));
 };

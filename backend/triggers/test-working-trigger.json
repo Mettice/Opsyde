@@ -1,0 +1,22 @@
+{
+  "flow": {
+    "trigger_type": "schedule",
+    "edges": [],
+    "nodes": [
+      {
+        "data": {
+          "triggerType": "schedule",
+          "runAt": "2025-05-27 20:05",
+          "scheduleType": "once"
+        },
+        "id": "test-working-trigger",
+        "type": "trigger"
+      }
+    ]
+  },
+  "created_at": "2025-05-27T20:03:07.928284",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "schedule"
+}

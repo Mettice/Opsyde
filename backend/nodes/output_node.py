@@ -1,6 +1,6 @@
 # backend/nodes/output_node.py - Enhanced with AI Integration
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
 
@@ -46,15 +46,34 @@ class OutputNode:
     ) -> NodeData:
         """Enhanced process method with rich output support"""
         try:
-            self.logger.info(f"Processing output node: {node.get('id', 'unknown')}")
+            node_id = node.get('id', 'unknown')
+            self.logger.info(f"Processing output node: {node_id}")
             
             # Collect input data
             output_data = self._collect_output_data(inputs)
             node_data = node.get('data', {})
             
+            # Log the node configuration for debugging
+            self.logger.info(f"Node data: {node_data}")
+            
             # Determine processing type
             output_type = node_data.get('outputType', 'webhook')
             ai_description = node_data.get('ai_description', '')
+            
+            # Check if email is configured but outputType is not set correctly
+            email_configured = (
+                node_data.get('email') or 
+                node_data.get('recipient_email') or
+                node_data.get('config', {}).get('email') or
+                node_data.get('config', {}).get('recipient_email')
+            )
+            
+            if email_configured and output_type not in ['email', 'smart_email']:
+                self.logger.warning(f"Email configured ({email_configured}) but outputType is '{output_type}'. Forcing to 'email'.")
+                output_type = 'email'
+                node_data['outputType'] = 'email'
+            
+            self.logger.info(f"Processing output type: {output_type}")
             
             # Check if this should use AI processing
             if output_type.startswith('smart_') or ai_description:
@@ -72,7 +91,7 @@ class OutputNode:
         rich_outputs = []
         
         for input_id, node_data in inputs.items():
-            if node_data.has_error():
+            if node_data.is_error():
                 collected_data[f"{input_id}_error"] = node_data.error
             else:
                 data_value = node_data.value
@@ -131,7 +150,7 @@ class OutputNode:
                     self.logger.warning(f"Failed to create rich output for AI result: {e}")
             
             return NodeData.from_value(result)
-            
+
         except Exception as e:
             self.logger.error(f"AI output processing failed: {str(e)}")
             error_result = {"success": False, "error": f"AI processing failed: {str(e)}"}
@@ -195,7 +214,7 @@ class OutputNode:
             )
             
             return result
-            
+                
         except Exception as e:
             self.logger.error(f"Smart email processing failed: {str(e)}")
             return {"success": False, "error": f"Smart email failed: {str(e)}"}
@@ -266,11 +285,11 @@ class OutputNode:
                         self.logger.warning(f"Failed to create rich output: {e}")
                 
                 return NodeData.from_value(result)
-                    
+                
         except Exception as e:
             self.logger.error(f"Traditional output processing failed: {str(e)}")
             return NodeData.from_error(f"Output processing failed: {str(e)}")
-
+    
     async def _send_webhook(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via webhook"""
         # Use your existing webhook infrastructure
@@ -303,28 +322,63 @@ class OutputNode:
     
     async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via email"""
-        # Use your existing email infrastructure
+        try:
         from backend.frameworks.email_notifier import send_email
         
-        email = node_data.get('email') or node_data.get('config', {}).get('email')
-        subject = node_data.get('subject', 'Workflow Results')
+            # Get email configuration from multiple possible sources
+            email = (
+                node_data.get('email') or 
+                node_data.get('recipient_email') or
+                node_data.get('config', {}).get('email') or
+                node_data.get('config', {}).get('recipient_email')
+            )
+            
+            subject = node_data.get('subject', 'CrewFlow Workflow Results')
+            
+            self.logger.info(f"Processing email output - Email: {email}, Subject: {subject}")
+            self.logger.info(f"Output data structure: {output_data}")
         
         if not email:
-            return NodeData.from_error("Email address is required")
-        
-        try:
-            # Format email body
-            body = self._format_email_body(output_data)
-            result = await send_email(email, subject, body)
+                error_msg = "Email address is required for email output"
+                self.logger.error(error_msg)
+                return NodeData.from_error(error_msg)
             
+            # Format email body with rich content
+            body = self._format_rich_email_body(output_data)
+            
+            self.logger.info(f"Sending email to {email} with subject: {subject}")
+            self.logger.info(f"Email body preview: {body[:500]}...")
+            
+            # Send the email
+            result = await send_email(email, subject, body, is_html=True)
+            
+            self.logger.info(f"Email send result: {result}")
+            
+            if result.get('success'):
             return NodeData.from_value({
                 "success": True,
                 "output_type": "email",
                 "summary": f"Successfully sent email to {email}",
-                "data": result
-            })
+                    "data": {
+                        "recipient": email,
+                        "subject": subject,
+                        "status": "sent",
+                        "message": result.get('message', 'Email sent successfully')
+                    }
+                })
+            else:
+                error_msg = f"Email failed: {result.get('message', 'Unknown error')}"
+                self.logger.error(error_msg)
+                return NodeData.from_error(error_msg)
+                
+        except ImportError as e:
+            error_msg = f"Email notifier not available: {str(e)}"
+            self.logger.error(error_msg)
+            return NodeData.from_error(error_msg)
         except Exception as e:
-            return NodeData.from_error(f"Email failed: {str(e)}")
+            error_msg = f"Email failed: {str(e)}"
+            self.logger.error(error_msg)
+            return NodeData.from_error(error_msg)
     
     async def _send_discord(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data to Discord"""
@@ -359,98 +413,525 @@ class OutputNode:
         except Exception as e:
             return NodeData.from_error(f"Sheets integration failed: {str(e)}")
     
-    def _format_email_body(self, data: Dict[str, Any]) -> str:
-        """Format data for email body"""
-        if isinstance(data, dict):
-            formatted_lines = []
-            for key, value in data.items():
-                if not key.endswith('_error') and not key.endswith('_metadata'):
-                    formatted_lines.append(f"{key.replace('_', ' ').title()}: {value}")
-            return "\n".join(formatted_lines)
-        else:
-            return str(data)
-
     def _format_rich_email_body(self, data: Dict[str, Any]) -> str:
-        """Create rich HTML email content"""
+        """Create rich HTML email content with intelligent content extraction"""
         html_content = """
         <html>
         <head>
             <style>
-                body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-                .header { background: #f4f4f4; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-                .content { padding: 20px; }
-                .data-item { margin: 10px 0; padding: 10px; background: #f9f9f9; border-left: 4px solid #007cba; }
-                .rich-output { margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-                pre { background: #f4f4f4; padding: 10px; border-radius: 3px; overflow-x: auto; }
-                table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                th { background-color: #f2f2f2; }
+                body { 
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                    line-height: 1.6; 
+                    color: #333; 
+                    margin: 0; 
+                    padding: 20px; 
+                    background-color: #f5f5f5; 
+                }
+                .container { 
+                    max-width: 800px; 
+                    margin: 0 auto; 
+                    background: white; 
+                    border-radius: 10px; 
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+                    overflow: hidden; 
+                }
+                .header { 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    color: white; 
+                    padding: 30px; 
+                    text-align: center; 
+                }
+                .header h1 { margin: 0; font-size: 28px; font-weight: 300; }
+                .header p { margin: 10px 0 0 0; opacity: 0.9; }
+                .content { padding: 30px; }
+                .section { 
+                    margin: 25px 0; 
+                    padding: 20px; 
+                    background: #f8f9fa; 
+                    border-radius: 8px; 
+                    border-left: 4px solid #667eea; 
+                }
+                .section h3 { 
+                    margin: 0 0 15px 0; 
+                    color: #495057; 
+                    font-size: 18px; 
+                    font-weight: 600; 
+                }
+                .content-block { 
+                    background: white; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    margin: 10px 0; 
+                    border: 1px solid #e9ecef; 
+                }
+                .key-value { 
+                    display: flex; 
+                    margin: 8px 0; 
+                    align-items: flex-start; 
+                }
+                .key { 
+                    font-weight: 600; 
+                    color: #495057; 
+                    min-width: 120px; 
+                    margin-right: 15px; 
+                }
+                .value { 
+                    flex: 1; 
+                    color: #6c757d; 
+                    word-break: break-word; 
+                }
+                .highlight { 
+                    background: #fff3cd; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    border-left: 4px solid #ffc107; 
+                    margin: 15px 0; 
+                }
+                .success { 
+                    background: #d4edda; 
+                    color: #155724; 
+                    border-left-color: #28a745; 
+                }
+                .error { 
+                    background: #f8d7da; 
+                    color: #721c24; 
+                    border-left-color: #dc3545; 
+                }
+                .footer { 
+                    background: #f8f9fa; 
+                    padding: 20px; 
+                    text-align: center; 
+                    color: #6c757d; 
+                    font-size: 14px; 
+                }
+                pre { 
+                    background: #f8f9fa; 
+                    padding: 15px; 
+                    border-radius: 6px; 
+                    overflow-x: auto; 
+                    font-family: 'Courier New', monospace; 
+                    font-size: 13px; 
+                    border: 1px solid #e9ecef; 
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin: 15px 0; 
+                }
+                th, td { 
+                    border: 1px solid #dee2e6; 
+                    padding: 12px; 
+                    text-align: left; 
+                }
+                th { 
+                    background-color: #e9ecef; 
+                    font-weight: 600; 
+                    color: #495057; 
+                }
+                .badge { 
+                    display: inline-block; 
+                    padding: 4px 8px; 
+                    background: #667eea; 
+                    color: white; 
+                    border-radius: 4px; 
+                    font-size: 12px; 
+                    font-weight: 500; 
+                }
             </style>
         </head>
         <body>
-            <div class="header">
-                <h2>🚀 Workflow Results</h2>
-                <p>Your CrewFlow workflow has completed successfully!</p>
-            </div>
-            <div class="content">
+            <div class="container">
+                <div class="header">
+                    <h1>🚀 Workflow Results</h1>
+                    <p>Your CrewFlow workflow has completed successfully!</p>
+                </div>
+                <div class="content">
         """
         
-        # Process rich outputs if available
-        if '_rich_outputs' in data:
-            for rich_output in data['_rich_outputs']:
-                output_type = rich_output.get('output_type', 'text')
-                payload = rich_output.get('payload', '')
-                metadata = rich_output.get('metadata', {})
-                title = metadata.get('title', 'Output')
-                
-                html_content += f'<div class="rich-output"><h3>{title}</h3>'
-                
-                if output_type == 'html':
-                    html_content += payload
-                elif output_type == 'markdown':
-                    # Convert markdown to HTML (basic conversion)
-                    html_payload = payload.replace('\n', '<br>').replace('**', '<strong>').replace('*', '<em>')
-                    html_content += html_payload
-                elif output_type == 'table':
-                    if isinstance(payload, list) and payload:
-                        html_content += '<table>'
-                        # Headers
-                        if isinstance(payload[0], dict):
-                            html_content += '<tr>'
-                            for key in payload[0].keys():
-                                html_content += f'<th>{key}</th>'
-                            html_content += '</tr>'
-                            # Rows
-                            for row in payload:
-                                html_content += '<tr>'
-                                for value in row.values():
-                                    html_content += f'<td>{value}</td>'
-                                html_content += '</tr>'
-                        html_content += '</table>'
-                elif output_type == 'json':
-                    html_content += f'<pre>{str(payload)}</pre>'
-                else:
-                    html_content += f'<p>{str(payload)}</p>'
-                
-                html_content += '</div>'
+        # Extract and format content intelligently
+        extracted_content = self._extract_meaningful_content(data)
         
-        # Process regular data
-        for key, value in data.items():
-            if not key.startswith('_') and not key.endswith('_error'):
-                html_content += f'''
-                <div class="data-item">
-                    <strong>{key.replace('_', ' ').title()}:</strong><br>
-                    {str(value)}
+        # Add summary section if we have multiple items
+        if len(extracted_content) > 1:
+            html_content += '''
+                <div class="section success">
+                    <h3>📊 Summary</h3>
+                    <div class="key-value">
+                        <span class="key">Total Results:</span>
+                        <span class="value">{} items processed</span>
+                    </div>
                 </div>
-                '''
+            '''.format(len(extracted_content))
         
-        html_content += """
+        # Process each extracted content item
+        for i, content_item in enumerate(extracted_content, 1):
+            section_title = content_item.get('title', f'Result {i}')
+            content_type = content_item.get('type', 'text')
+            content_value = content_item.get('content', '')
+            metadata = content_item.get('metadata', {})
+            
+            html_content += f'<div class="section">'
+            html_content += f'<h3>{section_title}</h3>'
+            
+            # Add metadata if available
+            if metadata:
+                html_content += '<div class="content-block">'
+                for key, value in metadata.items():
+                    if key not in ['title', 'type'] and value:
+                        html_content += f'''
+                            <div class="key-value">
+                                <span class="key">{key.replace('_', ' ').title()}:</span>
+                                <span class="value">{self._format_value_for_display(value)}</span>
+                            </div>
+                        '''
+                html_content += '</div>'
+            
+            # Format content based on type
+            if content_type == 'text' and content_value:
+                html_content += f'<div class="content-block">{self._format_text_content(content_value)}</div>'
+            elif content_type == 'json' and content_value:
+                html_content += f'<div class="content-block"><pre>{self._format_json_content(content_value)}</pre></div>'
+            elif content_type == 'list' and content_value:
+                html_content += f'<div class="content-block">{self._format_list_content(content_value)}</div>'
+            elif content_type == 'table' and content_value:
+                html_content += f'<div class="content-block">{self._format_table_content(content_value)}</div>'
+            elif content_value:
+                # Fallback for any other content
+                html_content += f'<div class="content-block">{self._format_text_content(str(content_value))}</div>'
+            
+            html_content += '</div>'
+        
+        # Add footer
+        html_content += '''
+                </div>
+                <div class="footer">
+                    <p>Generated by CrewFlow • Workflow Automation Platform</p>
+                    <p style="font-size: 12px; margin-top: 10px;">
+                        This email was automatically generated from your workflow execution.
+                    </p>
+                </div>
             </div>
         </body>
         </html>
-        """
+        '''
         
         return html_content
+    
+    def _extract_meaningful_content(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Extract only meaningful results content, filtering out metadata and logs"""
+        extracted = []
+        
+        # Skip internal/technical keys that shouldn't be in emails
+        skip_keys = {
+            '_rich_outputs', 'metadata', 'timestamp', 'execution_time', 'node_id', 
+            'node_type', 'status', 'logs', 'debug', 'trace', 'internal', 'system',
+            'config', 'settings', 'parameters', 'raw_data', 'full_response'
+        }
+        
+        # Handle different data structures
+        if isinstance(data, dict):
+            for key, value in data.items():
+                # Skip technical/internal keys
+                if key.startswith('_') or key.endswith('_error') or key in skip_keys:
+                    continue
+                
+                # Handle success/output structures - extract only the meaningful output
+                if isinstance(value, dict):
+                    if 'success' in value and value.get('success'):
+                        # Look for the actual output content
+                        output_content = None
+                        
+                        # Try different output field names
+                        for output_field in ['output', 'result', 'data', 'content', 'text', 'response']:
+                            if output_field in value and value[output_field]:
+                                output_content = value[output_field]
+                                break
+                        
+                        if output_content is not None:
+                            # Further extract meaningful content from the output
+                            meaningful_output = self._extract_result_content(output_content)
+                            if meaningful_output:
+                                content_item = {
+                                    'title': self._generate_title_from_key(key),
+                                    'type': self._detect_content_type(meaningful_output),
+                                    'content': meaningful_output,
+                                    'metadata': {
+                                        'source_key': key,
+                                        'status': 'success'
+                                    }
+                                }
+                                extracted.append(content_item)
+                    elif 'success' in value and not value.get('success'):
+                        # Handle failed operations - only show user-friendly error
+                        error_content = value.get('error', 'Operation failed')
+                        if isinstance(error_content, str) and len(error_content) < 500:
+                            content_item = {
+                                'title': f"❌ {self._generate_title_from_key(key)} (Failed)",
+                                'type': 'text',
+                                'content': error_content,
+                                'metadata': {
+                                    'source_key': key,
+                                    'status': 'failed'
+                                }
+                            }
+                            extracted.append(content_item)
+                    else:
+                        # Handle regular nested objects - extract meaningful content
+                        meaningful_content = self._extract_result_content(value)
+                        if meaningful_content:
+                            content_item = {
+                                'title': self._generate_title_from_key(key),
+                                'type': self._detect_content_type(meaningful_content),
+                                'content': meaningful_content,
+                                'metadata': {'source_key': key}
+                            }
+                            extracted.append(content_item)
+                else:
+                    # Handle direct values (strings, numbers, lists)
+                    meaningful_content = self._extract_result_content(value)
+                    if meaningful_content:
+                        content_item = {
+                            'title': self._generate_title_from_key(key),
+                            'type': self._detect_content_type(meaningful_content),
+                            'content': meaningful_content,
+                            'metadata': {'source_key': key}
+                        }
+                        extracted.append(content_item)
+        
+        # If no meaningful content found, try to extract from the raw data
+        if not extracted:
+            meaningful_content = self._extract_result_content(data)
+            if meaningful_content:
+                extracted.append({
+                    'title': 'Workflow Result',
+                    'type': self._detect_content_type(meaningful_content),
+                    'content': meaningful_content,
+                    'metadata': {}
+                })
+        
+        return extracted
+    
+    def _extract_result_content(self, data: Any) -> Any:
+        """Extract the actual result content, filtering out technical details"""
+        if data is None:
+            return None
+        
+        # Handle strings - return if meaningful
+        if isinstance(data, str):
+            # Skip empty strings or very short technical strings
+            if len(data.strip()) < 3:
+                return None
+            # Skip technical/system strings
+            technical_patterns = ['node_', 'execution_', 'timestamp', 'uuid', 'id:', 'status:', 'debug:']
+            if any(pattern in data.lower() for pattern in technical_patterns):
+                return None
+            return data.strip()
+        
+        # Handle numbers and booleans
+        if isinstance(data, (int, float, bool)):
+            return data
+        
+        # Handle lists
+        if isinstance(data, list):
+            if not data:
+                return None
+            # Filter out empty or technical items
+            filtered_list = []
+            for item in data:
+                meaningful_item = self._extract_result_content(item)
+                if meaningful_item is not None:
+                    filtered_list.append(meaningful_item)
+            return filtered_list if filtered_list else None
+        
+        # Handle dictionaries
+        if isinstance(data, dict):
+            # Skip internal/technical keys
+            skip_keys = {
+                'metadata', 'timestamp', 'execution_time', 'node_id', 'node_type', 
+                'status', 'logs', 'debug', 'trace', 'internal', 'system', 'config',
+                'settings', 'parameters', 'raw_data', 'full_response', 'request_id',
+                'session_id', 'user_id', 'api_key', 'token', 'auth', 'headers'
+            }
+            
+            # Look for the main content fields first
+            content_fields = ['content', 'output', 'result', 'text', 'message', 'data', 'value', 'answer', 'response']
+            
+            # Try to find the main content
+            for field in content_fields:
+                if field in data and data[field] is not None:
+                    main_content = self._extract_result_content(data[field])
+                    if main_content is not None:
+                        return main_content
+            
+            # If no main content field found, extract meaningful key-value pairs
+            meaningful_dict = {}
+            for key, value in data.items():
+                # Skip technical keys
+                if key.startswith('_') or key in skip_keys or key.endswith('_id') or key.endswith('_time'):
+                    continue
+                
+                meaningful_value = self._extract_result_content(value)
+                if meaningful_value is not None:
+                    meaningful_dict[key] = meaningful_value
+            
+            return meaningful_dict if meaningful_dict else None
+        
+        # For any other type, return as is
+        return data
+    
+    def _generate_title_from_key(self, key: str) -> str:
+        """Generate a readable title from a key"""
+        # Handle common patterns
+        title_map = {
+            'task_result': '📋 Task Result',
+            'agent_output': '🤖 Agent Output',
+            'tool_result': '🔧 Tool Result',
+            'workflow_result': '⚙️ Workflow Result',
+            'analysis': '📊 Analysis',
+            'summary': '📝 Summary',
+            'recommendation': '💡 Recommendation',
+            'data': '📄 Data',
+            'output': '📤 Output',
+            'result': '✅ Result'
+        }
+        
+        if key in title_map:
+            return title_map[key]
+        
+        # Convert snake_case to Title Case
+        return ' '.join(word.capitalize() for word in key.replace('_', ' ').split())
+    
+    def _detect_content_type(self, content) -> str:
+        """Detect the type of content for appropriate formatting"""
+        if isinstance(content, dict):
+            return 'json'
+        elif isinstance(content, list):
+            if content and isinstance(content[0], dict):
+                return 'table'
+            return 'list'
+        elif isinstance(content, str):
+            if len(content) > 200:
+                return 'text'
+            return 'text'
+        else:
+            return 'text'
+    
+    def _format_text_content(self, content: str) -> str:
+        """Format text content for HTML display"""
+        if not content:
+            return '<em>No content</em>'
+        
+        # Convert to string if not already
+        text = str(content)
+        
+        # Handle very long text by adding paragraph breaks
+        if len(text) > 500:
+            # Split into paragraphs at natural break points
+            paragraphs = []
+            current_paragraph = ""
+            
+            # Split by double newlines first (natural paragraph breaks)
+            sections = text.split('\n\n')
+            
+            for section in sections:
+                # Clean up the section
+                section = section.strip()
+                if not section:
+                    continue
+                
+                # If section is still very long, try to break it at sentences
+                if len(section) > 300:
+                    sentences = section.split('. ')
+                    temp_paragraph = ""
+                    
+                    for sentence in sentences:
+                        if len(temp_paragraph + sentence) > 300 and temp_paragraph:
+                            paragraphs.append(temp_paragraph.strip())
+                            temp_paragraph = sentence + '. '
+                        else:
+                            temp_paragraph += sentence + '. '
+                    
+                    if temp_paragraph.strip():
+                        paragraphs.append(temp_paragraph.strip())
+                else:
+                    paragraphs.append(section)
+            
+            # Join paragraphs with proper HTML paragraph tags
+            formatted = '</p><p>'.join(paragraphs)
+            formatted = f'<p>{formatted}</p>'
+        else:
+            # For shorter text, just convert newlines to breaks
+            formatted = text.replace('\n\n', '</p><p>').replace('\n', '<br>')
+            if not formatted.startswith('<p>'):
+                formatted = f'<p>{formatted}</p>'
+        
+        # Apply basic markdown-like formatting
+        formatted = formatted.replace('**', '<strong>').replace('**', '</strong>')
+        formatted = formatted.replace('*', '<em>').replace('*', '</em>')
+        
+        # Handle numbered lists
+        import re
+        formatted = re.sub(r'\n(\d+)\.\s+', r'<br><strong>\1.</strong> ', formatted)
+        
+        # Handle bullet points
+        formatted = re.sub(r'\n[-•]\s+', r'<br>• ', formatted)
+        
+        return formatted
+    
+    def _format_json_content(self, content) -> str:
+        """Format JSON content for display"""
+        try:
+            if isinstance(content, str):
+                import json
+                content = json.loads(content)
+            return json.dumps(content, indent=2, ensure_ascii=False)
+        except:
+            return str(content)
+    
+    def _format_list_content(self, content: list) -> str:
+        """Format list content as HTML list"""
+        if not content:
+            return '<em>Empty list</em>'
+        
+        html = '<ul>'
+        for item in content:
+            html += f'<li>{self._format_value_for_display(item)}</li>'
+        html += '</ul>'
+        return html
+    
+    def _format_table_content(self, content: list) -> str:
+        """Format list of dictionaries as HTML table"""
+        if not content or not isinstance(content[0], dict):
+            return self._format_list_content(content)
+        
+        # Get headers from first item
+        headers = list(content[0].keys())
+        
+        html = '<table><thead><tr>'
+        for header in headers:
+            html += f'<th>{header.replace("_", " ").title()}</th>'
+        html += '</tr></thead><tbody>'
+        
+        for row in content:
+            html += '<tr>'
+            for header in headers:
+                value = row.get(header, '')
+                html += f'<td>{self._format_value_for_display(value)}</td>'
+            html += '</tr>'
+        
+        html += '</tbody></table>'
+        return html
+    
+    def _format_value_for_display(self, value) -> str:
+        """Format a value for HTML display"""
+        if value is None:
+            return '<em>None</em>'
+        elif isinstance(value, bool):
+            return '✅ Yes' if value else '❌ No'
+        elif isinstance(value, (dict, list)):
+            return f'<code>{str(value)[:100]}{"..." if len(str(value)) > 100 else ""}</code>'
+        else:
+            return str(value)
 
 
 # Register the handler function
