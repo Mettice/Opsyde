@@ -6,6 +6,140 @@ import { flowTemplates as cvTemplates } from './flowTemplates/cvTemplates';
 // Define base templates
 const baseTemplates = [
     {
+      name: 'Automation Platform Market Research 2025',
+      description: '🔄 Comprehensive market analysis of automation platforms: n8n, Make.com, Zapier with competitive positioning',
+      thumbnail: '/img/automation-market-research.png',
+      nodes: [
+        {
+          id: 'input-automation-1',
+          type: 'input',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'Research Query',
+            description: 'Enter your automation platform research requirements',
+            inputType: 'text',
+            placeholder: 'Enter specific research focus or questions...',
+            value: 'Analyze the competitive landscape of automation platforms in 2025, focusing on n8n, Make.com, and Zapier. Include market positioning, pricing strategies, target audiences, and growth opportunities.',
+            nodeId: 'input-automation-1',
+            nodeType: 'input'
+          }
+        },
+        {
+          id: 'agent-automation-research-1',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Automation Market Analyst',
+            role: 'Senior Automation Market Research Analyst',
+            goal: 'Provide comprehensive market analysis of automation platforms with focus on competitive positioning and strategic insights',
+            backstory: 'You are a specialized market research analyst with 8+ years of experience in the automation and workflow technology sector. You have deep expertise in analyzing SaaS platforms, particularly automation tools like n8n, Make.com (formerly Integromat), and Zapier. You understand the nuances of no-code/low-code markets, enterprise adoption patterns, and competitive dynamics in the automation space.',
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.7,
+              max_tokens: 4000,
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 4000,
+            allowDelegation: true,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-automation-research-1',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-market-analysis-1',
+          type: 'task',
+          position: { x: 600, y: 50 },
+          data: {
+            label: 'Market Landscape Analysis',
+            description: 'Analyze the overall automation platform market with focus on key players',
+            expectedOutput: 'Comprehensive market analysis including: 1) Market size and growth projections for automation platforms, 2) Key market segments (SMB, Enterprise, Developer), 3) Technology trends driving adoption, 4) Competitive landscape overview with market share estimates, 5) Regulatory and compliance considerations',
+            async: false,
+            agentId: 'agent-automation-research-1',
+            nodeId: 'task-market-analysis-1',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'task-platform-comparison-1',
+          type: 'task',
+          position: { x: 600, y: 200 },
+          data: {
+            label: 'Platform Competitive Analysis',
+            description: 'Deep dive comparison of n8n, Make.com, and Zapier positioning strategies',
+            expectedOutput: 'Detailed competitive analysis including: 1) Feature comparison matrix (integrations, pricing, ease of use), 2) Target audience analysis for each platform, 3) Pricing strategy comparison and value propositions, 4) Strengths and weaknesses of each platform, 5) Market positioning and differentiation strategies, 6) Customer acquisition and retention approaches',
+            async: false,
+            agentId: 'agent-automation-research-1',
+            nodeId: 'task-platform-comparison-1',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'task-strategic-recommendations-1',
+          type: 'task',
+          position: { x: 600, y: 350 },
+          data: {
+            label: 'Strategic Recommendations',
+            description: 'Provide actionable strategic insights and market opportunities',
+            expectedOutput: 'Strategic recommendations including: 1) Market opportunities and gaps for each platform, 2) Recommended positioning strategies for 2025, 3) Potential partnership and integration opportunities, 4) Risk assessment and mitigation strategies, 5) Investment and growth recommendations, 6) Future market predictions and emerging trends',
+            async: false,
+            agentId: 'agent-automation-research-1',
+            nodeId: 'task-strategic-recommendations-1',
+            nodeType: 'task'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-input-agent',
+          source: 'input-automation-1',
+          target: 'agent-automation-research-1',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-market',
+          source: 'agent-automation-research-1',
+          target: 'task-market-analysis-1',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-comparison',
+          source: 'agent-automation-research-1',
+          target: 'task-platform-comparison-1',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-strategy',
+          source: 'agent-automation-research-1',
+          target: 'task-strategic-recommendations-1',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Market Research', 'Automation', 'Competitive Analysis', 'n8n', 'Make.com', 'Zapier', 'Strategic Planning'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Advanced',
+      estimatedTime: '4-6 minutes',
+      useCase: 'Perfect for businesses evaluating automation platforms, investors analyzing the market, or platform teams developing competitive strategies.',
+      metadata: {
+        category: 'Market Research',
+        industry: ['SaaS', 'Automation', 'No-Code', 'Enterprise Software'],
+        outputFormat: 'Comprehensive Market Research Report',
+        aiCapabilities: ['Market Analysis', 'Competitive Intelligence', 'Strategic Planning'],
+        businessValue: 'Very High - Provides deep market insights for strategic decision-making'
+      }
+    },
+    {
       name: 'RAG Retriever Flow',
       description: 'A complete Retrieval-Augmented Generation pipeline',
       thumbnail: '/img/rag-flow.png',
