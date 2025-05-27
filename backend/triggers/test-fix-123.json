@@ -1,0 +1,23 @@
+{
+  "flow": {
+    "nodes": [
+      {
+        "id": "test-fix-123",
+        "type": "trigger",
+        "data": {
+          "triggerType": "schedule",
+          "scheduleType": "once",
+          "runAt": "2025-05-27 20:00"
+        }
+      }
+    ],
+    "edges": [],
+    "trigger_id": "test-fix-123",
+    "trigger_type": "schedule"
+  },
+  "created_at": "2025-05-27T19:27:53.194278",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "schedule"
+}

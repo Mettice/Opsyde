@@ -71,8 +71,7 @@ def is_valid_email(email: str) -> bool:
     email_pattern = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
     return bool(email_pattern.match(email))
 
-# Make this a synchronous function to avoid awaiting problems
-def _send_email_sync(recipient: str, subject: str, body: str) -> Dict[str, Any]:
+def _send_email_sync(recipient: str, subject: str, body: str, is_html: bool = False) -> Dict[str, Any]:
     """
     Send an email synchronously using Gmail SMTP
     
@@ -92,13 +91,26 @@ def _send_email_sync(recipient: str, subject: str, body: str) -> Dict[str, Any]:
             return {"success": False, "message": error_msg}
         
         # Create message
-        msg = MIMEMultipart()
+        msg = MIMEMultipart('alternative')
         msg["From"] = smtp_username
         msg["To"] = recipient
         msg["Subject"] = subject
         
-        # Attach body
-        msg.attach(MIMEText(body, "plain"))
+        # Determine if body is HTML
+        if is_html or (isinstance(body, str) and ('<html>' in body.lower() or '<div>' in body.lower() or '<p>' in body.lower())):
+            # Send as HTML email
+            html_part = MIMEText(body, "html")
+            msg.attach(html_part)
+            
+            # Also create a plain text version for better compatibility
+            # Simple HTML to text conversion
+            plain_text = re.sub('<[^<]+?>', '', body)
+            plain_text = re.sub(r'\s+', ' ', plain_text).strip()
+            text_part = MIMEText(plain_text, "plain")
+            msg.attach(text_part)
+        else:
+            # Send as plain text
+            msg.attach(MIMEText(body, "plain"))
         
         # Send email
         with smtplib.SMTP(smtp_server, smtp_port) as server:
@@ -106,7 +118,7 @@ def _send_email_sync(recipient: str, subject: str, body: str) -> Dict[str, Any]:
             server.login(smtp_username, smtp_password)
             server.send_message(msg)
             
-        logger.info(f"Email sent to {recipient} via Gmail SMTP")
+        logger.info(f"Email sent to {recipient} via Gmail SMTP ({'HTML' if is_html else 'Plain Text'})")
         
         # Return success with recipient and subject for display
         return {
@@ -121,14 +133,15 @@ def _send_email_sync(recipient: str, subject: str, body: str) -> Dict[str, Any]:
         logger.error(error_msg)
         return {"success": False, "message": error_msg}
 
-async def send_email(recipient: str, subject: str, body: Any) -> Dict[str, Any]:
+async def send_email(recipient: str, subject: str, body: Any, is_html: bool = None) -> Dict[str, Any]:
     """
     Send an email to the specified recipient using Gmail SMTP - async wrapper
     
     Args:
         recipient: Email address of the recipient
         subject: Email subject
-        body: Email body content (can be text or dict/object that will be converted to formatted text)
+        body: Email body content (can be text, HTML, or dict/object that will be converted to formatted text)
+        is_html: Whether to send as HTML email (auto-detected if None)
         
     Returns:
         Dict with status and message
@@ -156,10 +169,14 @@ async def send_email(recipient: str, subject: str, body: Any) -> Dict[str, Any]:
                 logger.error(f"Error formatting email body: {str(e)}")
                 body = f"[Error formatting content: {str(e)}]"
         
+        # Auto-detect HTML if not specified
+        if is_html is None:
+            is_html = isinstance(body, str) and ('<html>' in body.lower() or '<div>' in body.lower() or '<p>' in body.lower())
+        
         # Run the synchronous SMTP code in a thread pool to avoid blocking
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            None, _send_email_sync, recipient, subject, body
+            None, _send_email_sync, recipient, subject, body, is_html
         )
         
         return result

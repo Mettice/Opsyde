@@ -3,14 +3,32 @@ import React from 'react';
 import PropTypes from 'prop-types';
 
 const MarkdownRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
-  if (!content) return null;
+  if (!content && content !== 0 && content !== false) return null;
   
   // Handle extracted content object structure
-  const markdownContent = typeof content === 'object' && content.content 
-    ? content.content 
-    : typeof content === 'string' 
-      ? content 
-      : JSON.stringify(content, null, 2);
+  let markdownContent;
+  if (typeof content === 'object' && content !== null) {
+    // If it's an extracted content object with content property
+    if (content.content && typeof content.content === 'string') {
+      markdownContent = content.content;
+    }
+    // If it's a result object with output
+    else if (content.output && typeof content.output === 'string') {
+      markdownContent = content.output;
+    }
+    // If it's a result object with success and output
+    else if (content.success !== undefined && content.output && typeof content.output === 'string') {
+      markdownContent = content.output;
+    }
+    // Otherwise stringify as fallback
+    else {
+      markdownContent = JSON.stringify(content, null, 2);
+    }
+  } else if (typeof content === 'string') {
+    markdownContent = content;
+  } else {
+    markdownContent = String(content);
+  }
   
   // Simple markdown parsing - can be enhanced with a library like react-markdown
   const parseMarkdown = (text) => {

@@ -777,7 +777,7 @@ export default function UnifiedExecutionPanel({
                                   <div className="mt-3 p-3 bg-white/60 rounded-lg">
                                     <h4 className="text-sm font-medium text-gray-700 mb-2">Result:</h4>
                                     <div className="text-sm text-gray-600">
-                                      <RichContentRenderer content={log.result} maxHeight="250px" />
+                                      <RichContentRenderer content={log.result} maxHeight="600px" />
                                     </div>
                                     {debugMode && (
                                       <details className="mt-2">
@@ -797,7 +797,7 @@ export default function UnifiedExecutionPanel({
                                   <div className="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
                                     <h4 className="text-sm font-medium text-red-700 mb-2">Error:</h4>
                                     <div className="text-sm text-red-600">
-                                      <RichContentRenderer content={log.error} maxHeight="150px" />
+                                      <RichContentRenderer content={log.error} maxHeight="400px" />
                                     </div>
                                   </div>
                                 )}
@@ -807,7 +807,7 @@ export default function UnifiedExecutionPanel({
                                   <div className="mt-3 p-3 bg-blue-50 rounded-lg">
                                     <h4 className="text-sm font-medium text-blue-700 mb-2">Message:</h4>
                                     <div className="text-sm text-blue-600">
-                                      <RichContentRenderer content={log.message} maxHeight="150px" />
+                                      <RichContentRenderer content={log.message} maxHeight="400px" />
                                     </div>
                                   </div>
                                 )}
@@ -817,7 +817,7 @@ export default function UnifiedExecutionPanel({
                                   <div className="mt-3 p-3 bg-white/40 rounded-lg">
                                     <h4 className="text-sm font-medium text-gray-700 mb-2">Metadata:</h4>
                                     <div className="text-xs text-gray-600 font-mono">
-                                      <RichContentRenderer content={log.metadata} maxHeight="120px" />
+                                      <RichContentRenderer content={log.metadata} maxHeight="300px" />
                                     </div>
                                   </div>
                                 )}
@@ -885,7 +885,7 @@ export default function UnifiedExecutionPanel({
                                     </span>
                                   </div>
                                   <div className="text-sm text-gray-700 leading-relaxed">
-                                    <RichContentRenderer content={log.text || log.message || safeStringify(log)} maxHeight="150px" />
+                                    <RichContentRenderer content={log.text || log.message || safeStringify(log)} maxHeight="400px" />
                                   </div>
                                 </div>
                               </div>

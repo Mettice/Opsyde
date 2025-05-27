@@ -10,11 +10,18 @@ export const topologicalSort = (nodes, edges) => {
   // Create adjacency list
   const graph = {};
   const inDegree = {};
+  const triggerNodes = [];
   
   // Initialize graph and in-degree count
   nodes.forEach(node => {
     graph[node.id] = [];
     inDegree[node.id] = 0;
+    
+    // Identify trigger nodes
+    const nodeType = node.type || (node.data && node.data.nodeType);
+    if (nodeType === 'trigger') {
+      triggerNodes.push(node.id);
+    }
   });
   
   // Build the graph
@@ -26,9 +33,22 @@ export const topologicalSort = (nodes, edges) => {
   });
   
   // Find all nodes with no incoming edges (in-degree = 0)
-  const queue = nodes
-    .filter(node => inDegree[node.id] === 0)
-    .map(node => node.id);
+  // Prioritize trigger nodes
+  const queue = [];
+  
+  // First add trigger nodes with no incoming edges
+  triggerNodes.forEach(nodeId => {
+    if (inDegree[nodeId] === 0) {
+      queue.push(nodeId);
+    }
+  });
+  
+  // Then add other nodes with no incoming edges
+  nodes.forEach(node => {
+    if (inDegree[node.id] === 0 && !triggerNodes.includes(node.id)) {
+      queue.push(node.id);
+    }
+  });
   
   const result = [];
   
@@ -42,8 +62,13 @@ export const topologicalSort = (nodes, edges) => {
       inDegree[neighbor]--;
       
       // If in-degree becomes 0, add to queue
+      // Prioritize trigger nodes
       if (inDegree[neighbor] === 0) {
-        queue.push(neighbor);
+        if (triggerNodes.includes(neighbor)) {
+          queue.unshift(neighbor); // Add trigger nodes to front
+        } else {
+          queue.push(neighbor);
+        }
       }
     });
   }
@@ -52,6 +77,9 @@ export const topologicalSort = (nodes, edges) => {
   if (result.length !== nodes.length) {
     console.warn('Graph contains cycles, execution order may not be optimal');
   }
+  
+  console.log('Execution order:', result);
+  console.log('Trigger nodes found:', triggerNodes);
   
   return result;
 };
@@ -157,6 +185,61 @@ function removeCircularReferences(obj) {
 }
 
 /**
+ * Execute a trigger node
+ * @param {Object} node - Trigger node object
+ * @param {Object} inputs - Input data (usually empty for triggers)
+ * @returns {Promise<Object>} - Trigger execution result
+ */
+export const executeTriggerNode = async (node, inputs) => {
+  const nodeData = node.data || {};
+  const triggerType = nodeData.triggerType || 'manual';
+  const triggerId = node.id;
+  const label = nodeData.label || 'Trigger';
+  
+  console.log(`Executing trigger node ${triggerId} of type ${triggerType}`);
+  
+  // Create base result
+  const result = {
+    status: 'started',
+    trigger_type: triggerType,
+    trigger_id: triggerId,
+    label: label,
+    timestamp: new Date().toISOString(),
+    execution_index: 0 // Triggers are always first
+  };
+  
+  switch (triggerType) {
+    case 'manual':
+      result.output = `Manual trigger '${label}' activated - workflow started`;
+      result.type = 'trigger_status';
+      break;
+      
+    case 'webhook':
+      result.output = `Webhook trigger '${label}' activated - workflow started`;
+      result.type = 'trigger_status';
+      result.webhook_url = `/api/triggers/${triggerId}`;
+      break;
+      
+    case 'schedule':
+      const runAt = nodeData.runAt || 'N/A';
+      const scheduleType = nodeData.scheduleType || 'once';
+      result.output = `Scheduled trigger '${label}' activated at ${runAt} - workflow started`;
+      result.type = 'trigger_status';
+      result.schedule_type = scheduleType;
+      result.run_at = runAt;
+      break;
+      
+    default:
+      result.output = `Unknown trigger type: ${triggerType}`;
+      result.type = 'error';
+      result.error = `Unsupported trigger type: ${triggerType}`;
+      break;
+  }
+  
+  return result;
+};
+
+/**
  * Execute a node based on its type
  * @param {Object} node - Node object
  * @param {Object} inputs - Input data for the node
@@ -168,6 +251,11 @@ export const executeNodeByType = async (node, inputs, executors) => {
   
   if (!nodeType) {
     throw new Error(`Node ${node.id} has no type`);
+  }
+  
+  // Handle trigger nodes with built-in executor
+  if (nodeType === 'trigger') {
+    return await executeTriggerNode(node, inputs);
   }
   
   const executor = executors[nodeType];

@@ -112,16 +112,23 @@ async def get_trigger_flow(trigger_id, increment_count=False):
         increment_count: Whether to increment the trigger count (should only be true during actual execution)
     """
     try:
+        trigger_data = None
+        
+        # First try file storage
         trigger_file = TRIGGERS_DIR / f"{trigger_id}.json"
-        if not trigger_file.exists():
-            logger.warning(f"Trigger ID not found: {trigger_id}")
-            return None
-            
-        with open(trigger_file, "r") as f:
-            trigger_data = json.load(f)
+        if trigger_file.exists():
+            with open(trigger_file, "r") as f:
+                trigger_data = json.load(f)
+        else:
+            # Fall back to in-memory storage
+            if trigger_id in IN_MEMORY_TRIGGERS:
+                trigger_data = IN_MEMORY_TRIGGERS[trigger_id].copy()
+            else:
+                logger.warning(f"Trigger ID not found in file or memory: {trigger_id}")
+                return None
         
         # Only update stats if this is an actual execution, not just a status check
-        if increment_count:
+        if increment_count and trigger_data:
             trigger_data["last_triggered"] = datetime.now().isoformat()
             trigger_data["trigger_count"] = trigger_data.get("trigger_count", 0) + 1
             
@@ -133,11 +140,14 @@ async def get_trigger_flow(trigger_id, increment_count=False):
                     trigger_data["completed_at"] = datetime.now().isoformat()
                     logger.info(f"Marked one-time schedule trigger {trigger_id} as completed")
             
-            # Save updated stats
-            with open(trigger_file, "w") as f:
-                json.dump(trigger_data, f, indent=2)
+            # Save updated stats back to file if it exists, otherwise update in-memory
+            if trigger_file.exists():
+                with open(trigger_file, "w") as f:
+                    json.dump(trigger_data, f, indent=2)
+            else:
+                IN_MEMORY_TRIGGERS[trigger_id] = trigger_data
             
-        return trigger_data["flow"]
+        return trigger_data["flow"] if trigger_data else None
     except Exception as e:
         logger.error(f"Error retrieving trigger {trigger_id}: {str(e)}")
         return None

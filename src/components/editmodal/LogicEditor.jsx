@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Plus, Trash2, ChevronDown, Code, Eye, Settings, Play, Save, BookOpen } from 'lucide-react';
@@ -72,30 +71,6 @@ const conditionTemplates = [
   }
 ];
 
-// Mock connected nodes for when no real data is available
-const mockConnectedNodes = [
-  {
-    id: 'web-search-1',
-    type: 'Web Search',
-    outputs: {
-      search_results: { type: 'array', sample: '[{...}, {...}]' },
-      query: { type: 'string', sample: 'AI research' },
-      total_results: { type: 'number', sample: 42 },
-      status: { type: 'string', sample: 'success' }
-    }
-  },
-  {
-    id: 'api-call-1', 
-    type: 'API Call',
-    outputs: {
-      response_data: { type: 'object', sample: '{user: {...}}' },
-      status_code: { type: 'number', sample: 200 },
-      headers: { type: 'object', sample: '{content-type: ...}' },
-      success: { type: 'boolean', sample: true }
-    }
-  }
-];
-
 const LogicEditor = ({ 
   formData, 
   handleInputChange, 
@@ -114,17 +89,22 @@ const LogicEditor = ({
   const [showTemplates, setShowTemplates] = useState(false);
   const [generatedCondition, setGeneratedCondition] = useState('');
 
-  // Get all available fields from connected nodes (use real data if available, fallback to mock)
-  const availableFields = (connectedNodes.length > 0 ? connectedNodes : mockConnectedNodes).flatMap(node => 
-    Object.entries(node.outputs).map(([fieldName, fieldInfo]) => ({
+  // Get all available fields from connected nodes (only use real data)
+  const availableFields = connectedNodes.flatMap(node => {
+    // Only process nodes that have actual output data
+    if (!node.outputs || typeof node.outputs !== 'object') {
+      return [];
+    }
+    
+    return Object.entries(node.outputs).map(([fieldName, fieldInfo]) => ({
       id: `${node.id}.${fieldName}`,
-      label: `${node.type}: ${fieldName}`,
+      label: `${node.type || node.label || 'Node'}: ${fieldName}`,
       value: `inputs.${fieldName}`,
-      type: fieldInfo.type,
-      sample: fieldInfo.sample,
-      nodeType: node.type
-    }))
-  );
+      type: fieldInfo.type || 'string',
+      sample: fieldInfo.sample || '',
+      nodeType: node.type || 'unknown'
+    }));
+  });
 
   // Parse existing condition into visual builder format
   useEffect(() => {
@@ -374,7 +354,7 @@ const LogicEditor = ({
           {connectedNodes.length === 0 && (
             <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
               <div className="text-sm text-blue-800">
-                <strong>Note:</strong> Connect other nodes to this logic node to see their output fields here. Currently showing sample fields for demonstration.
+                <strong>Note:</strong> Connect other nodes to this logic node to see their output fields here. You can use the code editor below to write conditions manually, or connect nodes first to use the visual builder.
               </div>
             </div>
           )}
@@ -463,15 +443,21 @@ const LogicEditor = ({
                           className="w-full p-2 border border-gray-300 rounded-md bg-white text-sm appearance-none pr-8"
                         >
                           <option value="">Select a field...</option>
-                          {(connectedNodes.length > 0 ? connectedNodes : mockConnectedNodes).map(node => (
-                            <optgroup key={node.id} label={`📡 ${node.type}`}>
-                              {Object.entries(node.outputs).map(([fieldName, fieldInfo]) => (
-                                <option key={`${node.id}.${fieldName}`} value={`${node.id}.${fieldName}`}>
-                                  {fieldName} ({fieldInfo.type})
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
+                          {connectedNodes.length > 0 ? (
+                            connectedNodes.map(node => (
+                              <optgroup key={node.id} label={`📡 ${node.type || node.label || 'Node'}`}>
+                                {node.outputs && Object.entries(node.outputs).map(([fieldName, fieldInfo]) => (
+                                  <option key={`${node.id}.${fieldName}`} value={`${node.id}.${fieldName}`}>
+                                    {fieldName} ({fieldInfo.type || 'unknown'})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))
+                          ) : (
+                            <option value="" disabled>
+                              No connected nodes available. Connect other nodes to this logic node first.
+                            </option>
+                          )}
                         </select>
                         <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                       </div>

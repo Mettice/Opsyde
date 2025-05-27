@@ -373,7 +373,7 @@ const FlowCanvasBase = forwardRef(({
       
       // Update selection to show only the template nodes
       const updatedNodes = newNodes.map(node => ({
-        ...node,
+      ...node,
         selected: templateNodes.some(template => template.id === node.id)
       }));
       
@@ -408,11 +408,11 @@ const FlowCanvasBase = forwardRef(({
       if (!edge) return null;
       return {
         ...edge,
-        data: {
+      data: {
           ...(edge.data || {}),
           state: connectionStates.get(edge.id)?.state || 'idle',
           animated: connectionStates.get(edge.id)?.state === 'active' || connectionStates.get(edge.id)?.state === 'processing'
-        }
+      }
       };
     }).filter(Boolean);
   }, [safeEdges, connectionStates]);
@@ -494,9 +494,9 @@ const FlowCanvasBase = forwardRef(({
 
         {/* Floating Metrics Panel */}
         <Panel position="top-right">
-          <FloatingMetricsPanel 
-            nodes={nodes}
-            edges={edges}
+        <FloatingMetricsPanel 
+          nodes={nodes} 
+          edges={edges} 
             nodeStates={nodeStates}
             connectionStates={connectionStates}
             isExecuting={isExecuting}
@@ -517,7 +517,7 @@ const FlowCanvasBase = forwardRef(({
           </button>
         </Panel>
       </ReactFlow>
-
+      
       {/* Context Menu */}
       <ContextMenu
         isVisible={contextMenu.isVisible}
@@ -555,7 +555,7 @@ const FlowCanvasBase = forwardRef(({
 
       {/* Floating Template Button */}
       {!showTemplateGallery && (
-        <button
+      <button 
           onClick={() => toggleTemplateGallery(true)}
           className="fixed bottom-32 left-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-50 group"
           title="Browse Templates"
@@ -566,7 +566,7 @@ const FlowCanvasBase = forwardRef(({
               Templates
             </span>
           </div>
-        </button>
+      </button>
       )}
 
       {/* Keyboard Shortcuts Help */}

@@ -650,8 +650,8 @@ const EnhancedEditModal = ({
       connectedNodes
     };
 
-    // NEW: Add tool-specific props for ToolEditor
-    const toolEditorProps = {
+    // Test-related props for editors that support testing
+    const testEditorProps = {
       ...editorProps,
       testInput,
       setTestInput,
@@ -667,7 +667,7 @@ const EnhancedEditModal = ({
       case 'task':
         return <TaskEditor {...editorProps} availableDependencies={availableDependencies} />;
       case 'tool':
-        return <ToolEditor {...toolEditorProps} />;
+        return <ToolEditor {...testEditorProps} />;
       case 'chatbot':
         return <ChatbotEditor {...editorProps} />;
       case 'delay':
@@ -675,7 +675,7 @@ const EnhancedEditModal = ({
       case 'trigger':
         return <TriggerEditor {...editorProps} />;
       case 'logic':
-        return <LogicEditor {...editorProps} />;
+        return <LogicEditor {...testEditorProps} />;
       case 'input':
         return <InputEditor {...editorProps} />;
       case 'output':

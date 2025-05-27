@@ -193,7 +193,66 @@ async def startup_event():
             logger.error(f"Error creating demo workflow: {str(e)}")
         
         # Start scheduler
-        scheduler_manager.start()
+        logger.info("Initializing scheduler...")
+        scheduler_started = scheduler_manager.start()
+        
+        if scheduler_started:
+            logger.info("Scheduler started successfully")
+        else:
+            logger.error("Failed to start scheduler - scheduled triggers will not work")
+        
+        # Wait a moment for scheduler to fully initialize
+        await asyncio.sleep(1)
+        
+        # Re-register all existing scheduled triggers
+        try:
+            from backend.services.trigger_service import TriggerService
+            from backend.core.di import get_trigger_service
+            
+            # Get the trigger service instance
+            trigger_service = TriggerService()
+            
+            # Get all existing triggers
+            triggers = await trigger_service.list_triggers()
+            logger.info(f"Found {len(triggers)} existing triggers to re-register")
+            
+            # Re-register scheduled triggers
+            for trigger in triggers:
+                trigger_id = trigger.get("id") or trigger.get("trigger_id")
+                if not trigger_id:
+                    continue
+                    
+                # Get the full trigger data
+                flow = await trigger_service.get_trigger_flow(trigger_id)
+                if not flow:
+                    continue
+                    
+                # Check if it's a scheduled trigger
+                if flow.get("trigger_type") == "schedule":
+                    logger.info(f"Re-registering scheduled trigger: {trigger_id}")
+                    
+                    # Find the trigger node in the flow
+                    trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
+                    if trigger_nodes:
+                        trigger_data = trigger_nodes[0].get('data', {})
+                        
+                        # Only re-register if the scheduled time is in the future
+                        run_at = trigger_data.get('runAt')
+                        if run_at:
+                            from datetime import datetime
+                            try:
+                                target_time = datetime.strptime(run_at, "%Y-%m-%d %H:%M")
+                                if target_time > datetime.now():
+                                    await trigger_service._setup_schedule(trigger_id, trigger_data)
+                                    logger.info(f"Successfully re-registered future trigger {trigger_id}")
+                                else:
+                                    logger.info(f"Skipping past trigger {trigger_id} (scheduled for {run_at})")
+                            except Exception as e:
+                                logger.error(f"Error parsing date for trigger {trigger_id}: {str(e)}")
+                        
+        except Exception as e:
+            logger.error(f"Error re-registering triggers: {str(e)}")
+        
         logger.info("Application started successfully")
     except Exception as e:
         logger.error(f"Error during startup: {str(e)}")
@@ -518,15 +577,79 @@ async def health_check():
 # Debug endpoint to list all routes
 @app.get("/debug/routes")
 async def debug_routes():
-    """List all registered routes for debugging"""
+    """Debug endpoint to list all available routes"""
     routes = []
     for route in app.routes:
-        routes.append({
-            "path": route.path,
-            "name": route.name,
-            "methods": list(route.methods) if hasattr(route, "methods") else None
-        })
-    return {"routes": sorted(routes, key=lambda x: x["path"])}
+        if hasattr(route, 'methods') and hasattr(route, 'path'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods),
+                "name": getattr(route, 'name', 'unnamed')
+            })
+    return {"routes": routes}
+
+@app.get("/debug/scheduler")
+async def debug_scheduler():
+    """Debug endpoint to check scheduler status and jobs"""
+    try:
+        from backend.frameworks.apscheduler_manager import scheduler_manager
+        
+        if not scheduler_manager:
+            return {"error": "Scheduler manager not available"}
+        
+        if not scheduler_manager.scheduler:
+            return {"error": "Scheduler not available"}
+        
+        jobs = scheduler_manager.get_all_jobs()
+        job_info = []
+        
+        for job in jobs:
+            try:
+                job_data = {
+                    "id": job.id,
+                    "name": job.name,
+                    "func": str(job.func),
+                    "args": job.args,
+                    "kwargs": job.kwargs
+                }
+                
+                # Handle next_run_time safely for APScheduler 3.x
+                if hasattr(job, 'next_run_time'):
+                    job_data["next_run_time"] = str(job.next_run_time) if job.next_run_time else None
+                else:
+                    # For APScheduler 3.x, get next run time from trigger
+                    try:
+                        next_run = job.trigger.get_next_fire_time(None, None)
+                        job_data["next_run_time"] = str(next_run) if next_run else None
+                    except:
+                        job_data["next_run_time"] = "Unable to determine"
+                
+                # Handle trigger safely
+                if hasattr(job, 'trigger'):
+                    job_data["trigger"] = str(job.trigger)
+                else:
+                    job_data["trigger"] = "No trigger info"
+                    
+                job_info.append(job_data)
+            except Exception as e:
+                job_info.append({
+                    "id": getattr(job, 'id', 'unknown'),
+                    "error": f"Error reading job: {str(e)}"
+                })
+        
+        return {
+            "scheduler_running": scheduler_manager._initialized and scheduler_manager.scheduler.running,
+            "scheduler_state": "running" if (scheduler_manager.scheduler and scheduler_manager.scheduler.running) else "stopped",
+            "total_jobs": len(jobs),
+            "jobs": job_info,
+            "scheduler_available": True
+        }
+    except Exception as e:
+        logger.error(f"Error in debug scheduler endpoint: {str(e)}", exc_info=True)
+        return {
+            "error": f"Debug endpoint error: {str(e)}",
+            "scheduler_available": False
+        }
 
 # Legacy routes for backward compatibility
 @app.get("/api/flows")
@@ -696,59 +819,51 @@ async def direct_output_node_endpoint(request: Request):
 @app.get("/executed-triggers")
 @app.get("/api/triggers/executed")
 async def legacy_executed_triggers():
-    """Legacy endpoint for listing executed triggers"""
-    import os
-    import json
-    
-    # Check for triggers directly in the triggers directory first (for backward compatibility)
-    triggers_dir = "triggers"
-    data_triggers_dir = "data/triggers"
-    
-    all_triggers = []
-    
-    # Try to read from legacy triggers directory first
-    if os.path.exists(triggers_dir):
-        for filename in os.listdir(triggers_dir):
-            if filename.endswith(".json"):
-                try:
-                    with open(os.path.join(triggers_dir, filename), "r") as f:
-                        trigger_data = json.load(f)
-                        trigger_data["id"] = filename.replace(".json", "")
-                        all_triggers.append(trigger_data)
-                except Exception as e:
-                    logger.error(f"Error reading trigger file {filename}: {str(e)}")
-    
-    # Then try to read from data/triggers directory
-    if os.path.exists(data_triggers_dir):
-        for filename in os.listdir(data_triggers_dir):
-            if filename.endswith(".json"):
-                try:
-                    with open(os.path.join(data_triggers_dir, filename), "r") as f:
-                        trigger_data = json.load(f)
-                        trigger_data["id"] = filename.replace(".json", "")
-                        all_triggers.append(trigger_data)
-                except Exception as e:
-                    logger.error(f"Error reading trigger file {filename}: {str(e)}")
-    
-    # Filter to only executed triggers
-    executed_triggers = [
-        trigger for trigger in all_triggers 
-        if trigger.get("trigger_count", 0) > 0
-    ]
-    
-    logger.info(f"Found {len(executed_triggers)} executed triggers")
-    
-    return {
-        "success": True,
-        "data": {
+    """Legacy endpoint for executed triggers with proper error handling"""
+    try:
+        from backend.services.trigger_service import TriggerService
+        from backend.core.di import get_trigger_service
+        
+        # Get trigger service instance
+        trigger_service = get_trigger_service()
+        
+        # Get all triggers
+        triggers = await trigger_service.list_triggers()
+        
+        # Filter to only executed triggers (those with trigger_count > 0)
+        executed_triggers = [
+            trigger for trigger in triggers 
+            if trigger.get("trigger_count", 0) > 0 or trigger.get("execution_count", 0) > 0
+        ]
+        
+        # Format response to match expected structure
+        response_data = {
             "triggers": executed_triggers,
             "total_count": len(executed_triggers)
-        },
-        "metadata": {
-            "timestamp": datetime.now().isoformat(),
-            "version": "1.0.0"
         }
-    }
+        
+        return {
+            "success": True,
+            "data": response_data,
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching executed triggers: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": f"Failed to fetch executed triggers: {str(e)}"
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0"
+            }
+        }
 
 @app.post("/api/post-to-platform")
 async def post_to_platform(request: Request):
@@ -924,6 +1039,30 @@ async def analyze_content_with_ai(content, content_type, analysis_type):
     except Exception as e:
         logger.error(f"Error in AI analysis: {str(e)}")
         raise e
+
+@app.post("/test-email")
+async def test_email(request: Request):
+    """Test email functionality"""
+    try:
+        from backend.frameworks.email_notifier import send_email
+        
+        data = await request.json()
+        recipient = data.get('recipient', 'test@example.com')
+        subject = data.get('subject', 'CrewFlow Email Test')
+        body = data.get('body', 'This is a test email from CrewFlow to verify email functionality is working.')
+        
+        result = await send_email(recipient, subject, body)
+        
+        return {
+            "success": True,
+            "message": "Email test completed",
+            "result": result
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
     import uvicorn

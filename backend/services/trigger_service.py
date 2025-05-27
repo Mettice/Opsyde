@@ -23,7 +23,11 @@ class TriggerService(BaseService[Dict]):
     async def get_by_id(self, id: str) -> Optional[Dict]:
         """Get a trigger by ID"""
         try:
-            return await storage_get_trigger_flow(id)
+            flow = await storage_get_trigger_flow(id)
+            if not flow:
+                logger.debug(f"Trigger {id} not found")
+                return None
+            return flow
         except Exception as e:
             logger.error(f"Error getting trigger {id}: {str(e)}")
             return None
@@ -96,35 +100,29 @@ class TriggerService(BaseService[Dict]):
     async def register_trigger(self, trigger_id: str, flow: Dict, owner: str = "system") -> bool:
         """Register a new trigger with its associated flow"""
         try:
-            logger.info(f"Registering trigger: {trigger_id}")
+            logger.info(f"Registering trigger {trigger_id} for owner {owner}")
             
-            # Validate trigger data
-            if not trigger_id or not flow:
-                raise HTTPException(status_code=400, detail="Missing trigger_id or flow data")
-            
-            # Set trigger ID in flow data
-            flow["trigger_id"] = trigger_id
-            
-            # Register with storage
+            # Call the storage layer to actually register the trigger
             success = await storage_register_trigger(trigger_id, flow, owner)
-            if not success:
-                raise HTTPException(status_code=500, detail="Failed to register trigger")
             
-            # If it's a scheduled trigger, set up the schedule
-            trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
-            if trigger_nodes:
-                trigger_node = trigger_nodes[0]
-                trigger_data = trigger_node.get('data', {})
+            if success:
+                logger.info(f"Successfully registered trigger {trigger_id}")
                 
-                if trigger_data.get('triggerType') == 'schedule':
-                    await self._setup_schedule(trigger_id, trigger_data)
-            
-            logger.info(f"Successfully registered trigger: {trigger_id}")
-            return True
-            
+                # If this is a scheduled trigger, set up the scheduling
+                if flow and flow.get("trigger_type") == "schedule":
+                    # Find the trigger node in the flow
+                    trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
+                    if trigger_nodes:
+                        trigger_data = trigger_nodes[0].get('data', {})
+                        await self._setup_schedule(trigger_id, trigger_data)
+                        logger.info(f"Set up scheduling for trigger {trigger_id}")
+            else:
+                logger.error(f"Failed to register trigger {trigger_id}")
+                
+            return success
         except Exception as e:
-            logger.error(f"Error registering trigger: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.error(f"Error registering trigger {trigger_id}: {str(e)}")
+            return False
 
     async def get_trigger_flow(self, trigger_id: str, requesting_user: Optional[str] = None) -> Optional[Dict]:
         """Get the flow associated with a trigger without incrementing the execution count"""
@@ -137,11 +135,23 @@ class TriggerService(BaseService[Dict]):
 
             flow = await storage_get_trigger_flow(trigger_id, increment_count=False)
             if not flow:
-                raise HTTPException(status_code=404, detail="Trigger not found")
+                # Only raise HTTPException if this is an external API call (has requesting_user)
+                if requesting_user is not None:
+                    raise HTTPException(status_code=404, detail="Trigger not found")
+                else:
+                    logger.debug(f"Trigger {trigger_id} not found (internal call)")
+                    return None
             return flow
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
         except Exception as e:
             logger.error(f"Error getting trigger flow: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+            # Only raise HTTPException for external API calls
+            if requesting_user is not None:
+                raise HTTPException(status_code=500, detail=str(e))
+            else:
+                return None
             
     async def execute_trigger_flow(self, trigger_id: str, requesting_user: Optional[str] = None) -> Optional[Dict]:
         """Execute a trigger and get the associated flow, incrementing the execution count"""
@@ -155,11 +165,23 @@ class TriggerService(BaseService[Dict]):
             logger.info(f"Executing trigger: {trigger_id}")
             flow = await storage_execute_trigger(trigger_id)
             if not flow:
-                raise HTTPException(status_code=404, detail="Trigger not found")
+                # Only raise HTTPException if this is an external API call (has requesting_user)
+                if requesting_user is not None:
+                    raise HTTPException(status_code=404, detail="Trigger not found")
+                else:
+                    logger.debug(f"Trigger {trigger_id} not found during execution (internal call)")
+                    return None
             return flow
+        except HTTPException:
+            # Re-raise HTTP exceptions as-is
+            raise
         except Exception as e:
             logger.error(f"Error executing trigger flow: {str(e)}")
-            raise HTTPException(status_code=500, detail=str(e))
+            # Only raise HTTPException for external API calls
+            if requesting_user is not None:
+                raise HTTPException(status_code=500, detail=str(e))
+            else:
+                return None
 
     async def list_triggers(self, owner: Optional[str] = None) -> List[Dict]:
         """List all registered triggers"""
@@ -208,40 +230,137 @@ class TriggerService(BaseService[Dict]):
         try:
             schedule_type = trigger_data.get('scheduleType', 'once')
             
+            # Create a function that will execute the trigger
+            def execute_scheduled_trigger():
+                """Synchronous wrapper for the async trigger execution"""
+                try:
+                    print(f"[Scheduler] Trigger fired for: {trigger_id}")
+                    logger.info(f"[Scheduler] Executing scheduled trigger: {trigger_id}")
+                    
+                    # Simple approach: use asyncio.run in a thread
+                    import threading
+                    import asyncio
+                    
+                    def run_trigger():
+                        try:
+                            print(f"[Scheduler] Starting async execution for: {trigger_id}")
+                            # Create a new event loop for this thread
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                result = loop.run_until_complete(self.execute_trigger_flow(trigger_id))
+                                print(f"[Scheduler] Trigger {trigger_id} executed successfully: {result}")
+                                logger.info(f"[Scheduler] Trigger {trigger_id} executed successfully")
+                            finally:
+                                loop.close()
+                        except Exception as e:
+                            print(f"[Scheduler ERROR] Trigger execution failed for {trigger_id}: {e}")
+                            logger.error(f"[Scheduler ERROR] Trigger execution failed for {trigger_id}: {str(e)}")
+                    
+                    # Run in a separate thread
+                    thread = threading.Thread(target=run_trigger, name=f"trigger-{trigger_id}")
+                    thread.daemon = True
+                    thread.start()
+                    print(f"[Scheduler] Started execution thread for trigger: {trigger_id}")
+                    
+                except Exception as e:
+                    print(f"[Scheduler ERROR] Failed to start trigger {trigger_id}: {e}")
+                    logger.error(f"[Scheduler ERROR] Failed to start trigger {trigger_id}: {str(e)}")
+            
             if schedule_type == 'once':
                 run_at = trigger_data.get('runAt')
                 if not run_at:
                     raise ValueError("Missing runAt for one-time schedule")
-                    
-                scheduler_manager.add_job(
+                
+                # Format trigger data for scheduler
+                scheduler_trigger_data = {
+                    'triggerType': 'schedule',
+                    'scheduleType': 'once',
+                    'runAt': run_at,
+                    'timezone': 'UTC'
+                }
+                
+                success = scheduler_manager.add_job(
                     trigger_id,
-                    'date',
-                    run_date=datetime.fromisoformat(run_at)
+                    execute_scheduled_trigger,
+                    scheduler_trigger_data
                 )
+                
+                if success:
+                    logger.info(f"Successfully scheduled one-time trigger {trigger_id} for {run_at}")
+                else:
+                    logger.error(f"Failed to schedule trigger {trigger_id}")
                 
             elif schedule_type == 'daily':
-                scheduler_manager.add_job(
+                start_time = trigger_data.get('scheduleStartTime', '9:00').split(':')
+                hour = int(start_time[0])
+                minute = int(start_time[1]) if len(start_time) > 1 else 0
+                
+                scheduler_trigger_data = {
+                    'triggerType': 'schedule',
+                    'scheduleType': 'daily',
+                    'runAt': {'hour': hour, 'minute': minute},
+                    'timezone': 'UTC'
+                }
+                
+                success = scheduler_manager.add_job(
                     trigger_id,
-                    'cron',
-                    day_of_week='*',
-                    hour=trigger_data.get('scheduleStartTime', '9:00').split(':')[0],
-                    minute=trigger_data.get('scheduleStartTime', '9:00').split(':')[1]
+                    execute_scheduled_trigger,
+                    scheduler_trigger_data
                 )
+                
+                if success:
+                    logger.info(f"Successfully scheduled daily trigger {trigger_id}")
+                else:
+                    logger.error(f"Failed to schedule trigger {trigger_id}")
                 
             elif schedule_type == 'weekly':
-                scheduler_manager.add_job(
+                weekday_map = {
+                    'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                    'friday': 4, 'saturday': 5, 'sunday': 6
+                }
+                weekday = trigger_data.get('scheduleWeekday', 'monday').lower()
+                day_of_week = weekday_map.get(weekday, 0)
+                
+                scheduler_trigger_data = {
+                    'triggerType': 'schedule',
+                    'scheduleType': 'weekly',
+                    'runAt': {'dayOfWeek': day_of_week, 'hour': 9, 'minute': 0},
+                    'timezone': 'UTC'
+                }
+                
+                success = scheduler_manager.add_job(
                     trigger_id,
-                    'cron',
-                    day_of_week=trigger_data.get('scheduleWeekday', 'mon').lower()[:3]
+                    execute_scheduled_trigger,
+                    scheduler_trigger_data
                 )
                 
+                if success:
+                    logger.info(f"Successfully scheduled weekly trigger {trigger_id}")
+                else:
+                    logger.error(f"Failed to schedule trigger {trigger_id}")
+                
             elif schedule_type == 'monthly':
-                scheduler_manager.add_job(
+                month_day = int(trigger_data.get('scheduleMonthDay', 1))
+                
+                scheduler_trigger_data = {
+                    'triggerType': 'schedule',
+                    'scheduleType': 'monthly',
+                    'runAt': {'day': month_day, 'hour': 9, 'minute': 0},
+                    'timezone': 'UTC'
+                }
+                
+                success = scheduler_manager.add_job(
                     trigger_id,
-                    'cron',
-                    day=str(trigger_data.get('scheduleMonthDay', 1))
+                    execute_scheduled_trigger,
+                    scheduler_trigger_data
                 )
+                
+                if success:
+                    logger.info(f"Successfully scheduled monthly trigger {trigger_id}")
+                else:
+                    logger.error(f"Failed to schedule trigger {trigger_id}")
                 
         except Exception as e:
             logger.error(f"Error setting up schedule for trigger {trigger_id}: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Schedule setup failed: {str(e)}") 
+            # Don't raise the exception during registration, just log it 
