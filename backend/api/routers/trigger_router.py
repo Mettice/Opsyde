@@ -336,12 +336,110 @@ async def debug_test_endpoint() -> Dict[str, Any]:
         "timestamp": datetime.now().isoformat()
     }
 
+@router.post("/debug/test-api-polling-simple")
+async def debug_test_api_polling_simple(
+    test_data: Dict[str, Any],
+    trigger_service: TriggerService = Depends(get_trigger_service)
+) -> Dict[str, Any]:
+    """Simple API polling test without AI analysis - just returns raw data"""
+    try:
+        logger.info(f"Simple API polling test started with data: {test_data}")
+        
+        import aiohttp
+        
+        # Extract test parameters
+        api_endpoint = test_data.get('apiEndpoint')
+        auth_type = test_data.get('authType', 'none')
+        api_key = test_data.get('apiKey')
+        bearer_token = test_data.get('bearerToken')
+        username = test_data.get('username')
+        password = test_data.get('password')
+        service_name = test_data.get('serviceName', 'Unknown API')
+        
+        logger.info(f"Testing endpoint: {api_endpoint}, service: {service_name}, auth: {auth_type}")
+        
+        if not api_endpoint:
+            return {"success": False, "error": "API endpoint is required"}
+        
+        # Set up headers
+        headers = {'User-Agent': 'CrewBuilder-Simple-Test/1.0'}
+        
+        # Handle different authentication types
+        if auth_type == 'api_key' and api_key:
+            if 'airtable' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
+            else:
+                headers['Authorization'] = f'Bearer {api_key}'
+                headers['X-API-Key'] = api_key
+                
+        elif auth_type == 'bearer_token' and bearer_token:
+            headers['Authorization'] = f'Bearer {bearer_token}'
+            
+        elif auth_type == 'basic_auth' and username and password:
+            import base64
+            credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+            headers['Authorization'] = f'Basic {credentials}'
+        
+        logger.info(f"Making request to {api_endpoint} with headers: {list(headers.keys())}")
+        
+        # Make the API request
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_endpoint, headers=headers, timeout=30) as response:
+                logger.info(f"API response status: {response.status}")
+                
+                if response.status == 200:
+                    try:
+                        data = await response.json()
+                        logger.info(f"Successfully got JSON data")
+                        
+                        # Simple analysis without AI
+                        analysis = _basic_api_analysis(data, test_data.get('changeDetectionMethod', 'array_length'))
+                        
+                        return {
+                            "success": True,
+                            "status_code": response.status,
+                            "service_detected": service_name,
+                            "endpoint_tested": api_endpoint,
+                            "sample_data": data,
+                            "data_structure": analysis.get("data_structure", {}),
+                            "change_detection_info": analysis.get("change_detection_info", {}),
+                            "note": "Simple analysis without AI"
+                        }
+                        
+                    except Exception as json_error:
+                        logger.error(f"Failed to parse JSON response: {str(json_error)}")
+                        response_text = await response.text()
+                        return {
+                            "success": False,
+                            "error": f"Failed to parse API response as JSON: {str(json_error)}",
+                            "response_preview": response_text[:200] + "..." if len(response_text) > 200 else response_text
+                        }
+                    
+                else:
+                    error_text = await response.text()
+                    logger.error(f"API request failed with status {response.status}: {error_text}")
+                    return {
+                        "success": False,
+                        "status_code": response.status,
+                        "error": f"API request failed: {response.status} {response.reason}",
+                        "error_details": error_text
+                    }
+                    
+    except Exception as e:
+        logger.error(f"Simple API polling test failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {
+            "success": False,
+            "error": f"Test failed: {str(e)}"
+        }
+
 @router.post("/debug/test-api-polling")
 async def debug_test_api_polling(
     test_data: Dict[str, Any],
     trigger_service: TriggerService = Depends(get_trigger_service)
 ) -> Dict[str, Any]:
-    """AI-powered API polling test and analysis"""
+    """AI-powered API polling test and analysis with better error handling"""
     try:
         logger.info(f"Debug API polling test started with data: {test_data}")
         
@@ -402,20 +500,41 @@ async def debug_test_api_polling(
                         data = await response.json()
                         logger.info(f"Successfully got JSON data, keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
                         
-                        # AI-powered analysis
-                        analysis = await _ai_analyze_api_response(
-                            data, service_name, change_method, api_endpoint
-                        )
+                        # Always start with basic analysis as fallback
+                        basic_analysis = _basic_api_analysis(data, change_method)
                         
-                        analysis.update({
+                        # Try AI analysis but don't fail if it doesn't work
+                        try:
+                            ai_analysis = await _ai_analyze_api_response(
+                                data, service_name, change_method, api_endpoint
+                            )
+                            
+                            # Merge AI analysis with basic analysis
+                            final_analysis = {
+                                **basic_analysis,
+                                **ai_analysis,
+                                "ai_analysis_success": True
+                            }
+                            
+                        except Exception as ai_error:
+                            logger.warning(f"AI analysis failed, using basic analysis: {str(ai_error)}")
+                            final_analysis = {
+                                **basic_analysis,
+                                "ai_analysis_success": False,
+                                "ai_analysis_error": str(ai_error)
+                            }
+                        
+                        # Always include the essential fields
+                        final_analysis.update({
                             "success": True,
                             "status_code": response.status,
                             "service_detected": service_name,
-                            "endpoint_tested": api_endpoint
+                            "endpoint_tested": api_endpoint,
+                            "sample_data": data  # Include the actual data for preview
                         })
                         
                         logger.info(f"Analysis completed successfully")
-                        return analysis
+                        return final_analysis
                         
                     except Exception as json_error:
                         logger.error(f"Failed to parse JSON response: {str(json_error)}")
