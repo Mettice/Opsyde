@@ -557,7 +557,7 @@ const BuilderPageContent = () => {
     
     return schemas[nodeType] || {};
   };
-  
+
   const [showCrewAIImporter, setShowCrewAIImporter] = useState(false);
 
   // Add handler for CrewAI import
@@ -741,61 +741,61 @@ const BuilderPageContent = () => {
           {/* Input Panel - Compact */}
           <div className="border-b border-gray-200 bg-white px-4 py-2">
             <div className="flex items-center gap-4">
-              <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
-              <button 
+        <InputPanel inputs={inputs} setInputs={setInputs} nodes={nodes} />
+        <button 
                 className="text-sm bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded-lg transition-colors"
-                onClick={() => toggleTriggerHistory(true)}
-              >
-                Trigger History
-              </button>
+          onClick={() => toggleTriggerHistory(true)}
+        >
+          Trigger History
+        </button>
             </div>
-          </div>
-          
+      </div>
+      
           {/* Output Config - Compact */}
-          <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
-          
+      <OutputConfigPanel outputConfig={outputConfig} setOutputConfig={setOutputConfig} />
+      
           {/* Flow Canvas */}
           <div className="flex-1 relative bg-gray-50">
-            <ReactFlowProvider>
-              <FlowCanvass
-                nodes={nodes}
-                edges={edges}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onConnect={onConnect}
-                onNodeClick={(_, node) => handleNodeEdit(node.id)}
-                onNodeDragStop={onNodeDragStop}
-                onEdgeClick={(_, edge) => {
-                  if (window.confirm('Do you want to delete this connection?')) {
-                    setEdges(edges => edges.filter(e => e.id !== edge.id));
-                  }
-                }}
-                connectionLineType="bezier"
-                defaultEdgeOptions={{
-                  type: 'animated',
-                  animated: isExecuting,
-                  style: {
-                    stroke: '#888',
-                    strokeWidth: 1.5,
-                    strokeDasharray: '5,5'
-                  }
-                }}
-                onMove={setViewport}
-                viewport={viewport}
-                ref={flowInstance}
-                nodeStates={nodeStates}
-                connectionStates={connectionStates}
-                isExecuting={isExecuting}
-              />
-            </ReactFlowProvider>
-            
+        <ReactFlowProvider>
+          <FlowCanvass
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={(_, node) => handleNodeEdit(node.id)}
+            onNodeDragStop={onNodeDragStop}
+            onEdgeClick={(_, edge) => {
+              if (window.confirm('Do you want to delete this connection?')) {
+                setEdges(edges => edges.filter(e => e.id !== edge.id));
+              }
+            }}
+            connectionLineType="bezier"
+            defaultEdgeOptions={{
+              type: 'animated',
+              animated: isExecuting,
+              style: {
+                stroke: '#888',
+                strokeWidth: 1.5,
+                strokeDasharray: '5,5'
+              }
+            }}
+            onMove={setViewport}
+            viewport={viewport}
+            ref={flowInstance}
+            nodeStates={nodeStates}
+            connectionStates={connectionStates}
+            isExecuting={isExecuting}
+          />
+        </ReactFlowProvider>
+        
             {/* Zoom Controls */}
-            <ZoomControls 
-              zoomIn={zoomIn}
-              zoomOut={zoomOut}
-              resetView={resetZoom}
-              fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
-            />
+        <ZoomControls 
+          zoomIn={zoomIn}
+          zoomOut={zoomOut}
+          resetView={resetZoom}
+          fitView={() => flowInstance.current?.fitView({ padding: 0.2 })}
+        />
           </div>
         </div>
       </div>

@@ -679,6 +679,142 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                   }
                   
                   try {
+                    console.log('🔍 Starting Preview Data request...');
+                    toast.loading('🔍 Fetching data preview...', { id: 'preview-data' });
+                    
+                    const requestBody = {
+                      apiEndpoint: formData.apiEndpoint,
+                      authType: formData.authType || 'none',
+                      apiKey: formData.apiKey || '',
+                      bearerToken: formData.bearerToken || '',
+                      username: formData.username || '',
+                      password: formData.password || '',
+                      changeDetectionMethod: formData.changeDetectionMethod || 'array_length',
+                      serviceName: formData.serviceName || 'Unknown API'
+                    };
+                    
+                    console.log('🔍 Request body:', requestBody);
+                    
+                    // Use the simpler backend endpoint that doesn't rely on AI
+                    const response = await fetch('http://localhost:8000/api/triggers/debug/test-api-polling-simple', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify(requestBody)
+                    });
+                    
+                    console.log('🔍 Response status:', response.status, response.statusText);
+                    console.log('🔍 Response headers:', Object.fromEntries(response.headers.entries()));
+                    
+                    if (!response.ok) {
+                      const errorText = await response.text();
+                      console.error('🔍 Error response:', errorText);
+                      toast.error(`❌ Failed to fetch data: ${response.status}`, {
+                        id: 'preview-data',
+                        duration: 4000
+                      });
+                      return;
+                    }
+                    
+                    const result = await response.json();
+                    console.log('🔍 Parsed result:', result);
+                    
+                    if (result.success && result.sample_data) {
+                      console.log('🔍 Success! Sample data received:', result.sample_data);
+                      
+                      // Create a user-friendly data preview
+                      let previewText = "📊 Data Structure Preview:\n\n";
+                      
+                      // Analyze the data structure for better display
+                      const data = result.sample_data;
+                      
+                      if (Array.isArray(data)) {
+                        previewText += `📋 Array with ${data.length} items\n`;
+                        if (data.length > 0 && typeof data[0] === 'object') {
+                          previewText += `🔑 Sample item fields: ${Object.keys(data[0]).join(', ')}\n\n`;
+                          previewText += `📄 First item:\n${JSON.stringify(data[0], null, 2)}`;
+                        }
+                      } else if (typeof data === 'object' && data !== null) {
+                        // Check for common patterns
+                        if (data.records && Array.isArray(data.records)) {
+                          previewText += `📊 Airtable-style: ${data.records.length} records\n`;
+                          if (data.records.length > 0) {
+                            const firstRecord = data.records[0];
+                            if (firstRecord.fields) {
+                              previewText += `🔑 Available fields: ${Object.keys(firstRecord.fields).join(', ')}\n\n`;
+                              previewText += `📄 Sample record:\n${JSON.stringify(firstRecord, null, 2)}`;
+                            }
+                          }
+                        } else if (data.values && Array.isArray(data.values)) {
+                          previewText += `📈 Google Sheets-style: ${data.values.length} rows\n`;
+                          if (data.values.length > 0) {
+                            previewText += `🔑 First row (headers): ${data.values[0].join(', ')}\n`;
+                            if (data.values.length > 1) {
+                              previewText += `📄 Sample data row:\n${JSON.stringify(data.values[1], null, 2)}`;
+                            }
+                          }
+                        } else {
+                          // Generic object
+                          previewText += `🔑 Object keys: ${Object.keys(data).join(', ')}\n\n`;
+                          previewText += `📄 Sample data:\n${JSON.stringify(data, null, 2).substring(0, 400)}...`;
+                        }
+                      } else {
+                        previewText += `📄 Raw data:\n${JSON.stringify(data, null, 2)}`;
+                      }
+                      
+                      // Truncate if too long
+                      if (previewText.length > 800) {
+                        previewText = previewText.substring(0, 800) + '\n\n... (truncated)';
+                      }
+                      
+                      previewText += '\n\n💡 This is what your agent will receive!';
+                      
+                      toast.success(previewText, {
+                        id: 'preview-data',
+                        duration: 12000,
+                        style: {
+                          maxWidth: '700px',
+                          fontSize: '12px',
+                          fontFamily: 'monospace',
+                          whiteSpace: 'pre-wrap'
+                        }
+                      });
+                      
+                      // Also log full data to console for developers
+                      console.log('🔍 Full Data Preview for Agent:', result.sample_data);
+                      console.log('📊 Data Structure Analysis:', result.data_structure);
+                      
+                    } else {
+                      console.error('🔍 Request failed:', result);
+                      toast.error(`❌ ${result.error || 'Failed to fetch data preview'}`, {
+                        id: 'preview-data',
+                        duration: 6000
+                      });
+                    }
+                    
+                  } catch (error) {
+                    console.error('🔍 Exception caught:', error);
+                    toast.error(`❌ Preview error: ${error.message}`, {
+                      id: 'preview-data',
+                      duration: 6000
+                    });
+                  }
+                }}
+                className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm rounded transition-colors"
+              >
+                🔍 Preview Data
+              </button>
+              
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!formData.apiEndpoint) {
+                    toast.error('Please enter an API endpoint first');
+                    return;
+                  }
+                  
+                  try {
                     toast.loading('🤖 AI is analyzing your API...', { id: 'test-connection' });
                     
                     // Use the backend debug endpoint with AI analysis
@@ -841,7 +977,143 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                 🤖 AI-Powered API Analysis & Test
               </button>
             </div>
+            
+            <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <strong>💡 Pro Tip:</strong> Use <strong>"Preview Data"</strong> to see exactly what your agent will receive, then craft better prompts in the Agent node!
+            </div>
           </div>
+          
+          {/* Individual Node Testing */}
+          <div className="mb-4">
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+              <h3 className="font-semibold text-green-800 mb-2">🧪 Individual Node Testing</h3>
+              <p className="text-sm text-green-700 mb-3">
+                Test each component independently before running the full workflow
+              </p>
+              
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!formData.apiEndpoint) {
+                      toast.error('Please configure the trigger first');
+                      return;
+                    }
+                    
+                    try {
+                      toast.loading('🔄 Testing trigger only...', { id: 'test-trigger' });
+                      
+                      // Test just the trigger configuration
+                      const response = await fetch('http://localhost:8000/api/triggers/debug/test-api-polling', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          apiEndpoint: formData.apiEndpoint,
+                          authType: formData.authType || 'none',
+                          apiKey: formData.apiKey || '',
+                          bearerToken: formData.bearerToken || '',
+                          username: formData.username || '',
+                          password: formData.password || '',
+                          changeDetectionMethod: formData.changeDetectionMethod || 'array_length',
+                          serviceName: formData.serviceName || 'Unknown API'
+                        })
+                      });
+                      
+                      if (response.ok) {
+                        const result = await response.json();
+                        if (result.success) {
+                          toast.success(`✅ Trigger Test Passed! Connected to ${result.service_detected || formData.serviceName}`, {
+                            id: 'test-trigger',
+                            duration: 4000
+                          });
+                        } else {
+                          toast.error(`❌ Trigger Test Failed: ${result.error}`, {
+                            id: 'test-trigger',
+                            duration: 4000
+                          });
+                        }
+                      } else {
+                        toast.error(`❌ Trigger Test Failed: ${response.status}`, {
+                          id: 'test-trigger',
+                          duration: 4000
+                        });
+                      }
+                    } catch (error) {
+                      toast.error(`❌ Trigger Test Error: ${error.message}`, {
+                        id: 'test-trigger',
+                        duration: 4000
+                      });
+                    }
+                  }}
+                  className="px-3 py-2 bg-green-100 hover:bg-green-200 text-green-700 text-sm rounded transition-colors"
+                >
+                  🔄 Test Trigger Only
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.info('💡 To test the Agent: Go to Agent node → Use "Test Agent" button with sample data from Preview Data', {
+                      duration: 6000
+                    });
+                  }}
+                  className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded transition-colors"
+                >
+                  🤖 Test Agent (Guide)
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.info('💡 To test the Task: Go to Task node → Use "Test Task" button after agent is configured', {
+                      duration: 6000
+                    });
+                  }}
+                  className="px-3 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-sm rounded transition-colors"
+                >
+                  📋 Test Task (Guide)
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    toast.info('💡 Full workflow test: Use the "▶️ Run Crew" button to test the complete flow', {
+                      duration: 6000
+                    });
+                  }}
+                  className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm rounded transition-colors"
+                >
+                  🚀 Test Full Flow (Guide)
+                </button>
+              </div>
+              
+              <div className="mt-3 p-2 bg-green-100 border border-green-300 rounded text-xs">
+                <strong>🎯 Testing Strategy:</strong> 
+                <br />1. Test Trigger → 2. Preview Data → 3. Configure Agent with real data → 4. Test Agent → 5. Test Task → 6. Run Full Flow
+              </div>
+            </div>
+          </div>
+          
+          {/* Quick Data Summary */}
+          {formData.apiEndpoint && (
+            <div className="mb-4">
+              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <h4 className="font-semibold text-gray-800 mb-2">📋 Current Configuration</h4>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div><strong>Service:</strong> {formData.serviceName || 'Unknown'}</div>
+                  <div><strong>Endpoint:</strong> <code className="bg-gray-200 px-1 rounded text-xs">{formData.apiEndpoint}</code></div>
+                  <div><strong>Auth:</strong> {formData.authType || 'none'}</div>
+                  <div><strong>Detection:</strong> {formData.changeDetectionMethod || 'array_length'}</div>
+                  <div><strong>Interval:</strong> Every {Math.floor((formData.pollingInterval || 300) / 60)} minutes</div>
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  💡 Use "Preview Data" to see what your agent will receive from this API
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </>

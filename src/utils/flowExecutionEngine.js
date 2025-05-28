@@ -229,6 +229,29 @@ export const executeTriggerNode = async (node, inputs) => {
       result.run_at = runAt;
       break;
       
+    case 'universal_polling':
+      const serviceName = nodeData.serviceName || 'Unknown API';
+      const apiEndpoint = nodeData.apiEndpoint || '';
+      const pollingInterval = nodeData.pollingInterval || 300;
+      const changeMethod = nodeData.changeDetectionMethod || 'array_length';
+      result.output = `Universal API Polling trigger '${label}' activated - monitoring ${serviceName} every ${Math.floor(pollingInterval/60)} minutes using ${changeMethod} detection`;
+      result.type = 'trigger_status';
+      result.service_name = serviceName;
+      result.api_endpoint = apiEndpoint;
+      result.polling_interval = pollingInterval;
+      result.change_detection_method = changeMethod;
+      break;
+      
+    case 'universal_webhook':
+      const webhookServiceName = nodeData.serviceName || 'Unknown Service';
+      const webhookService = nodeData.webhookService || 'generic';
+      result.output = `Universal Webhook trigger '${label}' activated - ready to receive ${webhookServiceName} webhooks`;
+      result.type = 'trigger_status';
+      result.service_name = webhookServiceName;
+      result.webhook_service = webhookService;
+      result.webhook_url = `/api/triggers/${triggerId}`;
+      break;
+      
     default:
       result.output = `Unknown trigger type: ${triggerType}`;
       result.type = 'error';

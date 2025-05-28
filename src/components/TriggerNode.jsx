@@ -464,6 +464,36 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
         </div>
       </div>
       
+      {/* API Data Preview - Show for Universal Polling triggers */}
+      {data.triggerType === 'universal_polling' && data.serviceName && (
+        <div className="px-4 pb-3">
+          <div className="bg-blue-50/60 backdrop-blur-sm rounded-xl border border-blue-200/50 p-3">
+            <div className="text-center">
+              <div className="text-xs font-semibold text-blue-800 mb-1">
+                📊 {data.serviceName}
+              </div>
+              {data.apiEndpoint && (
+                <div className="text-xs text-blue-600 mb-1 truncate">
+                  {data.apiEndpoint.replace('https://', '').replace('http://', '')}
+                </div>
+              )}
+              <div className="flex justify-center gap-2 text-xs text-blue-700">
+                {data.changeDetectionMethod && (
+                  <span className="bg-blue-100 px-2 py-1 rounded">
+                    {data.changeDetectionMethod.replace('_', ' ')}
+                  </span>
+                )}
+                {data.pollingInterval && (
+                  <span className="bg-blue-100 px-2 py-1 rounded">
+                    {Math.floor(data.pollingInterval / 60)}min
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Action buttons */}
       <div className="px-4 pb-4">
         <div className="flex gap-2">

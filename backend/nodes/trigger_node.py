@@ -47,6 +47,24 @@ def run_trigger_node(data=None):
             "trigger_type": "schedule",
             "trigger_id": trigger_id
         }
+    elif trigger_type == "universal_polling":
+        service_name = data.get("serviceName", "Unknown API")
+        return {
+            "output": f"Universal API Polling - monitoring {service_name}",
+            "type": "trigger_status",
+            "trigger_type": "universal_polling",
+            "trigger_id": trigger_id,
+            "service_name": service_name
+        }
+    elif trigger_type == "universal_webhook":
+        service_name = data.get("serviceName", "Unknown Service")
+        return {
+            "output": f"Universal Webhook - ready for {service_name}",
+            "type": "trigger_status",
+            "trigger_type": "universal_webhook",
+            "trigger_id": trigger_id,
+            "service_name": service_name
+        }
     else:
         return {
             "output": f"Unknown trigger type: {trigger_type}",
@@ -114,6 +132,29 @@ async def process_trigger_node(
                 "type": "trigger_status",
                 "schedule_type": schedule_type,
                 "run_at": run_at
+            })
+        elif trigger_type == "universal_polling":
+            service_name = node_data.get("serviceName", "Unknown API")
+            api_endpoint = node_data.get("apiEndpoint", "")
+            polling_interval = node_data.get("pollingInterval", 300)
+            change_method = node_data.get("changeDetectionMethod", "array_length")
+            result.update({
+                "output": f"Universal API Polling trigger '{label}' activated - monitoring {service_name} every {polling_interval//60} minutes using {change_method} detection",
+                "type": "trigger_status",
+                "service_name": service_name,
+                "api_endpoint": api_endpoint,
+                "polling_interval": polling_interval,
+                "change_detection_method": change_method
+            })
+        elif trigger_type == "universal_webhook":
+            service_name = node_data.get("serviceName", "Unknown Service")
+            webhook_service = node_data.get("webhookService", "generic")
+            result.update({
+                "output": f"Universal Webhook trigger '{label}' activated - ready to receive {service_name} webhooks",
+                "type": "trigger_status",
+                "service_name": service_name,
+                "webhook_service": webhook_service,
+                "webhook_url": f"/api/triggers/{trigger_id}"
             })
         else:
             result.update({
