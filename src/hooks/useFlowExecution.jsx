@@ -758,6 +758,14 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
         return issues;
       }
       
+      // Check for flows with only one node (except triggers)
+      if (safeNodes.length === 1 && safeNodes[0].type !== 'trigger') {
+        issues.push({
+          type: 'error',
+          message: 'Workflow needs at least 2 connected nodes to be executable.'
+        });
+      }
+      
       // Check for nodes without connections
       const isolatedNodes = safeNodes.filter(node => {
         const hasConnections = safeEdges.some(edge => 
@@ -768,13 +776,32 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       
       if (isolatedNodes.length > 0) {
         issues.push({
-          type: 'warning',
+          type: 'error',
           message: `${isolatedNodes.length} node(s) are not connected to the flow`,
           nodes: isolatedNodes.map(node => ({
             id: node.id,
             name: extractNodeName(node, null),
             type: node.type
           }))
+        });
+      }
+      
+      // Check for agents without tasks
+      const agentNodes = safeNodes.filter(node => node.type === 'agent');
+      const taskNodes = safeNodes.filter(node => node.type === 'task');
+      
+      if (agentNodes.length > 0 && taskNodes.length === 0) {
+        issues.push({
+          type: 'error',
+          message: 'Agents need tasks to execute. Add at least one task node.'
+        });
+      }
+      
+      // Check for tasks without agents
+      if (taskNodes.length > 0 && agentNodes.length === 0) {
+        issues.push({
+          type: 'error',
+          message: 'Tasks need agents to execute them. Add at least one agent node.'
         });
       }
       

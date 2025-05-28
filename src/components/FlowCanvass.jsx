@@ -122,28 +122,38 @@ const FlowCanvasBase = forwardRef(({
   const [mousePosition, setMousePosition] = useState({ x: 100, y: 100 });
   const [canPaste, setCanPaste] = useState(false);
 
-  // Check clipboard on mount and focus
-  useEffect(() => {
-    const checkClipboard = async () => {
-      try {
-        const isValid = await validateClipboardData();
-        setCanPaste(isValid);
-      } catch (error) {
-        console.warn('Error checking clipboard:', error);
-        setCanPaste(false);
-      }
-    };
-
-    checkClipboard();
-    window.addEventListener('focus', checkClipboard);
-    return () => window.removeEventListener('focus', checkClipboard);
-  }, []);
-
   // Keyboard shortcuts
   const deletePressed = useKeyPress('Delete');
   const ctrlCPressed = useKeyPress(['Meta+c', 'Control+c']);
   const ctrlVPressed = useKeyPress(['Meta+v', 'Control+v']);
   const ctrlDPressed = useKeyPress(['Meta+d', 'Control+d']);
+
+  // Ensure normal paste operations work in input fields
+  useEffect(() => {
+    const handleGlobalPaste = (event) => {
+      const target = event.target;
+      const isInputField = target.tagName === 'INPUT' || 
+                          target.tagName === 'TEXTAREA' || 
+                          target.contentEditable === 'true' ||
+                          target.closest('input') ||
+                          target.closest('textarea') ||
+                          target.closest('[contenteditable="true"]');
+      
+      // If we're in an input field, ensure the browser handles paste normally
+      if (isInputField) {
+        // Don't prevent default - let browser handle normal paste
+        console.log('Normal paste operation in input field');
+        return;
+      }
+    };
+
+    // Add global paste listener with low priority
+    document.addEventListener('paste', handleGlobalPaste, { passive: true });
+    
+    return () => {
+      document.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, []);
 
   // Node operations - Define callbacks before useEffect hooks
   const handleDuplicateNodes = useCallback((selectedNodes) => {
@@ -178,16 +188,27 @@ const FlowCanvasBase = forwardRef(({
         setCanPaste(true);
         safeToast.success(`Copied ${selectedNodes.length} node${selectedNodes.length > 1 ? 's' : ''} to clipboard`);
       } else {
+        setCanPaste(false);
         safeToast.error('Failed to copy nodes. Try using the context menu instead.');
       }
     } catch (error) {
       console.error('Copy operation failed:', error);
+      setCanPaste(false);
       safeToast.error('Failed to copy nodes to clipboard');
     }
   }, [safeEdges]);
 
   const handlePasteNodes = useCallback(async () => {
     try {
+      // Check if clipboard has valid data before attempting paste
+      const isValid = await validateClipboardData();
+      setCanPaste(isValid);
+      
+      if (!isValid) {
+        safeToast.info('No nodes to paste. Copy some nodes first using Ctrl+C or the context menu.');
+        return;
+      }
+      
       const pastedData = await pasteNodesFromClipboard(mousePosition);
       
       if (pastedData && pastedData.nodes && pastedData.nodes.length > 0) {
@@ -271,10 +292,47 @@ const FlowCanvasBase = forwardRef(({
   }, [ctrlCPressed, safeNodes, safeEdges, handleContextCopy]);
 
   useEffect(() => {
+    // Only handle our custom paste if we're not in an input field
+    const handleCustomPaste = (event) => {
+      // Check if the target is an input field, textarea, or contenteditable
+      const target = event.target;
+      const isInputField = target.tagName === 'INPUT' || 
+                          target.tagName === 'TEXTAREA' || 
+                          target.contentEditable === 'true' ||
+                          target.closest('input') ||
+                          target.closest('textarea') ||
+                          target.closest('[contenteditable="true"]');
+      
+      // If we're in an input field, let the browser handle paste normally
+      if (isInputField) {
+        console.log('Paste in input field - letting browser handle it');
+        return;
+      }
+      
+      // Only handle our custom paste for the flow canvas
+      if (ctrlVPressed) {
+        event.preventDefault();
+        handleContextPaste();
+      }
+    };
+
     if (ctrlVPressed) {
-      handleContextPaste();
+      // Add a small delay to check the active element
+      setTimeout(() => {
+        const activeElement = document.activeElement;
+        const isInputField = activeElement.tagName === 'INPUT' || 
+                            activeElement.tagName === 'TEXTAREA' || 
+                            activeElement.contentEditable === 'true' ||
+                            activeElement.closest('input') ||
+                            activeElement.closest('textarea') ||
+                            activeElement.closest('[contenteditable="true"]');
+        
+        if (!isInputField) {
+          handleContextPaste();
+        }
+      }, 10);
     }
-  }, [ctrlVPressed, mousePosition, handleContextPaste]);
+  }, [ctrlVPressed, handleContextPaste]);
 
   useEffect(() => {
     const selectedNodes = safeNodes.filter(node => node && node.selected);
@@ -503,19 +561,6 @@ const FlowCanvasBase = forwardRef(({
           />
         </Panel>
 
-        {/* Template Manager Button */}
-        <Panel position="top-left">
-          <button
-            onClick={handleOpenTemplateManager}
-            className="bg-white border border-gray-200 rounded-lg p-2 shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105"
-            title="Template Manager"
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-lg">📚</span>
-              <span className="text-sm font-medium">Templates</span>
-            </div>
-          </button>
-        </Panel>
       </ReactFlow>
       
       {/* Context Menu */}
@@ -552,22 +597,6 @@ const FlowCanvasBase = forwardRef(({
 
       {/* Template Gallery */}
       {showTemplateGallery && <TemplateGallery />}
-
-      {/* Floating Template Button */}
-      {!showTemplateGallery && (
-      <button 
-          onClick={() => toggleTemplateGallery(true)}
-          className="fixed bottom-32 left-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white p-3 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 z-50 group"
-          title="Browse Templates"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xl">📚</span>
-            <span className="hidden group-hover:block text-sm font-medium whitespace-nowrap">
-              Templates
-            </span>
-          </div>
-      </button>
-      )}
 
       {/* Keyboard Shortcuts Help */}
       <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3 text-xs">
@@ -619,6 +648,24 @@ const FlowCanvasBase = forwardRef(({
             <div>Can Paste: {canPaste ? '✅' : '❌'}</div>
             <div>Selected: {safeNodes.filter(n => n.selected).length} nodes</div>
             <div>Clipboard: {navigator.clipboard ? 'API' : 'Fallback'}</div>
+            <button
+              onClick={async () => {
+                try {
+                  // Try to request clipboard permissions
+                  if (navigator.permissions) {
+                    const permission = await navigator.permissions.query({ name: 'clipboard-read' });
+                    console.log('Clipboard permission:', permission.state);
+                    safeToast.info(`Clipboard permission: ${permission.state}`);
+                  }
+                } catch (error) {
+                  console.log('Permission check failed:', error);
+                  safeToast.info('Clipboard permission check not supported');
+                }
+              }}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded mt-1"
+            >
+              Check Clipboard Permission
+            </button>
           </div>
         </Panel>
       )}

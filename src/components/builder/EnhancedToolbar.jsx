@@ -1,7 +1,38 @@
 import React, { useState, useRef, useEffect } from 'react';
 import HelpTooltip from '../HelpTooltip';
 
-export default function EnhancedToolbar({ toolbarProps }) {
+export default function EnhancedToolbar({ 
+  onAddAgent,
+  onAddTask,
+  onAddTool,
+  onShowSmartTools,
+  onQuickAddSmartTool,
+  onAddChat,
+  onAddDelay,
+  onAddTrigger,
+  onAddLogicNode,
+  onAddInputNode,
+  onAddOutputNode,
+  onSaveProject,
+  onLoadProject,
+  onExportYAML,
+  onExportPython,
+  onExportProject,
+  onPreviewWorkflow,
+  onUndo,
+  onRedo,
+  onToggleExecutionMode,
+  onShowCrewAIImporter,
+  onDuplicateFlow,
+  onToggleCompactMode,
+  isCompactMode,
+  executionMode,
+  projectName,
+  onProjectNameChange,
+  isExecuting,
+  canUndo,
+  canRedo
+}) {
   const [moreDropdownOpen, setMoreDropdownOpen] = useState(false);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
   const [ioDropdownOpen, setIODropdownOpen] = useState(false);
@@ -41,7 +72,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
         {/* Primary node types */}
         <div className="flex space-x-1">
           <button 
-            onClick={toolbarProps.onAddAgent}
+            onClick={onAddAgent}
             className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Add an Agent node"
           >
@@ -53,7 +84,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
           
           <button 
-            onClick={toolbarProps.onAddTask}
+            onClick={onAddTask}
             className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Add a Task node"
           >
@@ -94,7 +125,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
                 <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Smart AI Tools</div>
                 <button 
                   onClick={() => {
-                    toolbarProps.onShowSmartTools();
+                    onShowSmartTools();
                     setToolsDropdownOpen(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -110,7 +141,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
                 <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Traditional Tools</div>
                 <button 
                   onClick={() => {
-                    toolbarProps.onAddTool();
+                    onAddTool();
                     setToolsDropdownOpen(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -125,7 +156,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
                 <button 
                   onClick={() => {
                     // You can add a quick action for popular tools
-                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('text_generation', 'gpt4');
+                    onQuickAddSmartTool && onQuickAddSmartTool('text_generation', 'gpt4');
                     setToolsDropdownOpen(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -136,7 +167,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
                 
                 <button 
                   onClick={() => {
-                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('image_generation', 'dalle');
+                    onQuickAddSmartTool && onQuickAddSmartTool('image_generation', 'dalle');
                     setToolsDropdownOpen(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -147,7 +178,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
                 
                 <button 
                   onClick={() => {
-                    toolbarProps.onQuickAddSmartTool && toolbarProps.onQuickAddSmartTool('web_search', 'serper');
+                    onQuickAddSmartTool && onQuickAddSmartTool('web_search', 'serper');
                     setToolsDropdownOpen(false);
                   }}
                   className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -160,7 +191,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </div>
           
           <button 
-            onClick={toolbarProps.onAddTrigger}
+            onClick={onAddTrigger}
             className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Add a Trigger node"
           >
@@ -194,7 +225,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Input Nodes</div>
               <button 
                 onClick={() => {
-                  toolbarProps.onAddInputNode('text');
+                  onAddInputNode('text');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -205,7 +236,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddInputNode('file');
+                  onAddInputNode('file');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -216,7 +247,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddInputNode('url');
+                  onAddInputNode('url');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -230,7 +261,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               <div className="mb-2 px-3 py-1 text-xs text-gray-400 uppercase font-semibold">Output Nodes</div>
               <button 
                 onClick={() => {
-                  toolbarProps.onAddOutputNode('webhook');
+                  onAddOutputNode('webhook');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -241,7 +272,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddOutputNode('discord');
+                  onAddOutputNode('discord');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -252,7 +283,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddOutputNode('sheets');
+                  onAddOutputNode('sheets');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -263,7 +294,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddOutputNode('email');
+                  onAddOutputNode('email');
                   setIODropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -297,7 +328,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
             <div className="absolute top-full left-0 mt-1 bg-gray-800 rounded shadow-lg p-2 z-50 min-w-[120px]">
               <button 
                 onClick={() => {
-                  toolbarProps.onAddChat();
+                  onAddChat();
                   setMoreDropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -310,7 +341,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddDelay();
+                  onAddDelay();
                   setMoreDropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -323,7 +354,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onAddLogicNode();
+                  onAddLogicNode();
                   setMoreDropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -341,7 +372,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
         {/* Save/Load buttons */}
         <div className="flex space-x-1">
           <button 
-            onClick={toolbarProps.onSaveProject}
+            onClick={onSaveProject}
             className="bg-pink-500 hover:bg-pink-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Save your workflow"
           >
@@ -352,7 +383,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
           
           <button 
-            onClick={toolbarProps.onLoadProject}
+            onClick={onLoadProject}
             className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Load a workflow"
           >
@@ -363,7 +394,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
           
           <button 
-            onClick={toolbarProps.onDuplicateFlow}
+            onClick={onDuplicateFlow}
             className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-sm flex items-center"
             title="Duplicate the entire workflow"
           >
@@ -376,7 +407,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
         
         {/* CrewAI Import button */}
         <button 
-          onClick={toolbarProps.onShowCrewAIImporter}
+          onClick={onShowCrewAIImporter}
           className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-sm flex items-center"
           title="Import CrewAI YAML Configuration"
         >
@@ -409,7 +440,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
             <div className="absolute top-full right-0 mt-1 bg-gray-800 rounded shadow-lg p-2 z-50 min-w-[120px]">
               <button 
                 onClick={() => {
-                  toolbarProps.onExportYAML();
+                  onExportYAML();
                   setExportDropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -423,7 +454,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
               
               <button 
                 onClick={() => {
-                  toolbarProps.onExportPython();
+                  onExportPython();
                   setExportDropdownOpen(false);
                 }}
                 className="w-full text-left px-3 py-2 text-sm text-white hover:bg-gray-700 rounded flex items-center"
@@ -440,7 +471,7 @@ export default function EnhancedToolbar({ toolbarProps }) {
         
         {/* Preview button */}
         <button 
-          onClick={toolbarProps.onPreviewWorkflow}
+          onClick={onPreviewWorkflow}
           className="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded text-sm flex items-center"
           title="Preview workflow"
         >
@@ -455,9 +486,9 @@ export default function EnhancedToolbar({ toolbarProps }) {
         {/* Undo/Redo buttons */}
         <div className="flex space-x-1 ml-2">
           <button 
-            onClick={toolbarProps.onUndo}
-            disabled={!toolbarProps.canUndo}
-            className={`px-2 py-1 rounded text-sm flex items-center ${toolbarProps.canUndo ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+            onClick={onUndo}
+            disabled={!canUndo}
+            className={`px-2 py-1 rounded text-sm flex items-center ${canUndo ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
             title="Undo"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -466,9 +497,9 @@ export default function EnhancedToolbar({ toolbarProps }) {
           </button>
           
           <button 
-            onClick={toolbarProps.onRedo}
-            disabled={!toolbarProps.canRedo}
-            className={`px-2 py-1 rounded text-sm flex items-center ${toolbarProps.canRedo ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
+            onClick={onRedo}
+            disabled={!canRedo}
+            className={`px-2 py-1 rounded text-sm flex items-center ${canRedo ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-700 text-gray-400 cursor-not-allowed'}`}
             title="Redo"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -480,33 +511,61 @@ export default function EnhancedToolbar({ toolbarProps }) {
         {/* Execution mode toggle */}
         <div className="ml-2">
           <button
-            onClick={toolbarProps.onToggleExecutionMode}
+            onClick={onToggleExecutionMode}
             className="bg-gray-600 hover:bg-gray-500 text-white px-3 py-1 rounded text-sm flex items-center"
             title={
-              toolbarProps.executionMode === 'local' 
+              executionMode === 'local' 
                 ? 'Local Mode: Visualize flow execution in the browser' 
-                : toolbarProps.executionMode === 'backend' 
+                : executionMode === 'backend' 
                   ? 'Backend Mode: Execute with AI services on the server'
                   : 'Hybrid Mode: Visualize locally while executing on the server'
             }
           >
             <span className="mr-1">
-              {toolbarProps.executionMode === 'local' 
+              {executionMode === 'local' 
                 ? '💻' 
-                : toolbarProps.executionMode === 'backend' 
+                : executionMode === 'backend' 
                   ? '🌐' 
                   : '⚡'}
             </span>
             <span className="mr-1">
-              {toolbarProps.executionMode === 'local' 
+              {executionMode === 'local' 
                 ? 'Local' 
-                : toolbarProps.executionMode === 'backend' 
+                : executionMode === 'backend' 
                   ? 'Backend' 
                   : 'Hybrid'}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
             </svg>
+          </button>
+        </div>
+
+        {/* Compact mode toggle */}
+        <div className="ml-2">
+          <button
+            onClick={onToggleCompactMode}
+            className={`px-3 py-1 rounded text-sm flex items-center transition-colors ${
+              isCompactMode 
+                ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                : 'bg-gray-600 hover:bg-gray-500 text-white'
+            }`}
+            title={isCompactMode ? 'Switch to Expanded Layout' : 'Switch to Compact Layout'}
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className="h-4 w-4 mr-1" 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              {isCompactMode ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              )}
+            </svg>
+            {isCompactMode ? 'Expand' : 'Compact'}
           </button>
         </div>
       </div>

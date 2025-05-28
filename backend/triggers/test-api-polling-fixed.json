@@ -1,0 +1,24 @@
+{
+  "flow": {
+    "nodes": [
+      {
+        "id": "test-api-polling-fixed",
+        "type": "trigger",
+        "data": {
+          "triggerType": "api_polling",
+          "label": "Test API Polling Fixed",
+          "apiEndpoint": "https://jsonplaceholder.typicode.com/posts/1",
+          "pollingInterval": 30,
+          "changeDetectionField": "title"
+        }
+      }
+    ],
+    "edges": [],
+    "trigger_type": "api_polling"
+  },
+  "created_at": "2025-05-28T12:21:37.071890",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "api_polling"
+}

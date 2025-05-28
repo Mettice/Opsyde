@@ -325,4 +325,445 @@ async def schedule_trigger(
         return APIResponse.success_response(response)
         
     except Exception as e:
-        return handle_exception(e) 
+        return handle_exception(e)
+
+@router.get("/debug/test")
+async def debug_test_endpoint() -> Dict[str, Any]:
+    """Simple test endpoint to verify routing is working"""
+    return {
+        "success": True,
+        "message": "Debug endpoint is working!",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@router.post("/debug/test-api-polling")
+async def debug_test_api_polling(
+    test_data: Dict[str, Any],
+    trigger_service: TriggerService = Depends(get_trigger_service)
+) -> Dict[str, Any]:
+    """AI-powered API polling test and analysis"""
+    try:
+        logger.info(f"Debug API polling test started with data: {test_data}")
+        
+        import aiohttp
+        
+        # Extract test parameters
+        api_endpoint = test_data.get('apiEndpoint')
+        auth_type = test_data.get('authType', 'none')
+        api_key = test_data.get('apiKey')
+        bearer_token = test_data.get('bearerToken')
+        username = test_data.get('username')
+        password = test_data.get('password')
+        change_method = test_data.get('changeDetectionMethod', 'array_length')
+        service_name = test_data.get('serviceName', 'Unknown API')
+        
+        logger.info(f"Testing endpoint: {api_endpoint}, service: {service_name}, auth: {auth_type}")
+        
+        if not api_endpoint:
+            return {"success": False, "error": "API endpoint is required"}
+        
+        # Set up headers
+        headers = {'User-Agent': 'CrewBuilder-AI-Analysis/1.0'}
+        
+        # Handle different authentication types
+        if auth_type == 'api_key' and api_key:
+            # Smart auth detection based on service
+            if 'airtable' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
+            elif 'notion' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
+                headers['Notion-Version'] = '2022-06-28'
+            elif 'github' in api_endpoint.lower():
+                headers['Authorization'] = f'token {api_key}'
+            elif 'slack' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
+            else:
+                # Default patterns
+                headers['Authorization'] = f'Bearer {api_key}'
+                headers['X-API-Key'] = api_key
+                
+        elif auth_type == 'bearer_token' and bearer_token:
+            headers['Authorization'] = f'Bearer {bearer_token}'
+            
+        elif auth_type == 'basic_auth' and username and password:
+            import base64
+            credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+            headers['Authorization'] = f'Basic {credentials}'
+        
+        logger.info(f"Making request to {api_endpoint} with headers: {list(headers.keys())}")
+        
+        # Make the API request
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_endpoint, headers=headers, timeout=30) as response:
+                logger.info(f"API response status: {response.status}")
+                
+                if response.status == 200:
+                    try:
+                        data = await response.json()
+                        logger.info(f"Successfully got JSON data, keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+                        
+                        # AI-powered analysis
+                        analysis = await _ai_analyze_api_response(
+                            data, service_name, change_method, api_endpoint
+                        )
+                        
+                        analysis.update({
+                            "success": True,
+                            "status_code": response.status,
+                            "service_detected": service_name,
+                            "endpoint_tested": api_endpoint
+                        })
+                        
+                        logger.info(f"Analysis completed successfully")
+                        return analysis
+                        
+                    except Exception as json_error:
+                        logger.error(f"Failed to parse JSON response: {str(json_error)}")
+                        response_text = await response.text()
+                        return {
+                            "success": False,
+                            "error": f"Failed to parse API response as JSON: {str(json_error)}",
+                            "response_preview": response_text[:200] + "..." if len(response_text) > 200 else response_text
+                        }
+                    
+                else:
+                    error_text = await response.text()
+                    logger.error(f"API request failed with status {response.status}: {error_text}")
+                    return {
+                        "success": False,
+                        "status_code": response.status,
+                        "error": f"API request failed: {response.status} {response.reason}",
+                        "error_details": error_text,
+                        "ai_suggestion": await _ai_suggest_fix(response.status, error_text, api_endpoint)
+                    }
+                    
+    except Exception as e:
+        logger.error(f"Debug API polling test failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        return {
+            "success": False,
+            "error": f"Test failed: {str(e)}",
+            "ai_suggestion": "Check your API endpoint URL and authentication credentials"
+        }
+
+async def _ai_analyze_api_response(
+    data: Dict[str, Any], 
+    service_name: str, 
+    change_method: str,
+    api_endpoint: str
+) -> Dict[str, Any]:
+    """Use AI to analyze API response and provide intelligent recommendations"""
+    try:
+        # Import AI integration
+        from backend.frameworks.openrouter_runner import run_openrouter_chat
+        
+        # Prepare data sample for AI (truncate large responses)
+        data_sample = str(data)[:2000] + "..." if len(str(data)) > 2000 else str(data)
+        
+        # AI prompt for universal analysis
+        prompt = f"""
+You are an API integration expert. Analyze this REAL API response and provide intelligent recommendations.
+
+SERVICE: {service_name}
+ENDPOINT: {api_endpoint}
+CURRENT CHANGE DETECTION: {change_method}
+ACTUAL API RESPONSE: {data_sample}
+
+Analyze the ACTUAL response structure and provide recommendations in this JSON format:
+{{
+    "data_structure": {{
+        "type": "object|array",
+        "main_data_path": "path.to.main.data",
+        "item_count": number_of_items_if_array,
+        "records_count": number_of_records_if_applicable,
+        "key_fields": ["field1", "field2", "field3"],
+        "has_timestamps": true/false,
+        "timestamp_fields": ["created_at", "updated_at"],
+        "keys": ["top_level_keys"]
+    }},
+    "change_detection_recommendations": {{
+        "best_method": "array_length|field_value|timestamp|response_hash",
+        "reasoning": "why this method is best for THIS specific data",
+        "suggested_field_paths": ["actual.path.from.response", "another.real.path"],
+        "confidence": 0.95,
+        "explanation": "Clear explanation of what to monitor and why"
+    }},
+    "service_insights": {{
+        "detected_service": "actual service name based on response structure",
+        "api_type": "REST|GraphQL|webhook",
+        "data_freshness": "real-time|cached|batch",
+        "typical_update_frequency": "seconds|minutes|hours"
+    }}
+}}
+
+IMPORTANT: 
+- Base ALL recommendations on the ACTUAL response structure
+- Use REAL field paths from the response
+- Don't make assumptions about what the service "might" be
+- Analyze the actual data patterns and structure
+- Provide specific, actionable recommendations
+
+Focus on practical recommendations for change detection monitoring based on what's actually in the response.
+"""
+        
+        # Get AI analysis
+        messages = [{"role": "user", "content": prompt}]
+        ai_response = await run_openrouter_chat(
+            messages, 
+            model="openai/gpt-4-turbo",
+            temperature=0.3
+        )
+        
+        # Parse AI response
+        try:
+            import json
+            # Extract JSON from AI response
+            if "```json" in ai_response:
+                json_start = ai_response.find("```json") + 7
+                json_end = ai_response.find("```", json_start)
+                json_str = ai_response[json_start:json_end].strip()
+            elif "{" in ai_response and "}" in ai_response:
+                json_start = ai_response.find("{")
+                json_end = ai_response.rfind("}") + 1
+                json_str = ai_response[json_start:json_end]
+            else:
+                raise ValueError("No JSON found in AI response")
+            
+            ai_analysis = json.loads(json_str)
+            
+            # Add basic fallback analysis only if AI analysis is incomplete
+            basic_analysis = _basic_api_analysis(data, change_method)
+            
+            # Merge AI insights with basic analysis (AI takes priority)
+            return {
+                "data_structure": {
+                    **basic_analysis.get("data_structure", {}),
+                    **ai_analysis.get("data_structure", {})
+                },
+                "change_detection_info": ai_analysis.get("change_detection_recommendations", {}),
+                "ai_insights": ai_analysis.get("service_insights", {}),
+                "ai_raw_response": ai_response
+            }
+            
+        except Exception as e:
+            logger.warning(f"Failed to parse AI analysis: {str(e)}")
+            # Only fallback to basic analysis if AI completely fails
+            basic_result = _basic_api_analysis(data, change_method)
+            basic_result["ai_parsing_error"] = str(e)
+            return basic_result
+            
+    except Exception as e:
+        logger.error(f"AI analysis failed: {str(e)}")
+        # Only fallback to basic analysis if AI completely fails
+        basic_result = _basic_api_analysis(data, change_method)
+        basic_result["ai_analysis_error"] = str(e)
+        return basic_result
+
+def _basic_api_analysis(data: Dict[str, Any], change_method: str) -> Dict[str, Any]:
+    """Universal API analysis without AI - works with any data structure"""
+    analysis = {
+        "data_structure": {},
+        "change_detection_info": {},
+        "sample_data": data
+    }
+    
+    # Analyze data structure universally
+    if isinstance(data, dict):
+        analysis["data_structure"]["type"] = "object"
+        analysis["data_structure"]["keys"] = list(data.keys())
+        
+        # Look for common array patterns (universal detection)
+        array_fields = []
+        for key, value in data.items():
+            if isinstance(value, list):
+                array_fields.append({
+                    "field": key,
+                    "count": len(value),
+                    "path": key
+                })
+        
+        if array_fields:
+            # Use the largest array as the main data source
+            main_array = max(array_fields, key=lambda x: x["count"])
+            analysis["data_structure"]["main_data_path"] = main_array["field"]
+            analysis["data_structure"]["item_count"] = main_array["count"]
+            
+            # If the array has objects, analyze the first one
+            array_data = data[main_array["field"]]
+            if array_data and isinstance(array_data[0], dict):
+                first_item = array_data[0]
+                analysis["data_structure"]["sample_item_fields"] = list(first_item.keys())
+                
+                # Look for timestamp fields
+                timestamp_fields = []
+                for field_name, field_value in first_item.items():
+                    if any(time_indicator in field_name.lower() for time_indicator in 
+                          ['time', 'date', 'created', 'updated', 'modified', 'timestamp']):
+                        timestamp_fields.append(f"{main_array['field']}[0].{field_name}")
+                
+                if timestamp_fields:
+                    analysis["data_structure"]["timestamp_fields"] = timestamp_fields
+                    analysis["data_structure"]["has_timestamps"] = True
+        
+        # Special handling for nested data structures
+        for key, value in data.items():
+            if isinstance(value, dict) and len(value) > 0:
+                # Check if this nested object contains arrays
+                for nested_key, nested_value in value.items():
+                    if isinstance(nested_value, list):
+                        analysis["data_structure"][f"nested_array_{key}_{nested_key}"] = len(nested_value)
+                        
+    elif isinstance(data, list):
+        # Direct array
+        analysis["data_structure"]["type"] = "array"
+        analysis["data_structure"]["item_count"] = len(data)
+        analysis["data_structure"]["main_data_path"] = ""
+        
+        if data and isinstance(data[0], dict):
+            analysis["data_structure"]["sample_item_fields"] = list(data[0].keys())
+    
+    # Provide universal change detection guidance
+    if change_method == "array_length":
+        main_path = analysis["data_structure"].get("main_data_path", "")
+        item_count = analysis["data_structure"].get("item_count")
+        
+        if item_count is not None:
+            analysis["change_detection_info"] = {
+                "method": "array_length",
+                "current_count": item_count,
+                "explanation": f"Currently monitoring {item_count} items at path '{main_path}'. Will trigger when this number changes.",
+                "field_path": main_path or "root array"
+            }
+        else:
+            analysis["change_detection_info"] = {
+                "method": "array_length",
+                "error": "No array found in response. Consider using 'field_value' or 'response_hash' method instead."
+            }
+    
+    elif change_method == "field_value":
+        analysis["change_detection_info"] = {
+            "method": "field_value",
+            "explanation": "Monitor a specific field for changes. Suggested paths based on your data structure:",
+            "suggested_paths": []
+        }
+        
+        # Generate universal field path suggestions
+        suggested_paths = []
+        
+        # For objects with arrays
+        if analysis["data_structure"].get("main_data_path") and analysis["data_structure"].get("sample_item_fields"):
+            main_path = analysis["data_structure"]["main_data_path"]
+            for field in analysis["data_structure"]["sample_item_fields"][:5]:  # Limit to 5
+                suggested_paths.append(f"{main_path}[0].{field}")
+        
+        # For direct arrays
+        elif analysis["data_structure"].get("type") == "array" and analysis["data_structure"].get("sample_item_fields"):
+            for field in analysis["data_structure"]["sample_item_fields"][:5]:
+                suggested_paths.append(f"[0].{field}")
+        
+        # For simple objects
+        elif analysis["data_structure"].get("keys"):
+            for key in analysis["data_structure"]["keys"][:5]:
+                suggested_paths.append(key)
+        
+        analysis["change_detection_info"]["suggested_paths"] = suggested_paths
+    
+    elif change_method == "timestamp":
+        timestamp_fields = analysis["data_structure"].get("timestamp_fields", [])
+        if timestamp_fields:
+            analysis["change_detection_info"] = {
+                "method": "timestamp",
+                "explanation": f"Monitor timestamp fields for changes. Found {len(timestamp_fields)} potential timestamp fields.",
+                "suggested_paths": timestamp_fields[:3]  # Top 3 timestamp fields
+            }
+        else:
+            analysis["change_detection_info"] = {
+                "method": "timestamp",
+                "explanation": "No timestamp fields detected in the response. Consider using 'array_length' or 'field_value' method instead.",
+                "suggested_paths": []
+            }
+    
+    elif change_method == "response_hash":
+        analysis["change_detection_info"] = {
+            "method": "response_hash",
+            "explanation": "Monitor the entire response for any changes. This is the most sensitive method but may trigger frequently.",
+            "current_hash": "Will be calculated during monitoring"
+        }
+    
+    return analysis
+
+async def _ai_suggest_fix(status_code: int, error_text: str, api_endpoint: str) -> str:
+    """Use AI to suggest fixes for API errors"""
+    try:
+        from backend.frameworks.openrouter_runner import run_openrouter_chat
+        
+        prompt = f"""
+API request failed. Suggest a fix:
+
+STATUS CODE: {status_code}
+ERROR: {error_text}
+ENDPOINT: {api_endpoint}
+
+Provide a brief, actionable suggestion to fix this API issue.
+"""
+        
+        messages = [{"role": "user", "content": prompt}]
+        suggestion = await run_openrouter_chat(
+            messages, 
+            model="openai/gpt-3.5-turbo",
+            temperature=0.3
+        )
+        
+        return suggestion[:200] + "..." if len(suggestion) > 200 else suggestion
+        
+    except Exception:
+        # Fallback suggestions
+        if status_code == 401:
+            return "Authentication failed. Check your API key or credentials."
+        elif status_code == 403:
+            return "Access forbidden. Verify your API permissions."
+        elif status_code == 404:
+            return "Endpoint not found. Check your API URL."
+        elif status_code == 429:
+            return "Rate limited. Try reducing polling frequency."
+        else:
+            return "API request failed. Check endpoint URL and authentication."
+
+@router.post("/debug/test-scheduling/{trigger_id}")
+async def debug_test_scheduling(
+    trigger_id: str,
+    trigger_service: TriggerService = Depends(get_trigger_service)
+) -> Dict[str, Any]:
+    """Debug endpoint to test trigger scheduling manually"""
+    try:
+        # Get the trigger
+        trigger_flow = await trigger_service.get_trigger_flow(trigger_id)
+        if not trigger_flow:
+            return {"success": False, "error": f"Trigger {trigger_id} not found"}
+        
+        # Find the trigger node
+        trigger_nodes = [n for n in trigger_flow.get('nodes', []) if n.get('id') == trigger_id]
+        if not trigger_nodes:
+            return {"success": False, "error": f"No trigger node found for {trigger_id}"}
+        
+        trigger_data = trigger_nodes[0].get('data', {})
+        trigger_type = trigger_data.get('triggerType', 'unknown')
+        
+        # Test the scheduling setup
+        try:
+            await trigger_service._setup_schedule(trigger_id, trigger_data)
+            return {
+                "success": True,
+                "message": f"Successfully set up scheduling for {trigger_type} trigger {trigger_id}",
+                "trigger_data": trigger_data
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Failed to set up scheduling: {str(e)}",
+                "trigger_data": trigger_data
+            }
+            
+    except Exception as e:
+        return {"success": False, "error": str(e)} 

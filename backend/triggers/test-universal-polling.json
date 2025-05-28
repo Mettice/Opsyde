@@ -1,0 +1,27 @@
+{
+  "flow": {
+    "nodes": [
+      {
+        "id": "test-universal-polling",
+        "type": "trigger",
+        "data": {
+          "triggerType": "universal_polling",
+          "label": "Universal API Test",
+          "serviceName": "JSONPlaceholder",
+          "apiEndpoint": "https://jsonplaceholder.typicode.com/posts/1",
+          "pollingInterval": 60,
+          "authType": "none",
+          "changeDetectionMethod": "field_value",
+          "changeDetectionField": "title"
+        }
+      }
+    ],
+    "edges": [],
+    "trigger_type": "universal_polling"
+  },
+  "created_at": "2025-05-28T12:36:16.038343",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "universal_polling"
+}

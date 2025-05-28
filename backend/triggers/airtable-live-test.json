@@ -1,0 +1,25 @@
+{
+  "flow": {
+    "trigger_type": "universal_polling",
+    "nodes": [
+      {
+        "id": "airtable-live-test",
+        "data": {
+          "triggerType": "universal_polling",
+          "serviceName": "Airtable",
+          "apiEndpoint": "https://api.airtable.com/v0/appYourBaseId/YourTableName",
+          "pollingInterval": "60",
+          "authType": "api_key",
+          "apiKey": "pataiOWBHqj97O1Zp.270409a7145ebe0d63c12918d35d52e739c9",
+          "changeDetectionMethod": "response_hash"
+        }
+      }
+    ],
+    "edges": []
+  },
+  "created_at": "2025-05-28T13:59:06.972366",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "universal_polling"
+}
