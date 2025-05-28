@@ -145,118 +145,92 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
+    logger.info("🚀 Starting CrewBuilder backend...")
+    
+    # Initialize database
     try:
-        # Create necessary data directories
-        os.makedirs("data/workflows", exist_ok=True)
-        os.makedirs("data/triggers", exist_ok=True)
-        os.makedirs("data/executions", exist_ok=True)
-        os.makedirs("data/outputs", exist_ok=True)
+        from backend.database import init_db
+        await init_db()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {str(e)}")
+    
+    # Initialize scheduler PROPERLY in async context
+    try:
+        from backend.frameworks.apscheduler_manager import scheduler_manager
+        logger.info("🔧 Initializing scheduler in async context...")
         
-        # Store unified runner in app state
-        app.state.runner = unified_runner
-        
-        # Create a demo workflow if none exist
-        try:
-            from backend.services.workflow_service import workflow_service
-            workflows = await workflow_service.get_all_workflows()
-            
-            if not workflows:
-                logger.info("Creating demo workflow")
-                demo_flow = {
-                    "id": "demo-workflow-123",
-                    "name": "Demo Workflow",
-                    "description": "A sample workflow for demonstration",
-                    "owner_id": "f31db8d3-7b54-46b5-bebf-1ea7b6b2edff",
-                    "nodes": [
-                        {
-                            "id": "node-1",
-                            "type": "input",
-                            "data": {"label": "Input Node"}
-                        },
-                        {
-                            "id": "node-2",
-                            "type": "output",
-                            "data": {"label": "Output Node"}
-                        }
-                    ],
-                    "edges": [
-                        {
-                            "id": "edge-1",
-                            "source": "node-1",
-                            "target": "node-2"
-                        }
-                    ]
-                }
-                await workflow_service.create_workflow(demo_flow)
-                logger.info("Demo workflow created successfully")
-        except Exception as e:
-            logger.error(f"Error creating demo workflow: {str(e)}")
-        
-        # Start scheduler
-        logger.info("Initializing scheduler...")
+        # Start scheduler in the current event loop
         scheduler_started = scheduler_manager.start()
         
         if scheduler_started:
-            logger.info("Scheduler started successfully")
-        else:
-            logger.error("Failed to start scheduler - scheduled triggers will not work")
-        
-        # Wait a moment for scheduler to fully initialize
-        await asyncio.sleep(1)
-        
-        # Re-register all existing scheduled triggers
-        try:
-            from backend.services.trigger_service import TriggerService
-            from backend.core.di import get_trigger_service
+            logger.info("✅ Scheduler started successfully")
             
-            # Get the trigger service instance
-            trigger_service = TriggerService()
-            
-            # Get all existing triggers
-            triggers = await trigger_service.list_triggers()
-            logger.info(f"Found {len(triggers)} existing triggers to re-register")
-            
-            # Re-register scheduled triggers
-            for trigger in triggers:
-                trigger_id = trigger.get("id") or trigger.get("trigger_id")
-                if not trigger_id:
-                    continue
+            # Verify scheduler is actually running
+            if scheduler_manager.scheduler and scheduler_manager.scheduler.running:
+                logger.info(f"✅ Scheduler confirmed running - State: {scheduler_manager.scheduler.state}")
+                
+                # Wait a moment for scheduler to fully initialize
+                await asyncio.sleep(0.5)
+                
+                # Re-register all existing scheduled triggers
+                try:
+                    from backend.services.trigger_service import TriggerService
                     
-                # Get the full trigger data
-                flow = await trigger_service.get_trigger_flow(trigger_id)
-                if not flow:
-                    continue
+                    # Get the trigger service instance
+                    trigger_service = TriggerService()
                     
-                # Check if it's a scheduled trigger
-                if flow.get("trigger_type") == "schedule":
-                    logger.info(f"Re-registering scheduled trigger: {trigger_id}")
+                    # Get all existing triggers
+                    triggers = await trigger_service.list_triggers()
+                    logger.info(f"Found {len(triggers)} existing triggers to re-register")
                     
-                    # Find the trigger node in the flow
-                    trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
-                    if trigger_nodes:
-                        trigger_data = trigger_nodes[0].get('data', {})
-                        
-                        # Only re-register if the scheduled time is in the future
-                        run_at = trigger_data.get('runAt')
-                        if run_at:
-                            from datetime import datetime
-                            try:
-                                target_time = datetime.strptime(run_at, "%Y-%m-%d %H:%M")
-                                if target_time > datetime.now():
-                                    await trigger_service._setup_schedule(trigger_id, trigger_data)
-                                    logger.info(f"Successfully re-registered future trigger {trigger_id}")
+                    # Re-register each trigger that needs scheduling
+                    re_registered = 0
+                    for trigger in triggers:
+                        try:
+                            trigger_id = trigger.get("id")
+                            if trigger_id:
+                                # Get the full trigger flow
+                                flow = await trigger_service.get_trigger_flow(trigger_id)
+                                if flow:
+                                    # Find trigger nodes that need scheduling
+                                    trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
+                                    if trigger_nodes:
+                                        trigger_data = trigger_nodes[0].get('data', {})
+                                        trigger_type = trigger_data.get('triggerType')
+                                        
+                                        logger.info(f"🔧 DEBUG: Found trigger {trigger_id} with type {trigger_type}")
+                                        
+                                        # Only re-register triggers that need scheduling
+                                        if trigger_type in ['schedule', 'universal_polling', 'api_polling', 'data_change', 'file_monitor', 'email_polling']:
+                                            logger.info(f"🔧 DEBUG: Re-registering {trigger_id} ({trigger_type})")
+                                            await trigger_service._setup_schedule(trigger_id, trigger_data)
+                                            re_registered += 1
+                                            logger.info(f"✅ Re-registered trigger: {trigger_id} ({trigger_type})")
+                                        else:
+                                            logger.info(f"🔧 DEBUG: Skipping {trigger_id} - type {trigger_type} doesn't need scheduling")
+                                    else:
+                                        logger.warning(f"🔧 DEBUG: No trigger node found for {trigger_id}")
                                 else:
-                                    logger.info(f"Skipping past trigger {trigger_id} (scheduled for {run_at})")
-                            except Exception as e:
-                                logger.error(f"Error parsing date for trigger {trigger_id}: {str(e)}")
-                        
-        except Exception as e:
-            logger.error(f"Error re-registering triggers: {str(e)}")
-        
-        logger.info("Application started successfully")
+                                    logger.warning(f"🔧 DEBUG: No flow found for trigger {trigger_id}")
+                        except Exception as trigger_error:
+                            logger.error(f"❌ Failed to re-register trigger {trigger.get('id', 'unknown')}: {str(trigger_error)}")
+                            import traceback
+                            logger.error(f"Full traceback: {traceback.format_exc()}")
+                    
+                    logger.info(f"✅ Re-registered {re_registered} scheduled triggers")
+                    
+                except Exception as trigger_error:
+                    logger.error(f"❌ Error re-registering triggers: {str(trigger_error)}")
+            else:
+                logger.error("❌ Scheduler claims to be started but isn't running")
+        else:
+            logger.error("❌ Failed to start scheduler - scheduled triggers will not work")
+            
     except Exception as e:
-        logger.error(f"Error during startup: {str(e)}")
-        raise
+        logger.error(f"❌ Scheduler initialization failed: {str(e)}")
+    
+    logger.info("🎉 CrewBuilder backend startup complete!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -649,6 +623,96 @@ async def debug_scheduler():
         return {
             "error": f"Debug endpoint error: {str(e)}",
             "scheduler_available": False
+        }
+
+@app.post("/debug/scheduler/restart")
+async def restart_scheduler():
+    """Debug endpoint to manually restart the scheduler"""
+    try:
+        from backend.frameworks.apscheduler_manager import scheduler_manager
+        
+        logger.info("Manual scheduler restart requested")
+        
+        # Shutdown existing scheduler
+        try:
+            scheduler_manager.shutdown()
+            logger.info("Scheduler shutdown completed")
+        except Exception as e:
+            logger.warning(f"Error during shutdown: {str(e)}")
+        
+        # Wait a moment
+        await asyncio.sleep(1)
+        
+        # Reset initialization flag
+        scheduler_manager._initialized = False
+        
+        # Start fresh
+        started = scheduler_manager.start()
+        
+        if started and scheduler_manager.scheduler and scheduler_manager.scheduler.running:
+            logger.info("Scheduler successfully restarted")
+            
+            # Re-register all scheduled triggers
+            try:
+                from backend.services.trigger_service import TriggerService
+                trigger_service = TriggerService()
+                
+                triggers = await trigger_service.list_triggers()
+                registered_count = 0
+                
+                for trigger in triggers:
+                    trigger_id = trigger.get("id") or trigger.get("trigger_id")
+                    if not trigger_id:
+                        continue
+                        
+                    flow = await trigger_service.get_trigger_flow(trigger_id)
+                    if not flow or flow.get("trigger_type") != "schedule":
+                        continue
+                        
+                    trigger_nodes = [n for n in flow.get('nodes', []) if n.get('id') == trigger_id]
+                    if trigger_nodes:
+                        trigger_data = trigger_nodes[0].get('data', {})
+                        run_at = trigger_data.get('runAt')
+                        
+                        if run_at:
+                            from datetime import datetime
+                            try:
+                                target_time = datetime.strptime(run_at, "%Y-%m-%d %H:%M")
+                                if target_time > datetime.now():
+                                    await trigger_service._setup_schedule(trigger_id, trigger_data)
+                                    registered_count += 1
+                                    logger.info(f"Re-registered trigger: {trigger_id}")
+                            except Exception as e:
+                                logger.error(f"Error re-registering trigger {trigger_id}: {str(e)}")
+                
+                return {
+                    "success": True,
+                    "message": "Scheduler restarted successfully",
+                    "scheduler_running": True,
+                    "triggers_registered": registered_count
+                }
+                
+            except Exception as e:
+                logger.error(f"Error re-registering triggers: {str(e)}")
+                return {
+                    "success": True,
+                    "message": "Scheduler restarted but trigger re-registration failed",
+                    "scheduler_running": True,
+                    "error": str(e)
+                }
+        else:
+            return {
+                "success": False,
+                "message": "Failed to restart scheduler",
+                "scheduler_running": False
+            }
+            
+    except Exception as e:
+        logger.error(f"Error restarting scheduler: {str(e)}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "scheduler_running": False
         }
 
 # Legacy routes for backward compatibility

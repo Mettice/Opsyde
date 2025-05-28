@@ -1,0 +1,22 @@
+{
+  "flow": {
+    "trigger_type": "universal_polling",
+    "nodes": [
+      {
+        "id": "test-debug-final",
+        "data": {
+          "triggerType": "universal_polling",
+          "serviceName": "Test API",
+          "apiEndpoint": "https://api.example.com/test",
+          "pollingInterval": "300"
+        }
+      }
+    ],
+    "edges": []
+  },
+  "created_at": "2025-05-28T13:12:48.575522",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "universal_polling"
+}

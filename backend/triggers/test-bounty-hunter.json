@@ -1,0 +1,22 @@
+{
+  "flow": {
+    "trigger_type": "universal_polling",
+    "nodes": [
+      {
+        "id": "test-bounty-hunter",
+        "data": {
+          "triggerType": "universal_polling",
+          "serviceName": "Bounty API",
+          "apiEndpoint": "https://api.example.com/bounty",
+          "pollingInterval": "60"
+        }
+      }
+    ],
+    "edges": []
+  },
+  "created_at": "2025-05-28T13:15:31.553077",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "universal_polling"
+}

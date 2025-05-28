@@ -93,21 +93,6 @@ const CleanHeader = ({
       {/* Center: Main Actions */}
       <div className="flex items-center gap-3">
         <button
-          onClick={onRun}
-          disabled={isExecuting}
-          className={`
-            flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all
-            ${isExecuting 
-              ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md'
-            }
-          `}
-        >
-          <PlayIcon className="h-4 w-4" />
-          {isExecuting ? 'Running...' : 'Run'}
-        </button>
-
-        <button
           onClick={onSave}
           className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors"
         >

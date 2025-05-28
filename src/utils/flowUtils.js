@@ -390,22 +390,22 @@ export const copyNodesToClipboard = async (nodes, edges = []) => {
  * Paste nodes from clipboard with improved error handling
  */
 export const pasteNodesFromClipboard = async (mousePosition = { x: 100, y: 100 }) => {
-  let clipboardText = null;
-  let dataSource = 'unknown';
-  
   try {
-    // Try clipboard API first
+    let clipboardText = null;
+    let dataSource = null;
+    
+    // Try clipboard API first (but handle permission errors silently)
     if (navigator.clipboard && navigator.clipboard.readText) {
       try {
         clipboardText = await navigator.clipboard.readText();
         dataSource = 'clipboard-api';
         console.log('📋 Successfully read from Clipboard API');
       } catch (clipboardError) {
-        console.warn('📋 Clipboard API read failed:', clipboardError.message);
-        
-        // Check if it's a permission error
+        // Only log permission errors in debug mode, not as warnings
         if (clipboardError.name === 'NotAllowedError') {
-          console.warn('🔒 Clipboard access denied. Trying localStorage fallback...');
+          console.debug('🔒 Clipboard access denied. Trying localStorage fallback...');
+        } else {
+          console.warn('📋 Clipboard API read failed:', clipboardError.message);
         }
       }
     }
@@ -420,7 +420,7 @@ export const pasteNodesFromClipboard = async (mousePosition = { x: 100, y: 100 }
     }
     
     if (!clipboardText) {
-      console.warn('❌ No clipboard data available from any source');
+      console.debug('❌ No clipboard data available from any source');
       return null;
     }
     
@@ -435,12 +435,12 @@ export const pasteNodesFromClipboard = async (mousePosition = { x: 100, y: 100 }
     
     // Validate clipboard data structure
     if (clipboardData.type !== 'flow-nodes') {
-      console.warn('🚫 Invalid clipboard data type:', clipboardData.type);
+      console.debug('🚫 Invalid clipboard data type:', clipboardData.type);
       return null;
     }
     
     if (!clipboardData.nodes || !Array.isArray(clipboardData.nodes) || clipboardData.nodes.length === 0) {
-      console.warn('📭 No valid nodes found in clipboard data');
+      console.debug('📭 No valid nodes found in clipboard data');
       return null;
     }
     
@@ -600,13 +600,13 @@ export const validateClipboardData = async () => {
   try {
     let clipboardText = null;
     
-    // Try clipboard API first
+    // Try clipboard API first (silently handle permission errors)
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         clipboardText = await navigator.clipboard.readText();
       }
     } catch (clipboardError) {
-      // Silently try fallback - don't log every permission error
+      // Silently handle permission errors - no logging needed
     }
     
     // Fallback to localStorage
@@ -629,7 +629,10 @@ export const validateClipboardData = async () => {
       return false;
     }
   } catch (error) {
-    console.warn('Clipboard validation failed:', error.message);
+    // Only log unexpected errors, not permission errors
+    if (error.name !== 'NotAllowedError') {
+      console.debug('Clipboard validation failed:', error.message);
+    }
     return false;
   }
 };

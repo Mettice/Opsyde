@@ -148,8 +148,21 @@ const BuilderPageContent = () => {
     
     console.log("Cleaned formData:", cleanFormData);
     
+    // Add safety check for selectedNode
+    if (!selectedNode || !selectedNode.id) {
+      console.error("Cannot update node: selectedNode is undefined or missing id");
+      closeEditModal();
+      return;
+    }
+    
     setNodes(nodes => 
       nodes.map(node => {
+        // Add safety check for node
+        if (!node || !node.id) {
+          console.warn("Skipping invalid node during update");
+          return node;
+        }
+        
         if (node.id === selectedNode.id) {
           console.log(`Updating node ${node.id} with new data`);
           
@@ -476,7 +489,8 @@ const BuilderPageContent = () => {
     if (!nodeId) return [];
     
     // Get edges that connect TO this node (incoming edges)
-    const incomingEdges = edges.filter(edge => edge.target === nodeId);
+    // Add safety checks for edges array and edge properties
+    const incomingEdges = (edges || []).filter(edge => edge && edge.target === nodeId);
     
     // Get the source nodes that connect to this logic node
     const connectedNodes = incomingEdges.map(edge => {
@@ -544,33 +558,6 @@ const BuilderPageContent = () => {
     return schemas[nodeType] || {};
   };
   
-  // Create toolbar props
-  const toolbarProps = {
-    onAddAgent: addAgent,
-    onAddTask: addTask,
-    onAddTool: () => toggleToolTemplates(true), // Traditional tool templates
-    onShowSmartTools: openSmartTools, // Smart Tool Selector
-    onQuickAddSmartTool: handleQuickAddSmartTool, // Quick access buttons
-    onAddChat: addChatNode,
-    onAddDelay: addDelayNode,
-    onAddTrigger: addTriggerNode,
-    onAddLogicNode: addLogicNode,
-    onAddInputNode: addInputNode,
-    onAddOutputNode: addOutputNode,
-    onSaveProject: saveProject,
-    onLoadProject: loadProject,
-    onExportYAML: exportYAML,
-    onExportPython: exportMainPy,
-    onExportProject: exportProject,
-    onPreviewWorkflow: () => togglePreview(true),
-    onUndo: handleUndo,
-    onRedo: handleRedo,
-    onToggleExecutionMode: toggleExecutionMode,
-    onShowCrewAIImporter: () => setShowCrewAIImporter(true),
-    onDuplicateFlow: handleDuplicateFlow,
-    executionMode
-  };
-
   const [showCrewAIImporter, setShowCrewAIImporter] = useState(false);
 
   // Add handler for CrewAI import
@@ -610,22 +597,107 @@ const BuilderPageContent = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Clean Header */}
-      <CleanHeader 
-        projectName={projectName}
-        onProjectNameChange={setProjectName}
-        onSave={saveProject}
-        onLoad={loadProject}
-        onRun={() => {
-          runCrew();
-          toggleExecutionPanel(true);
-        }}
-        onPreview={() => togglePreview(true)}
-        onExport={exportProject}
-        onImport={() => setShowCrewAIImporter(true)}
-        onDuplicate={handleDuplicateFlow}
-        isExecuting={isExecuting}
-      />
+      {/* Top Toolbar - Essential Actions */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-semibold text-gray-900">Nodai</h1>
+            <div className="text-sm text-gray-500">|</div>
+            <div className="text-sm text-gray-600">{projectName || 'Untitled Project'}</div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {/* Save Button */}
+            <button
+              onClick={saveProject}
+              className="px-3 py-1.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              Save
+            </button>
+            
+            {/* Load/Import Dropdown */}
+            <div className="relative group">
+              <button className="px-3 py-1.5 text-sm font-medium bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Load
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <button
+                  onClick={loadProject}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-t-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Load Project
+                </button>
+                <button
+                  onClick={() => setShowCrewAIImporter(true)}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-b-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  </svg>
+                  Import CrewAI YAML
+                </button>
+              </div>
+            </div>
+            
+            {/* Export Dropdown */}
+            <div className="relative group">
+              <button className="px-3 py-1.5 text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition-colors flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="absolute top-full right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+                <button
+                  onClick={exportYAML}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-t-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Export YAML
+                </button>
+                <button
+                  onClick={exportMainPy}
+                  className="w-full px-3 py-2 text-sm text-left hover:bg-gray-50 rounded-b-lg flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  Export Python
+                </button>
+              </div>
+            </div>
+            
+            {/* Duplicate Button */}
+            <button
+              onClick={handleDuplicateFlow}
+              className="px-3 py-1.5 text-sm font-medium bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              title="Duplicate Flow"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Duplicate
+            </button>
+          </div>
+        </div>
+      </div>
       
       {/* Main Content Area */}
       <div className="flex flex-1 overflow-hidden">
@@ -654,6 +726,14 @@ const BuilderPageContent = () => {
           onOpenTemplates={() => toggleTemplateModal(true)}
           onOpenToolTemplates={() => toggleToolTemplates(true)}
           onOpenSmartTools={openSmartTools}
+          // Project Management
+          onSaveProject={saveProject}
+          onLoadProject={loadProject}
+          onExportYAML={exportYAML}
+          onExportPython={exportMainPy}
+          onDuplicateFlow={handleDuplicateFlow}
+          // UI Controls
+          onShowCrewAIImporter={() => setShowCrewAIImporter(true)}
         />
         
         {/* Canvas Area */}
@@ -738,6 +818,39 @@ const BuilderPageContent = () => {
           nodes={nodes}
         />
       )}
+      
+      {/* RunCrew Button - Bottom Right (Restored) */}
+      <RunCrewButton
+        onClick={() => {
+          runCrew();
+          toggleExecutionPanel(true);
+        }}
+        isRunning={isExecuting}
+        hasErrors={validateFlow().some(issue => issue.type === 'error')}
+        nodeCount={nodes.length}
+      />
+      
+      {/* Center Bottom Action Group */}
+      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
+        <button
+          onClick={() => togglePreview(true)}
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg transition-colors"
+          title="Preview workflow"
+        >
+          👁️ Preview
+        </button>
+        
+        <button
+          onClick={() => {
+            console.log('🧪 Test States clicked - Starting test execution...');
+            testExecutionStates();
+          }}
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg transition-colors"
+          title="Run test execution to simulate workflow states"
+        >
+          🧪 Test States
+        </button>
+      </div>
       
       {/* Modals and Overlays */}
       {showEditModal && selectedNode && (

@@ -1,0 +1,22 @@
+{
+  "flow": {
+    "trigger_type": "universal_polling",
+    "nodes": [
+      {
+        "id": "final-victory-test",
+        "data": {
+          "triggerType": "universal_polling",
+          "serviceName": "Final Victory API",
+          "apiEndpoint": "https://httpbin.org/json",
+          "pollingInterval": "45"
+        }
+      }
+    ],
+    "edges": []
+  },
+  "created_at": "2025-05-28T13:48:10.184279",
+  "owner": "system",
+  "last_triggered": null,
+  "trigger_count": 0,
+  "trigger_type": "universal_polling"
+}

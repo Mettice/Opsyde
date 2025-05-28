@@ -21,7 +21,20 @@ except ImportError as e:
     pytz = None
 
 class SchedulerManager:
-    def __init__(self):
+    _instance = None
+    _initialized = False
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(SchedulerManager, cls).__new__(cls)
+            cls._instance._init_scheduler()
+        return cls._instance
+    
+    def _init_scheduler(self):
+        """Initialize the scheduler only once"""
+        if SchedulerManager._initialized:
+            return
+            
         if SCHEDULER_AVAILABLE:
             # Configure job stores and executors
             jobstores = {
@@ -41,9 +54,15 @@ class SchedulerManager:
                 job_defaults=job_defaults,
                 timezone=pytz.UTC if pytz else None
             )
+            logger.info(f"Created scheduler instance: {id(self.scheduler)}")
         else:
             self.scheduler = None
-        self._initialized = False
+        
+        SchedulerManager._initialized = True
+    
+    def __init__(self):
+        # This method is called every time, but we only init once
+        pass
     
     def start(self):
         """Start the scheduler if not already running"""
@@ -59,7 +78,6 @@ class SchedulerManager:
             if not self.scheduler.running:
                 logger.info("Starting APScheduler...")
                 self.scheduler.start()
-                self._initialized = True
                 
                 # Verify the scheduler actually started
                 if self.scheduler.running:
@@ -67,16 +85,13 @@ class SchedulerManager:
                     return True
                 else:
                     logger.error("APScheduler failed to start - still not running")
-                    self._initialized = False
                     return False
             else:
-                self._initialized = True
                 logger.info(f"APScheduler was already running - State: {self.scheduler.state}")
                 return True
                 
         except Exception as e:
             logger.error(f"Error starting scheduler: {str(e)}")
-            self._initialized = False
             return False
     
     def shutdown(self):
@@ -85,11 +100,10 @@ class SchedulerManager:
             logger.warning("Scheduler not available - skipping scheduler shutdown")
             return
 
-        if self._initialized and self.scheduler:
+        if self.scheduler:
             try:
                 if self.scheduler.running:
                     self.scheduler.shutdown()
-                self._initialized = False
                 logger.info("APScheduler shut down successfully")
             except Exception as e:
                 logger.error(f"Error shutting down scheduler: {str(e)}")
@@ -126,8 +140,9 @@ class SchedulerManager:
             # Remove any existing job with this ID
             self.remove_job(job_id)
             
-            if trigger_data.get('triggerType') != 'schedule':
-                logger.warning(f"Non-schedule trigger type received: {trigger_data.get('triggerType')}")
+            trigger_type = trigger_data.get('triggerType', 'schedule')
+            if trigger_type not in ['schedule', 'interval']:
+                logger.warning(f"Non-schedule/interval trigger type received: {trigger_type}")
                 return False
             
             schedule_type = trigger_data.get('scheduleType', 'once')
@@ -188,6 +203,20 @@ class SchedulerManager:
                     minute=minute,
                     timezone=timezone
                 )
+            
+            elif schedule_type == 'interval':
+                # Handle interval triggers for polling
+                seconds = run_at.get('seconds', 300)
+                minutes = run_at.get('minutes', 0)
+                hours = run_at.get('hours', 0)
+                
+                trigger = IntervalTrigger(
+                    seconds=seconds,
+                    minutes=minutes,
+                    hours=hours,
+                    timezone=timezone
+                )
+                logger.info(f"Created interval trigger: {seconds}s, {minutes}m, {hours}h")
             
             else:
                 logger.error(f"Unsupported schedule type: {schedule_type}")

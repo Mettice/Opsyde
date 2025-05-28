@@ -323,8 +323,8 @@ class OutputNode:
     async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via email"""
         try:
-        from backend.frameworks.email_notifier import send_email
-        
+            from backend.frameworks.email_notifier import send_email
+            
             # Get email configuration from multiple possible sources
             email = (
                 node_data.get('email') or 
@@ -337,8 +337,8 @@ class OutputNode:
             
             self.logger.info(f"Processing email output - Email: {email}, Subject: {subject}")
             self.logger.info(f"Output data structure: {output_data}")
-        
-        if not email:
+            
+            if not email:
                 error_msg = "Email address is required for email output"
                 self.logger.error(error_msg)
                 return NodeData.from_error(error_msg)
@@ -355,10 +355,10 @@ class OutputNode:
             self.logger.info(f"Email send result: {result}")
             
             if result.get('success'):
-            return NodeData.from_value({
-                "success": True,
-                "output_type": "email",
-                "summary": f"Successfully sent email to {email}",
+                return NodeData.from_value({
+                    "success": True,
+                    "output_type": "email",
+                    "summary": f"Successfully sent email to {email}",
                     "data": {
                         "recipient": email,
                         "subject": subject,
