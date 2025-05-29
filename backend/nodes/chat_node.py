@@ -6,8 +6,8 @@ import os
 from openai import AsyncOpenAI
 import json
 import markdown
-from backend.frameworks.openrouter_runner import run_openrouter_chat
-from backend.frameworks.huggingface_runner import run_huggingface_chat
+from frameworks.openrouter_runner import run_openrouter_chat
+from frameworks.huggingface_runner import run_huggingface_chat
 
 logger = logging.getLogger(__name__)
 

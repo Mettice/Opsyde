@@ -311,35 +311,29 @@ class APIKeyManager:
 security_manager = SecurityManager(os.getenv("JWT_SECRET_KEY"), os.getenv("JWT_ALGORITHM"))
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    """Get the current authenticated user from the token"""
+    """Get current authenticated user from JWT token"""
     try:
         payload = security_manager.verify_token(token)
-        if not payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
         return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
     except Exception as e:
-        logger.error(f"Error getting current user: {str(e)}")
+        logger.error(f"Authentication failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication failed",
+            detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+async def get_current_user_optional(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get current user if authenticated, otherwise return None"""
+    if not token:
+        return None
+    
+    try:
+        payload = security_manager.verify_token(token)
+        return payload
+    except Exception:
+        # If any error occurs, just return None (unauthenticated)
+        return None
 
 # Example usage:
 # token = security_manager.create_token({"user_id": "123"})

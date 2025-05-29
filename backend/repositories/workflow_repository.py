@@ -5,9 +5,9 @@ import os
 import logging
 from datetime import datetime
 
-from backend.models.workflow import Workflow
-from backend.repositories.base_repository import BaseRepository
-from backend.core.di import injector
+from models.workflow import Workflow
+from repositories.base_repository import BaseRepository
+from core.di import injector
 
 logger = logging.getLogger(__name__)
 

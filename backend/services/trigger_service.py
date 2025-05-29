@@ -3,9 +3,9 @@ from datetime import datetime
 import logging
 from fastapi import HTTPException
 
-from backend.services.base_service import BaseService
-from backend.utils.logging import get_logger
-from backend.frameworks.trigger_storage import (
+from services.base_service import BaseService
+from utils.logging import get_logger
+from frameworks.trigger_storage import (
     register_trigger as storage_register_trigger,
     get_trigger_flow as storage_get_trigger_flow,
     execute_trigger as storage_execute_trigger,
@@ -13,7 +13,7 @@ from backend.frameworks.trigger_storage import (
     delete_trigger as storage_delete_trigger,
     get_trigger_owner as storage_get_trigger_owner
 )
-from backend.frameworks.apscheduler_manager import scheduler_manager
+from frameworks.apscheduler_manager import scheduler_manager
 
 logger = get_logger(__name__)
 

@@ -538,6 +538,11 @@ const ToolEditor = ({
   const [researchResult, setResearchResult] = useState(null);
   const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
 
+  // BYOK Integration - Load API Keys from API Key Manager
+  const [availableApiKeys, setAvailableApiKeys] = useState([]);
+  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+  const [apiKeyError, setApiKeyError] = useState(null);
+
   const parentAgent = connectedNodes.find(node => 
     node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
   );
@@ -548,6 +553,29 @@ const ToolEditor = ({
       setLocalFrameworkConfig(formData.frameworkConfig);
     }
   }, [formData.framework]);
+
+  // Load API Keys from BYOK Manager
+  useEffect(() => {
+    const loadApiKeys = async () => {
+      try {
+        setLoadingApiKeys(true);
+        const response = await fetch('http://localhost:8000/api/user-settings/api-keys');
+        const result = await response.json();
+        
+        if (result.success && result.data.api_keys) {
+          setAvailableApiKeys(result.data.api_keys);
+          console.log('🔑 Tool Editor: Loaded API keys:', result.data.api_keys);
+        }
+      } catch (error) {
+        console.error('🔑 Tool Editor: Error loading API keys:', error);
+        setApiKeyError('Failed to load API keys from BYOK Manager');
+      } finally {
+        setLoadingApiKeys(false);
+      }
+    };
+
+    loadApiKeys();
+  }, []);
 
   const handleToolTypeChange = (e) => {
     const newToolType = e.target.value;
@@ -782,6 +810,73 @@ const ToolEditor = ({
     }
   };
 
+  // Render BYOK Status for Tool Editor
+  const renderBYOKStatus = () => {
+    if (loadingApiKeys) {
+      return (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+            <span className="text-sm text-blue-700">Loading your API keys...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (apiKeyError) {
+      return (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center">
+            <span className="text-red-600 mr-2">⚠️</span>
+            <span className="text-sm text-red-700">{apiKeyError}</span>
+          </div>
+        </div>
+      );
+    }
+
+    const validKeys = availableApiKeys.filter(key => key.validation_status === 'valid');
+    
+    if (validKeys.length === 0) {
+      return (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="text-yellow-600 mr-2">🔑</span>
+              <span className="text-sm text-yellow-700">No API keys configured</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+            >
+              Add API Keys
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <span className="text-green-600 mr-2">🔑</span>
+            <span className="text-sm text-green-700">
+              {validKeys.length} API key{validKeys.length > 1 ? 's' : ''} available: {validKeys.map(k => k.provider_name).join(', ')}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.open('/api-keys', '_blank')}
+            className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm"
+          >
+            Manage Keys
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-8 bg-slate-50/50 min-h-screen">
       {/* Header */}
@@ -793,6 +888,9 @@ const ToolEditor = ({
           Configure your tool with AI assistance or traditional methods
         </p>
       </div>
+
+      {/* BYOK Status Indicator */}
+      {renderBYOKStatus()}
 
       {/* Inheritance Indicator */}
       {isInheritingFromAgent && (

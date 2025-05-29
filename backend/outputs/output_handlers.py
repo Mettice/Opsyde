@@ -76,10 +76,10 @@ except ImportError as e:
         return lambda retry_state: 0
 
 try:
-    from backend.output_utils import sanitize_output, format_output, validate_output_config
-    from backend.models.types import OutputType
-    from backend.utils.security import SecurityManager
-    from backend.config.settings import get_settings
+    from output_utils import sanitize_output, format_output, validate_output_config
+    from models.types import OutputType
+    from utils.security import SecurityManager
+    from config.settings import get_settings
 except ImportError as e:
     logger.error(f"Error importing internal modules: {str(e)}")
     # Define fallback OutputType enum if it's not available
@@ -112,7 +112,7 @@ settings = get_settings()
 
 # Add SecurityManager instance after imports
 try:
-    security_manager = SecurityManager(secret_key=os.getenv("JWT_SECRET_KEY", "default-secret"))
+    from utils.security import security_manager
 except Exception as e:
     logger.error(f"Error initializing SecurityManager: {str(e)}")
     # Create dummy security manager

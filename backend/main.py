@@ -29,6 +29,7 @@ from api.routers.tools import router as tools_router
 from api.routers.auth_router import router as auth_router
 from api.routers.trigger_router import router as trigger_router, root_router as trigger_root_router
 from api.routers.output_router import router as output_router
+from api.routers.user_settings import router as user_settings_router
 
 # Models
 from backend.models.data import NodeData
@@ -153,7 +154,8 @@ async def startup_event():
         await init_db()
         logger.info("✅ Database initialized")
     except Exception as e:
-        logger.error(f"❌ Database initialization failed: {str(e)}")
+        logger.warning(f"⚠️ Database initialization failed (continuing without database): {str(e)}")
+        # Continue without database for development
     
     # Initialize scheduler PROPERLY in async context
     try:
@@ -249,6 +251,7 @@ app.include_router(tools_router, prefix="/api/tools")
 app.include_router(trigger_router, prefix="/api/triggers")
 app.include_router(trigger_root_router)
 app.include_router(output_router, prefix="/api/outputs")
+app.include_router(user_settings_router, prefix="/api/user-settings")
 
 # Error handlers
 @app.exception_handler(CrewFlowError)

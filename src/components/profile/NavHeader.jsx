@@ -212,6 +212,14 @@ export default function NavHeader({ showHelp, projectName, editingProjectName, s
                           Dashboard
                         </Link>
                         
+                        <Link 
+                          to="/api-key-manager" 
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setIsMenuOpen(false)}
+                        >
+                          🔑 API Key Manager
+                        </Link>
+                        
                         {isBuilderPage && (
                           <button
                             onClick={() => {
@@ -325,6 +333,13 @@ export default function NavHeader({ showHelp, projectName, editingProjectName, s
                 onClick={() => setIsMenuOpen(false)}
               >
                 Dashboard
+              </Link>
+              <Link
+                to="/api-key-manager"
+                className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-gray-700"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                🔑 API Key Manager
               </Link>
             </div>
           )}

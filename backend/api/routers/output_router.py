@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Request, Depends
 from typing import Dict, Any
 import logging
 
-from backend.services.output_service import OutputService
-from backend.utils.logging import get_logger
+from services.output_service import OutputService
+from utils.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/outputs", tags=["outputs"])

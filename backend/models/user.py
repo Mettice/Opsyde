@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime
 from sqlalchemy.sql import func
 from typing import Optional, Dict, Any
 
-from ..database import Base
-from ..auth.utils import verify_password, get_password_hash
+from database import Base
+from auth.utils import verify_password, get_password_hash
 
 class User(Base):
     __tablename__ = "users"

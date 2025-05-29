@@ -5,22 +5,22 @@ from datetime import datetime
 import aiohttp
 import json
 
-from backend.models.nodes import Node, NodeType, ToolType, ToolConfig
-from backend.models.workflow import ExecutionContext
-from backend.models.results import NodeResult, ExecutionStatus
-from backend.models.data import NodeData
+from models.nodes import Node, NodeType, ToolType, ToolConfig
+from models.workflow import ExecutionContext
+from models.results import NodeResult, ExecutionStatus
+from models.data import NodeData
 
 # Import the enhanced framework registry
-from backend.framework_registry import framework_registry
+from framework_registry import framework_registry
 
 # Import tool-specific handlers (fallback for direct tool types)
-from backend.tools.llm_tools import run_llm_tool
-from backend.tools.api_tools import run_api_tool
-from backend.tools.webhook_tools import run_webhook_tool
-from backend.tools.custom_tools import run_custom_tool
+from tools.llm_tools import run_llm_tool
+from tools.api_tools import run_api_tool
+from tools.webhook_tools import run_webhook_tool
+from tools.custom_tools import run_custom_tool
 
 # NEW: Import universal API runner
-from backend.frameworks.universal_api_runner import run_universal_api_tool
+from universal_api_runner import run_universal_api_tool
 
 logger = logging.getLogger(__name__)
 

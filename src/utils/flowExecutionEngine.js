@@ -1,5 +1,8 @@
 import { toast } from 'react-hot-toast';
 
+// Import the workflow data manager
+import { get_workflow_context } from '../backend/core/workflow_data_manager.py';
+
 /**
  * Topologically sort nodes based on their dependencies
  * @param {Array} nodes - Array of node objects
@@ -270,15 +273,70 @@ export const executeTriggerNode = async (node, inputs) => {
         const apiData = await response.json();
         console.log(`✅ Successfully fetched data from ${serviceName}:`, apiData);
         
+        // 🎯 ENHANCED DATA PROCESSING FOR CRYPTO VISIBILITY
+        let processedData = apiData;
+        let cryptoSummary = '';
+        
+        // Special handling for DexScreener data
+        if (serviceName.toLowerCase().includes('dexscreener') || apiEndpoint.includes('dexscreener')) {
+          if (apiData.pairs && Array.isArray(apiData.pairs)) {
+            const pairs = apiData.pairs;
+            console.log(`🪙 DexScreener found ${pairs.length} crypto pairs:`);
+            
+            // Log each crypto pair for visibility
+            pairs.forEach((pair, index) => {
+              const token = pair.baseToken || {};
+              const price = pair.priceUsd || 'N/A';
+              const liquidity = pair.liquidity?.usd || 'N/A';
+              const volume24h = pair.volume?.h24 || 'N/A';
+              const change24h = pair.priceChange?.h24 || 'N/A';
+              
+              console.log(`🪙 Pair ${index + 1}: ${token.symbol} (${token.name})`);
+              console.log(`   💰 Price: $${price}`);
+              console.log(`   💧 Liquidity: $${liquidity}`);
+              console.log(`   📊 Volume 24h: $${volume24h}`);
+              console.log(`   📈 Change 24h: ${change24h}%`);
+            });
+            
+            // Create a summary for the agent (REDUCED TOKEN USAGE)
+            cryptoSummary = pairs.map((pair, index) => {
+              const token = pair.baseToken || {};
+              return `Token ${index + 1}: ${token.symbol} (${token.name}) - Price: $${pair.priceUsd || 'N/A'}, Liquidity: $${pair.liquidity?.usd || 'N/A'}, Volume: $${pair.volume?.h24 || 'N/A'}, Change: ${pair.priceChange?.h24 || 'N/A'}%`;
+            }).join('\n');
+            
+            // 🔥 LIMIT DATA TO REDUCE TOKEN USAGE
+            // Only pass essential fields to the agent
+            processedData = {
+              pairs: pairs.map(pair => ({
+                baseToken: {
+                  symbol: pair.baseToken?.symbol,
+                  name: pair.baseToken?.name
+                },
+                priceUsd: pair.priceUsd,
+                liquidity: { usd: pair.liquidity?.usd },
+                volume: { h24: pair.volume?.h24 },
+                priceChange: { h24: pair.priceChange?.h24 },
+                chainId: pair.chainId,
+                url: pair.url
+              })),
+              schemaVersion: apiData.schemaVersion,
+              total_pairs: pairs.length
+            };
+            
+            console.log(`🎯 Processed data for agent (reduced size):`, processedData);
+          }
+        }
+        
         // Apply field filtering if configured
-        let filteredData = apiData;
+        let filteredData = processedData;
         const includeFields = nodeData.includeFields || nodeData.targetFields;
         const excludeFields = nodeData.excludeFields;
         
         if (includeFields && includeFields.length > 0) {
+          console.log(`🎯 Applying field filtering - Include: ${includeFields.join(', ')}`);
           // Filter to include only specified fields
-          if (Array.isArray(apiData)) {
-            filteredData = apiData.map(item => {
+          if (Array.isArray(processedData)) {
+            filteredData = processedData.map(item => {
               const filtered = {};
               includeFields.forEach(field => {
                 if (item[field] !== undefined) {
@@ -287,11 +345,11 @@ export const executeTriggerNode = async (node, inputs) => {
               });
               return filtered;
             });
-          } else if (apiData.pairs && Array.isArray(apiData.pairs)) {
+          } else if (processedData.pairs && Array.isArray(processedData.pairs)) {
             // DexScreener format
             filteredData = {
-              ...apiData,
-              pairs: apiData.pairs.map(pair => {
+              ...processedData,
+              pairs: processedData.pairs.map(pair => {
                 const filtered = {};
                 includeFields.forEach(field => {
                   if (field.includes('.')) {
@@ -318,6 +376,7 @@ export const executeTriggerNode = async (node, inputs) => {
               })
             };
           }
+          console.log(`🎯 Filtered data:`, filteredData);
         }
         
         // Return the actual API data for the agent to process
@@ -327,11 +386,13 @@ export const executeTriggerNode = async (node, inputs) => {
         result.api_endpoint = apiEndpoint;
         result.polling_interval = pollingInterval;
         result.change_detection_method = changeMethod;
-        result.api_data = filteredData; // This is the key - pass the actual data
+        result.api_data = filteredData; // This is the key - pass the filtered data
         result.raw_data = apiData; // Keep original for reference
+        result.crypto_summary = cryptoSummary; // Human-readable summary
         result.data_summary = `Retrieved real data from ${serviceName} API`;
+        result.token_optimization = `Data filtered to reduce token usage: ${JSON.stringify(filteredData).length} chars vs ${JSON.stringify(apiData).length} chars original`;
         
-        console.log(`🎯 Trigger returning real API data:`, result);
+        console.log(`🎯 Trigger returning optimized API data:`, result);
         
       } catch (error) {
         console.error(`❌ Failed to fetch API data from ${serviceName}:`, error);
@@ -438,95 +499,120 @@ export const runFlow = async (
   onNodeComplete = () => {},
   onFlowComplete = () => {}
 ) => {
-  // Initialize execution state
+  console.log('🚀 Starting flow execution with enhanced data management');
+  
+  // Create workflow context for data management
+  const workflowId = `flow_${Date.now()}`;
   const executionState = {};
-  const logs = [];
+  const results = [];
   
-  // Get execution order
-  const executionOrder = topologicalSort(nodes, edges);
-  
-  // Execute nodes in order
-  for (const nodeId of executionOrder) {
-    const node = nodes.find(n => n.id === nodeId);
+  try {
+    // Get execution order
+    const executionOrder = topologicalSort(nodes, edges);
+    console.log('📋 Execution order:', executionOrder);
     
-    if (!node) {
-      console.warn(`Node ${nodeId} not found`);
-      continue;
+    // Execute nodes in order
+    for (const nodeId of executionOrder) {
+      const node = nodes.find(n => n.id === nodeId);
+      if (!node) {
+        console.warn(`⚠️ Node ${nodeId} not found`);
+        continue;
+      }
+      
+      console.log(`🔄 Executing node: ${nodeId} (${node.type})`);
+      onNodeStart(nodeId, node);
+      
+      try {
+        // Collect inputs for this node
+        const nodeInputs = collectInputData(nodeId, edges, executionState, inputs);
+        console.log(`📥 Node inputs for ${nodeId}:`, nodeInputs);
+        
+        // Execute the node
+        const result = await executeNodeByType(node, nodeInputs, executors);
+        console.log(`✅ Node ${nodeId} completed:`, result);
+        
+        // Store result in execution state
+        executionState[nodeId] = result;
+        
+        // Register with workflow context (if backend integration available)
+        try {
+          // This would be called via API in a real implementation
+          console.log(`📝 Registering output for ${node.type} node: ${nodeId}`);
+          // await registerNodeOutput(workflowId, nodeId, node.type, result);
+        } catch (error) {
+          console.warn('Could not register with workflow context:', error.message);
+        }
+        
+        // Notify completion
+        onNodeComplete(nodeId, node, result);
+        
+        // Add to results
+        results.push({
+          nodeId,
+          nodeType: node.type,
+          result,
+          timestamp: new Date().toISOString()
+        });
+        
+      } catch (error) {
+        console.error(`❌ Error executing node ${nodeId}:`, error);
+        
+        const errorResult = {
+          type: 'error',
+          error: error.message,
+          nodeId,
+          timestamp: new Date().toISOString()
+        };
+        
+        executionState[nodeId] = errorResult;
+        results.push({
+          nodeId,
+          nodeType: node.type,
+          result: errorResult,
+          timestamp: new Date().toISOString()
+        });
+        
+        onNodeComplete(nodeId, node, errorResult);
+        
+        // Continue execution for now (could be made configurable)
+      }
     }
     
-    // Notify that node execution is starting
-    onNodeStart(node);
+    console.log('✅ Flow execution completed');
+    onFlowComplete(results, executionState);
     
-    // Log start of execution
-    logs.push({
-      nodeId: node.id,
-      nodeName: node.data?.label || 'Unnamed Node',
-      type: node.type || (node.data && node.data.nodeType),
-      typeDescription: getNodeTypeDescription(node),
-      status: 'started',
-      timestamp: new Date().toISOString()
-    });
+    return {
+      success: true,
+      results,
+      executionState,
+      workflowId,
+      summary: {
+        totalNodes: nodes.length,
+        executedNodes: results.length,
+        errors: results.filter(r => r.result.type === 'error').length
+      }
+    };
     
-    try {
-      // Collect inputs for this node
-      const nodeInputs = collectInputData(nodeId, edges, executionState, inputs);
-      
-      // Execute the node
-      const result = await executeNodeByType(node, nodeInputs, executors);
-      
-      // Clean the result before storing
-      const cleanedResult = removeCircularReferences(result);
-      
-      // Store the result
-      executionState[nodeId] = cleanedResult;
-      
-      // Log successful execution
-      logs.push({
-        nodeId: node.id,
-        nodeName: node.data?.label || 'Unnamed Node',
-        type: node.type || (node.data && node.data.nodeType),
-        typeDescription: getNodeTypeDescription(node),
-        status: 'completed',
-        result: cleanedResult,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Notify that node execution is complete
-      onNodeComplete(node, cleanedResult);
-      
-    } catch (error) {
-      console.error(`Error executing node ${nodeId}:`, error);
-      
-      // Log error
-      logs.push({
-        nodeId: node.id,
-        nodeName: node.data?.label || 'Unnamed Node',
-        type: node.type || (node.data && node.data.nodeType),
-        typeDescription: getNodeTypeDescription(node),
-        status: 'error',
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Store error result
-      executionState[nodeId] = {
-        error: true,
-        message: error.message
-      };
-      
-      // Notify that node execution failed
-      onNodeComplete(node, { error: true, message: error.message });
-    }
+  } catch (error) {
+    console.error('❌ Flow execution failed:', error);
+    onFlowComplete([], executionState, error);
+    
+    return {
+      success: false,
+      error: error.message,
+      results,
+      executionState,
+      workflowId
+    };
   }
-  
-  // Notify that flow execution is complete
-  onFlowComplete(executionState, logs);
-  
-  return {
-    state: executionState,
-    logs
-  };
 };
+
+// Helper function to register node output (would call backend API)
+async function registerNodeOutput(workflowId, nodeId, nodeType, outputData) {
+  // This would make an API call to the backend to register the output
+  // For now, just log it
+  console.log(`📝 Would register: ${workflowId} -> ${nodeId} (${nodeType}) -> ${typeof outputData}`);
+}
 
 // Add this helper function to get a descriptive node type
 function getNodeTypeDescription(node) {

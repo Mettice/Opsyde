@@ -5,8 +5,8 @@ from datetime import datetime
 # Import all service integrations
 from .image_gen import handle_image_generation
 from .text_gen import handle_text_generation
-from ..integrations.web_search import handle_web_search
-from backend.tools.llm_tools import create_llm_tool, LLMConfig, LLMProvider
+from integrations.web_search import handle_web_search
+from tools.llm_tools import create_llm_tool, LLMConfig, LLMProvider
 
 logger = logging.getLogger(__name__)
 

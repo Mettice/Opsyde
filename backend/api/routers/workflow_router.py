@@ -2,20 +2,20 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from backend.models.api_models import (
+from models.api_models import (
     APIResponse, WorkflowBase, WorkflowCreateResponse, WorkflowUpdateResponse,
     WorkflowExecutionResponse, WorkflowExecutionListResponse,
     WorkflowValidationResponse, WorkflowExportResponse, ErrorCode
 )
-from backend.models.workflow import Workflow, WorkflowValidationResult
-from backend.services.workflow_service import WorkflowService
-from backend.utils.security import security_manager
-from backend.utils.logging import get_logger
-from backend.utils.api_utils import handle_exception
-from backend.core.runner import UnifiedRunner
-from backend.auth.dependencies import get_current_user
-from backend.core.exceptions import WorkflowError
-from backend.framework_registry import validate_framework_llm_combination, get_available_frameworks
+from models.workflow import Workflow, WorkflowValidationResult
+from services.workflow_service import WorkflowService
+from utils.security import security_manager
+from utils.logging import get_logger
+from utils.api_utils import handle_exception
+from core.runner import UnifiedRunner
+from auth.dependencies import get_current_user
+from core.exceptions import WorkflowError
+from framework_registry import validate_framework_llm_combination, get_available_frameworks
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])

@@ -3,18 +3,18 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
 
-from backend.models.nodes import Node
-from backend.models.data import NodeData
-from backend.models.api_models import (
+from models.nodes import Node
+from models.data import NodeData
+from models.api_models import (
     APIResponse, NodeExecutionResponse, NodeValidationResponse,
     NodeTypesResponse, FrameworksResponse, ErrorCode
 )
-from backend.core.node_processor import node_processor
-from backend.utils.security import security_manager
-from backend.utils.logging import get_logger
-from backend.utils.api_utils import handle_exception
-from backend.core.runner import UnifiedRunner
-from backend.auth.dependencies import get_current_user
+from core.node_processor import node_processor
+from utils.security import security_manager
+from utils.logging import get_logger
+from utils.api_utils import handle_exception
+from core.runner import UnifiedRunner
+from auth.dependencies import get_current_user
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["nodes"])
@@ -738,14 +738,14 @@ async def run_universal_api_tool_endpoint(
 ) -> Dict[str, Any]:
     '''Run a universal API tool with AI configuration'''
     try:
-        from backend.frameworks.universal_api_runner import run_universal_api_tool
+        from frameworks.universal_api_runner import run_universal_api_tool
         
         # Extract configuration
         config = data.get("config", {})
         inputs = data.get("inputs", {})
         
         # Convert input data to NodeData objects if needed
-        from backend.models.data import NodeData
+        from models.data import NodeData
         node_inputs = {
             key: NodeData.from_value(value) if not isinstance(value, NodeData) else value
             for key, value in inputs.items()

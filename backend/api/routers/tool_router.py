@@ -2,18 +2,18 @@ from fastapi import APIRouter, HTTPException, Depends, File, UploadFile
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
-from backend.models.api_models import (
+from models.api_models import (
     APIResponse, ToolInstance, ToolExecutionResponse, ToolListResponse,
     ToolFrameworksResponse, PluginResponse, PluginListResponse,
     PluginUploadResponse, ToolValidationResponse, ErrorCode
 )
-from backend.tools.custom_tools import tool_registry, plugin_loader
-from backend.utils.security import security_manager
-from backend.utils.logging import get_logger
-from backend.utils.api_utils import handle_exception
-from backend.core.runner import UnifiedRunner
-from backend.models.data import NodeData
-from backend.integrations.service_integration import execute_tool_service, get_supported_services, validate_tool_config
+from tools.custom_tools import tool_registry, plugin_loader
+from utils.security import security_manager
+from utils.logging import get_logger
+from utils.api_utils import handle_exception
+from core.runner import UnifiedRunner
+from models.data import NodeData
+from integrations.service_integration import execute_tool_service, get_supported_services, validate_tool_config
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, Query
 from pydantic import BaseModel
