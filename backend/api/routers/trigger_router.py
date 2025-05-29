@@ -574,8 +574,8 @@ async def _ai_analyze_api_response(
 ) -> Dict[str, Any]:
     """Use AI to analyze API response and provide intelligent recommendations"""
     try:
-        # Import AI integration
-        from backend.frameworks.openrouter_runner import run_openrouter_chat
+        # Import AI integration - USE OPENAI INSTEAD OF OPENROUTER
+        from backend.frameworks.openai_runner import run_openai_chat
         
         # Prepare data sample for AI (truncate large responses)
         data_sample = str(data)[:2000] + "..." if len(str(data)) > 2000 else str(data)
@@ -626,11 +626,11 @@ IMPORTANT:
 Focus on practical recommendations for change detection monitoring based on what's actually in the response.
 """
         
-        # Get AI analysis
+        # Get AI analysis using OpenAI instead of OpenRouter
         messages = [{"role": "user", "content": prompt}]
-        ai_response = await run_openrouter_chat(
+        ai_response = await run_openai_chat(
             messages, 
-            model="openai/gpt-4-turbo",
+            model="gpt-4",
             temperature=0.3
         )
         
@@ -815,7 +815,7 @@ def _basic_api_analysis(data: Dict[str, Any], change_method: str) -> Dict[str, A
 async def _ai_suggest_fix(status_code: int, error_text: str, api_endpoint: str) -> str:
     """Use AI to suggest fixes for API errors"""
     try:
-        from backend.frameworks.openrouter_runner import run_openrouter_chat
+        from backend.frameworks.openai_runner import run_openai_chat
         
         prompt = f"""
 API request failed. Suggest a fix:
@@ -828,9 +828,9 @@ Provide a brief, actionable suggestion to fix this API issue.
 """
         
         messages = [{"role": "user", "content": prompt}]
-        suggestion = await run_openrouter_chat(
+        suggestion = await run_openai_chat(
             messages, 
-            model="openai/gpt-3.5-turbo",
+            model="gpt-3.5-turbo",
             temperature=0.3
         )
         

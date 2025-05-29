@@ -1188,6 +1188,130 @@ const baseTemplates = [
         aiCapabilities: ['Field-Specific Processing', 'Event-Driven Triggers', 'Targeted Research'],
         businessValue: 'High - Reduces noise and focuses on relevant data only'
       }
+    },
+    // NEW: WORKING DexScreener Live Template
+    {
+      name: '🔥 WORKING DexScreener Live Monitor',
+      description: 'LIVE crypto monitoring using the working universal polling trigger - REAL DATA!',
+      thumbnail: '/img/crypto-live-flow.png',
+      nodes: [
+        {
+          id: 'dexscreener-live-trigger',
+          type: 'trigger',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'DexScreener Live Monitor',
+            triggerType: 'universal_polling',
+            serviceName: 'DexScreener',
+            apiEndpoint: 'https://api.dexscreener.com/latest/dex/search?q=PEPE',
+            pollingInterval: 60,
+            authType: 'none',
+            changeDetectionMethod: 'array_length',
+            nodeId: 'dexscreener-live-trigger',
+            nodeType: 'trigger'
+          }
+        },
+        {
+          id: 'crypto-agent',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Crypto Data Extractor',
+            role: 'Crypto Data Extraction Specialist',
+            goal: 'Extract and format crypto trading data from DexScreener API responses',
+            backstory: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data.',
+            prompt: 'You are a crypto data extraction specialist. Extract crypto data from DexScreener API and format it cleanly. DO NOT give trading advice, just extract and format the data.\n\nFormat like this:\n🔥 CRYPTO DATA:\nToken: [NAME]\nSymbol: [SYMBOL]\nPrice: $[PRICE]\nLiquidity: $[LIQUIDITY]\nVolume 24h: $[VOLUME]\nChange: [CHANGE]%',
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.3,
+              max_tokens: 2000,
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.3,
+            max_tokens: 2000,
+            allowDelegation: false,
+            enableMemory: false,
+            verbose: true,
+            nodeId: 'crypto-agent',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'crypto-task',
+          type: 'task',
+          position: { x: 600, y: 100 },
+          data: {
+            label: 'Extract Crypto Data',
+            description: 'Extract and format crypto data from DexScreener',
+            expectedOutput: 'Formatted crypto data ready for Telegram',
+            async: false,
+            agentId: 'crypto-agent',
+            nodeId: 'crypto-task',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'telegram-output',
+          type: 'output',
+          position: { x: 850, y: 100 },
+          data: {
+            label: 'Telegram Sender',
+            description: 'Send crypto data to Telegram',
+            outputType: 'webhook',
+            webhookUrl: 'https://api.telegram.org/bot8163116561:AAH5mKM-MDINf5gJXMsRxycNsRfFILBcJZ0/sendMessage',
+            webhookMethod: 'POST',
+            webhookHeaders: {
+              'Content-Type': 'application/json'
+            },
+            webhookPayload: {
+              'chat_id': '5251498620',
+              'text': '{task_output}'
+            },
+            nodeId: 'telegram-output',
+            nodeType: 'output'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-trigger-agent',
+          source: 'dexscreener-live-trigger',
+          target: 'crypto-agent',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-task',
+          source: 'crypto-agent',
+          target: 'crypto-task',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-task-output',
+          source: 'crypto-task',
+          target: 'telegram-output',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['WORKING', 'Live', 'DexScreener', 'Telegram', 'Real Data'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2025-05-29',
+      complexity: 'Simple',
+      estimatedTime: '30 seconds',
+      useCase: 'WORKING template that uses the live universal polling trigger for real DexScreener data.',
+      metadata: {
+        category: 'Live Crypto Data',
+        industry: ['Cryptocurrency', 'Trading', 'Data'],
+        outputFormat: 'Telegram Message',
+        aiCapabilities: ['Data Extraction', 'Format Conversion'],
+        businessValue: 'High - Uses WORKING live trigger for real crypto data'
+      }
     }
 ];
 
