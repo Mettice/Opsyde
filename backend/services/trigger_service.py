@@ -679,10 +679,24 @@ class TriggerService(BaseService[Dict]):
                 setattr(self, stored_key, current_length)
                 logger.info(f"[ARRAY CHECK] Initial length stored for {trigger_id}: {current_length}")
                 return False
-            elif current_length != last_length:
+            elif current_length > last_length:
+                # ONLY trigger on INCREASE (new records added)
+                new_records_count = current_length - last_length
                 setattr(self, stored_key, current_length)
-                logger.info(f"[ARRAY CHECK] Array length changed for {trigger_id}: {last_length} -> {current_length}")
+                logger.info(f"[ARRAY CHECK] NEW RECORDS DETECTED for {trigger_id}: {new_records_count} new records added (total: {current_length})")
+                
+                # Store the new records for the agent to process
+                if new_records_count > 0 and hasattr(self, '_store_new_records'):
+                    new_records = array_data[-new_records_count:]  # Get the last N records
+                    setattr(self, f"new_records_{trigger_id}", new_records)
+                    logger.info(f"[ARRAY CHECK] Stored {len(new_records)} new records for processing")
+                
                 return True
+            elif current_length < last_length:
+                # Records were deleted - update count but don't trigger
+                setattr(self, stored_key, current_length)
+                logger.info(f"[ARRAY CHECK] Records deleted for {trigger_id}: {last_length} -> {current_length} (no trigger)")
+                return False
                 
             return False
             

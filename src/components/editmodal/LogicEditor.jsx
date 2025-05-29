@@ -68,6 +68,82 @@ const conditionTemplates = [
       { field: '', operator: '!=', value: 'null', logicType: 'AND' },
       { field: '', operator: 'not_empty', value: '', logicType: 'AND' }
     ]
+  },
+  // NEW: Trigger-specific templates
+  {
+    name: 'Trigger Activated',
+    description: 'Check if trigger was successfully activated',
+    conditions: [{ field: '', operator: '==', value: 'true', logicType: 'AND' }],
+    category: 'trigger',
+    icon: '🔄'
+  },
+  {
+    name: 'New Data Available',
+    description: 'Check if trigger detected new data changes',
+    conditions: [
+      { field: '', operator: '==', value: 'true', logicType: 'AND' }, // has_changes
+      { field: '', operator: '>', value: '0', logicType: 'AND' } // new_records_count
+    ],
+    category: 'trigger',
+    icon: '📊'
+  },
+  {
+    name: 'API Data Threshold',
+    description: 'Only proceed if enough new records were found',
+    conditions: [{ field: '', operator: '>=', value: '5', logicType: 'AND' }], // new_records_count >= 5
+    category: 'trigger',
+    icon: '📈'
+  },
+  {
+    name: 'Service Health Check',
+    description: 'Verify API service is responding correctly',
+    conditions: [
+      { field: '', operator: '!=', value: 'error', logicType: 'AND' }, // service status
+      { field: '', operator: 'contains', value: 'Retrieved', logicType: 'AND' } // data_summary contains "Retrieved"
+    ],
+    category: 'trigger',
+    icon: '🏥'
+  },
+  {
+    name: 'Crypto Price Alert',
+    description: 'Trigger when crypto price exceeds threshold',
+    conditions: [
+      { field: '', operator: '>', value: '50000', logicType: 'AND' }, // price > $50k
+      { field: '', operator: '>', value: '1000000', logicType: 'AND' } // volume > $1M
+    ],
+    category: 'crypto',
+    icon: '💰'
+  },
+  {
+    name: 'High Volume Trading',
+    description: 'Detect high-volume trading activity',
+    conditions: [
+      { field: '', operator: '>', value: '500000', logicType: 'AND' }, // liquidity > $500k
+      { field: '', operator: '>', value: '10', logicType: 'AND' } // new pairs > 10
+    ],
+    category: 'crypto',
+    icon: '📊'
+  },
+  {
+    name: 'Webhook Validation',
+    description: 'Validate incoming webhook payload',
+    conditions: [
+      { field: '', operator: '!=', value: 'null', logicType: 'AND' }, // payload exists
+      { field: '', operator: 'has_key', value: 'data', logicType: 'AND' } // has data key
+    ],
+    category: 'webhook',
+    icon: '🔗'
+  },
+  {
+    name: 'Error Detection',
+    description: 'Detect and handle error conditions',
+    conditions: [
+      { field: '', operator: '==', value: 'error', logicType: 'OR' },
+      { field: '', operator: 'contains', value: 'failed', logicType: 'OR' },
+      { field: '', operator: '==', value: 'null', logicType: 'OR' }
+    ],
+    category: 'error',
+    icon: '❌'
   }
 ];
 
@@ -83,28 +159,178 @@ const LogicEditor = ({
   connectedNodes = [] // New prop for connected node data
 }) => {
   const [buildMode, setBuildMode] = useState('visual'); // 'visual' or 'code'
-  const [conditions, setConditions] = useState([
-    { id: 1, field: '', operator: '', value: '', valueType: 'single', logicType: 'AND' }
-  ]);
+  const [conditions, setConditions] = useState([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [generatedCondition, setGeneratedCondition] = useState('');
+  const [availableFields, setAvailableFields] = useState([]);
+  const [showExamples, setShowExamples] = useState(false);
+  const [showFieldGuide, setShowFieldGuide] = useState(false);
 
-  // Get all available fields from connected nodes (only use real data)
-  const availableFields = connectedNodes.flatMap(node => {
-    // Only process nodes that have actual output data
-    if (!node.outputs || typeof node.outputs !== 'object') {
-      return [];
-    }
+  // Get all available fields from connected nodes (enhanced detection)
+  const detectFieldsFromAgent = (agentData) => {
+    const fields = [
+      // Standard agent fields
+      { id: 'response', type: 'string', sample: 'AI response text', description: 'Main AI response' },
+      { id: 'status', type: 'string', sample: 'completed', description: 'Execution status' },
+      { id: 'token_usage', type: 'number', sample: 1500, description: 'Tokens consumed' },
+      { id: 'execution_time', type: 'number', sample: 2.5, description: 'Time in seconds' }
+    ];
+
+    // Parse expected outputs from agent's prompt
+    const prompt = agentData?.prompt || '';
     
-    return Object.entries(node.outputs).map(([fieldName, fieldInfo]) => ({
-      id: `${node.id}.${fieldName}`,
-      label: `${node.type || node.label || 'Node'}: ${fieldName}`,
-      value: `inputs.${fieldName}`,
-      type: fieldInfo.type || 'string',
-      sample: fieldInfo.sample || '',
-      nodeType: node.type || 'unknown'
-    }));
-  });
+    // Crypto trading patterns
+    if (prompt.includes('decision') || prompt.includes('BUY') || prompt.includes('trading')) {
+      fields.push(
+        { id: 'decision', type: 'string', sample: 'STRONG_BUY', description: 'Trading decision' },
+        { id: 'confidence', type: 'number', sample: 0.85, description: 'Confidence score (0-1)' },
+        { id: 'risk_score', type: 'number', sample: 0.3, description: 'Risk assessment (0-1)' },
+        { id: 'reasons', type: 'array', sample: ['High liquidity', 'Good volume'], description: 'Decision reasons' },
+        { id: 'red_flags', type: 'array', sample: [], description: 'Warning signals' }
+      );
+    }
+
+    // Market analysis patterns
+    if (prompt.includes('market') || prompt.includes('analysis') || prompt.includes('research')) {
+      fields.push(
+        { id: 'market_trend', type: 'string', sample: 'bullish', description: 'Market direction' },
+        { id: 'sentiment', type: 'string', sample: 'positive', description: 'Market sentiment' },
+        { id: 'score', type: 'number', sample: 7.5, description: 'Analysis score' },
+        { id: 'recommendation', type: 'string', sample: 'buy', description: 'Action recommendation' }
+      );
+    }
+
+    // Email/content generation patterns
+    if (prompt.includes('email') || prompt.includes('content') || prompt.includes('write')) {
+      fields.push(
+        { id: 'subject', type: 'string', sample: 'Email subject', description: 'Email subject line' },
+        { id: 'body', type: 'string', sample: 'Email content', description: 'Email body text' },
+        { id: 'tone', type: 'string', sample: 'professional', description: 'Content tone' },
+        { id: 'word_count', type: 'number', sample: 250, description: 'Content length' }
+      );
+    }
+
+    return fields;
+  };
+
+  // Universal logic examples for different use cases
+  const logicExamples = {
+    crypto: [
+      {
+        title: '🚀 Strong Buy Signal',
+        condition: 'decision == "STRONG_BUY" && confidence > 0.8',
+        description: 'Execute trade when AI is very confident about a strong buy signal',
+        useCase: 'Crypto trading automation'
+      },
+      {
+        title: '⚠️ Risk Management',
+        condition: 'risk_score < 0.3 && red_flags.length == 0',
+        description: 'Only proceed if risk is low and no red flags detected',
+        useCase: 'Safe trading with risk controls'
+      },
+      {
+        title: '📊 High Confidence Filter',
+        condition: 'confidence > 0.75 && (decision == "BUY" || decision == "STRONG_BUY")',
+        description: 'Filter for high-confidence buy decisions only',
+        useCase: 'Quality over quantity trading'
+      }
+    ],
+    business: [
+      {
+        title: '⭐ High-Quality Lead',
+        condition: 'score > 80 && sentiment == "positive"',
+        description: 'Route high-scoring leads with positive sentiment to sales team',
+        useCase: 'Lead qualification and routing'
+      },
+      {
+        title: '🔥 Urgent Response Needed',
+        condition: 'priority == "high" && response_time < 24',
+        description: 'Flag urgent items that need immediate attention',
+        useCase: 'Customer support prioritization'
+      },
+      {
+        title: '✅ Content Approval',
+        condition: 'tone == "professional" && word_count > 100 && word_count < 500',
+        description: 'Auto-approve content that meets quality standards',
+        useCase: 'Content workflow automation'
+      }
+    ],
+    general: [
+      {
+        title: '📈 Performance Threshold',
+        condition: 'score >= 7 && status == "completed"',
+        description: 'Route successful high-performing results',
+        useCase: 'Quality control and filtering'
+      },
+      {
+        title: '🎯 Multi-Condition Check',
+        condition: 'confidence > 0.5 && execution_time < 10 && token_usage < 2000',
+        description: 'Ensure good performance within resource limits',
+        useCase: 'Efficiency and cost control'
+      },
+      {
+        title: '🔍 Error Handling',
+        condition: 'status == "completed" && response != ""',
+        description: 'Only proceed if execution was successful with valid output',
+        useCase: 'Robust error handling'
+      }
+    ]
+  };
+
+  // Field reference guide
+  const fieldGuide = {
+    'String Fields': {
+      description: 'Text values that can be compared',
+      examples: [
+        'decision == "STRONG_BUY"',
+        'status != "error"',
+        'tone.includes("professional")',
+        'response.startswith("Success")'
+      ],
+      operators: ['==', '!=', 'includes()', 'startswith()', 'endswith()']
+    },
+    'Number Fields': {
+      description: 'Numeric values for mathematical comparisons',
+      examples: [
+        'confidence > 0.8',
+        'score >= 75',
+        'risk_score <= 0.3',
+        'price < 100'
+      ],
+      operators: ['>', '>=', '<', '<=', '==', '!=']
+    },
+    'Array Fields': {
+      description: 'Lists that can be checked for length or content',
+      examples: [
+        'red_flags.length == 0',
+        'reasons.length > 2',
+        'tags.includes("verified")',
+        'categories != []'
+      ],
+      operators: ['.length', '.includes()', '== []', '!= []']
+    },
+    'Boolean Logic': {
+      description: 'Combine multiple conditions',
+      examples: [
+        'condition1 && condition2',
+        'condition1 || condition2',
+        '!(condition)',
+        '(condition1 || condition2) && condition3'
+      ],
+      operators: ['&&', '||', '!', '()', 'and', 'or', 'not']
+    }
+  };
+
+  useEffect(() => {
+    // Detect available fields based on connected nodes
+    // This would be enhanced to actually analyze the workflow
+    const mockAgentData = {
+      prompt: formData.description || 'trading decision analysis'
+    };
+    
+    const fields = detectFieldsFromAgent(mockAgentData);
+    setAvailableFields(fields);
+  }, [formData.description]);
 
   // Parse existing condition into visual builder format
   useEffect(() => {
@@ -178,81 +404,89 @@ const LogicEditor = ({
   };
 
   const generateConditionFromVisual = () => {
-    const conditionParts = conditions
-      .filter(c => c.field && c.operator && (c.value !== '' || ['empty', 'not_empty'].includes(c.operator)))
-      .map((condition, index) => {
-        const field = availableFields.find(f => f.id === condition.field);
-        if (!field) return '';
-
-        let conditionStr = '';
-        const fieldValue = field.value;
-        
-        // Handle different operators and field types
-        switch (condition.operator) {
-          case 'contains':
-            conditionStr = `"${condition.value}" in ${fieldValue}`;
-            break;
-          case 'starts_with':
-            conditionStr = `${fieldValue}.startswith("${condition.value}")`;
-            break;
-          case 'ends_with':
-            conditionStr = `${fieldValue}.endswith("${condition.value}")`;
-            break;
-          case 'regex':
-            conditionStr = `re.match("${condition.value}", ${fieldValue})`;
-            break;
-          case 'length_gt':
-            conditionStr = `len(${fieldValue}) > ${condition.value}`;
-            break;
-          case 'length_lt':
-            conditionStr = `len(${fieldValue}) < ${condition.value}`;
-            break;
-          case 'length_eq':
-            conditionStr = `len(${fieldValue}) == ${condition.value}`;
-            break;
-          case 'empty':
-            conditionStr = `len(${fieldValue}) == 0`;
-            break;
-          case 'not_empty':
-            conditionStr = `len(${fieldValue}) > 0`;
-            break;
-          case 'has_key':
-            conditionStr = `"${condition.value}" in ${fieldValue}`;
-            break;
-          case 'between':
-            const [min, max] = condition.value.split(',').map(v => v.trim());
-            conditionStr = `${min} <= ${fieldValue} <= ${max}`;
-            break;
-          default:
-            // Standard operators (>, <, ==, !=, etc.)
-            const valueStr = field.type === 'string' && !['true', 'false', 'null'].includes(condition.value.toLowerCase())
-              ? `"${condition.value}"`
-              : condition.value;
-            conditionStr = `${fieldValue} ${condition.operator} ${valueStr}`;
+    const validConditions = conditions.filter(c => c.field && c.operator && c.value !== '');
+    
+    if (validConditions.length === 0) return '';
+    
+    const conditionStrings = validConditions.map(condition => {
+      const selectedField = availableFields.find(f => f.id === condition.field);
+      const fieldPath = selectedField?.value || condition.fieldPath || `inputs.${condition.field}`;
+      
+      let value = condition.value;
+      
+      // Handle different value types
+      if (condition.valueType === 'string' || selectedField?.type === 'string') {
+        // For string comparisons, wrap in quotes unless it's already a variable reference
+        if (!value.startsWith('inputs.') && !value.startsWith('"') && !value.startsWith("'")) {
+          value = `"${value}"`;
         }
-
-        return index > 0 ? ` ${condition.logicType.toLowerCase()} ${conditionStr}` : conditionStr;
-      });
-
-    return conditionParts.join('');
+      } else if (selectedField?.type === 'number') {
+        // Ensure numeric values are not quoted
+        value = isNaN(Number(value)) ? value : Number(value);
+      } else if (selectedField?.type === 'boolean') {
+        // Handle boolean values
+        value = value === 'true' || value === true ? 'true' : 'false';
+      }
+      
+      // Generate condition based on operator
+      switch (condition.operator) {
+        case 'equals':
+          return `${fieldPath} === ${value}`;
+        case 'not_equals':
+          return `${fieldPath} !== ${value}`;
+        case 'greater_than':
+          return `${fieldPath} > ${value}`;
+        case 'less_than':
+          return `${fieldPath} < ${value}`;
+        case 'greater_equal':
+          return `${fieldPath} >= ${value}`;
+        case 'less_equal':
+          return `${fieldPath} <= ${value}`;
+        case 'contains':
+          return `${fieldPath}.includes(${value})`;
+        case 'not_contains':
+          return `!${fieldPath}.includes(${value})`;
+        case 'starts_with':
+          return `${fieldPath}.startsWith(${value})`;
+        case 'ends_with':
+          return `${fieldPath}.endsWith(${value})`;
+        case 'is_empty':
+          return `!${fieldPath} || ${fieldPath} === ""`;
+        case 'is_not_empty':
+          return `${fieldPath} && ${fieldPath} !== ""`;
+        default:
+          return `${fieldPath} === ${value}`;
+      }
+    });
+    
+    // Join conditions with logical operators
+    if (conditionStrings.length === 1) {
+      return conditionStrings[0];
+    }
+    
+    // Handle multiple conditions with AND/OR logic
+    let result = conditionStrings[0];
+    for (let i = 1; i < conditionStrings.length; i++) {
+      const logicType = validConditions[i-1].logicType || 'AND';
+      const operator = logicType === 'AND' ? '&&' : '||';
+      result = `${result} ${operator} ${conditionStrings[i]}`;
+    }
+    
+    return result;
   };
 
   const addCondition = () => {
-    const newId = Math.max(...conditions.map(c => c.id)) + 1;
     setConditions([...conditions, {
-      id: newId,
+      id: Date.now(),
       field: '',
       operator: '',
       value: '',
-      valueType: 'single',
       logicType: 'AND'
     }]);
   };
 
   const removeCondition = (id) => {
-    if (conditions.length > 1) {
-      setConditions(conditions.filter(c => c.id !== id));
-    }
+    setConditions(conditions.filter(c => c.id !== id));
   };
 
   const updateCondition = (id, field, value) => {
@@ -263,7 +497,44 @@ const LogicEditor = ({
 
   const getOperatorsForField = (fieldId) => {
     const field = availableFields.find(f => f.id === fieldId);
-    return field ? operatorsByType[field.type] || [] : [];
+    const baseOperators = [
+      { value: 'equals', label: 'equals (==)' },
+      { value: 'not_equals', label: 'not equals (!=)' }
+    ];
+
+    if (!field) return baseOperators;
+
+    if (field.type === 'number') {
+      return [
+        ...baseOperators,
+        { value: 'greater_than', label: 'greater than (>)' },
+        { value: 'greater_equal', label: 'greater or equal (>=)' },
+        { value: 'less_than', label: 'less than (<)' },
+        { value: 'less_equal', label: 'less or equal (<=)' }
+      ];
+    }
+
+    if (field.type === 'string') {
+      return [
+        ...baseOperators,
+        { value: 'contains', label: 'contains' },
+        { value: 'not_contains', label: 'not contains' },
+        { value: 'starts_with', label: 'starts with' },
+        { value: 'ends_with', label: 'ends with' }
+      ];
+    }
+
+    if (field.type === 'array') {
+      return [
+        { value: 'array_length_equals', label: 'array length equals' },
+        { value: 'array_length_greater', label: 'array length greater' },
+        { value: 'array_not_empty', label: 'array not empty' },
+        { value: 'array_empty', label: 'array empty' },
+        { value: 'contains', label: 'contains item' }
+      ];
+    }
+
+    return baseOperators;
   };
 
   const getSelectedField = (fieldId) => {
@@ -297,360 +568,260 @@ const LogicEditor = ({
     }
   };
 
+  const applyExample = (example) => {
+    handleInputChange({
+      target: { name: 'condition', value: example.condition }
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {/* Description */}
-      <div>
-        <label className="block text-gray-700 mb-1 flex items-center">
-          Description
-          <HelpTooltip type="logic" field="description" />
-        </label>
-        <input
-          type="text"
-          name="description"
-          value={formData.description || ''}
-          onChange={handleInputChange}
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Describe what this logic node does..."
-        />
-      </div>
-
-      {/* Build Mode Toggle */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900">Condition Setup</h3>
-        <div className="flex items-center space-x-2">
-          <div className="inline-flex rounded-lg border border-gray-200 p-1">
-            <button
-              type="button"
-              onClick={() => setBuildMode('visual')}
-              className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                buildMode === 'visual'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Eye className="w-4 h-4 mr-1.5" />
-              Visual Builder
-            </button>
-            <button
-              type="button"
-              onClick={() => setBuildMode('code')}
-              className={`inline-flex items-center px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                buildMode === 'code'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <Code className="w-4 h-4 mr-1.5" />
-              Code Editor
-            </button>
-          </div>
+      {/* Header with Help */}
+      <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+        <h3 className="font-semibold text-blue-800 mb-2">🧠 Logic Node - Universal Decision Making</h3>
+        <p className="text-sm text-blue-700 mb-3">
+          Create intelligent decision points in your workflow. Logic nodes evaluate conditions and route your workflow based on AI outputs, data values, or any other criteria.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowExamples(!showExamples)}
+            className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
+          >
+            📚 View Examples
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFieldGuide(!showFieldGuide)}
+            className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded"
+          >
+            📖 Field Guide
+          </button>
         </div>
       </div>
 
-      {/* Visual Builder */}
-      {buildMode === 'visual' && (
-        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-          {connectedNodes.length === 0 && (
-            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <div className="text-sm text-blue-800">
-                <strong>Note:</strong> Connect other nodes to this logic node to see their output fields here. You can use the code editor below to write conditions manually, or connect nodes first to use the visual builder.
+      {/* Examples Panel */}
+      {showExamples && (
+        <div className="bg-gray-50 p-4 rounded-lg border">
+          <h4 className="font-semibold mb-3">💡 Logic Examples by Use Case</h4>
+          
+          <div className="space-y-4">
+            {Object.entries(logicExamples).map(([category, examples]) => (
+              <div key={category} className="border rounded-lg p-3 bg-white">
+                <h5 className="font-medium mb-2 capitalize">{category} Use Cases</h5>
+                <div className="space-y-2">
+                  {examples.map((example, idx) => (
+                    <div key={idx} className="border-l-4 border-blue-300 pl-3 py-2">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h6 className="font-medium text-sm">{example.title}</h6>
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded block my-1">
+                            {example.condition}
+                          </code>
+                          <p className="text-xs text-gray-600">{example.description}</p>
+                          <span className="text-xs text-blue-600 italic">{example.useCase}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => applyExample(example)}
+                          className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded ml-2"
+                        >
+                          Use This
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-
-          {/* Templates */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">Quick Templates</span>
-              <button
-                type="button"
-                onClick={() => setShowTemplates(!showTemplates)}
-                className="text-sm text-blue-600 hover:text-blue-700"
-              >
-                {showTemplates ? 'Hide' : 'Show'} Templates
-              </button>
-            </div>
-            
-            {showTemplates && (
-              <div className="grid grid-cols-2 gap-2">
-                {conditionTemplates.map((template, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    onClick={() => applyTemplate(template)}
-                    className="p-3 text-left border border-gray-200 rounded-md hover:bg-white hover:shadow-sm transition-all"
-                  >
-                    <div className="font-medium text-sm text-gray-900">{template.name}</div>
-                    <div className="text-xs text-gray-500 mt-1">{template.description}</div>
-                  </button>
-                ))}
-              </div>
-            )}
+            ))}
           </div>
+        </div>
+      )}
 
-          {/* Condition Builder */}
-          <div className="space-y-3">
-            {conditions.map((condition, index) => {
-              const selectedField = getSelectedField(condition.field);
-              const availableOperators = getOperatorsForField(condition.field);
-              const selectedOperator = availableOperators.find(op => op.value === condition.operator);
-
-              return (
-                <div key={condition.id} className="border border-gray-200 rounded-lg p-4 bg-white">
-                  {index > 0 && (
-                    <div className="flex justify-center mb-3">
-                      <div className="inline-flex rounded-md shadow-sm">
-                        <button
-                          type="button"
-                          onClick={() => updateCondition(condition.id, 'logicType', 'AND')}
-                          className={`px-3 py-1 text-sm font-medium rounded-l-md border ${
-                            condition.logicType === 'AND'
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          AND
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => updateCondition(condition.id, 'logicType', 'OR')}
-                          className={`px-3 py-1 text-sm font-medium rounded-r-md border-l-0 border ${
-                            condition.logicType === 'OR'
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          OR
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-12 gap-3 items-start">
-                    {/* Field Selector */}
-                    <div className="col-span-4">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Field from Previous Nodes
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={condition.field}
-                          onChange={(e) => {
-                            updateCondition(condition.id, 'field', e.target.value);
-                            updateCondition(condition.id, 'operator', ''); // Reset operator
-                          }}
-                          className="w-full p-2 border border-gray-300 rounded-md bg-white text-sm appearance-none pr-8"
-                        >
-                          <option value="">Select a field...</option>
-                          {connectedNodes.length > 0 ? (
-                            connectedNodes.map(node => (
-                              <optgroup key={node.id} label={`📡 ${node.type || node.label || 'Node'}`}>
-                                {node.outputs && Object.entries(node.outputs).map(([fieldName, fieldInfo]) => (
-                                  <option key={`${node.id}.${fieldName}`} value={`${node.id}.${fieldName}`}>
-                                    {fieldName} ({fieldInfo.type || 'unknown'})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            ))
-                          ) : (
-                            <option value="" disabled>
-                              No connected nodes available. Connect other nodes to this logic node first.
-                            </option>
-                          )}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      {selectedField && (
-                        <div className="mt-1 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                          <div className="font-medium">Sample: {selectedField.sample}</div>
-                          <div className="text-blue-500 mt-1">Type: {selectedField.type}</div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Operator Selector */}
-                    <div className="col-span-3">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Condition
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={condition.operator}
-                          onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md bg-white text-sm appearance-none pr-8"
-                          disabled={!condition.field}
-                        >
-                          <option value="">Choose condition...</option>
-                          {availableOperators.map(op => (
-                            <option key={op.value} value={op.value} title={op.description}>
-                              {op.label}
-                            </option>
-                          ))}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                      </div>
-                      {selectedOperator && (
-                        <div className="mt-1 text-xs text-gray-500">
-                          {selectedOperator.description}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Value Input */}
-                    <div className="col-span-4">
-                      <label className="block text-xs font-medium text-gray-700 mb-1">
-                        {condition.operator === 'between' ? 'Range (min, max)' : 'Value'}
-                      </label>
-                      {selectedField?.type === 'boolean' ? (
-                        <select
-                          value={condition.value}
-                          onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md bg-white text-sm"
-                        >
-                          <option value="">Select...</option>
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      ) : ['empty', 'not_empty'].includes(condition.operator) ? (
-                        <div className="p-2 bg-gray-100 border border-gray-300 rounded-md text-sm text-gray-500 italic">
-                          No value needed
-                        </div>
-                      ) : (
-                        <input
-                          type={selectedField?.type === 'number' ? 'number' : 'text'}
-                          value={condition.value}
-                          onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
-                          className="w-full p-2 border border-gray-300 rounded-md text-sm"
-                          placeholder={
-                            condition.operator === 'between' 
-                              ? '10, 100' 
-                              : selectedField?.type === 'number' 
-                                ? '0' 
-                                : 'Enter value...'
-                          }
-                          disabled={!condition.operator}
-                        />
-                      )}
-                    </div>
-
-                    {/* Remove Button */}
-                    <div className="col-span-1 flex justify-end">
-                      {conditions.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeCondition(condition.id)}
-                          className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
-                          title="Remove condition"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
+      {/* Field Guide Panel */}
+      {showFieldGuide && (
+        <div className="bg-gray-50 p-4 rounded-lg border">
+          <h4 className="font-semibold mb-3">📖 Field Types & Operators Guide</h4>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(fieldGuide).map(([type, info]) => (
+              <div key={type} className="border rounded-lg p-3 bg-white">
+                <h5 className="font-medium mb-2">{type}</h5>
+                <p className="text-sm text-gray-600 mb-2">{info.description}</p>
+                
+                <div className="mb-2">
+                  <span className="text-xs font-medium text-gray-700">Examples:</span>
+                  <div className="space-y-1 mt-1">
+                    {info.examples.map((example, idx) => (
+                      <code key={idx} className="text-xs bg-gray-100 px-2 py-1 rounded block">
+                        {example}
+                      </code>
+                    ))}
                   </div>
                 </div>
-              );
-            })}
+                
+                <div>
+                  <span className="text-xs font-medium text-gray-700">Operators:</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {info.operators.map((op, idx) => (
+                      <span key={idx} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        {op}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
+      )}
 
-          {/* Add Condition Button */}
-          <div className="flex justify-center mt-4">
+      {/* Main Logic Editor */}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-gray-700 mb-1 flex items-center font-medium">
+            Logic Condition
+            <HelpTooltip type="logic" field="condition" />
+          </label>
+          <textarea
+            name="condition"
+            value={formData.condition || ''}
+            onChange={handleInputChange}
+            className="w-full p-3 border rounded-lg font-mono text-sm"
+            rows="3"
+            placeholder="Enter your condition (e.g., decision == 'STRONG_BUY' && confidence > 0.8)"
+          />
+          <div className="text-xs text-gray-500 mt-1">
+            💡 Use field names directly (decision, confidence) or with inputs prefix (inputs.decision)
+          </div>
+        </div>
+
+        {/* Visual Condition Builder */}
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="flex justify-between items-center mb-3">
+            <h4 className="font-medium">🎯 Visual Condition Builder</h4>
             <button
               type="button"
               onClick={addCondition}
-              className="inline-flex items-center px-4 py-2 border border-dashed border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400 transition-colors"
+              className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
             >
-              <Plus className="w-4 h-4 mr-2" />
-              Add Another Condition
+              + Add Condition
             </button>
           </div>
 
-          {/* Generated Condition Preview */}
-          <div className="mt-6 border-t pt-4">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Generated Code:</h4>
-            <div className="bg-gray-900 p-3 rounded-md">
-              <code className="text-green-400 text-sm font-mono block overflow-x-auto">
-                {generatedCondition || '# Configure conditions above to see the generated code...'}
-              </code>
-            </div>
-            
-            {generatedCondition && conditions.filter(c => c.field && c.operator).length > 0 && (
-              <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <div className="text-sm text-blue-800">
-                  <div className="font-medium mb-1">Plain English:</div>
-                  <div className="italic">
-                    {conditions
-                      .filter(c => c.field && c.operator)
-                      .map((condition, index) => {
-                        const field = getSelectedField(condition.field);
-                        const operator = getOperatorsForField(condition.field).find(op => op.value === condition.operator);
-                        
-                        if (!field || !operator) return '';
-                        
-                        const prefix = index > 0 ? ` ${condition.logicType.toLowerCase()} ` : '';
-                        const fieldName = field.label.split(': ')[1];
-                        const valueText = ['empty', 'not_empty'].includes(condition.operator) ? '' : ` "${condition.value}"`;
-                        
-                        return `${prefix}${fieldName} ${operator.label}${valueText}`;
-                      })
-                      .join('')}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          {conditions.length === 0 && (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Click "Add Condition" to build your logic visually, or write it directly above.
+            </p>
+          )}
 
-      {/* Code Editor */}
-      {buildMode === 'code' && (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-gray-700 mb-1 flex items-center">
-              Condition Code
-              <HelpTooltip type="logic" field="condition" />
-              <span className="ml-2 text-xs text-gray-500">Advanced users only</span>
-            </label>
-            <textarea
-              name="condition"
-              value={formData.condition || ''}
-              onChange={handleInputChange}
-              className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="inputs.value > 10"
-              rows={4}
-            />
-            <div className="text-xs text-gray-500 mt-1">
-              Use Python-like syntax. Available: inputs.*, context.*, env.*
+          {conditions.map((condition, index) => (
+            <div key={condition.id} className="flex items-center gap-2 mb-2 p-2 bg-white rounded border">
+              {index > 0 && (
+                <select
+                  value={condition.logicType}
+                  onChange={(e) => updateCondition(condition.id, 'logicType', e.target.value)}
+                  className="text-xs border rounded px-2 py-1"
+                >
+                  <option value="AND">AND</option>
+                  <option value="OR">OR</option>
+                </select>
+              )}
+              
+              <select
+                value={condition.field}
+                onChange={(e) => updateCondition(condition.id, 'field', e.target.value)}
+                className="flex-1 text-xs border rounded px-2 py-1"
+              >
+                <option value="">Select Field</option>
+                {availableFields.map(field => (
+                  <option key={field.id} value={field.id}>
+                    {field.id} ({field.type}) - {field.description}
+                  </option>
+                ))}
+              </select>
+              
+              <select
+                value={condition.operator}
+                onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
+                className="text-xs border rounded px-2 py-1"
+              >
+                <option value="">Operator</option>
+                {getOperatorsForField(condition.field).map(op => (
+                  <option key={op.value} value={op.value}>
+                    {op.label}
+                  </option>
+                ))}
+              </select>
+              
+              <input
+                type="text"
+                value={condition.value}
+                onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
+                placeholder="Value"
+                className="flex-1 text-xs border rounded px-2 py-1"
+              />
+              
+              <button
+                type="button"
+                onClick={() => removeCondition(condition.id)}
+                className="text-red-500 hover:text-red-700 text-xs px-2"
+              >
+                ✕
+              </button>
             </div>
-          </div>
+          ))}
 
-          {/* Code Examples */}
-          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <h4 className="font-medium text-yellow-800 mb-3 flex items-center">
-              <BookOpen className="w-4 h-4 mr-2" />
-              Code Examples:
-            </h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div>
-                <div className="font-medium text-yellow-700 mb-1">Simple Comparisons:</div>
-                <div className="space-y-1 text-yellow-600 font-mono">
-                  <div>inputs.temperature &gt; 70</div>
-                  <div>inputs.status == "approved"</div>
-                  <div>"error" in inputs.message</div>
-                </div>
-              </div>
-              <div>
-                <div className="font-medium text-yellow-700 mb-1">Complex Logic:</div>
-                <div className="space-y-1 text-yellow-600 font-mono">
-                  <div>len(inputs.items) &gt; 0</div>
-                  <div>inputs.score &gt; 80 and inputs.verified</div>
-                  <div>inputs.country == "FR" or inputs.vip</div>
-                </div>
+          {conditions.length > 0 && (
+            <div className="mt-3 pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => {
+                  const generated = generateConditionFromVisual();
+                  handleInputChange({
+                    target: { name: 'condition', value: generated }
+                  });
+                }}
+                className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded"
+              >
+                📝 Generate Condition
+              </button>
+              <div className="mt-2 p-2 bg-gray-100 rounded text-xs font-mono">
+                Preview: {generateConditionFromVisual() || 'Add conditions above'}
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Available Fields Display */}
+        {availableFields.length > 0 && (
+          <div className="border rounded-lg p-3 bg-blue-50">
+            <h4 className="font-medium mb-2">🔍 Detected Fields from Connected Nodes</h4>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {availableFields.map(field => (
+                <div key={field.id} className="text-xs bg-white p-2 rounded border">
+                  <div className="font-medium">{field.id}</div>
+                  <div className="text-gray-600">{field.type}</div>
+                  <div className="text-gray-500 italic">{field.description}</div>
+                  <code className="text-blue-600">{JSON.stringify(field.sample)}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Tips */}
+        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+          <h4 className="font-medium text-yellow-800 mb-2">💡 Quick Tips</h4>
+          <ul className="text-sm text-yellow-700 space-y-1">
+            <li>• Use <code>&&</code> for AND logic, <code>||</code> for OR logic</li>
+            <li>• String values need quotes: <code>decision == "STRONG_BUY"</code></li>
+            <li>• Numbers don't need quotes: <code>confidence &gt; 0.8</code></li>
+            <li>• Check arrays: <code>red_flags.length == 0</code></li>
+            <li>• Combine conditions: <code>(condition1 || condition2) && condition3</code></li>
+          </ul>
+        </div>
+      </div>
 
       {/* Test Section */}
       <div className="border-t pt-6">

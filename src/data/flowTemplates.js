@@ -5,6 +5,201 @@ import { flowTemplates as cvTemplates } from './flowTemplates/cvTemplates';
 
 // Define base templates
 const baseTemplates = [
+    // NEW: Simple Crypto Data Extractor Template
+    {
+      name: '🔥 Simple Crypto Data Extractor',
+      description: 'Extract real crypto data from DexScreener and send to Telegram - WORKING VERSION',
+      thumbnail: '/img/crypto-simple-flow.png',
+      nodes: [
+        {
+          id: 'trigger-crypto-simple',
+          type: 'trigger',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'DexScreener Monitor',
+            triggerType: 'universal_polling',
+            serviceName: 'DexScreener',
+            apiEndpoint: 'https://api.dexscreener.com/latest/dex/search?q=PEPE',
+            pollingInterval: 60,
+            authType: 'none',
+            changeDetectionMethod: 'array_length',
+            nodeId: 'trigger-crypto-simple',
+            nodeType: 'trigger'
+          }
+        },
+        {
+          id: 'agent-crypto-simple',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Crypto Data Extractor',
+            role: 'Crypto Data Extraction Specialist',
+            goal: 'Extract and format crypto trading data from DexScreener API responses',
+            backstory: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data.',
+            prompt: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data from DexScreener API responses.\n\nCRITICAL INSTRUCTIONS:\n1. Extract ONLY the raw trading data\n2. DO NOT give trading advice\n3. DO NOT analyze or recommend\n4. JUST format the data cleanly\n\nINPUT: You will receive DexScreener API data\nOUTPUT: Format it like this:\n\n🔥 NEW CRYPTO TOKENS DETECTED:\n\nToken: [TOKEN_NAME]\nSymbol: [SYMBOL]\nPrice: $[PRICE]\nChain: [BLOCKCHAIN]\nLiquidity: $[LIQUIDITY]\nVolume 24h: $[VOLUME]\nPrice Change: [CHANGE]%\nStatus: [ACTIVE/NEW/TRENDING]\n\n---\n\nIf NO new tokens: Output exactly "No new crypto data detected"\n\nREMEMBER: Extract data, don\'t give advice!',
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.3,
+              max_tokens: 2000,
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.3,
+            max_tokens: 2000,
+            allowDelegation: false,
+            enableMemory: false,
+            verbose: true,
+            nodeId: 'agent-crypto-simple',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-crypto-simple',
+          type: 'task',
+          position: { x: 600, y: 100 },
+          data: {
+            label: 'Extract Crypto Data',
+            description: 'Extract and format crypto data from DexScreener',
+            expectedOutput: 'Formatted crypto data ready for Telegram',
+            async: false,
+            agentId: 'agent-crypto-simple',
+            nodeId: 'task-crypto-simple',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'output-crypto-simple',
+          type: 'output',
+          position: { x: 850, y: 100 },
+          data: {
+            label: 'Telegram Sender',
+            description: 'Send crypto data to Telegram',
+            outputType: 'webhook',
+            webhookUrl: 'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
+            webhookMethod: 'POST',
+            webhookHeaders: {
+              'Content-Type': 'application/json'
+            },
+            webhookPayload: {
+              'chat_id': '5251498620',
+              'text': '{task_output}'
+            },
+            nodeId: 'output-crypto-simple',
+            nodeType: 'output'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-trigger-agent',
+          source: 'trigger-crypto-simple',
+          target: 'agent-crypto-simple',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-task',
+          source: 'agent-crypto-simple',
+          target: 'task-crypto-simple',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-task-output',
+          source: 'task-crypto-simple',
+          target: 'output-crypto-simple',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Crypto', 'DexScreener', 'Telegram', 'Data Extraction', 'Simple'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Simple',
+      estimatedTime: '1-2 minutes',
+      useCase: 'Extract real crypto data from DexScreener and send to Telegram without trading advice.',
+      metadata: {
+        category: 'Crypto Data',
+        industry: ['Cryptocurrency', 'Trading', 'Data'],
+        outputFormat: 'Telegram Message',
+        aiCapabilities: ['Data Extraction', 'Format Conversion'],
+        businessValue: 'High - Get real crypto data notifications'
+      }
+    },
+    // Simple test template for field detection
+    {
+      name: '🧪 Field Detection Test',
+      description: 'Simple template to test field detection in Logic nodes',
+      thumbnail: '/img/test-flow.png',
+      nodes: [
+        {
+          id: 'trigger-test',
+          type: 'trigger',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'Test Trigger',
+            triggerType: 'universal_polling',
+            serviceName: 'Test API',
+            apiEndpoint: 'https://api.test.com/data',
+            nodeId: 'trigger-test',
+            nodeType: 'trigger'
+          }
+        },
+        {
+          id: 'agent-test',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Token Safety Analyzer',
+            role: 'DeFi Token Safety Analyst',
+            goal: 'Analyze tokens for safety and make buy/sell decisions',
+            backstory: 'Expert crypto analyst who makes trading decisions',
+            prompt: 'Analyze this token data and return a JSON decision with confidence and risk_score',
+            nodeId: 'agent-test',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'logic-test',
+          type: 'logic',
+          position: { x: 600, y: 100 },
+          data: {
+            label: 'Buy Decision Logic',
+            description: 'Test logic node for field detection',
+            condition: 'inputs.decision === "STRONG_BUY"',
+            nodeId: 'logic-test',
+            nodeType: 'logic'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-1',
+          source: 'trigger-test',
+          target: 'agent-test',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-2',
+          source: 'agent-test',
+          target: 'logic-test',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Test', 'Debug', 'Field Detection'],
+      frameworksUsed: ['test'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Simple',
+      estimatedTime: '30 seconds',
+      useCase: 'Testing field detection in Logic nodes'
+    },
     {
       name: 'Automation Platform Market Research 2025',
       description: '🔄 Comprehensive market analysis of automation platforms: n8n, Make.com, Zapier with competitive positioning',
@@ -895,6 +1090,104 @@ const baseTemplates = [
         aiCapabilities: ['Content Creation', 'Platform Optimization', 'Strategy Development'],
         businessValue: 'High - Increases social media engagement and brand awareness'
       }
+    },
+
+    // NEW: Targeted Column Research Template
+    {
+      name: 'Targeted Column Research Agent',
+      description: '🎯 Smart agent that only processes specific columns (topic + description) and triggers only on new data',
+      thumbnail: '/img/targeted-research-flow.png',
+      nodes: [
+        {
+          id: 'trigger-targeted-1',
+          type: 'trigger',
+          position: { x: 100, y: 100 },
+          data: {
+            label: 'Smart Airtable Monitor',
+            triggerType: 'universal_polling',
+            serviceName: 'Airtable',
+            apiEndpoint: 'https://api.airtable.com/v0/YOUR_BASE_ID/YOUR_TABLE_NAME',
+            pollingInterval: 300, // 5 minutes
+            authType: 'api_key',
+            apiKey: '', // User will fill this
+            changeDetectionMethod: 'array_length', // Only trigger on NEW records
+            nodeId: 'trigger-targeted-1',
+            nodeType: 'trigger'
+          }
+        },
+        {
+          id: 'agent-targeted-1',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: 'Targeted Research Specialist',
+            role: 'Targeted Research Specialist',
+            goal: 'Extract and research ONLY the topic and description fields from new Airtable records, ignoring all other data',
+            backstory: 'You are a focused research specialist who processes only specific data fields. You ignore metadata, IDs, timestamps, and other irrelevant fields. You focus exclusively on the "topic" and "description" fields to conduct targeted research.',
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.7,
+              max_tokens: 3000,
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 3000,
+            allowDelegation: false,
+            enableMemory: true,
+            verbose: true,
+            prompt: "IMPORTANT: You will receive Airtable data with many fields. ONLY focus on these fields:\n- \"Topic\" or \"title\" field\n- \"Description\" or \"desc\" field\n\nIGNORE all other fields like: id, createdTime, metadata, etc.\n\nFor each NEW record, extract ONLY the topic and description, then conduct focused research on that specific topic.",
+            nodeId: 'agent-targeted-1',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-research-1',
+          type: 'task',
+          position: { x: 600, y: 100 },
+          data: {
+            label: 'Focused Column Research',
+            description: 'Research each topic and description pair from new Airtable records only',
+            expectedOutput: 'For each NEW record: 1) Extract topic and description only, 2) Conduct targeted research on the topic, 3) Provide insights based on the description context, 4) Format as: "Topic: [topic] | Research: [findings] | Insights: [analysis]"',
+            async: false,
+            agentId: 'agent-targeted-1',
+            nodeId: 'task-research-1',
+            nodeType: 'task'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-trigger-agent',
+          source: 'trigger-targeted-1',
+          target: 'agent-targeted-1',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-task',
+          source: 'agent-targeted-1',
+          target: 'task-research-1',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Targeted', 'Column-Specific', 'Event-Driven', 'Airtable', 'Research'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Medium',
+      estimatedTime: '2-3 minutes',
+      useCase: 'Perfect for processing only specific columns from APIs and triggering only when new data arrives.',
+      metadata: {
+        category: 'Targeted Processing',
+        industry: ['Data Processing', 'Research', 'Content Analysis'],
+        outputFormat: 'Focused Research Report',
+        aiCapabilities: ['Field-Specific Processing', 'Event-Driven Triggers', 'Targeted Research'],
+        businessValue: 'High - Reduces noise and focuses on relevant data only'
+      }
     }
 ];
 
@@ -903,7 +1196,460 @@ export const flowTemplates = [
   ...baseTemplates,
   autoEmailReplyTemplate,
   ...crmQualifierTemplates,
-  ...cvTemplates
+  ...cvTemplates,
+  {
+    id: "intelligent-incremental-processing",
+    name: "🧠 Intelligent Incremental Data Processing",
+    description: "Advanced template for smart incremental data processing with state management, change detection, and intelligent filtering. Perfect for monitoring APIs and processing only new/changed data.",
+    category: "Advanced Automation",
+    tags: ["incremental", "state-management", "smart-filtering", "change-detection", "api-monitoring"],
+    difficulty: "Advanced",
+    estimatedTime: "15-30 minutes",
+    features: [
+      "🔍 Smart change detection (multiple methods)",
+      "📊 Incremental record processing",
+      "🎯 Intelligent field filtering",
+      "💾 Persistent state management",
+      "🚀 Performance optimized",
+      "📈 Processing analytics"
+    ],
+    nodes: [
+      {
+        id: "trigger-incremental",
+        type: "trigger",
+        position: { x: 100, y: 200 },
+        data: {
+          label: "🔄 Smart API Monitor",
+          trigger_type: "universal_polling",
+          serviceName: "Data Source API",
+          apiEndpoint: "https://api.example.com/data",
+          pollingInterval: 300,
+          changeDetectionMethod: "smart", // Auto-detects best method
+          
+          // Advanced filtering configuration
+          includeFields: ["id", "title", "description", "status", "updated_at"],
+          excludeFields: ["internal_notes", "debug_info"],
+          fieldConditions: {
+            "status": "active",
+            "updated_at": { "greater_than": "2024-01-01" }
+          },
+          recordLimit: 50,
+          sortBy: "-updated_at",
+          idField: "id",
+          timestampField: "updated_at",
+          maxNewRecords: 25,
+          
+          // Authentication
+          authType: "api_key",
+          apiKey: "${API_KEY}",
+          
+          description: "Monitors API for changes and processes only new/modified records with intelligent filtering"
+        }
+      },
+      {
+        id: "agent-data-processor",
+        type: "agent",
+        position: { x: 400, y: 200 },
+        data: {
+          label: "🤖 Incremental Data Processor",
+          role: "Data Processing Specialist",
+          goal: "Process only new and modified records efficiently while maintaining context of previous processing",
+          backstory: "You are an expert at processing incremental data updates. You focus only on new or changed records, avoiding redundant processing while maintaining awareness of the overall data context.",
+          
+          // Enhanced prompt for incremental processing
+          prompt: "You are processing incremental data updates. Focus on:\n\n1. **New Records**: Process each new record thoroughly\n2. **Modified Records**: Identify what changed and process accordingly  \n3. **Context Awareness**: Understand the relationship between records\n4. **Efficiency**: Avoid reprocessing unchanged data\n5. **Quality**: Ensure consistent processing standards\n\nFor each record, provide:\n- Summary of key information\n- Identified changes (for modified records)\n- Processing recommendations\n- Quality assessment\n\nCurrent batch contains: {new_records_count} new records, {modified_records_count} modified records.\n\nProcessing metadata: {processing_metadata}",
+
+          framework: "openrouter",
+          model: "anthropic/claude-3.5-sonnet",
+          temperature: 0.3,
+          maxTokens: 2000,
+          description: "Processes incremental data updates with context awareness and efficiency focus"
+        }
+      },
+      {
+        id: "task-analytics",
+        type: "task",
+        position: { x: 700, y: 200 },
+        data: {
+          label: "📊 Processing Analytics",
+          description: "Generate analytics and insights from the incremental processing results",
+          expectedOutput: "Comprehensive analytics report including processing metrics, data quality insights, and trend analysis",
+          
+          prompt: "Analyze the incremental data processing results and generate a comprehensive analytics report.\n\nInclude:\n\n## Processing Metrics\n- Records processed (new vs modified)\n- Processing efficiency metrics\n- Data quality indicators\n- Change detection accuracy\n\n## Data Insights  \n- Key trends identified\n- Anomalies or outliers\n- Data quality issues\n- Recommendations for optimization\n\n## Performance Analysis\n- Processing time analysis\n- Resource utilization\n- Bottlenecks identified\n- Optimization opportunities\n\n## Summary & Recommendations\n- Overall processing health\n- Suggested improvements\n- Alert conditions\n- Next steps\n\nFormat as a structured report with clear sections and actionable insights.",
+
+          agent: "agent-data-processor"
+        }
+      },
+      {
+        id: "output-results",
+        type: "output",
+        position: { x: 1000, y: 200 },
+        data: {
+          label: "📤 Smart Output Manager",
+          outputType: "multi",
+          
+          // Email configuration for alerts
+          emailEnabled: true,
+          emailSubject: "Incremental Data Processing Report - {timestamp}",
+          emailTemplate: `
+# Incremental Data Processing Report
+
+## Summary
+- **New Records**: {new_records_count}
+- **Modified Records**: {modified_records_count}  
+- **Processing Time**: {processing_time}
+- **Status**: {status}
+
+## Key Insights
+{analytics_summary}
+
+## Full Report
+{full_report}
+
+---
+Generated by CrewBuilder Intelligent Processing System
+`,
+
+          // Webhook for real-time notifications
+          webhookEnabled: true,
+          webhookUrl: "https://hooks.example.com/data-processing",
+          webhookPayload: {
+            "event": "incremental_processing_complete",
+            "timestamp": "{timestamp}",
+            "metrics": {
+              "new_records": "{new_records_count}",
+              "modified_records": "{modified_records_count}",
+              "processing_time": "{processing_time}"
+            },
+            "summary": "{analytics_summary}"
+          },
+          
+          // Database storage
+          databaseEnabled: true,
+          databaseTable: "processing_results",
+          databaseFields: {
+            "timestamp": "{timestamp}",
+            "new_records_count": "{new_records_count}",
+            "modified_records_count": "{modified_records_count}",
+            "processing_status": "{status}",
+            "analytics_data": "{full_report}"
+          },
+          
+          description: "Manages multiple output channels for processing results and analytics"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "e1-2",
+        source: "trigger-incremental",
+        target: "agent-data-processor",
+        type: "smoothstep",
+        animated: true,
+        data: {
+          label: "📊 Incremental Data",
+          description: "Passes only new/modified records with change metadata"
+        }
+      },
+      {
+        id: "e2-3", 
+        source: "agent-data-processor",
+        target: "task-analytics",
+        type: "smoothstep",
+        animated: true,
+        data: {
+          label: "🔍 Processed Results",
+          description: "Processed data with insights and recommendations"
+        }
+      },
+      {
+        id: "e3-4",
+        source: "task-analytics", 
+        target: "output-results",
+        type: "smoothstep",
+        animated: true,
+        data: {
+          label: "📈 Analytics Report",
+          description: "Comprehensive analytics and performance metrics"
+        }
+      }
+    ],
+    metadata: {
+      version: "2.0",
+      created: "2024-01-28",
+      author: "CrewBuilder AI",
+      complexity: "advanced",
+      useCase: "incremental-data-processing",
+      industry: ["technology", "data-analytics", "automation"],
+      estimatedCost: "$0.15-0.30 per execution",
+      
+      setupInstructions: [
+        "1. Configure your API endpoint and authentication",
+        "2. Set up field filtering based on your data structure", 
+        "3. Choose appropriate change detection method",
+        "4. Configure output channels (email, webhook, database)",
+        "5. Test with a small dataset first",
+        "6. Monitor processing metrics and adjust as needed"
+      ],
+      
+      bestPractices: [
+        "Start with 'smart' change detection for automatic optimization",
+        "Use field filtering to reduce processing overhead",
+        "Set reasonable limits on new records per batch",
+        "Monitor processing metrics for performance optimization",
+        "Implement proper error handling and alerting",
+        "Regular cleanup of old state data"
+      ],
+      
+      troubleshooting: [
+        "If no changes detected: Check API endpoint and authentication",
+        "If too many records: Adjust maxNewRecords and filtering",
+        "If processing slow: Review field filtering and record limits",
+        "If duplicates: Verify idField configuration",
+        "If missing data: Check includeFields configuration"
+      ]
+    }
+  },
+  {
+    id: "live-dex-coin-scanner",
+    name: "🚀 Live Dex Coin Scanner & Auto-Buyer",
+    description: "Advanced crypto trading bot that monitors DexScreener for new tokens, analyzes them with AI, and executes trades automatically. Includes Telegram notifications and risk management.",
+    category: "Crypto Trading",
+    tags: ["crypto", "trading", "dexscreener", "automation", "telegram", "defi"],
+    difficulty: "Expert",
+    estimatedTime: "30-45 minutes",
+    features: [
+      "🔍 Real-time DexScreener monitoring",
+      "🧠 AI-powered token analysis",
+      "💰 Automated buying with risk management",
+      "📱 Telegram notifications",
+      "🛡️ Scam detection & filtering",
+      "📊 Performance tracking"
+    ],
+    nodes: [
+      {
+        id: "trigger-dex-scanner",
+        type: "trigger",
+        position: { x: 100, y: 200 },
+        data: {
+          label: "🔍 DexScreener Monitor",
+          trigger_type: "universal_polling",
+          serviceName: "DexScreener",
+          apiEndpoint: "https://api.dexscreener.com/latest/dex/search?q=PEPE",
+          pollingInterval: 60,
+          changeDetectionMethod: "array_length",
+          
+          includeFields: [
+            "pairCreatedAt", 
+            "baseToken.symbol", 
+            "baseToken.name",
+            "priceUsd", 
+            "liquidity.usd",
+            "volume.h24",
+            "priceChange.h24",
+            "url",
+            "chainId"
+          ],
+          
+          authType: "none",
+          description: "Monitors DexScreener for new PEPE pairs with real crypto data"
+        }
+      },
+      {
+        id: "agent-token-analyzer",
+        type: "agent",
+        position: { x: 400, y: 150 },
+        data: {
+          label: "🧠 Crypto Data Extractor",
+          role: "Crypto Data Extraction Specialist",
+          goal: "Extract and format crypto trading data from DexScreener API responses without giving advice",
+          backstory: "You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data from DexScreener API responses.",
+          
+          prompt: "You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data from DexScreener API responses.\n\nCRITICAL INSTRUCTIONS:\n1. Extract ONLY the raw trading data\n2. DO NOT give trading advice\n3. DO NOT analyze or recommend\n4. JUST format the data cleanly\n\nINPUT: You will receive DexScreener API data\nOUTPUT: Format it like this:\n\n🔥 NEW CRYPTO TOKENS DETECTED:\n\nToken: [TOKEN_NAME]\nSymbol: [SYMBOL]\nPrice: $[PRICE]\nChain: [BLOCKCHAIN]\nLiquidity: $[LIQUIDITY]\nVolume 24h: $[VOLUME]\nPrice Change: [CHANGE]%\nStatus: [ACTIVE/NEW/TRENDING]\n\n---\n\nIf NO new tokens: Output exactly \"No new crypto data detected\"\n\nREMEMBER: Extract data, don't give advice!\n\nReturn JSON format:\n{\n  \"decision\": \"STRONG_BUY|BUY|HOLD|AVOID\",\n  \"confidence\": 0.85,\n  \"risk_score\": 0.3,\n  \"token_data\": \"formatted token info\",\n  \"raw_data\": \"extracted data\"\n}",
+
+          framework: "openrouter",
+          model: "anthropic/claude-3.5-sonnet",
+          temperature: 0.3,
+          maxTokens: 1500,
+          description: "AI agent that extracts crypto data without giving trading advice"
+        }
+      },
+      {
+        id: "logic-buy-decision",
+        type: "logic",
+        position: { x: 700, y: 200 },
+        data: {
+          label: "💡 Buy Decision Logic",
+          description: "Decides whether to execute buy based on AI analysis",
+          condition: `decision == "STRONG_BUY" || decision == "BUY"`,
+          nodeId: "logic-buy-decision",
+          nodeType: "logic"
+        }
+      },
+      {
+        id: "agent-trade-executor",
+        type: "agent",
+        position: { x: 1000, y: 150 },
+        data: {
+          label: "💰 Trade Executor",
+          role: "DeFi Trading Specialist",
+          goal: "Execute safe and profitable token purchases with proper risk management",
+          backstory: "You are a professional DeFi trader who executes trades with precision. You always use proper slippage, check for sufficient liquidity, and implement stop-losses.",
+          
+          prompt: "Execute a token purchase based on this analysis:\n\n**TRADE PARAMETERS:**\n- Token: {{trigger.baseToken.symbol}}\n- Current Price: ${{trigger.priceUsd}}\n- Liquidity: ${{trigger.liquidity.usd}}\n\n**EXECUTION CHECKLIST:**\n1. Verify price is reasonable\n2. Check liquidity is sufficient\n3. Calculate slippage (max 5%)\n4. Set stop-loss at -20%\n5. Execute trade\n\nReturn execution details:\n{\n  \"action\": \"BUY_EXECUTED|BUY_FAILED|BUY_SKIPPED\",\n  \"amount_usd\": 50,\n  \"tokens_received\": 125000,\n  \"price_paid\": 0.0004,\n  \"tx_hash\": \"0x123...\",\n  \"reason\": \"Trade executed successfully\"\n}",
+
+          framework: "openrouter", 
+          model: "openai/gpt-4",
+          temperature: 0.2,
+          maxTokens: 1000,
+          description: "Executes token purchases with risk management"
+        }
+      },
+      {
+        id: "task-telegram-notify",
+        type: "task",
+        position: { x: 1300, y: 200 },
+        data: {
+          label: "📱 Telegram Notification",
+          description: "Send trading results to Telegram channel",
+          expectedOutput: "Formatted Telegram message with trade details and performance metrics",
+          
+          prompt: "Create a Telegram notification for this crypto trade. Return ONLY the message text, no JSON or extra formatting:\n\n**TRADE SUMMARY:**\nToken: {{trigger.baseToken.symbol}} ({{trigger.baseToken.name}})\nAction: {{trade_result.action}}\nAmount: ${{trade_result.amount_usd}}\nPrice: ${{trade_result.price_paid}}\nTokens: {{trade_result.tokens_received}}\n\n**ANALYSIS:**\nDecision: {{analysis.decision}}\nConfidence: {{analysis.confidence}}%\n\n**MARKET DATA:**\nLiquidity: ${{trigger.liquidity.usd}}\n24h Volume: ${{trigger.volume.h24}}\n24h Change: {{trigger.priceChange.h24}}%\n\nFormat as an engaging Telegram message with emojis and clear sections. Output should be plain text ready to send to Telegram.",
+
+          agent: "agent-trade-executor"
+        }
+      },
+      {
+        id: "output-telegram",
+        type: "output",
+        position: { x: 1600, y: 200 },
+        data: {
+          label: "📤 Telegram Sender",
+          outputType: "webhook",
+          
+          webhookUrl: "https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+          webhookMethod: "POST",
+          webhookHeaders: {
+            "Content-Type": "application/json"
+          },
+          webhookPayload: {
+            "chat_id": "5251498620",
+            "text": "{task_output}"
+          },
+          
+          description: "Sends formatted trading notifications to Telegram"
+        }
+      },
+      {
+        id: "task-risk-monitor",
+        type: "task",
+        position: { x: 1000, y: 350 },
+        data: {
+          label: "🛡️ Risk Monitor",
+          description: "Monitor portfolio risk and set alerts",
+          expectedOutput: "Risk assessment and portfolio recommendations",
+          
+          prompt: "Monitor trading risk and portfolio health:\n\n**CURRENT TRADE:**\n{{trade_result}}\n\n**RISK ANALYSIS:**\n1. Calculate position size vs total portfolio\n2. Assess concentration risk\n3. Monitor stop-loss levels\n4. Track daily/weekly P&L\n\n**ALERTS:**\n- If daily loss > 5% of portfolio\n- If single position > 10% of portfolio  \n- If stop-loss triggered\n- If unusual market volatility\n\nProvide risk recommendations and alerts.",
+
+          agent: "agent-trade-executor"
+        }
+      }
+    ],
+    edges: [
+      {
+        id: "e1-2",
+        source: "trigger-dex-scanner",
+        target: "agent-token-analyzer",
+        type: "smoothstep",
+        animated: true,
+        data: { label: "🔍 New Token Data" }
+      },
+      {
+        id: "e2-3",
+        source: "agent-token-analyzer", 
+        target: "logic-buy-decision",
+        type: "smoothstep",
+        animated: true,
+        data: { label: "📊 Analysis Results" }
+      },
+      {
+        id: "e3-4",
+        source: "logic-buy-decision",
+        target: "agent-trade-executor",
+        type: "smoothstep",
+        animated: true,
+        sourceHandle: "true",
+        data: { label: "✅ Buy Approved" }
+      },
+      {
+        id: "e4-5",
+        source: "agent-trade-executor",
+        target: "task-telegram-notify",
+        type: "smoothstep", 
+        animated: true,
+        data: { label: "💰 Trade Results" }
+      },
+      {
+        id: "e5-6",
+        source: "task-telegram-notify",
+        target: "output-telegram",
+        type: "smoothstep",
+        animated: true,
+        data: { label: "📱 Notification" }
+      },
+      {
+        id: "e4-7",
+        source: "agent-trade-executor",
+        target: "task-risk-monitor", 
+        type: "smoothstep",
+        animated: true,
+        data: { label: "🛡️ Risk Check" }
+      }
+    ],
+    metadata: {
+      version: "1.0",
+      created: "2024-01-28",
+      author: "CrewBuilder AI",
+      complexity: "expert",
+      useCase: "crypto-trading-automation",
+      industry: ["cryptocurrency", "defi", "trading", "fintech"],
+      estimatedCost: "$2-5 per execution",
+      
+      setupInstructions: [
+        "1. Get DexScreener API access (free)",
+        "2. Set up Telegram bot and get bot token",
+        "3. Configure trading wallet/exchange API",
+        "4. Set risk management parameters",
+        "5. Test with small amounts first",
+        "6. Monitor performance and adjust filters"
+      ],
+      
+      riskWarnings: [
+        "⚠️ CRYPTO TRADING IS HIGH RISK - Only invest what you can afford to lose",
+        "⚠️ Test thoroughly with small amounts before scaling",
+        "⚠️ Always use stop-losses and position sizing",
+        "⚠️ Monitor for honeypots and rug pulls",
+        "⚠️ Comply with local regulations"
+      ],
+      
+      bestPractices: [
+        "Start with very small position sizes ($10-50)",
+        "Use multiple safety checks and filters",
+        "Monitor performance daily",
+        "Set strict stop-losses (-20% max)",
+        "Diversify across multiple tokens",
+        "Keep detailed trading logs"
+      ],
+      
+      profitPotential: [
+        "💰 Early detection of 10-100x tokens",
+        "🚀 Automated 24/7 monitoring",
+        "⚡ Faster than manual traders",
+        "🎯 Consistent strategy execution",
+        "📈 Compound growth potential"
+      ]
+    }
+  }
 ];
       
       

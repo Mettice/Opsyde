@@ -86,6 +86,12 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
         return '🔗';
       case 'schedule':
         return '⏰';
+      case 'universal_polling':
+        return '🔄';
+      case 'universal_webhook':
+        return '📡';
+      case 'manual':
+        return '⚡';
       default:
         return '⚡';
     }
@@ -156,6 +162,15 @@ const TriggerNode = React.memo(({ data, isConnectable, selected }) => {
           return `Monthly on day ${data.scheduleMonthDay || '1'}`;
         }
         return `Scheduled (${data.scheduleType})`;
+      case 'universal_polling':
+        const serviceName = data.serviceName || 'API';
+        const interval = data.pollingInterval ? Math.floor(data.pollingInterval / 60) : 5;
+        return `${serviceName} Polling (${interval}min)`;
+      case 'universal_webhook':
+        const webhookService = data.serviceName || 'Service';
+        return `${webhookService} Webhook`;
+      case 'manual':
+        return 'Manual Trigger';
       default:
         return 'Manual Trigger';
     }

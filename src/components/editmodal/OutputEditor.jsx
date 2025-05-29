@@ -209,19 +209,91 @@ const OutputEditor = ({ formData, handleInputChange }) => {
 
       {/* EXISTING: Traditional Configuration (unchanged) */}
       {formData.outputType === 'webhook' && (
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-1">Webhook URL</label>
-          <input
-            type="text"
-            name="webhookUrl"
-            value={formData.webhookUrl || ''}
-            onChange={handleOutputConfigChange}
-            className="w-full p-2 border rounded"
-            placeholder="https://example.com/webhook"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            The URL where output data will be sent via a POST request.
-          </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-gray-700 mb-1">Webhook URL</label>
+            <input
+              type="text"
+              name="webhookUrl"
+              value={formData.webhookUrl || ''}
+              onChange={handleOutputConfigChange}
+              className="w-full p-2 border rounded"
+              placeholder="https://api.telegram.org/bot{TOKEN}/sendMessage"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The URL where output data will be sent via a POST request.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 mb-1">HTTP Method</label>
+            <select
+              name="webhookMethod"
+              value={formData.webhookMethod || 'POST'}
+              onChange={handleOutputConfigChange}
+              className="w-full p-2 border rounded"
+            >
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="PATCH">PATCH</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 mb-1">Headers (JSON)</label>
+            <textarea
+              name="webhookHeaders"
+              value={formData.webhookHeaders || '{\n  "Content-Type": "application/json"\n}'}
+              onChange={handleOutputConfigChange}
+              className="w-full p-2 border rounded font-mono text-sm"
+              rows={3}
+              placeholder='{"Content-Type": "application/json"}'
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              HTTP headers to send with the request (JSON format).
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-gray-700 mb-1">Payload (JSON)</label>
+            <textarea
+              name="webhookPayload"
+              value={formData.webhookPayload || '{\n  "chat_id": "YOUR_CHAT_ID",\n  "text": "{{message}}",\n  "parse_mode": "Markdown"\n}'}
+              onChange={handleOutputConfigChange}
+              className="w-full p-2 border rounded font-mono text-sm"
+              rows={6}
+              placeholder='{"message": "{{output}}", "timestamp": "{{timestamp}}"}'
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              JSON payload to send. Use {'{variable}'} for dynamic values from previous nodes.
+            </p>
+          </div>
+
+          {/* Telegram Quick Setup */}
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+            <h4 className="font-medium text-blue-800 mb-2">🤖 Telegram Bot Quick Setup</h4>
+            <p className="text-sm text-blue-700 mb-2">
+              For Telegram bots, use this configuration:
+            </p>
+            <div className="space-y-2 text-xs">
+              <div>
+                <strong>URL:</strong> <code className="bg-white px-1 rounded">https://api.telegram.org/bot{'{TOKEN}'}/sendMessage</code>
+              </div>
+              <div>
+                <strong>Payload:</strong>
+                <div className="bg-white p-2 rounded mt-1 text-xs overflow-x-auto font-mono border">
+                  {"{"}<br/>
+                  &nbsp;&nbsp;"chat_id": "YOUR_CHAT_ID",<br/>
+                  &nbsp;&nbsp;"text": "{'{telegram_message}'}",<br/>
+                  &nbsp;&nbsp;"parse_mode": "Markdown"<br/>
+                  {"}"}
+                </div>
+              </div>
+              <div className="text-blue-600">
+                Replace <code>YOUR_CHAT_ID</code> with your actual Telegram chat ID.
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

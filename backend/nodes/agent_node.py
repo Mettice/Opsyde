@@ -55,8 +55,8 @@ class AgentNode:
                 "backstory": node_data.get("backstory", ""),
                 "framework": node_data.get("framework", "openrouter"),
                 "llmModel": node_data.get("llmModel", "gpt-4o-mini"),
-                "temperature": node_data.get("temperature", 0.7),
-                "max_tokens": node_data.get("max_tokens", 4000),
+                "temperature": float(node_data.get("temperature", 0.7)),
+                "max_tokens": int(node_data.get("max_tokens", 4000)),
                 "enableMemory": node_data.get("enableMemory", False),
                 "allowDelegation": node_data.get("allowDelegation", False),
                 "streamIntermediateSteps": node_data.get("streamIntermediateSteps", False)
