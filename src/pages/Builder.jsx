@@ -715,6 +715,7 @@ const BuilderPageContent = () => {
               case 'email':
               case 'custom_tool':
                 addTool(); break;
+              case 'chatbot': addChatNode(); break;
               case 'trigger': addTriggerNode(); break;
               case 'input': addInputNode(); break;
               case 'output': addOutputNode(); break;

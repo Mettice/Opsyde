@@ -25,11 +25,11 @@ router = APIRouter(tags=["user-settings"])
 
 # Pydantic models for API requests
 class APIKeyRequest(BaseModel):
-    provider_id: str
+    provider: str
     api_key: str
 
 class APIKeyValidationRequest(BaseModel):
-    provider_id: str
+    provider: str
 
 class UserPreferencesUpdate(BaseModel):
     theme: Optional[str] = None
@@ -62,9 +62,10 @@ async def get_user_settings(
         for key in api_keys:
             provider = provider_registry.get_provider(key.provider)
             api_keys_response.append({
-                "provider_id": key.provider,
+                "provider": key.provider,
                 "provider_name": provider.name if provider else key.provider,
                 "provider_icon": provider.icon if provider else "🔑",
+                "key_value": key.key_value,
                 "masked_value": key.masked_value,
                 "is_active": key.is_active,
                 "validation_status": key.validation_status,
@@ -104,21 +105,21 @@ async def add_api_key(
         user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
         
         # Validate provider exists in registry
-        provider = provider_registry.get_provider(request.provider_id)
+        provider = provider_registry.get_provider(request.provider)
         if not provider:
             available_providers = [p.id for p in provider_registry.get_all_providers()]
             return APIKeyResponse(
                 success=False,
-                message=f"Unknown provider: {request.provider_id}. Available providers: {available_providers}"
+                message=f"Unknown provider: {request.provider}. Available providers: {available_providers}"
             )
         
-        success = await user_settings_service.add_api_key(user_id, request.provider_id, request.api_key)
+        success = await user_settings_service.add_api_key(user_id, request.provider, request.api_key)
         
         if success:
             return APIKeyResponse(
                 success=True,
                 message=f"{provider.name} API key added successfully",
-                data={"provider_id": request.provider_id}
+                data={"provider_id": request.provider}
             )
         else:
             return APIKeyResponse(
@@ -148,10 +149,11 @@ async def list_api_keys(
         for key in api_keys:
             provider = provider_registry.get_provider(key.provider)
             keys_response.append({
-                "provider_id": key.provider,
+                "provider": key.provider,
                 "provider_name": provider.name if provider else key.provider,
                 "provider_description": provider.description if provider else "",
                 "provider_icon": provider.icon if provider else "🔑",
+                "key_value": key.key_value,
                 "masked_value": key.masked_value,
                 "is_active": key.is_active,
                 "validation_status": key.validation_status,
@@ -190,19 +192,19 @@ async def validate_api_key(
         user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
         
         # Validate provider exists
-        provider = provider_registry.get_provider(request.provider_id)
+        provider = provider_registry.get_provider(request.provider)
         if not provider:
             return ValidationResponse(
                 valid=False,
-                provider=request.provider_id,
-                error=f"Unknown provider: {request.provider_id}"
+                provider=request.provider,
+                error=f"Unknown provider: {request.provider}"
             )
         
-        is_valid = await user_settings_service.validate_api_key(user_id, request.provider_id)
+        is_valid = await user_settings_service.validate_api_key(user_id, request.provider)
         
         return ValidationResponse(
             valid=is_valid,
-            provider=request.provider_id,
+            provider=request.provider,
             error=f"{provider.name} API key is {'valid' if is_valid else 'invalid'}",
             models_available=provider.supported_models if is_valid else [],
             total_models=len(provider.supported_models) if is_valid else 0
@@ -212,7 +214,7 @@ async def validate_api_key(
         logger.error(f"Error validating API key: {str(e)}")
         return ValidationResponse(
             valid=False,
-            provider=request.provider_id,
+            provider=request.provider,
             error=str(e)
         )
 

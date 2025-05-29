@@ -1,9 +1,134 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import { toast } from 'react-hot-toast';
 
 const TriggerEditor = ({ formData, handleInputChange }) => {
+  // BYOK Integration - Load API Keys from API Key Manager
+  const [availableApiKeys, setAvailableApiKeys] = useState([]);
+  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+  const [apiKeyError, setApiKeyError] = useState(null);
+
+  // Load API Keys from BYOK Manager
+  useEffect(() => {
+    const loadApiKeys = async () => {
+      try {
+        setLoadingApiKeys(true);
+        const response = await fetch('http://localhost:8000/api/user-settings/api-keys');
+        const result = await response.json();
+        
+        if (result.success && result.data.api_keys) {
+          setAvailableApiKeys(result.data.api_keys);
+          setApiKeyError(null);
+        } else {
+          setApiKeyError('Failed to load API keys');
+        }
+      } catch (error) {
+        console.error('Error loading API keys:', error);
+        setApiKeyError('Error connecting to API Key Manager');
+      } finally {
+        setLoadingApiKeys(false);
+      }
+    };
+
+    loadApiKeys();
+  }, []);
+
+  // Auto-inject API key when provider is selected
+  useEffect(() => {
+    if (formData.authType === 'api_key' && formData.serviceName && availableApiKeys.length > 0) {
+      const serviceName = formData.serviceName.toLowerCase();
+      let matchingKey = null;
+
+      // Try to match service name to provider
+      if (serviceName.includes('airtable')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'airtable' && key.validation_status === 'valid');
+      } else if (serviceName.includes('notion')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'notion' && key.validation_status === 'valid');
+      } else if (serviceName.includes('slack')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'slack' && key.validation_status === 'valid');
+      } else if (serviceName.includes('github')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'github' && key.validation_status === 'valid');
+      }
+
+      // Auto-inject the API key if found and not already set
+      if (matchingKey && !formData.apiKey) {
+        handleInputChange({ target: { name: 'apiKey', value: matchingKey.masked_value } });
+        toast.success(`🔑 Auto-injected ${matchingKey.provider_name} API key from BYOK Manager`);
+      }
+    }
+  }, [formData.authType, formData.serviceName, availableApiKeys, formData.apiKey, handleInputChange]);
+
+  // Render BYOK Status for Universal API Polling
+  const renderBYOKStatus = () => {
+    if (formData.triggerType !== 'universal_polling') return null;
+
+    if (loadingApiKeys) {
+      return (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+            <span className="text-blue-700 text-sm">Loading API keys...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (apiKeyError) {
+      return (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-red-700 text-sm">⚠️ {apiKeyError}</span>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+            >
+              Manage Keys
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    const validKeys = availableApiKeys.filter(key => key.validation_status === 'valid');
+    const totalKeys = availableApiKeys.length;
+
+    if (totalKeys === 0) {
+      return (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-yellow-700 text-sm">🔑 No API keys configured for external APIs</span>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
+            >
+              Add Keys
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <span className="text-green-700 text-sm">
+            ✅ {validKeys.length}/{totalKeys} API keys ready for external services
+          </span>
+          <button
+            type="button"
+            onClick={() => window.open('/api-keys', '_blank')}
+            className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
+          >
+            Manage Keys
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const registerTrigger = async () => {
     if (!formData.nodeId) {
       toast.error('Node ID is missing. Please save the node first.');
@@ -280,6 +405,9 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
               One trigger = One API endpoint. Multiple data sources = Use AI Tool Builder with integration logic.
             </div>
           </div>
+
+          {/* BYOK Status Display */}
+          {renderBYOKStatus()}
 
           <div className="mb-4">
             <label className="block text-gray-700 mb-1 font-medium">
