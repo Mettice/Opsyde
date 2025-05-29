@@ -133,7 +133,12 @@ class OutputNode:
             # Get user keys from context
             user_keys = context.get('user_keys', {})
             
-            if output_type == 'smart_email':
+            # Special case: if output_type is 'webhook' but has ai_description, 
+            # route to traditional webhook processing
+            if output_type == 'webhook':
+                self.logger.info("Webhook with AI description detected, routing to traditional webhook processing")
+                return await self._process_traditional_output(node_data, output_data, context)
+            elif output_type == 'smart_email':
                 result = await self._process_smart_email(ai_config, output_data, context, user_keys)
             elif output_type == 'smart_api':
                 result = await self._process_smart_api(ai_config, output_data, context, user_keys)
@@ -309,8 +314,35 @@ class OutputNode:
                     "data": output_data
                 })
         
+        # Replace template variables in webhook URL
+        webhook_url = self._replace_template_variables(webhook_url, node_data, output_data)
+        
+        # Validate the URL after template replacement
+        if '{' in webhook_url and '}' in webhook_url:
+            return NodeData.from_error(f"Webhook URL contains unresolved template variables: {webhook_url}")
+        
+        # Prepare payload data with template replacement
+        payload_data = output_data.copy()
+        
+        # If there's a custom webhook payload defined, use it and replace variables
+        if 'webhookPayload' in node_data:
+            custom_payload = node_data['webhookPayload']
+            
+            # Handle both string and dict payload formats
+            if isinstance(custom_payload, str):
+                try:
+                    import json
+                    custom_payload = json.loads(custom_payload)
+                    self.logger.info("Parsed webhook payload from JSON string")
+                except json.JSONDecodeError as e:
+                    self.logger.error(f"Failed to parse webhook payload JSON: {e}")
+                    return NodeData.from_error(f"Invalid JSON in webhook payload: {e}")
+            
+            # Replace template variables in the custom payload
+            payload_data = self._replace_template_variables_in_dict(custom_payload, node_data, output_data)
+        
         try:
-            result = await post_to_webhook(webhook_url, output_data)
+            result = await post_to_webhook(webhook_url, payload_data)
             return NodeData.from_value({
                 "success": True,
                 "output_type": "webhook",
@@ -319,6 +351,95 @@ class OutputNode:
             })
         except Exception as e:
             return NodeData.from_error(f"Webhook failed: {str(e)}")
+    
+    def _replace_template_variables(self, template: str, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> str:
+        """Replace template variables in strings like {BOT_TOKEN} and {{variable}} with actual values"""
+        import re
+        import os
+        
+        # Handle single curly braces {VARIABLE} - typically for environment variables
+        single_brace_variables = re.findall(r'\{([^{}]+)\}', template)
+        
+        for var in single_brace_variables:
+            replacement = None
+            
+            # First, try to get from node configuration
+            if var in node_data:
+                replacement = str(node_data[var])
+            # Then try from node config sub-object
+            elif 'config' in node_data and var in node_data['config']:
+                replacement = str(node_data['config'][var])
+            # Try from output data
+            elif var in output_data:
+                replacement = str(output_data[var])
+            # Try from environment variables
+            elif var in os.environ:
+                replacement = os.environ[var]
+            # Try common variations
+            elif var.upper() in os.environ:
+                replacement = os.environ[var.upper()]
+            elif var.lower() in os.environ:
+                replacement = os.environ[var.lower()]
+            
+            # If we found a replacement, apply it
+            if replacement is not None:
+                template = template.replace(f'{{{var}}}', replacement)
+                self.logger.info(f"Replaced template variable {{{var}}} in webhook URL")
+            else:
+                self.logger.warning(f"Template variable {{{var}}} not found in configuration or environment")
+        
+        # Handle double curly braces {{variable}} - typically for data variables
+        double_brace_variables = re.findall(r'\{\{([^{}]+)\}\}', template)
+        
+        for var in double_brace_variables:
+            replacement = None
+            
+            # First, try to get from output data
+            if var in output_data:
+                replacement = str(output_data[var])
+            # Then try from node configuration
+            elif var in node_data:
+                replacement = str(node_data[var])
+            # Try from node config sub-object
+            elif 'config' in node_data and var in node_data['config']:
+                replacement = str(node_data['config'][var])
+            # Try nested access with dot notation (e.g., trigger.baseToken.symbol)
+            elif '.' in var:
+                replacement = self._get_nested_value(var, output_data) or self._get_nested_value(var, node_data)
+            
+            # If we found a replacement, apply it
+            if replacement is not None:
+                template = template.replace(f'{{{{{var}}}}}', replacement)
+                self.logger.info(f"Replaced template variable {{{{{var}}}}} with data")
+            else:
+                self.logger.warning(f"Template variable {{{{{var}}}}} not found in data")
+        
+        return template
+    
+    def _get_nested_value(self, path: str, data: Dict[str, Any]) -> Optional[str]:
+        """Get nested value from dictionary using dot notation (e.g., 'trigger.baseToken.symbol')"""
+        try:
+            keys = path.split('.')
+            value = data
+            for key in keys:
+                if isinstance(value, dict) and key in value:
+                    value = value[key]
+                else:
+                    return None
+            return str(value) if value is not None else None
+        except Exception:
+            return None
+    
+    def _replace_template_variables_in_dict(self, data: Any, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> Any:
+        """Recursively replace template variables in dictionaries, lists, and strings"""
+        if isinstance(data, dict):
+            return {key: self._replace_template_variables_in_dict(value, node_data, output_data) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [self._replace_template_variables_in_dict(item, node_data, output_data) for item in data]
+        elif isinstance(data, str):
+            return self._replace_template_variables(data, node_data, output_data)
+        else:
+            return data
     
     async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via email"""

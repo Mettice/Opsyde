@@ -67,6 +67,8 @@ httpx<0.28.1  # Specific version to avoid conflicts
 google-api-python-client
 markdown>=3.4.0
 psycopg2
+aiofiles
+aiosqlite
 
 # Monitoring
 prometheus-client

@@ -6,7 +6,17 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
   const [showStackTrace, setShowStackTrace] = useState(false);
   const [showRawError, setShowRawError] = useState(false);
 
-  if (!content) return null;
+  // Safety check for null/undefined content
+  if (!content && content !== 0 && content !== false) {
+    return (
+      <div className="error-container rounded-lg border p-4 bg-gray-50 border-gray-200">
+        <div className="flex items-center space-x-2 text-gray-600">
+          <span>⚠️</span>
+          <span>No error content provided</span>
+        </div>
+      </div>
+    );
+  }
 
   // Parse error content
   const parseError = (errorContent) => {
@@ -20,9 +30,13 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
     }
 
     if (typeof errorContent === 'object' && errorContent !== null) {
+      // Safely extract and convert to strings
+      const message = errorContent.message || errorContent.error || 'Unknown error';
+      const type = errorContent.name || errorContent.type || 'Error';
+      
       return {
-        message: errorContent.message || errorContent.error || 'Unknown error',
-        type: errorContent.name || errorContent.type || 'Error',
+        message: String(message),
+        type: String(type),
         stack: errorContent.stack || errorContent.stackTrace,
         code: errorContent.code || errorContent.errorCode,
         details: errorContent.details,
@@ -43,8 +57,9 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
 
   // Determine error severity
   const getSeverity = () => {
-    const message = errorData.message.toLowerCase();
-    const type = errorData.type.toLowerCase();
+    // Safely convert to string and then to lowercase
+    const message = String(errorData.message || '').toLowerCase();
+    const type = String(errorData.type || '').toLowerCase();
 
     if (type.includes('critical') || message.includes('critical') || 
         type.includes('fatal') || message.includes('fatal')) {
@@ -97,19 +112,31 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
 
   // Copy error details to clipboard
   const copyError = async () => {
-    const errorInfo = [
-      `Error Type: ${errorData.type}`,
-      `Message: ${errorData.message}`,
-      errorData.code && `Code: ${errorData.code}`,
-      errorData.source && `Source: ${errorData.source}`,
-      errorData.timestamp && `Timestamp: ${new Date(errorData.timestamp).toISOString()}`,
-      errorData.stack && `\nStack Trace:\n${errorData.stack}`
-    ].filter(Boolean).join('\n');
-
     try {
+      const errorInfo = [
+        `Error Type: ${String(errorData.type || 'Unknown')}`,
+        `Message: ${String(errorData.message || 'No message')}`,
+        errorData.code && `Code: ${String(errorData.code)}`,
+        errorData.source && `Source: ${String(errorData.source)}`,
+        errorData.timestamp && `Timestamp: ${(() => {
+          try {
+            return new Date(errorData.timestamp).toISOString();
+          } catch (e) {
+            return String(errorData.timestamp);
+          }
+        })()}`,
+        errorData.stack && `\nStack Trace:\n${String(errorData.stack)}`
+      ].filter(Boolean).join('\n');
+
       await navigator.clipboard.writeText(errorInfo);
     } catch (err) {
       console.error('Failed to copy error details:', err);
+      // Fallback: try to copy just the basic error message
+      try {
+        await navigator.clipboard.writeText(`Error: ${String(errorData.message || 'Unknown error')}`);
+      } catch (fallbackErr) {
+        console.error('Fallback copy also failed:', fallbackErr);
+      }
     }
   };
 
@@ -156,12 +183,18 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
             <div className="flex flex-wrap gap-4 text-sm opacity-75 mb-3">
               {errorData.source && (
                 <div className={styles.text}>
-                  <strong>Source:</strong> {errorData.source}
+                  <strong>Source:</strong> {String(errorData.source)}
                 </div>
               )}
               {errorData.timestamp && (
                 <div className={styles.text}>
-                  <strong>Time:</strong> {new Date(errorData.timestamp).toLocaleString()}
+                  <strong>Time:</strong> {(() => {
+                    try {
+                      return new Date(errorData.timestamp).toLocaleString();
+                    } catch (e) {
+                      return String(errorData.timestamp);
+                    }
+                  })()}
                 </div>
               )}
             </div>
@@ -173,8 +206,14 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
               <h4 className={`font-medium ${styles.title} mb-2`}>Details:</h4>
               <div className={`text-sm ${styles.text}`}>
                 {typeof errorData.details === 'object' 
-                  ? JSON.stringify(errorData.details, null, 2)
-                  : errorData.details
+                  ? (() => {
+                      try {
+                        return JSON.stringify(errorData.details, null, 2);
+                      } catch (e) {
+                        return String(errorData.details);
+                      }
+                    })()
+                  : String(errorData.details)
                 }
               </div>
             </div>
@@ -221,7 +260,13 @@ const ErrorRenderer = ({ content, metadata, displayMode = 'immersive' }) => {
             <div className="mt-4 p-3 bg-gray-100 rounded font-mono text-xs overflow-auto max-h-64">
               <div className="font-semibold text-gray-700 mb-2">Raw Error Data:</div>
               <pre className="whitespace-pre-wrap text-gray-600">
-                {JSON.stringify(content, null, 2)}
+                {(() => {
+                  try {
+                    return JSON.stringify(content, null, 2);
+                  } catch (e) {
+                    return String(content);
+                  }
+                })()}
               </pre>
             </div>
           )}

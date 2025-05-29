@@ -633,6 +633,69 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
             )}
           </div>
 
+          {/* NEW: Field Filtering Section */}
+          <div className="mb-4">
+            <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+              <h3 className="font-semibold text-purple-800 mb-2">🎯 Field Filtering (Optional)</h3>
+              <p className="text-sm text-purple-700 mb-3">
+                Filter API data to include only specific columns. Perfect for focusing on "topic" and "description" fields only.
+              </p>
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-1">
+                    Include Only These Fields (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    name="targetFields"
+                    value={formData.targetFields || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const fieldsArray = value ? value.split(',').map(f => f.trim()).filter(f => f) : [];
+                      handleInputChange({ target: { name: 'targetFields', value: fieldsArray } });
+                      // Also store as string for display
+                      handleInputChange({ target: { name: 'targetFieldsString', value: value } });
+                    }}
+                    className="w-full p-2 border rounded text-sm"
+                    placeholder="e.g., Topic, Description, Title, Content"
+                  />
+                  <div className="text-xs text-purple-600 mt-1">
+                    💡 Example: "Topic, Description" - Agent will only receive these fields
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-gray-700 text-sm font-medium mb-1">
+                    Exclude These Fields (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    name="excludeFields"
+                    value={formData.excludeFields || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const fieldsArray = value ? value.split(',').map(f => f.trim()).filter(f => f) : [];
+                      handleInputChange({ target: { name: 'excludeFields', value: fieldsArray } });
+                      // Also store as string for display
+                      handleInputChange({ target: { name: 'excludeFieldsString', value: value } });
+                    }}
+                    className="w-full p-2 border rounded text-sm"
+                    placeholder="e.g., id, createdTime, metadata, _internal"
+                  />
+                  <div className="text-xs text-purple-600 mt-1">
+                    💡 Example: "id, createdTime" - Remove noise and metadata fields
+                  </div>
+                </div>
+                
+                <div className="p-2 bg-purple-100 border border-purple-300 rounded text-xs">
+                  <strong>🎯 Pro Tip:</strong> Use field filtering to reduce token usage and focus your AI agent on relevant data only. 
+                  For Airtable, common fields are: "Topic", "Description", "Status", "Priority", etc.
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* AI-Powered Test API Connection Button */}
           <div className="mb-4">
             <div className="flex gap-2">
@@ -1055,8 +1118,9 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    toast.info('💡 To test the Agent: Go to Agent node → Use "Test Agent" button with sample data from Preview Data', {
-                      duration: 6000
+                    toast('💡 To test the Agent: Go to Agent node → Use "Test Agent" button with sample data from Preview Data', {
+                      duration: 6000,
+                      icon: '💡'
                     });
                   }}
                   className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded transition-colors"
@@ -1067,8 +1131,9 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    toast.info('💡 To test the Task: Go to Task node → Use "Test Task" button after agent is configured', {
-                      duration: 6000
+                    toast('💡 To test the Task: Go to Task node → Use "Test Task" button after agent is configured', {
+                      duration: 6000,
+                      icon: '💡'
                     });
                   }}
                   className="px-3 py-2 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 text-sm rounded transition-colors"
@@ -1079,8 +1144,9 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    toast.info('💡 Full workflow test: Use the "▶️ Run Crew" button to test the complete flow', {
-                      duration: 6000
+                    toast('💡 Full workflow test: Use the "▶️ Run Crew" button to test the complete flow', {
+                      duration: 6000,
+                      icon: '💡'
                     });
                   }}
                   className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 text-sm rounded transition-colors"

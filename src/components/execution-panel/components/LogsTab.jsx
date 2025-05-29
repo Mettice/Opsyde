@@ -22,6 +22,18 @@ const LogsTab = ({
   const [sortBy, setSortBy] = useState('timestamp');
   const [sortOrder, setSortOrder] = useState('desc');
 
+  // Provide default functions if props are undefined
+  const safeGetCardStyle = getCardStyle || ((log) => 'bg-white border border-gray-200 rounded-lg p-4 mb-3');
+  const safeGetStatusIcon = getStatusIcon || ((status) => {
+    switch (status) {
+      case 'completed': return '✅';
+      case 'error': return '❌';
+      case 'started': return '🔄';
+      default: return '📝';
+    }
+  });
+  const safeGetLogStyle = getLogStyle || ((log) => 'text-gray-800');
+
   // Filter and search logs
   const filteredLogs = useMemo(() => {
     let filtered = displayLogs;
@@ -274,8 +286,8 @@ const LogsTab = ({
                     log={log}
                     index={index}
                     viewMode="structured"
-                    getCardStyle={getCardStyle}
-                    getStatusIcon={getStatusIcon}
+                    getCardStyle={safeGetCardStyle}
+                    getStatusIcon={safeGetStatusIcon}
                     debugMode={debugMode}
                   />
                 ))}
@@ -289,7 +301,7 @@ const LogsTab = ({
                     log={log}
                     index={index}
                     viewMode="text"
-                    getLogStyle={getLogStyle}
+                    getLogStyle={safeGetLogStyle}
                     debugMode={debugMode}
                   />
                 ))}
