@@ -234,12 +234,113 @@ export const executeTriggerNode = async (node, inputs) => {
       const apiEndpoint = nodeData.apiEndpoint || '';
       const pollingInterval = nodeData.pollingInterval || 300;
       const changeMethod = nodeData.changeDetectionMethod || 'array_length';
-      result.output = `Universal API Polling trigger '${label}' activated - monitoring ${serviceName} every ${Math.floor(pollingInterval/60)} minutes using ${changeMethod} detection`;
-      result.type = 'trigger_status';
-      result.service_name = serviceName;
-      result.api_endpoint = apiEndpoint;
-      result.polling_interval = pollingInterval;
-      result.change_detection_method = changeMethod;
+      
+      // ACTUALLY FETCH THE API DATA instead of just returning a status
+      try {
+        console.log(`🔍 Fetching real data from ${serviceName}: ${apiEndpoint}`);
+        
+        // Set up headers for authentication
+        const headers = {
+          'Content-Type': 'application/json',
+          'User-Agent': 'CrewBuilder-Universal-Polling/1.0'
+        };
+        
+        // Handle authentication
+        const authType = nodeData.authType || 'none';
+        if (authType === 'api_key' && nodeData.apiKey) {
+          headers['Authorization'] = `Bearer ${nodeData.apiKey}`;
+        } else if (authType === 'bearer_token' && nodeData.bearerToken) {
+          headers['Authorization'] = `Bearer ${nodeData.bearerToken}`;
+        } else if (authType === 'basic_auth' && nodeData.username && nodeData.password) {
+          const credentials = btoa(`${nodeData.username}:${nodeData.password}`);
+          headers['Authorization'] = `Basic ${credentials}`;
+        }
+        
+        // Fetch the actual API data
+        const response = await fetch(apiEndpoint, {
+          method: 'GET',
+          headers: headers,
+          timeout: 30000
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const apiData = await response.json();
+        console.log(`✅ Successfully fetched data from ${serviceName}:`, apiData);
+        
+        // Apply field filtering if configured
+        let filteredData = apiData;
+        const includeFields = nodeData.includeFields || nodeData.targetFields;
+        const excludeFields = nodeData.excludeFields;
+        
+        if (includeFields && includeFields.length > 0) {
+          // Filter to include only specified fields
+          if (Array.isArray(apiData)) {
+            filteredData = apiData.map(item => {
+              const filtered = {};
+              includeFields.forEach(field => {
+                if (item[field] !== undefined) {
+                  filtered[field] = item[field];
+                }
+              });
+              return filtered;
+            });
+          } else if (apiData.pairs && Array.isArray(apiData.pairs)) {
+            // DexScreener format
+            filteredData = {
+              ...apiData,
+              pairs: apiData.pairs.map(pair => {
+                const filtered = {};
+                includeFields.forEach(field => {
+                  if (field.includes('.')) {
+                    // Handle nested fields like 'baseToken.symbol'
+                    const parts = field.split('.');
+                    let value = pair;
+                    for (const part of parts) {
+                      value = value?.[part];
+                    }
+                    if (value !== undefined) {
+                      // Set nested value in filtered object
+                      let target = filtered;
+                      for (let i = 0; i < parts.length - 1; i++) {
+                        if (!target[parts[i]]) target[parts[i]] = {};
+                        target = target[parts[i]];
+                      }
+                      target[parts[parts.length - 1]] = value;
+                    }
+                  } else if (pair[field] !== undefined) {
+                    filtered[field] = pair[field];
+                  }
+                });
+                return filtered;
+              })
+            };
+          }
+        }
+        
+        // Return the actual API data for the agent to process
+        result.output = `✅ Fetched ${Array.isArray(apiData) ? apiData.length : apiData.pairs?.length || 'unknown'} items from ${serviceName}`;
+        result.type = 'api_data';
+        result.service_name = serviceName;
+        result.api_endpoint = apiEndpoint;
+        result.polling_interval = pollingInterval;
+        result.change_detection_method = changeMethod;
+        result.api_data = filteredData; // This is the key - pass the actual data
+        result.raw_data = apiData; // Keep original for reference
+        result.data_summary = `Retrieved real data from ${serviceName} API`;
+        
+        console.log(`🎯 Trigger returning real API data:`, result);
+        
+      } catch (error) {
+        console.error(`❌ Failed to fetch API data from ${serviceName}:`, error);
+        result.output = `❌ Failed to fetch data from ${serviceName}: ${error.message}`;
+        result.type = 'error';
+        result.error = error.message;
+        result.service_name = serviceName;
+        result.api_endpoint = apiEndpoint;
+      }
       break;
       
     case 'universal_webhook':

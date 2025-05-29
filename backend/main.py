@@ -188,7 +188,7 @@ async def startup_event():
                     re_registered = 0
                     for trigger in triggers:
                         try:
-                            trigger_id = trigger.get("id")
+                            trigger_id = trigger.get("trigger_id") or trigger.get("id")  # Try both field names
                             if trigger_id:
                                 # Get the full trigger flow
                                 flow = await trigger_service.get_trigger_flow(trigger_id)
@@ -661,7 +661,7 @@ async def restart_scheduler():
                 registered_count = 0
                 
                 for trigger in triggers:
-                    trigger_id = trigger.get("id") or trigger.get("trigger_id")
+                    trigger_id = trigger.get("trigger_id") or trigger.get("id")
                     if not trigger_id:
                         continue
                         

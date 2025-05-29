@@ -1,0 +1,724 @@
+{"timestamp": "2025-05-29 06:57:44,130", "level": "INFO", "name": "backend.services.trigger_service", "message": "No triggers found for owner: None"}
+{"timestamp": "2025-05-29 12:34:57,408", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger airtable-live-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,408", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Airtable (airtable-live-test): https://api.airtable.com/v0/appYourBaseId/YourTableName every 60s"}
+{"timestamp": "2025-05-29 12:34:57,409", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,409", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,409", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,410", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,410", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,410", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Airtable (airtable-live-test) - interval: 60s"}
+{"timestamp": "2025-05-29 12:34:57,411", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 1"}
+{"timestamp": "2025-05-29 12:34:57,411", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,412", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger final-victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,412", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Final Victory API (final-victory-test): https://httpbin.org/json every 45s"}
+{"timestamp": "2025-05-29 12:34:57,413", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,413", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 45}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,413", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,413", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,414", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,414", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Final Victory API (final-victory-test) - interval: 45s"}
+{"timestamp": "2025-05-29 12:34:57,415", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 2"}
+{"timestamp": "2025-05-29 12:34:57,415", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,415", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,418", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-bounty-hunter with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,418", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Bounty API (test-bounty-hunter): https://api.example.com/bounty every 60s"}
+{"timestamp": "2025-05-29 12:34:57,418", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,418", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,419", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,419", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,419", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,420", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Bounty API (test-bounty-hunter) - interval: 60s"}
+{"timestamp": "2025-05-29 12:34:57,420", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 3"}
+{"timestamp": "2025-05-29 12:34:57,420", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,420", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,421", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,421", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-enhanced with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,422", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Debug API (test-debug-enhanced): https://api.example.com/debug every 120s"}
+{"timestamp": "2025-05-29 12:34:57,422", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:34:57,422", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 120}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,422", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,423", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,423", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,423", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Debug API (test-debug-enhanced) - interval: 120s"}
+{"timestamp": "2025-05-29 12:34:57,424", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 4"}
+{"timestamp": "2025-05-29 12:34:57,424", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,424", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,425", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,425", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:34:57,426", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-final with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,426", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Test API (test-debug-final): https://api.example.com/test every 300s"}
+{"timestamp": "2025-05-29 12:34:57,426", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:34:57,427", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 300}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,427", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,427", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,428", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,428", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Test API (test-debug-final) - interval: 300s"}
+{"timestamp": "2025-05-29 12:34:57,428", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 5"}
+{"timestamp": "2025-05-29 12:34:57,429", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,429", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,429", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,429", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:34:57,429", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:34:57,432", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-fix-123 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,435", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-fix-123 for 2025-05-27 20:00"}
+{"timestamp": "2025-05-29 12:34:57,436", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-future-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,437", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-future-trigger for 2025-05-27 19:35"}
+{"timestamp": "2025-05-29 12:34:57,438", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-fix with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,438", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-fix for 2025-05-27 21:49"}
+{"timestamp": "2025-05-29 12:34:57,439", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-working with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,440", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-working for 2025-05-27 21:59"}
+{"timestamp": "2025-05-29 12:34:57,441", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-trigger-1745191516 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,442", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-trigger-1745191516 for 2025-04-21 01:26"}
+{"timestamp": "2025-05-29 12:34:57,443", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-universal-polling with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,443", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for JSONPlaceholder (test-universal-polling): https://jsonplaceholder.typicode.com/posts/1 every 60s"}
+{"timestamp": "2025-05-29 12:34:57,443", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:34:57,443", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,444", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,444", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,445", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,445", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for JSONPlaceholder (test-universal-polling) - interval: 60s"}
+{"timestamp": "2025-05-29 12:34:57,445", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 11"}
+{"timestamp": "2025-05-29 12:34:57,445", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:34:57,445", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 12:34:57,446", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 12:34:57,446", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:34:57,446", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:34:57,446", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,447", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,447", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,447", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:34:57,447", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:34:57,448", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:34:57,449", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-utc-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,449", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-utc-trigger for 2025-05-27 20:06"}
+{"timestamp": "2025-05-29 12:34:57,450", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-working-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,451", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-working-trigger for 2025-05-27 20:05"}
+{"timestamp": "2025-05-29 12:34:57,452", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748365734749 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,453", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748365734749 for 2025-05-27 19:11"}
+{"timestamp": "2025-05-29 12:34:57,453", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366929945 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,454", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366929945 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 12:34:57,455", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366972215 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,456", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366972215 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 12:34:57,457", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748375213949 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,457", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748375213949 for 2025-05-27 21:49"}
+{"timestamp": "2025-05-29 12:34:57,458", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748376346376 with type schedule"}
+{"timestamp": "2025-05-29 12:34:57,459", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748376346376 for 2025-05-27 22:07"}
+{"timestamp": "2025-05-29 12:34:57,460", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:34:57,460", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Victory API (victory-test): https://httpbin.org/json every 30s"}
+{"timestamp": "2025-05-29 12:34:57,460", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,461", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 30}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:34:57,461", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:34:57,461", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:34:57,462", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:34:57,463", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Victory API (victory-test) - interval: 30s"}
+{"timestamp": "2025-05-29 12:34:57,463", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 19"}
+{"timestamp": "2025-05-29 12:34:57,463", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:34:57,463", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:34:57,463", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:34:57,464", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:34:57,464", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 12:34:57,464", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 12:34:57,464", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-working-trigger"}
+{"timestamp": "2025-05-29 12:34:57,464", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:34:57,465", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:34:57,465", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:34:57,465", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:34:57,465", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:34:57,465", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,466", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,466", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:34:57,466", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:34:57,466", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:34:57,466", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:34:57,467", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:34:57,469", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:34:57,470", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:34:57,471", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:34:57,471", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:34:57,472", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:34:57,473", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:34:57,474", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:34:57,474", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:34:57,474", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:34:57,475", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:34:57,475", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:34:57,476", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:34:57,476", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:34:57,478", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:34:57,478", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:34:57,478", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:34:57,480", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:34:57,480", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:34:57,481", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:34:57,483", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:34:57,483", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:34:57,483", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:34:57,485", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:34:57,485", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:34:57,493", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:34:57,499", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:34:57,499", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:34:57,500", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:34:57,505", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:34:57,506", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:34:57,507", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:34:57,509", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:34:57,509", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:34:57,511", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:34:57,511", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:34:57,513", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,514", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,515", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,515", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,515", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,515", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,516", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:34:57,517", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 12:47:35,071", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger airtable-live-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,071", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Airtable (airtable-live-test): https://api.airtable.com/v0/appYourBaseId/YourTableName every 60s"}
+{"timestamp": "2025-05-29 12:47:35,072", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,072", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,072", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,072", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,073", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,073", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Airtable (airtable-live-test) - interval: 60s"}
+{"timestamp": "2025-05-29 12:47:35,074", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 1"}
+{"timestamp": "2025-05-29 12:47:35,074", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,075", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger dexscreener-live-trigger with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,075", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for DexScreener (dexscreener-live-trigger): https://api.dexscreener.com/latest/dex/search?q=PEPE every 60s"}
+{"timestamp": "2025-05-29 12:47:35,075", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,075", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,076", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,076", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,077", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,077", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for DexScreener (dexscreener-live-trigger) - interval: 60s"}
+{"timestamp": "2025-05-29 12:47:35,077", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 2"}
+{"timestamp": "2025-05-29 12:47:35,077", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,078", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,079", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger final-victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,079", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Final Victory API (final-victory-test): https://httpbin.org/json every 45s"}
+{"timestamp": "2025-05-29 12:47:35,079", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,080", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 45}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,080", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,080", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,081", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,081", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Final Victory API (final-victory-test) - interval: 45s"}
+{"timestamp": "2025-05-29 12:47:35,082", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 3"}
+{"timestamp": "2025-05-29 12:47:35,082", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,082", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,082", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,085", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-bounty-hunter with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,085", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Bounty API (test-bounty-hunter): https://api.example.com/bounty every 60s"}
+{"timestamp": "2025-05-29 12:47:35,085", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,085", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,086", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,086", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,087", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,087", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Bounty API (test-bounty-hunter) - interval: 60s"}
+{"timestamp": "2025-05-29 12:47:35,087", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 4"}
+{"timestamp": "2025-05-29 12:47:35,088", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,088", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,088", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,088", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,089", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-enhanced with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,090", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Debug API (test-debug-enhanced): https://api.example.com/debug every 120s"}
+{"timestamp": "2025-05-29 12:47:35,090", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:47:35,090", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 120}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,090", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,090", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,091", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,091", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Debug API (test-debug-enhanced) - interval: 120s"}
+{"timestamp": "2025-05-29 12:47:35,091", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 5"}
+{"timestamp": "2025-05-29 12:47:35,092", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,092", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,092", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,093", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,093", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:47:35,099", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-final with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,100", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Test API (test-debug-final): https://api.example.com/test every 300s"}
+{"timestamp": "2025-05-29 12:47:35,102", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:47:35,103", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 300}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,103", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,104", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,105", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,105", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Test API (test-debug-final) - interval: 300s"}
+{"timestamp": "2025-05-29 12:47:35,105", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 6"}
+{"timestamp": "2025-05-29 12:47:35,105", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,106", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,106", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,106", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,107", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:47:35,107", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:47:35,110", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-fix-123 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,113", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-fix-123 for 2025-05-27 20:00"}
+{"timestamp": "2025-05-29 12:47:35,114", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-future-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,115", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-future-trigger for 2025-05-27 19:35"}
+{"timestamp": "2025-05-29 12:47:35,116", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-fix with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,116", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-fix for 2025-05-27 21:49"}
+{"timestamp": "2025-05-29 12:47:35,117", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-working with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,118", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-working for 2025-05-27 21:59"}
+{"timestamp": "2025-05-29 12:47:35,119", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-trigger-1745191516 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,119", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-trigger-1745191516 for 2025-04-21 01:26"}
+{"timestamp": "2025-05-29 12:47:35,120", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-universal-polling with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,120", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for JSONPlaceholder (test-universal-polling): https://jsonplaceholder.typicode.com/posts/1 every 60s"}
+{"timestamp": "2025-05-29 12:47:35,121", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:47:35,121", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,121", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,122", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,122", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,122", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for JSONPlaceholder (test-universal-polling) - interval: 60s"}
+{"timestamp": "2025-05-29 12:47:35,123", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 12"}
+{"timestamp": "2025-05-29 12:47:35,123", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:47:35,123", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 12:47:35,123", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 12:47:35,123", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:47:35,124", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:47:35,124", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,124", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,124", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,125", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,125", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:47:35,125", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:47:35,126", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:47:35,127", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-utc-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,127", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-utc-trigger for 2025-05-27 20:06"}
+{"timestamp": "2025-05-29 12:47:35,128", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-working-trigger with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,129", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-working-trigger for 2025-05-27 20:05"}
+{"timestamp": "2025-05-29 12:47:35,130", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748365734749 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,131", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748365734749 for 2025-05-27 19:11"}
+{"timestamp": "2025-05-29 12:47:35,132", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366929945 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,132", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366929945 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 12:47:35,133", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366972215 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,134", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366972215 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 12:47:35,135", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748375213949 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,135", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748375213949 for 2025-05-27 21:49"}
+{"timestamp": "2025-05-29 12:47:35,136", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748376346376 with type schedule"}
+{"timestamp": "2025-05-29 12:47:35,137", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748376346376 for 2025-05-27 22:07"}
+{"timestamp": "2025-05-29 12:47:35,138", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 12:47:35,138", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Victory API (victory-test): https://httpbin.org/json every 30s"}
+{"timestamp": "2025-05-29 12:47:35,139", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,139", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 30}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 12:47:35,139", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 12:47:35,139", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 12:47:35,140", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 12:47:35,140", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Victory API (victory-test) - interval: 30s"}
+{"timestamp": "2025-05-29 12:47:35,140", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 20"}
+{"timestamp": "2025-05-29 12:47:35,141", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:47:35,141", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:47:35,141", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:47:35,141", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:47:35,141", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 12:47:35,142", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 12:47:35,142", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-working-trigger"}
+{"timestamp": "2025-05-29 12:47:35,142", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:47:35,142", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:47:35,143", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:47:35,143", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:47:35,143", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:47:35,143", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,143", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,144", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 12:47:35,144", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 12:47:35,144", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 12:47:35,144", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 12:47:35,144", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 12:47:35,145", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 12:47:35,147", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:47:35,148", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:47:35,148", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:47:35,149", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:47:35,149", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:47:35,151", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 12:47:35,152", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:47:35,152", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:47:35,152", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 12:47:35,153", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:47:35,153", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 12:47:35,154", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:47:35,154", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:47:35,156", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:47:35,156", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:47:35,157", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 12:47:35,158", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:47:35,158", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:47:35,159", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 12:47:35,160", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:47:35,161", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:47:35,162", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-fix-123"}
+{"timestamp": "2025-05-29 12:47:35,162", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:47:35,163", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 12:47:35,163", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:47:35,172", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 12:47:35,172", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:47:35,173", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:47:35,179", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 12:47:35,179", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:47:35,180", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 12:47:35,186", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748375213949"}
+{"timestamp": "2025-05-29 12:47:35,186", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:47:35,189", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 12:47:35,189", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:14:05,567", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger airtable-live-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,568", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Airtable (airtable-live-test): https://api.airtable.com/v0/appYourBaseId/YourTableName every 60s"}
+{"timestamp": "2025-05-29 14:14:05,568", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,568", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,568", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,568", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,569", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,569", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Airtable (airtable-live-test) - interval: 60s"}
+{"timestamp": "2025-05-29 14:14:05,570", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 1"}
+{"timestamp": "2025-05-29 14:14:05,570", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,571", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger dexscreener-live-trigger with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,571", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for DexScreener (dexscreener-live-trigger): https://api.dexscreener.com/latest/dex/search?q=PEPE every 60s"}
+{"timestamp": "2025-05-29 14:14:05,571", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,572", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,572", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,572", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,573", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,573", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for DexScreener (dexscreener-live-trigger) - interval: 60s"}
+{"timestamp": "2025-05-29 14:14:05,573", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 2"}
+{"timestamp": "2025-05-29 14:14:05,573", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,574", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,575", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger final-victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,575", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Final Victory API (final-victory-test): https://httpbin.org/json every 45s"}
+{"timestamp": "2025-05-29 14:14:05,575", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,575", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 45}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,575", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,576", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,577", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,577", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Final Victory API (final-victory-test) - interval: 45s"}
+{"timestamp": "2025-05-29 14:14:05,577", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 3"}
+{"timestamp": "2025-05-29 14:14:05,577", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,577", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,578", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,580", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-bounty-hunter with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,580", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Bounty API (test-bounty-hunter): https://api.example.com/bounty every 60s"}
+{"timestamp": "2025-05-29 14:14:05,581", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,581", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,581", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,581", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,582", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,582", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Bounty API (test-bounty-hunter) - interval: 60s"}
+{"timestamp": "2025-05-29 14:14:05,583", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 4"}
+{"timestamp": "2025-05-29 14:14:05,583", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,583", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,583", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,583", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,584", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-enhanced with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,585", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Debug API (test-debug-enhanced): https://api.example.com/debug every 120s"}
+{"timestamp": "2025-05-29 14:14:05,585", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:14:05,585", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 120}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,585", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,585", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,586", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,586", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Debug API (test-debug-enhanced) - interval: 120s"}
+{"timestamp": "2025-05-29 14:14:05,587", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 5"}
+{"timestamp": "2025-05-29 14:14:05,587", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,587", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,587", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,587", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,588", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:14:05,589", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-final with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,589", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Test API (test-debug-final): https://api.example.com/test every 300s"}
+{"timestamp": "2025-05-29 14:14:05,589", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:14:05,589", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 300}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,590", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,590", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,590", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,591", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Test API (test-debug-final) - interval: 300s"}
+{"timestamp": "2025-05-29 14:14:05,591", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 6"}
+{"timestamp": "2025-05-29 14:14:05,591", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,591", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,592", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,592", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,592", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:14:05,592", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:14:05,595", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-fix-123 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,598", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-fix-123 for 2025-05-27 20:00"}
+{"timestamp": "2025-05-29 14:14:05,599", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-future-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,599", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-future-trigger for 2025-05-27 19:35"}
+{"timestamp": "2025-05-29 14:14:05,600", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-fix with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,601", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-fix for 2025-05-27 21:49"}
+{"timestamp": "2025-05-29 14:14:05,602", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-working with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,603", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-working for 2025-05-27 21:59"}
+{"timestamp": "2025-05-29 14:14:05,604", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-trigger-1745191516 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,604", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-trigger-1745191516 for 2025-04-21 01:26"}
+{"timestamp": "2025-05-29 14:14:05,605", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-universal-polling with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,606", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for JSONPlaceholder (test-universal-polling): https://jsonplaceholder.typicode.com/posts/1 every 60s"}
+{"timestamp": "2025-05-29 14:14:05,606", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:14:05,606", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,606", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,606", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,607", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,607", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for JSONPlaceholder (test-universal-polling) - interval: 60s"}
+{"timestamp": "2025-05-29 14:14:05,607", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 12"}
+{"timestamp": "2025-05-29 14:14:05,608", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:14:05,608", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 14:14:05,608", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 14:14:05,608", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 14:14:05,609", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:14:05,609", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,609", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,609", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,610", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,610", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:14:05,610", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:14:05,610", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:14:05,612", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-utc-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,613", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-utc-trigger for 2025-05-27 20:06"}
+{"timestamp": "2025-05-29 14:14:05,614", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-working-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,614", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-working-trigger for 2025-05-27 20:05"}
+{"timestamp": "2025-05-29 14:14:05,615", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748365734749 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,616", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748365734749 for 2025-05-27 19:11"}
+{"timestamp": "2025-05-29 14:14:05,617", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366929945 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,617", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366929945 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 14:14:05,618", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366972215 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,619", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366972215 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 14:14:05,620", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748376346376 with type schedule"}
+{"timestamp": "2025-05-29 14:14:05,621", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748376346376 for 2025-05-27 22:07"}
+{"timestamp": "2025-05-29 14:14:05,621", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:14:05,622", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Victory API (victory-test): https://httpbin.org/json every 30s"}
+{"timestamp": "2025-05-29 14:14:05,622", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,622", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 30}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:14:05,622", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:14:05,623", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:14:05,623", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:14:05,624", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Victory API (victory-test) - interval: 30s"}
+{"timestamp": "2025-05-29 14:14:05,624", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 19"}
+{"timestamp": "2025-05-29 14:14:05,624", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:14:05,624", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:14:05,624", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:14:05,625", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:14:05,625", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 14:14:05,625", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 14:14:05,625", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-working-trigger"}
+{"timestamp": "2025-05-29 14:14:05,626", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:14:05,626", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-fix"}
+{"timestamp": "2025-05-29 14:14:05,626", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:14:05,626", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:14:05,626", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,627", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,627", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:14:05,627", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:14:05,627", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:14:05,627", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:14:05,628", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:14:05,628", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:14:05,630", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:14:05,631", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:14:05,632", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:14:05,633", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:14:05,633", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:14:05,633", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:14:05,634", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:14:05,635", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:14:05,635", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:14:05,635", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:14:05,636", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:14:05,637", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:14:05,637", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:14:05,638", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:14:05,639", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:14:05,639", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:14:05,640", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:14:05,641", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:14:05,642", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:14:05,642", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:14:05,643", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 14:14:05,644", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:14:05,644", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:14:05,652", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:14:05,652", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:14:05,657", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:14:05,658", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 14:14:05,663", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:14:05,665", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-fix"}
+{"timestamp": "2025-05-29 14:14:05,665", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:14:05,667", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:14:05,667", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:32:43,400", "level": "INFO", "name": "backend.services.trigger_service", "message": "No triggers found for owner: None"}
+{"timestamp": "2025-05-29 14:33:47,199", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger airtable-live-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,199", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Airtable (airtable-live-test): https://api.airtable.com/v0/appYourBaseId/YourTableName every 60s"}
+{"timestamp": "2025-05-29 14:33:47,200", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,200", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,200", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,200", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,201", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,201", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Airtable (airtable-live-test) - interval: 60s"}
+{"timestamp": "2025-05-29 14:33:47,202", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 1"}
+{"timestamp": "2025-05-29 14:33:47,202", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,203", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger dexscreener-live-trigger with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,203", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for DexScreener (dexscreener-live-trigger): https://api.dexscreener.com/latest/dex/search?q=PEPE every 60s"}
+{"timestamp": "2025-05-29 14:33:47,203", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,204", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,204", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,204", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,205", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,205", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for DexScreener (dexscreener-live-trigger) - interval: 60s"}
+{"timestamp": "2025-05-29 14:33:47,205", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 2"}
+{"timestamp": "2025-05-29 14:33:47,206", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,206", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,207", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger final-victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,207", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Final Victory API (final-victory-test): https://httpbin.org/json every 45s"}
+{"timestamp": "2025-05-29 14:33:47,207", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,208", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 45}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,208", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,208", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,209", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,209", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Final Victory API (final-victory-test) - interval: 45s"}
+{"timestamp": "2025-05-29 14:33:47,209", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 3"}
+{"timestamp": "2025-05-29 14:33:47,210", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,210", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,210", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,212", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-bounty-hunter with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,212", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Bounty API (test-bounty-hunter): https://api.example.com/bounty every 60s"}
+{"timestamp": "2025-05-29 14:33:47,212", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,214", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,214", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,214", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,215", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,215", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Bounty API (test-bounty-hunter) - interval: 60s"}
+{"timestamp": "2025-05-29 14:33:47,216", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 4"}
+{"timestamp": "2025-05-29 14:33:47,216", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,216", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,216", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,217", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,218", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-enhanced with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,218", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Debug API (test-debug-enhanced): https://api.example.com/debug every 120s"}
+{"timestamp": "2025-05-29 14:33:47,218", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:33:47,218", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 120}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,219", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,219", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,220", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,220", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Debug API (test-debug-enhanced) - interval: 120s"}
+{"timestamp": "2025-05-29 14:33:47,220", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 5"}
+{"timestamp": "2025-05-29 14:33:47,221", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,221", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,221", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,221", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,222", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:33:47,223", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-debug-final with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,223", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Test API (test-debug-final): https://api.example.com/test every 300s"}
+{"timestamp": "2025-05-29 14:33:47,223", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:33:47,223", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 300}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,224", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,224", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,225", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,225", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Test API (test-debug-final) - interval: 300s"}
+{"timestamp": "2025-05-29 14:33:47,225", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 6"}
+{"timestamp": "2025-05-29 14:33:47,225", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,226", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,226", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,226", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,226", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:33:47,227", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:33:47,229", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-fix-123 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,232", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-fix-123 for 2025-05-27 20:00"}
+{"timestamp": "2025-05-29 14:33:47,233", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-future-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,234", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-future-trigger for 2025-05-27 19:35"}
+{"timestamp": "2025-05-29 14:33:47,235", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-scheduler-working with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,235", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-scheduler-working for 2025-05-27 21:59"}
+{"timestamp": "2025-05-29 14:33:47,237", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-trigger-1745191516 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,238", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-trigger-1745191516 for 2025-04-21 01:26"}
+{"timestamp": "2025-05-29 14:33:47,239", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-universal-polling with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,239", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for JSONPlaceholder (test-universal-polling): https://jsonplaceholder.typicode.com/posts/1 every 60s"}
+{"timestamp": "2025-05-29 14:33:47,239", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:33:47,240", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 60}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,240", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,240", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,241", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,241", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for JSONPlaceholder (test-universal-polling) - interval: 60s"}
+{"timestamp": "2025-05-29 14:33:47,241", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 11"}
+{"timestamp": "2025-05-29 14:33:47,241", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:33:47,242", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 14:33:47,242", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 14:33:47,242", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:33:47,242", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,243", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,243", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,243", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,244", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:33:47,244", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:33:47,244", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:33:47,245", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-utc-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,246", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-utc-trigger for 2025-05-27 20:06"}
+{"timestamp": "2025-05-29 14:33:47,247", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger test-working-trigger with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,248", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger test-working-trigger for 2025-05-27 20:05"}
+{"timestamp": "2025-05-29 14:33:47,249", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748365734749 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,249", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748365734749 for 2025-05-27 19:11"}
+{"timestamp": "2025-05-29 14:33:47,250", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366929945 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,251", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366929945 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 14:33:47,252", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748366972215 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,253", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748366972215 for 2025-05-27 19:31"}
+{"timestamp": "2025-05-29 14:33:47,254", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger trigger-1748376346376 with type schedule"}
+{"timestamp": "2025-05-29 14:33:47,255", "level": "INFO", "name": "backend.services.trigger_service", "message": "Successfully scheduled one-time trigger trigger-1748376346376 for 2025-05-27 22:07"}
+{"timestamp": "2025-05-29 14:33:47,256", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up schedule for trigger victory-test with type universal_polling"}
+{"timestamp": "2025-05-29 14:33:47,256", "level": "INFO", "name": "backend.services.trigger_service", "message": "Setting up Universal Polling for Victory API (victory-test): https://httpbin.org/json every 30s"}
+{"timestamp": "2025-05-29 14:33:47,256", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: About to schedule job with ID: victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,257", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler trigger data: {'triggerType': 'interval', 'scheduleType': 'interval', 'runAt': {'seconds': 30}, 'timezone': 'UTC'}"}
+{"timestamp": "2025-05-29 14:33:47,257", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler manager available: True"}
+{"timestamp": "2025-05-29 14:33:47,257", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Scheduler running: True"}
+{"timestamp": "2025-05-29 14:33:47,258", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: add_job returned: True"}
+{"timestamp": "2025-05-29 14:33:47,258", "level": "INFO", "name": "backend.services.trigger_service", "message": "\u2705 Successfully set up Universal Polling for Victory API (victory-test) - interval: 30s"}
+{"timestamp": "2025-05-29 14:33:47,258", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Total jobs after adding: 18"}
+{"timestamp": "2025-05-29 14:33:47,259", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:33:47,259", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:33:47,259", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:33:47,259", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:33:47,260", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-future-trigger"}
+{"timestamp": "2025-05-29 14:33:47,260", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-fix-123"}
+{"timestamp": "2025-05-29 14:33:47,260", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-working-trigger"}
+{"timestamp": "2025-05-29 14:33:47,260", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:33:47,261", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:33:47,261", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:33:47,261", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,261", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: final-victory-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,262", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: airtable-live-test-poll"}
+{"timestamp": "2025-05-29 14:33:47,262", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: dexscreener-live-trigger-poll"}
+{"timestamp": "2025-05-29 14:33:47,262", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-bounty-hunter-poll"}
+{"timestamp": "2025-05-29 14:33:47,262", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-universal-polling-poll"}
+{"timestamp": "2025-05-29 14:33:47,263", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-enhanced-poll"}
+{"timestamp": "2025-05-29 14:33:47,263", "level": "INFO", "name": "backend.services.trigger_service", "message": "\ud83d\udd27 DEBUG: Job found: test-debug-final-poll"}
+{"timestamp": "2025-05-29 14:33:47,265", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:33:47,267", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:33:47,268", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:33:47,268", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:33:47,269", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-trigger-1745191516"}
+{"timestamp": "2025-05-29 14:33:47,269", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:33:47,270", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:33:47,270", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:33:47,271", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748365734749"}
+{"timestamp": "2025-05-29 14:33:47,272", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:33:47,272", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366929945"}
+{"timestamp": "2025-05-29 14:33:47,273", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:33:47,273", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:33:47,275", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:33:47,275", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748366972215"}
+{"timestamp": "2025-05-29 14:33:47,276", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:33:47,277", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-future-trigger"}
+{"timestamp": "2025-05-29 14:33:47,278", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:33:47,279", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:33:47,288", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-fix-123"}
+{"timestamp": "2025-05-29 14:33:47,289", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:33:47,293", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:33:47,300", "level": "INFO", "name": "backend.services.trigger_service", "message": "[Scheduler] Executing scheduled trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:33:47,300", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:33:47,301", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-working-trigger"}
+{"timestamp": "2025-05-29 14:33:47,303", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-utc-trigger"}
+{"timestamp": "2025-05-29 14:33:47,303", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:33:47,304", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Starting automatic workflow execution for trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:33:47,305", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: test-scheduler-working"}
+{"timestamp": "2025-05-29 14:33:47,306", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,307", "level": "INFO", "name": "backend.services.trigger_service", "message": "Executing trigger: trigger-1748376346376"}
+{"timestamp": "2025-05-29 14:33:47,308", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}
+{"timestamp": "2025-05-29 14:33:47,309", "level": "INFO", "name": "backend.services.trigger_service", "message": "[AUTO-EXECUTION] Executing workflow with 1 nodes"}

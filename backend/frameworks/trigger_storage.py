@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 # Try multiple locations for the triggers directory
 TRIGGERS_DIRS = [
-    Path("./triggers"),
-    Path("../triggers"),
-    Path("../../triggers"),
+    Path("./backend/triggers"),  # From root directory - THIS IS WHERE YOUR TRIGGERS ARE!
+    Path("./triggers"),  # From backend directory
+    Path("../triggers"), # From backend directory going up
+    Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "triggers")),  # Relative to this file
     Path(os.path.expanduser("~/triggers")),
-    Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "triggers"))
+    Path("../../triggers")
 ]
 
 # Try to create each directory

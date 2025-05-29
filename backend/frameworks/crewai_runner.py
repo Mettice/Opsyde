@@ -359,8 +359,13 @@ class EnhancedCrewAIRunner:
     async def _fallback_execution(self, agent_config: Dict[str, Any], 
                                 task_config: Dict[str, Any],
                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Fallback when CrewAI is not available"""
-        from .openrouter_runner import run_openrouter_chat
+        """Fallback when CrewAI is not available - respects user's LLM provider choice"""
+        
+        # Get framework config to determine provider
+        framework_config = agent_config.get('frameworkConfig', {})
+        provider = framework_config.get('provider', 'openai')
+        model = framework_config.get('model', 'gpt-4')
+        temperature = framework_config.get('temperature', 0.7)
         
         # Simulate CrewAI behavior using direct LLM calls
         role = agent_config.get('role', 'Assistant')
@@ -384,18 +389,67 @@ Task: {task_description}
         
         messages = [{"role": "user", "content": prompt}]
         
-        response = await run_openrouter_chat(
-            messages=messages,
-            model=agent_config.get('frameworkConfig', {}).get('model', 'gpt-4'),
-            temperature=agent_config.get('frameworkConfig', {}).get('temperature', 0.7)
-        )
+        # Use the appropriate provider based on user selection
+        try:
+            if provider == 'openai':
+                # Use OpenAI directly
+                from backend.frameworks.openai_runner import run_openai_chat
+                response = await run_openai_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature
+                )
+            elif provider == 'anthropic':
+                # Use Anthropic directly
+                from backend.frameworks.anthropic_runner import run_anthropic_chat
+                response = await run_anthropic_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature
+                )
+            elif provider == 'openrouter':
+                # Use OpenRouter
+                from .openrouter_runner import run_openrouter_chat
+                response = await run_openrouter_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature
+                )
+            else:
+                # Default fallback to OpenAI
+                from backend.frameworks.openai_runner import run_openai_chat
+                response = await run_openai_chat(
+                    messages=messages,
+                    model='gpt-4',
+                    temperature=temperature
+                )
+                
+        except ImportError:
+            # If specific provider runner doesn't exist, fallback to OpenRouter
+            from .openrouter_runner import run_openrouter_chat
+            
+            # Map provider models to OpenRouter format
+            if provider == 'openai':
+                openrouter_model = f"openai/{model}"
+            elif provider == 'anthropic':
+                openrouter_model = f"anthropic/{model}"
+            else:
+                openrouter_model = model
+                
+            response = await run_openrouter_chat(
+                messages=messages,
+                model=openrouter_model,
+                temperature=temperature
+            )
         
         return {
             "type": "crewai_fallback",
             "output": response,
             "framework": "crewai_fallback",
+            "provider_used": provider,
+            "model_used": model,
             "success": True,
-            "note": "CrewAI not available - using fallback implementation"
+            "note": f"CrewAI not available - using {provider} fallback implementation"
         }
 
 # Main entry points for compatibility
