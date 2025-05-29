@@ -97,7 +97,7 @@ const EnhancedAgentEditor = ({
   useEffect(() => {
     const selectedProvider = formData.llm?.provider || formData.llmProvider;
     if (selectedProvider && availableApiKeys.length > 0) {
-      const apiKey = availableApiKeys.find(key => key.provider_id === selectedProvider);
+      const apiKey = availableApiKeys.find(key => key.provider === selectedProvider);
       if (apiKey && apiKey.validation_status === 'valid') {
         // Auto-populate the framework config with the API key
         const updatedFrameworkConfig = {
@@ -123,7 +123,7 @@ const EnhancedAgentEditor = ({
     const compatibleLLMs = FRAMEWORK_LLM_COMPATIBILITY[formData.framework] || [];
     const providersWithKeys = availableApiKeys
       .filter(key => key.validation_status === 'valid')
-      .map(key => key.provider_id);
+      .map(key => key.provider);
     
     return AVAILABLE_LLM_PROVIDERS.filter(llm => 
       compatibleLLMs.includes(llm.value) && providersWithKeys.includes(llm.value)
@@ -292,7 +292,7 @@ const EnhancedAgentEditor = ({
           </label>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {availableLLMs.map(llm => {
-              const apiKey = availableApiKeys.find(key => key.provider_id === llm.value);
+              const apiKey = availableApiKeys.find(key => key.provider === llm.value);
               const isSelected = selectedProvider === llm.value;
               
               return (

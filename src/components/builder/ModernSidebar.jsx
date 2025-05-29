@@ -9,7 +9,9 @@ import {
   ClockIcon,
   DocumentTextIcon,
   FolderIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  ChevronDownIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/solid';
 
 const ModernSidebar = ({ 
@@ -38,6 +40,18 @@ const ModernSidebar = ({
   className = "" 
 }) => {
   const [isHovered, setIsHovered] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState({
+    coreNodes: false,
+    templates: false,
+    tools: false
+  });
+
+  const toggleSection = (sectionKey) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }));
+  };
 
   const nodeCategories = [
     {
@@ -69,6 +83,15 @@ const ModernSidebar = ({
           gradient: 'from-blue-400 to-blue-600',
           shadow: 'shadow-blue-200',
           details: 'CrewAI • OpenAI • Custom LLM'
+        },
+        { 
+          id: 'chatbot', 
+          name: 'Chat Node', 
+          description: 'Interactive chatbot with conversation memory',
+          icon: '💬',
+          gradient: 'from-cyan-400 to-cyan-600',
+          shadow: 'shadow-cyan-200',
+          details: 'Interactive • Memory • Multi-turn'
         }
       ]
     },
@@ -162,6 +185,37 @@ const ModernSidebar = ({
     }
   };
 
+  const renderCollapsibleSection = (title, sectionKey, children, icon = null) => {
+    const isCollapsed = collapsedSections[sectionKey];
+    
+    return (
+      <div>
+        <button
+          onClick={() => toggleSection(sectionKey)}
+          className="w-full flex items-center justify-between text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 hover:text-gray-900 transition-colors duration-200"
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+            {title}
+          </div>
+          {isCollapsed ? (
+            <ChevronRightIcon className="w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors" />
+          ) : (
+            <ChevronDownIcon className="w-4 h-4 text-gray-400 hover:text-gray-600 transition-colors" />
+          )}
+        </button>
+        
+        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+          isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[1000px] opacity-100'
+        }`}>
+          <div className="space-y-2">
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div 
       className={`
@@ -237,7 +291,7 @@ const ModernSidebar = ({
               </button>
             </div>
           ) : (
-            // Expanded view - full content
+            // Expanded view - full content with collapsible sections
             <div className="space-y-6">
               {/* Search */}
               <div className="relative">
@@ -252,47 +306,42 @@ const ModernSidebar = ({
                 </div>
               </div>
 
-              {/* Core Nodes */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
-                  Core Nodes
-                </h3>
-                <div className="space-y-2">
-                  {nodeCategories.map((category) => (
-                    category.items.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => handleNodeClick(item.id)}
-                        className="w-full p-3 rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-sm hover:bg-white hover:border-gray-300/50 hover:shadow-lg transition-all duration-200 text-left group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${item.gradient} flex items-center justify-center text-lg shadow-md ${item.shadow} group-hover:shadow-lg group-hover:scale-105 transition-all duration-200`}>
-                            {item.icon}
+              {/* Core Nodes - Collapsible */}
+              {renderCollapsibleSection(
+                'Core Nodes',
+                'coreNodes',
+                nodeCategories.map((category) => (
+                  category.items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNodeClick(item.id)}
+                      className="w-full p-3 rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-sm hover:bg-white hover:border-gray-300/50 hover:shadow-lg transition-all duration-200 text-left group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${item.gradient} flex items-center justify-center text-lg shadow-md ${item.shadow} group-hover:shadow-lg group-hover:scale-105 transition-all duration-200`}>
+                          {item.icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold text-gray-900 text-sm">
+                            {item.name}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="font-semibold text-gray-900 text-sm">
-                              {item.name}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {item.details}
-                            </div>
+                          <div className="text-xs text-gray-500">
+                            {item.details}
                           </div>
                         </div>
-                      </button>
-                    ))
-                  ))}
-                </div>
-              </div>
+                      </div>
+                    </button>
+                  ))
+                ))
+              )}
 
-              {/* Templates */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gradient-to-r from-green-500 to-blue-500 rounded-full"></div>
-                  Templates
-                </h3>
-                <div className="space-y-2">
+              {/* Templates - Collapsible */}
+              {renderCollapsibleSection(
+                'Templates',
+                'templates',
+                [
                   <button
+                    key="flow-templates"
                     onClick={() => onOpenTemplates && onOpenTemplates()}
                     className="w-full p-3 rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-sm hover:bg-white hover:border-blue-300/50 hover:shadow-lg transition-all duration-200 text-left group"
                   >
@@ -310,17 +359,16 @@ const ModernSidebar = ({
                       </div>
                     </div>
                   </button>
-                </div>
-              </div>
+                ]
+              )}
 
-              {/* Tools */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 bg-gradient-to-r from-orange-500 to-red-500 rounded-full"></div>
-                  Tools
-                </h3>
-                <div className="space-y-2">
+              {/* Tools - Collapsible */}
+              {renderCollapsibleSection(
+                'Tools',
+                'tools',
+                [
                   <button
+                    key="tool-library"
                     onClick={() => onOpenToolTemplates && onOpenToolTemplates()}
                     className="w-full p-3 rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-sm hover:bg-white hover:border-orange-300/50 hover:shadow-lg transition-all duration-200 text-left group"
                   >
@@ -337,9 +385,10 @@ const ModernSidebar = ({
                         </div>
                       </div>
                     </div>
-                  </button>
+                  </button>,
                   
                   <button
+                    key="smart-tools"
                     onClick={() => onOpenSmartTools && onOpenSmartTools()}
                     className="w-full p-3 rounded-xl border border-gray-200/50 bg-white/80 backdrop-blur-sm hover:bg-white hover:border-purple-300/50 hover:shadow-lg transition-all duration-200 text-left group"
                   >
@@ -357,8 +406,8 @@ const ModernSidebar = ({
                       </div>
                     </div>
                   </button>
-                </div>
-              </div>
+                ]
+              )}
             </div>
           )}
         </div>

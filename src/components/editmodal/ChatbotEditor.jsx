@@ -52,18 +52,18 @@ const ChatbotEditor = ({ formData, handleInputChange }) => {
     const availableModels = [];
     
     validKeys.forEach(key => {
-      if (key.provider_id === 'openai') {
+      if (key.provider === 'openai') {
         availableModels.push(
           { value: 'gpt-4', label: 'GPT-4 ✅', disabled: false },
           { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo ✅', disabled: false }
         );
-      } else if (key.provider_id === 'anthropic') {
+      } else if (key.provider === 'anthropic') {
         availableModels.push(
           { value: 'claude-3-opus', label: 'Claude 3 Opus ✅', disabled: false },
           { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet ✅', disabled: false },
           { value: 'claude-3-haiku', label: 'Claude 3 Haiku ✅', disabled: false }
         );
-      } else if (key.provider_id === 'mistral') {
+      } else if (key.provider === 'mistral') {
         availableModels.push(
           { value: 'mistral-large', label: 'Mistral Large ✅', disabled: false },
           { value: 'mistral-medium', label: 'Mistral Medium ✅', disabled: false }

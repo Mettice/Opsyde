@@ -28,14 +28,11 @@ const APIKeyManager = () => {
             
             // Convert API keys to the format expected by the UI
             const keyMap = {};
-            if (result.settings.api_keys) {
+            if (result.settings && result.settings.api_keys) {
               result.settings.api_keys.forEach(key => {
-                keyMap[key.provider_id] = {
-                  masked_value: key.masked_value,
-                  validation_status: key.validation_status,
-                  usage_count: key.usage_count,
-                  created_at: key.created_at,
-                  last_used: key.last_used
+                keyMap[key.provider] = {
+                  ...key,
+                  isValid: key.validation_status === 'valid'
                 };
               });
             }
@@ -80,7 +77,7 @@ const APIKeyManager = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            provider_id: providerId,
+            provider: providerId,
             api_key: apiKey
           })
         });
@@ -110,7 +107,7 @@ const APIKeyManager = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            provider_id: providerId
+            provider: providerId
           })
         });
   
@@ -311,7 +308,7 @@ const APIKeyManager = () => {
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {usageStats.provider_stats.map((stat) => (
-                      <tr key={stat.provider_id}>
+                      <tr key={stat.provider}>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <span className="text-lg mr-2">{stat.icon}</span>
@@ -561,7 +558,7 @@ const APIKeyManager = () => {
       if (!providers || !usageStats) return [];
   
       return providers.map(provider => {
-        const usage = usageStats.provider_stats?.find(s => s.provider_id === provider.id);
+        const usage = usageStats.provider_stats?.find(s => s.provider === provider.id);
         const hasKey = usage && usage.validation_status === 'valid';
         
         let estimatedCost = 0;
