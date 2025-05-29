@@ -5,15 +5,15 @@ from typing import Dict, List, Any, AsyncGenerator, Optional, Set
 from datetime import datetime
 import json
 
-from backend.models.workflow import Workflow
-from backend.models.nodes import Node
-from backend.core.graph import determine_execution_order, get_node_inputs
-from backend.core.node_processor import node_processor
-from backend.utils.logging import get_logger
-from backend.core.di import injector
+from models.workflow import Workflow
+from models.nodes import Node
+from core.graph import determine_execution_order, get_node_inputs
+from core.node_processor import node_processor
+from utils.logging import get_logger
+from core.di import injector
 
 # NEW: Import framework validation
-from backend.framework_registry import framework_registry, validate_framework_llm_combination
+from framework_registry import framework_registry, validate_framework_llm_combination
 
 logger = get_logger(__name__)
 

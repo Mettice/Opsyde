@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, Optional, Literal
 from datetime import datetime
 
-from backend.utils.logging import get_logger
+from utils.logging import get_logger
 
 logger = get_logger(__name__)
 

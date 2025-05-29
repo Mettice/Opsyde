@@ -1,8 +1,8 @@
 import logging
 import base64
 from typing import Dict, Any
-from backend.models.data import NodeData
-from backend.frameworks.file_handler import FileHandler
+from models.data import NodeData
+from frameworks.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 

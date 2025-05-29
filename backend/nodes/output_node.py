@@ -6,7 +6,7 @@ import asyncio
 
 # Import the new rich output schema
 try:
-    from backend.schemas.output_schema import (
+    from schemas.output_schema import (
         RichOutput, OutputType, ChartType, FileType,
         smart_format_output, detect_output_type
     )
@@ -15,10 +15,11 @@ except ImportError:
     RICH_OUTPUT_AVAILABLE = False
     logging.warning("Rich output schema not available, falling back to basic output")
 
-from backend.models.data import NodeData
-from backend.frameworks.ai_integration_runner import AIIntegrationRunner
-from backend.frameworks import framework_registry
-from backend.utils.logging import get_logger
+from models.data import NodeData
+from frameworks.ai_integration_runner import AIIntegrationRunner
+from frameworks import framework_registry
+from utils.logging import get_logger
+from core.workflow_data_manager import get_workflow_context
 
 logger = get_logger(__name__)
 
@@ -298,7 +299,7 @@ class OutputNode:
     async def _send_webhook(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via webhook"""
         # Use your existing webhook infrastructure
-        from backend.frameworks.webhook_runner import post_to_webhook
+        from frameworks.webhook_runner import post_to_webhook
         
         webhook_url = node_data.get('webhookUrl') or node_data.get('config', {}).get('url')
         if not webhook_url:
@@ -353,68 +354,65 @@ class OutputNode:
             return NodeData.from_error(f"Webhook failed: {str(e)}")
     
     def _replace_template_variables(self, template: str, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> str:
-        """Replace template variables in strings like {BOT_TOKEN} and {{variable}} with actual values"""
-        import re
-        import os
-        
-        # Handle single curly braces {VARIABLE} - typically for environment variables
-        single_brace_variables = re.findall(r'\{([^{}]+)\}', template)
-        
-        for var in single_brace_variables:
-            replacement = None
+        """
+        Enhanced template variable replacement using WorkflowExecutionContext
+        """
+        if not isinstance(template, str):
+            return template
             
-            # First, try to get from node configuration
-            if var in node_data:
-                replacement = str(node_data[var])
-            # Then try from node config sub-object
-            elif 'config' in node_data and var in node_data['config']:
-                replacement = str(node_data['config'][var])
-            # Try from output data
-            elif var in output_data:
-                replacement = str(output_data[var])
-            # Try from environment variables
-            elif var in os.environ:
-                replacement = os.environ[var]
-            # Try common variations
-            elif var.upper() in os.environ:
-                replacement = os.environ[var.upper()]
-            elif var.lower() in os.environ:
-                replacement = os.environ[var.lower()]
-            
-            # If we found a replacement, apply it
-            if replacement is not None:
-                template = template.replace(f'{{{var}}}', replacement)
-                self.logger.info(f"Replaced template variable {{{var}}} in webhook URL")
-            else:
-                self.logger.warning(f"Template variable {{{var}}} not found in configuration or environment")
+        # Get the workflow context
+        workflow_id = node_data.get('workflow_id') or 'default'
+        context = get_workflow_context(workflow_id)
         
-        # Handle double curly braces {{variable}} - typically for data variables
-        double_brace_variables = re.findall(r'\{\{([^{}]+)\}\}', template)
+        # Add current output_data to context if not already there
+        for key, value in output_data.items():
+            if key not in context.variables:
+                context.variables[key] = value
         
-        for var in double_brace_variables:
-            replacement = None
-            
-            # First, try to get from output data
-            if var in output_data:
-                replacement = str(output_data[var])
-            # Then try from node configuration
-            elif var in node_data:
-                replacement = str(node_data[var])
-            # Try from node config sub-object
-            elif 'config' in node_data and var in node_data['config']:
-                replacement = str(node_data['config'][var])
-            # Try nested access with dot notation (e.g., trigger.baseToken.symbol)
-            elif '.' in var:
-                replacement = self._get_nested_value(var, output_data) or self._get_nested_value(var, node_data)
-            
-            # If we found a replacement, apply it
-            if replacement is not None:
-                template = template.replace(f'{{{{{var}}}}}', replacement)
-                self.logger.info(f"Replaced template variable {{{{{var}}}}} with data")
-            else:
-                self.logger.warning(f"Template variable {{{{{var}}}}} not found in data")
+        # Use the context to resolve template variables
+        resolved = context.resolve_template_variables(template)
         
-        return template
+        # Log for debugging
+        logger.debug(f"Template resolution: '{template}' -> '{resolved}'")
+        logger.debug(f"Available variables: {list(context.variables.keys())}")
+        
+        return resolved
+    
+    def _find_task_output(self, output_data: Dict[str, Any]) -> Optional[str]:
+        """Smart lookup for task output data"""
+        # Strategy 1: Look for keys that contain 'task'
+        for key, value in output_data.items():
+            if 'task' in key.lower():
+                if isinstance(value, dict) and 'output' in value:
+                    return str(value['output'])
+                elif isinstance(value, str):
+                    return value
+                else:
+                    return str(value)
+        
+        # Strategy 2: Look for the most recent/relevant output
+        # Check for common task output patterns
+        for key, value in output_data.items():
+            if isinstance(value, dict):
+                # Check if this looks like a task result
+                if 'output' in value:
+                    return str(value['output'])
+                elif 'result' in value:
+                    return str(value['result'])
+                elif 'content' in value:
+                    return str(value['content'])
+        
+        # Strategy 3: Look for any string value that looks like meaningful output
+        for key, value in output_data.items():
+            if isinstance(value, str) and len(value) > 10:  # Meaningful content
+                return value
+        
+        # Strategy 4: Return the first non-empty value
+        for key, value in output_data.items():
+            if value and str(value).strip():
+                return str(value)
+        
+        return None
     
     def _get_nested_value(self, path: str, data: Dict[str, Any]) -> Optional[str]:
         """Get nested value from dictionary using dot notation (e.g., 'trigger.baseToken.symbol')"""
@@ -444,7 +442,7 @@ class OutputNode:
     async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
         """Send data via email"""
         try:
-            from backend.frameworks.email_notifier import send_email
+            from frameworks.email_notifier import send_email
             
             # Get email configuration from multiple possible sources
             email = (

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { fetchFlows, deleteFlow, fetchExecutedTriggers } from '../api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { getUserProfile, updateUserProfile, initializeUserProfile } from '../services/userProfileService';
 import StatsCard from '../components/profile/StatsCard';
 import FlowList from '../components/profile/FlowList';
@@ -227,6 +227,78 @@ export default function Dashboard() {
           color="bg-yellow-100"
           onClick={() => setShowTriggerHistory(true)}
         />
+      </div>
+      
+      {/* Quick Access Section */}
+      <div className="mb-8">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Quick Access</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* API Key Manager Card */}
+          <Link 
+            to="/api-key-manager"
+            className="block p-6 bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 rounded-lg hover:shadow-lg transition-all duration-200 hover:scale-105"
+          >
+            <div className="flex items-center mb-3">
+              <div className="p-2 bg-blue-500 rounded-lg mr-3">
+                <span className="text-white text-xl">🔑</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">API Key Manager</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-3">
+              Manage your API keys for unlimited LLM providers. Set once, use everywhere.
+            </p>
+            <div className="flex items-center text-blue-600 text-sm font-medium">
+              <span>Manage Keys</span>
+              <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </Link>
+          
+          {/* Builder Card */}
+          <Link 
+            to="/builder"
+            className="block p-6 bg-gradient-to-br from-green-50 to-emerald-100 border border-green-200 rounded-lg hover:shadow-lg transition-all duration-200 hover:scale-105"
+          >
+            <div className="flex items-center mb-3">
+              <div className="p-2 bg-green-500 rounded-lg mr-3">
+                <span className="text-white text-xl">🛠️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Workflow Builder</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-3">
+              Create powerful AI workflows with drag-and-drop simplicity.
+            </p>
+            <div className="flex items-center text-green-600 text-sm font-medium">
+              <span>Start Building</span>
+              <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </Link>
+          
+          {/* Trigger History Card */}
+          <button 
+            onClick={() => setShowTriggerHistory(true)}
+            className="block p-6 bg-gradient-to-br from-yellow-50 to-amber-100 border border-yellow-200 rounded-lg hover:shadow-lg transition-all duration-200 hover:scale-105 text-left w-full"
+          >
+            <div className="flex items-center mb-3">
+              <div className="p-2 bg-yellow-500 rounded-lg mr-3">
+                <span className="text-white text-xl">⚡</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Trigger History</h3>
+            </div>
+            <p className="text-gray-600 text-sm mb-3">
+              View and manage your automated workflow triggers.
+            </p>
+            <div className="flex items-center text-yellow-600 text-sm font-medium">
+              <span>View History</span>
+              <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        </div>
       </div>
       
       {/* Trigger History Section */}

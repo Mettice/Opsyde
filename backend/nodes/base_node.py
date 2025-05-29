@@ -3,9 +3,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from pydantic import BaseModel, ValidationError
 
-from backend.models.data import NodeData
-from backend.utils.logging import get_logger
-from backend.config.settings import get_settings
+from models.data import NodeData
+from utils.logging import get_logger
+from config.settings import get_settings
 
 logger = get_logger(__name__)
 settings = get_settings()

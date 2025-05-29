@@ -8,6 +8,34 @@ const OutputEditor = ({ formData, handleInputChange }) => {
   const [isTestingIntegration, setIsTestingIntegration] = useState(false);
   const [testResult, setTestResult] = useState(null);
 
+  // BYOK Integration - Load API Keys from API Key Manager
+  const [availableApiKeys, setAvailableApiKeys] = useState([]);
+  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+  const [apiKeyError, setApiKeyError] = useState(null);
+
+  // Load API Keys from BYOK Manager
+  useEffect(() => {
+    const loadApiKeys = async () => {
+      try {
+        setLoadingApiKeys(true);
+        const response = await fetch('http://localhost:8000/api/user-settings/api-keys');
+        const result = await response.json();
+        
+        if (result.success && result.data.api_keys) {
+          setAvailableApiKeys(result.data.api_keys);
+          console.log('🔑 Output Editor: Loaded API keys:', result.data.api_keys);
+        }
+      } catch (error) {
+        console.error('🔑 Output Editor: Error loading API keys:', error);
+        setApiKeyError('Failed to load API keys from BYOK Manager');
+      } finally {
+        setLoadingApiKeys(false);
+      }
+    };
+
+    loadApiKeys();
+  }, []);
+
   // EXISTING: When output type changes, ensure config is properly set
   useEffect(() => {
     if (formData.outputType) {
@@ -160,6 +188,78 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     { value: 'smart_email', label: '🤖 Smart Email', description: 'AI-enhanced email formatting' },
   ];
 
+  // Render BYOK Status for Output Editor
+  const renderBYOKStatus = () => {
+    // Only show for smart outputs that use AI
+    if (!formData.outputType?.startsWith('smart_')) {
+      return null;
+    }
+
+    if (loadingApiKeys) {
+      return (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+            <span className="text-sm text-blue-700">Loading your API keys for AI integration...</span>
+          </div>
+        </div>
+      );
+    }
+
+    if (apiKeyError) {
+      return (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center">
+            <span className="text-red-600 mr-2">⚠️</span>
+            <span className="text-sm text-red-700">{apiKeyError}</span>
+          </div>
+        </div>
+      );
+    }
+
+    const validKeys = availableApiKeys.filter(key => key.validation_status === 'valid');
+    
+    if (validKeys.length === 0) {
+      return (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <span className="text-yellow-600 mr-2">🔑</span>
+              <span className="text-sm text-yellow-700">No API keys configured for AI integration</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+            >
+              Add API Keys
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <span className="text-green-600 mr-2">🔑</span>
+            <span className="text-sm text-green-700">
+              AI integration ready with {validKeys.length} API key{validKeys.length > 1 ? 's' : ''}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => window.open('/api-keys', '_blank')}
+            className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm"
+          >
+            Manage Keys
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <>
       {/* ENHANCED: Output Type Selection */}
@@ -197,6 +297,7 @@ const OutputEditor = ({ formData, handleInputChange }) => {
       {/* NEW: Smart Integration Configuration */}
       {(formData.outputType === 'smart_api' || formData.outputType === 'smart_email') && (
         <div className="mb-6">
+          {renderBYOKStatus()}
           <SmartOutputEditor 
             formData={formData}
             handleInputChange={handleOutputConfigChange}

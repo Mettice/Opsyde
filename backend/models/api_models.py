@@ -2,7 +2,7 @@ from typing import TypeVar, Generic, Optional, Dict, Any, List
 from pydantic import BaseModel, Field
 from datetime import datetime
 from enum import Enum
-from backend.models.results import ExecutionStatus
+from models.results import ExecutionStatus
 
 class ErrorCode(str, Enum):
     VALIDATION_ERROR = "VALIDATION_ERROR"

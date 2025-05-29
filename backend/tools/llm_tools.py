@@ -7,7 +7,7 @@ import aiohttp
 from openai import AsyncOpenAI
 import asyncio
 
-from backend.models.types import (
+from models.types import (
     ToolType,
     LLMProvider,
     LLMConfig,

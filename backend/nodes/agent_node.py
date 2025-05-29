@@ -4,14 +4,14 @@ from datetime import datetime
 from enum import Enum
 import asyncio
 
-from backend.models.nodes import Node, NodeType, AgentConfig
-from backend.models.workflow import ExecutionContext
-from backend.models.results import NodeResult, ExecutionStatus
-from backend.core.exceptions import ValidationError, FrameworkError
-from backend.models.data import NodeData
+from models.nodes import Node, NodeType, AgentConfig
+from models.workflow import ExecutionContext
+from models.results import NodeResult, ExecutionStatus
+from core.exceptions import ValidationError, FrameworkError
+from models.data import NodeData
 
 # Import the enhanced framework registry
-from backend.framework_registry import framework_registry
+from framework_registry import framework_registry
 
 logger = logging.getLogger(__name__)
 

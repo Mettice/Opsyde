@@ -1,6 +1,6 @@
 from typing import Dict, List, Set, Any, Union
-from backend.models.workflow import Workflow, Node, Edge
-from backend.models.results import NodeResult
+from models.workflow import Workflow, Node, Edge
+from models.results import NodeResult
 import logging
 
 logger = logging.getLogger(__name__)

@@ -4,10 +4,10 @@ import json
 import logging
 from typing import Any, Dict
 from datetime import datetime
-from backend.frameworks.email_notifier import send_email
-from backend.frameworks.discord_notifier import run_discord_notifier
-from backend.frameworks.sheets_logger import log_to_sheet
-from backend.utils.security import SecurityManager
+from frameworks.email_notifier import send_email
+from frameworks.discord_notifier import run_discord_notifier
+from frameworks.sheets_logger import log_to_sheet
+from utils.security import SecurityManager
 
 logger = logging.getLogger(__name__)
 security_manager = SecurityManager(secret_key=os.getenv("JWT_SECRET_KEY", "default-secret"))

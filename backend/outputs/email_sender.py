@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.warning("backend.outputs.email_sender is deprecated. Please use backend.frameworks.email_notifier instead.")
 
 # Import the consolidated implementations
-from backend.frameworks.email_notifier import (
+from frameworks.email_notifier import (
     send_email,
     format_output_for_email,
     send_candidate_email,

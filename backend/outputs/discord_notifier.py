@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.warning("backend.outputs.discord_notifier is deprecated. Please use backend.frameworks.discord_notifier instead.")
 
 # Import the consolidated implementation
-from backend.frameworks.discord_notifier import run_discord_notifier
+from frameworks.discord_notifier import run_discord_notifier
 
 # Create function aliases for backward compatibility
 def send_discord_message(message, webhook_url=None):

@@ -5,10 +5,10 @@ import asyncio
 import json
 import os
 
-from backend.models.nodes import Node, NodeType
-from backend.models.workflow import ExecutionContext
-from backend.models.results import NodeResult, ExecutionStatus
-from backend.models.data import NodeData
+from models.nodes import Node, NodeType
+from models.workflow import ExecutionContext
+from models.results import NodeResult, ExecutionStatus
+from models.data import NodeData
 
 logger = logging.getLogger(__name__)
 

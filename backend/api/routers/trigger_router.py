@@ -5,17 +5,17 @@ from fastapi.responses import StreamingResponse
 from datetime import datetime
 import json
 
-from backend.models.api_models import (
+from models.api_models import (
     APIResponse, TriggerBase, TriggerExecutionResponse, TriggerListResponse,
     TriggerRegistrationResponse, TriggerScheduleResponse, TriggerType,
     TriggerStatus, ErrorCode
 )
-from backend.services.trigger_service import TriggerService
-from backend.utils.logging import get_logger
-from backend.utils.security import get_current_user, security_manager
-from backend.utils.api_utils import handle_exception
-from backend.core.runner import UnifiedRunner
-from backend.core.di import get_trigger_service
+from services.trigger_service import TriggerService
+from utils.logging import get_logger
+from utils.security import get_current_user, security_manager
+from utils.api_utils import handle_exception
+from core.runner import UnifiedRunner
+from core.di import get_trigger_service
 
 logger = get_logger(__name__)
 

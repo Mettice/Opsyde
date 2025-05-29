@@ -215,7 +215,7 @@ unified_runner = UnifiedRunner()
 injector.register_instance(UnifiedRunner, unified_runner)
 
 # Create and register TriggerService instance
-from backend.services.trigger_service import TriggerService
+from services.trigger_service import TriggerService
 trigger_service = TriggerService()
 injector.register_instance(TriggerService, trigger_service)
 

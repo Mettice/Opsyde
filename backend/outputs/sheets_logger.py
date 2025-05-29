@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.warning("backend.outputs.sheets_logger is deprecated. Please use backend.frameworks.sheets_logger instead.")
 
 # Import the consolidated implementation
-from backend.frameworks.sheets_logger import log_to_sheet
+from frameworks.sheets_logger import log_to_sheet
 
 # Create function aliases for backward compatibility
 def push_to_sheet(logs, sheet_name="Logs"):

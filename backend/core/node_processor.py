@@ -3,13 +3,16 @@ import logging
 from typing import Dict, Any, Optional, Union, Callable
 from datetime import datetime
 import importlib
+import asyncio
+import json
 
-from backend.models.data import NodeData
-from backend.core.exceptions import NodeError
-from backend.utils.logging import get_logger
+from models.data import NodeData
+from models.results import NodeResult, ExecutionStatus, ResultType
+from core.exceptions import NodeError
+from utils.logging import get_logger
 
 # NEW: Import enhanced framework registry for validation
-from backend.framework_registry import framework_registry, validate_framework_llm_combination
+from framework_registry import framework_registry, validate_framework_llm_combination
 
 logger = get_logger(__name__)
 
@@ -145,12 +148,12 @@ class NodeProcessor:
 node_processor = NodeProcessor()
 
 # Register lazy handlers to avoid circular imports
-node_processor.register_lazy_handler("task", "backend.nodes.task_node", "process_task_node")
-node_processor.register_lazy_handler("agent", "backend.nodes.agent_node", "process_agent_node") 
-node_processor.register_lazy_handler("output", "backend.nodes.output_node", "process_output_node")
-node_processor.register_lazy_handler("input", "backend.nodes.input_node", "process_input_node")
-node_processor.register_lazy_handler("Input", "backend.nodes.input_node", "process_input_node")
-node_processor.register_lazy_handler("tool", "backend.nodes.tool_node", "process_tool_node")
-node_processor.register_lazy_handler("trigger", "backend.nodes.trigger_node", "process_trigger_node")
-node_processor.register_lazy_handler("chat", "backend.nodes.chat_node", "process_chat_node")
-node_processor.register_lazy_handler("logic", "backend.nodes.logic_node", "process_logic_node")
+node_processor.register_lazy_handler("task", "nodes.task_node", "process_task_node")
+node_processor.register_lazy_handler("agent", "nodes.agent_node", "process_agent_node") 
+node_processor.register_lazy_handler("output", "nodes.output_node", "process_output_node")
+node_processor.register_lazy_handler("input", "nodes.input_node", "process_input_node")
+node_processor.register_lazy_handler("Input", "nodes.input_node", "process_input_node")
+node_processor.register_lazy_handler("tool", "nodes.tool_node", "process_tool_node")
+node_processor.register_lazy_handler("trigger", "nodes.trigger_node", "process_trigger_node")
+node_processor.register_lazy_handler("chat", "nodes.chat_node", "process_chat_node")
+node_processor.register_lazy_handler("logic", "nodes.logic_node", "process_logic_node")

@@ -4,8 +4,8 @@ from typing import Dict, Any, Optional
 import json
 import aiohttp
 from datetime import datetime
-from backend.framework_registry import run_framework_tool
-from backend.frameworks.shared_api_research import research_for_output
+from framework_registry import run_framework_tool
+from frameworks.shared_api_research import research_for_output
 
 logger = logging.getLogger(__name__)
 

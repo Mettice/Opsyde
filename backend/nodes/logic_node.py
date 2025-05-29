@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any
 from datetime import datetime
 
-from backend.models.data import NodeData
+from models.data import NodeData
 
 logger = logging.getLogger(__name__)
 

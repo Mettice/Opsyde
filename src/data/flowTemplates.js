@@ -1220,17 +1220,43 @@ const baseTemplates = [
             role: 'Crypto Data Extraction Specialist',
             goal: 'Extract and format crypto trading data from DexScreener API responses',
             backstory: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data.',
-            prompt: 'You are a crypto data extraction specialist. Extract crypto data from DexScreener API and format it cleanly. DO NOT give trading advice, just extract and format the data.\n\nFormat like this:\n🔥 CRYPTO DATA:\nToken: [NAME]\nSymbol: [SYMBOL]\nPrice: $[PRICE]\nLiquidity: $[LIQUIDITY]\nVolume 24h: $[VOLUME]\nChange: [CHANGE]%',
+            prompt: `You are a crypto data extraction specialist. Extract crypto data from DexScreener API and format it cleanly.
+
+🎯 INSTRUCTIONS:
+1. Extract ONLY the essential crypto data
+2. Format it clearly for Telegram
+3. DO NOT give trading advice
+4. Keep it concise to save tokens
+
+📊 INPUT: You receive DexScreener API data with crypto pairs
+📤 OUTPUT: Format like this:
+
+🔥 CRYPTO DATA UPDATE:
+
+Token: [TOKEN_NAME] ([SYMBOL])
+💰 Price: $[PRICE]
+💧 Liquidity: $[LIQUIDITY]
+📊 Volume 24h: $[VOLUME]
+📈 Change 24h: [CHANGE]%
+🔗 Chain: [CHAIN]
+
+---
+⏰ Updated: [TIMESTAMP]
+
+If multiple tokens, show top 3 only.
+If no data: "No crypto data available"
+
+REMEMBER: Extract data only, no advice!`,
             framework: 'crewai',
             frameworkConfig: {
               model: 'gpt-4',
-              temperature: 0.3,
-              max_tokens: 2000,
+              temperature: 0.1,
+              max_tokens: 800,
               api_key: ''
             },
             llmModel: 'gpt-4',
-            temperature: 0.3,
-            max_tokens: 2000,
+            temperature: 0.1,
+            max_tokens: 800,
             allowDelegation: false,
             enableMemory: false,
             verbose: true,

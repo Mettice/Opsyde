@@ -1,30 +1,60 @@
-from typing import Dict, Any, AsyncGenerator, Optional
-from datetime import datetime
-import logging
 import asyncio
+import logging
+from typing import Dict, Any, List, Optional, AsyncGenerator
+from datetime import datetime
 import json
+import traceback
+import uuid
 import inspect
 import sys
 
-from backend.models.nodes import Node, NodeType, ToolType
-from backend.models.workflow import Workflow, ExecutionContext
-from backend.models.results import NodeResult, WorkflowResult, ExecutionStatus, ResultType
-from backend.models.data import NodeData
+from models.nodes import Node, NodeType, ToolType
+from models.data import NodeData
+from models.results import NodeResult, WorkflowResult, ExecutionStatus, ResultType
+from models.workflow import Workflow, ExecutionContext
 
-from backend.core.graph import determine_execution_order, get_node_inputs, cleanup_node_results
-from backend.core.node_processor import node_processor
+from core.graph import determine_execution_order, get_node_inputs, cleanup_node_results
+from core.node_processor import node_processor
 
 # NEW: Import enhanced framework registry
-from backend.framework_registry import framework_registry, validate_framework_llm_combination
+from framework_registry import framework_registry, validate_framework_llm_combination
 
-logger = logging.getLogger(__name__)
+from core.workflow_execution_context import get_execution_context
+from frameworks.crewai_runner import EnhancedCrewAIRunner
+from frameworks.openai_runner import run_openai_chat
+from frameworks.openrouter_runner import run_openrouter_chat
+from frameworks.anthropic_runner import run_anthropic_chat
+from frameworks.ai_integration_runner import AIIntegrationRunner
+from nodes.output_node import process_output_node
+from nodes.trigger_node import process_trigger_node
+from nodes.logic_node import process_logic_node
+from utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 class UnifiedRunner:
-    """Main orchestrator for workflow execution"""
+    """
+    Unified workflow execution engine with BYOK integration
+    """
     
     def __init__(self):
+        self.crewai_runner = EnhancedCrewAIRunner()
+        self.ai_integration_runner = AIIntegrationRunner()
+        self.execution_context = None
         self.executed_nodes = {}
         self.node_results = {}
+    
+    def determine_execution_order(self, nodes: List[Dict], edges: List[Dict]) -> List[str]:
+        """
+        Determine the execution order of nodes based on their dependencies
+        """
+        return determine_execution_order(nodes, edges)
+    
+    def get_node_inputs(self, node_id: str, edges: List[Dict], node_results: Dict, global_inputs: Dict = None) -> Dict[str, Any]:
+        """
+        Get inputs for a specific node based on edges and previous results
+        """
+        return get_node_inputs(node_id, edges, node_results, global_inputs or {})
     
     # Enhanced function to prevent circular references
     def sanitize_result(self, obj, depth=0, seen_objects=None, path=None):
@@ -198,79 +228,81 @@ class UnifiedRunner:
             if obj_id in seen_objects:
                 seen_objects.remove(obj_id)
         
-    async def execute_workflow(self, workflow_data: Dict[str, Any]) -> AsyncGenerator[str, None]:
-        """Execute a workflow and yield results as JSON strings"""
+    async def execute_workflow(self, workflow_data: Dict[str, Any], user_id: str = None) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Execute a complete workflow with automatic API key resolution
+        
+        Args:
+            workflow_data: Workflow configuration
+            user_id: User ID for API key resolution
+            
+        Yields:
+            Execution results for each node
+        """
         try:
+            # Initialize execution context with user's API keys
+            self.execution_context = await get_execution_context(
+                user_id=user_id,
+                workflow_id=workflow_data.get('workflow_id')
+            )
+            
+            logger.info(f"🔑 Execution context initialized: {self.execution_context.get_execution_metadata()}")
+            
+            # Get workflow components
             nodes = workflow_data.get("nodes", [])
             edges = workflow_data.get("edges", [])
             inputs = workflow_data.get("inputs", {})
             
-            context = {"edges": edges, "nodes": nodes, "execution_id": f"exec-{datetime.now().timestamp()}"}
+            # Determine execution order
+            execution_order = self.determine_execution_order(nodes, edges)
             
-            # Reset tracking variables
-            self.executed_nodes = {}
-            self.node_results = {}
-            
-            # Get execution order
-            execution_order = determine_execution_order(nodes, edges)
-            
-            # Create node lookup
-            node_map = {node["id"]: node for node in nodes}
-            
+            # Execute nodes in order
+            node_results = {}
             for node_id in execution_order:
-                # Skip if already executed
-                if node_id in self.executed_nodes:
-                    continue
+                try:
+                    node = next((n for n in nodes if n.get("id") == node_id), None)
+                    if not node:
+                        continue
                     
-                node = node_map.get(node_id)
-                if not node:
-                    continue
-                
-                # Clean up results if needed
-                if len(self.node_results) >= 80:  # 80% of max size
-                    cleanup_node_results(self.node_results, edges, set(self.executed_nodes))
-                
-                # Get node inputs
-                node_inputs = get_node_inputs(node_id, edges, self.node_results, inputs)
-                
-                # Process node
-                start_time = datetime.now()
-                result = await node_processor.process_node(node, node_inputs, context)
-                end_time = datetime.now()
-                
-                # Sanitize result to prevent circular references
-                clean_result = self.sanitize_result(result)
-                
-                # Store sanitized results
-                self.node_results[node_id] = clean_result
-                self.executed_nodes[node_id] = True
-                
-                # Format output
-                output = {
-                    "node_id": node_id,
-                    "node_type": node.get("type", "unknown"),
-                    "node_label": node.get("data", {}).get("label", "Unnamed Node"),
-                    "result": clean_result,
-                    "metadata": {
-                        "timestamp": datetime.now().isoformat(),
-                        "execution_index": len(self.executed_nodes),
-                        "has_error": clean_result.get("type") == "error" if isinstance(clean_result, dict) else False,
-                        "duration": (end_time - start_time).total_seconds()
+                    # Get node inputs from previous results
+                    node_inputs = self.get_node_inputs(node_id, edges, node_results, inputs)
+                    
+                    # 🔑 BYOK INTEGRATION: Enhance node config with user API keys
+                    enhanced_node_data = self.execution_context.enhance_node_config(node.get("data", {}))
+                    enhanced_node = {**node, "data": enhanced_node_data}
+                    
+                    # Execute the node
+                    result = await self.execute_node(enhanced_node.get("type"), enhanced_node.get("data", {}), node_inputs)
+                    
+                    # Store result
+                    node_results[node_id] = result
+                    
+                    # Yield result
+                    yield {
+                        "node_id": node_id,
+                        "node_type": node.get("type"),
+                        "result": result,
+                        "execution_metadata": self.execution_context.get_execution_metadata(),
+                        "timestamp": datetime.now().isoformat()
                     }
-                }
-                
-                # Convert to JSON string before yielding
-                yield json.dumps(output) + "\n"
-                
+                    
+                except Exception as e:
+                    error_result = {
+                        "node_id": node_id,
+                        "error": str(e),
+                        "type": "error",
+                        "timestamp": datetime.now().isoformat()
+                    }
+                    yield error_result
+                    logger.error(f"Error executing node {node_id}: {str(e)}")
+                    
         except Exception as e:
-            logger.error(f"Error executing workflow: {str(e)}")
-            error_output = {
-                "type": "error",
+            logger.error(f"Workflow execution failed: {str(e)}")
+            yield {
                 "error": str(e),
+                "type": "workflow_error",
                 "timestamp": datetime.now().isoformat()
             }
-            # Convert to JSON string before yielding
-            yield json.dumps(error_output) + "\n"
             
     async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single node with framework validation"""

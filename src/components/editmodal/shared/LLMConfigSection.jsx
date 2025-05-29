@@ -175,40 +175,47 @@ const LLMConfigSection = ({
           </div>
         </div>
 
-        {/* API Key */}
+        {/* BYOK Status - Replaces manual API key field */}
         {showApiKey && requiresApiKey(framework) && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              API Key *
+              API Key Status
             </label>
             <div className="relative">
-              <input
-                type="password"
-                name="frameworkConfig.api_key"
-                value={frameworkConfig.api_key || ''}
-                onChange={handleInputChange}
-                disabled={isInherited}
-                placeholder={isInherited ? "Using inherited API key" : "Your API key"}
-                className={`w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-8 ${
-                  isInherited ? 'bg-gray-100 cursor-not-allowed' : ''
-                }`}
-                required={!isInherited}
-              />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                <span className="text-gray-400">🔐</span>
+              <div className={`w-full p-3 border rounded-md ${
+                isInherited ? 'bg-purple-50 border-purple-200' : 'bg-blue-50 border-blue-200'
+              }`}>
+                {isInherited ? (
+                  <div className="flex items-center text-purple-700">
+                    <span className="mr-2">🔗</span>
+                    <span className="text-sm">Using inherited API key from parent agent</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center text-blue-700">
+                      <span className="mr-2">🔑</span>
+                      <span className="text-sm">Using BYOK (Bring Your Own Keys)</span>
+                    </div>
+                    <a 
+                      href="/api-key-manager" 
+                      target="_blank"
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Manage Keys →
+                    </a>
+                  </div>
+                )}
               </div>
             </div>
             <div className="text-xs text-gray-500 mt-1">
               {isInherited 
                 ? "API key is inherited from the parent agent"
-                : `Required to authenticate with ${framework} API`
+                : `API keys are managed centrally and applied automatically during execution`
               }
             </div>
-            {!isInherited && (
-              <div className="text-xs text-blue-600 mt-1">
-                💡 This will be stored securely and encrypted
-              </div>
-            )}
+            <div className="text-xs text-green-600 mt-1">
+              ✅ Secure, encrypted, and reusable across all workflows
+            </div>
           </div>
         )}
 

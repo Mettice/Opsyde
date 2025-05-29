@@ -6,6 +6,7 @@ import Builder from './pages/Builder';
 import Login from './auth/Login';
 import Signup from './auth/Signup';
 import Dashboard from './pages/Dashboard';
+import APIKeyManager from './components/APIKeyManager';
 import NavHeader from './components/profile/NavHeader';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
@@ -85,6 +86,16 @@ function App() {
             <ProtectedRoute>
               <Builder/>
             </ProtectedRoute>
+          } />
+          <Route path="/api-key-manager" element={
+            <AppLayout>
+              <APIKeyManager />
+            </AppLayout>
+          } />
+          <Route path="/api-keys" element={
+            <AppLayout>
+              <APIKeyManager />
+            </AppLayout>
           } />
         </Routes>
       </AuthProvider>

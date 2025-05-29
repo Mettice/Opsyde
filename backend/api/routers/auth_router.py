@@ -3,8 +3,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import logging
-from backend.utils.security import security_manager
-from backend.utils.logging import get_logger
+from utils.security import security_manager
+from utils.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["auth"])
