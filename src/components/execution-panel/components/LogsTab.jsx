@@ -288,6 +288,7 @@ const LogsTab = ({
                     viewMode="structured"
                     getCardStyle={safeGetCardStyle}
                     getStatusIcon={safeGetStatusIcon}
+                    getLogStyle={safeGetLogStyle}
                     debugMode={debugMode}
                   />
                 ))}
@@ -302,6 +303,8 @@ const LogsTab = ({
                     index={index}
                     viewMode="text"
                     getLogStyle={safeGetLogStyle}
+                    getCardStyle={safeGetCardStyle}
+                    getStatusIcon={safeGetStatusIcon}
                     debugMode={debugMode}
                   />
                 ))}

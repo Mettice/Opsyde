@@ -1,0 +1,10 @@
+{"timestamp": "2025-05-30 01:02:09,752", "level": "INFO", "name": "backend.services.trigger_service", "message": "[ARRAY DETECTION] Found 1 arrays, selected 'pairs' with 2 items (score: 25.2)"}
+{"timestamp": "2025-05-30 01:02:09,753", "level": "INFO", "name": "backend.services.trigger_service", "message": "[FIELD DETECTION] Selected 'schemaVersion' (pattern: version, score: 8.0)"}
+{"timestamp": "2025-05-30 01:02:09,753", "level": "INFO", "name": "backend.services.trigger_service", "message": "[ARRAY DETECTION] Found 1 arrays, selected 'records' with 2 items (score: 25.2)"}
+{"timestamp": "2025-05-30 01:02:09,753", "level": "INFO", "name": "backend.services.trigger_service", "message": "[FIELD DETECTION] Fallback to array length monitoring: 'records' with 2 items"}
+{"timestamp": "2025-05-30 01:02:09,754", "level": "INFO", "name": "backend.services.trigger_service", "message": "[ARRAY DETECTION] Found 1 arrays, selected 'items' with 2 items (score: 25.2)"}
+{"timestamp": "2025-05-30 01:02:09,754", "level": "INFO", "name": "backend.services.trigger_service", "message": "[FIELD DETECTION] Selected 'total_count' (pattern: count, score: 11.0)"}
+{"timestamp": "2025-05-30 01:02:09,755", "level": "INFO", "name": "backend.services.trigger_service", "message": "[ARRAY DETECTION] Found 1 arrays, selected 'messages' with 2 items (score: 25.2)"}
+{"timestamp": "2025-05-30 01:02:09,755", "level": "INFO", "name": "backend.services.trigger_service", "message": "[FIELD DETECTION] Fallback to array length monitoring: 'messages' with 2 items"}
+{"timestamp": "2025-05-30 01:02:09,755", "level": "INFO", "name": "backend.services.trigger_service", "message": "[ARRAY DETECTION] Found 1 arrays, selected 'response.data' with 2 items (score: 10.2)"}
+{"timestamp": "2025-05-30 01:02:09,756", "level": "INFO", "name": "backend.services.trigger_service", "message": "[FIELD DETECTION] Selected 'status' (pattern: status, score: 12.0)"}

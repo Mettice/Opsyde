@@ -769,6 +769,70 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                 Filter API data to include only specific columns. Perfect for focusing on "topic" and "description" fields only.
               </p>
               
+              {/* ChatGPT's Smart Filtering Mode Toggle */}
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="summaryMode"
+                      checked={formData.summaryMode || false}
+                      onChange={(e) => handleInputChange({ target: { name: 'summaryMode', value: e.target.checked } })}
+                      className="mr-2"
+                    />
+                    <span className="font-medium text-blue-800">🧠 Smart Filtering Mode (ChatGPT Strategy)</span>
+                  </label>
+                </div>
+                <p className="text-xs text-blue-700">
+                  Automatically optimize data for AI processing: reduce tokens by 80-90%, select most important fields, 
+                  and limit records to prevent overflow. Based on ChatGPT's recommendations.
+                </p>
+                
+                {formData.summaryMode && (
+                  <div className="mt-3 space-y-3 p-3 bg-white border border-blue-300 rounded">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Max Records
+                        </label>
+                        <select
+                          name="maxRecords"
+                          value={formData.maxRecords || 5}
+                          onChange={handleInputChange}
+                          className="w-full p-2 border rounded text-sm"
+                        >
+                          <option value="3">3 records (safest)</option>
+                          <option value="5">5 records (recommended)</option>
+                          <option value="10">10 records (moderate)</option>
+                          <option value="20">20 records (high)</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Token Limit
+                        </label>
+                        <select
+                          name="maxTokens"
+                          value={formData.maxTokens || 2000}
+                          onChange={handleInputChange}
+                          className="w-full p-2 border rounded text-sm"
+                        >
+                          <option value="1000">1,000 tokens (minimal)</option>
+                          <option value="2000">2,000 tokens (recommended)</option>
+                          <option value="4000">4,000 tokens (generous)</option>
+                          <option value="6000">6,000 tokens (maximum)</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="p-2 bg-green-100 border border-green-300 rounded text-xs">
+                      <strong>💡 Smart Mode Benefits:</strong> Automatically selects essential fields, 
+                      removes noise, optimizes for {formData.serviceName || 'your API'}, and prevents token overflow.
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <div className="space-y-3">
                 <div>
                   <label className="block text-gray-700 text-sm font-medium mb-1">
@@ -777,7 +841,7 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                   <input
                     type="text"
                     name="targetFields"
-                    value={formData.targetFields || ''}
+                    value={formData.targetFieldsString || ''}
                     onChange={(e) => {
                       const value = e.target.value;
                       const fieldsArray = value ? value.split(',').map(f => f.trim()).filter(f => f) : [];
@@ -786,10 +850,14 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                       handleInputChange({ target: { name: 'targetFieldsString', value: value } });
                     }}
                     className="w-full p-2 border rounded text-sm"
-                    placeholder="e.g., Topic, Description, Title, Content"
+                    placeholder="e.g., baseToken.symbol, priceUsd, liquidity.usd, volume.h24"
+                    disabled={formData.summaryMode}
                   />
                   <div className="text-xs text-purple-600 mt-1">
-                    💡 Example: "Topic, Description" - Agent will only receive these fields
+                    {formData.summaryMode ? 
+                      "🧠 Smart Mode: Fields auto-selected based on API type" : 
+                      "💡 Example: \"baseToken.symbol, priceUsd\" - Agent will only receive these fields"
+                    }
                   </div>
                 </div>
                 
@@ -800,7 +868,7 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                   <input
                     type="text"
                     name="excludeFields"
-                    value={formData.excludeFields || ''}
+                    value={formData.excludeFieldsString || ''}
                     onChange={(e) => {
                       const value = e.target.value;
                       const fieldsArray = value ? value.split(',').map(f => f.trim()).filter(f => f) : [];
@@ -809,16 +877,68 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                       handleInputChange({ target: { name: 'excludeFieldsString', value: value } });
                     }}
                     className="w-full p-2 border rounded text-sm"
-                    placeholder="e.g., id, createdTime, metadata, _internal"
+                    placeholder="e.g., info, labels, boosts, profile"
                   />
                   <div className="text-xs text-purple-600 mt-1">
-                    💡 Example: "id, createdTime" - Remove noise and metadata fields
+                    💡 Example: "info, labels" - Remove noise and metadata fields
                   </div>
                 </div>
                 
+                {/* ChatGPT's Service-Specific Recommendations */}
+                {formData.serviceName && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                    <div className="text-xs font-medium text-yellow-800 mb-1">
+                      🎯 Recommended for {formData.serviceName}:
+                    </div>
+                    <div className="text-xs text-yellow-700">
+                      {formData.serviceName.toLowerCase().includes('dexscreener') && (
+                        <>
+                          <strong>Include:</strong> baseToken.symbol, baseToken.name, priceUsd, liquidity.usd, volume.h24, priceChange.h24, chainId<br/>
+                          <strong>Exclude:</strong> info, labels, boosts, profile
+                        </>
+                      )}
+                      {formData.serviceName.toLowerCase().includes('airtable') && (
+                        <>
+                          <strong>Include:</strong> fields.Topic, fields.Description, fields.Status<br/>
+                          <strong>Exclude:</strong> createdTime, id (unless needed)
+                        </>
+                      )}
+                      {formData.serviceName.toLowerCase().includes('notion') && (
+                        <>
+                          <strong>Include:</strong> properties.Name, properties.Status, properties.Description<br/>
+                          <strong>Exclude:</strong> object, parent, archived
+                        </>
+                      )}
+                      {!formData.serviceName.toLowerCase().includes('dexscreener') && 
+                       !formData.serviceName.toLowerCase().includes('airtable') && 
+                       !formData.serviceName.toLowerCase().includes('notion') && (
+                        "Use 'Preview Data' to see available fields, then select the most important ones for your use case."
+                      )}
+                    </div>
+                    
+                    {formData.serviceName.toLowerCase().includes('dexscreener') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleInputChange({ target: { name: 'targetFieldsString', value: 'baseToken.symbol, baseToken.name, priceUsd, liquidity.usd, volume.h24, priceChange.h24, chainId' } });
+                          handleInputChange({ target: { name: 'targetFields', value: ['baseToken.symbol', 'baseToken.name', 'priceUsd', 'liquidity.usd', 'volume.h24', 'priceChange.h24', 'chainId'] } });
+                          handleInputChange({ target: { name: 'excludeFieldsString', value: 'info, labels, boosts, profile' } });
+                          handleInputChange({ target: { name: 'excludeFields', value: ['info', 'labels', 'boosts', 'profile'] } });
+                        }}
+                        className="mt-2 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
+                      >
+                        🚀 Apply DexScreener Optimization
+                      </button>
+                    )}
+                  </div>
+                )}
+                
                 <div className="p-2 bg-purple-100 border border-purple-300 rounded text-xs">
                   <strong>🎯 Pro Tip:</strong> Use field filtering to reduce token usage and focus your AI agent on relevant data only. 
-                  For Airtable, common fields are: "Topic", "Description", "Status", "Priority", etc.
+                  {formData.summaryMode ? 
+                    " Smart Mode handles this automatically!" : 
+                    " For crypto data, focus on price, volume, and liquidity fields."
+                  }
                 </div>
               </div>
             </div>

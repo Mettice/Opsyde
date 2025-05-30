@@ -84,7 +84,7 @@
         "id": "edge-3",
         "source": "crypto-task",
         "target": "telegram-output",
-        "type": "smoothstep"
+        "type": "bezier"
       }
     ],
     "trigger_id": "dexscreener-live-trigger",

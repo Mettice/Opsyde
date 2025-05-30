@@ -3,6 +3,8 @@ import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 import asyncio
+import json
+import re
 
 # Import the new rich output schema
 try:
@@ -20,6 +22,9 @@ from frameworks.ai_integration_runner import AIIntegrationRunner
 from frameworks import framework_registry
 from utils.logging import get_logger
 from core.workflow_data_manager import get_workflow_context
+
+# Import the universal data transformer for output formatting
+from backend.core.data_transformer import data_transformer
 
 logger = get_logger(__name__)
 
@@ -329,10 +334,9 @@ class OutputNode:
         if 'webhookPayload' in node_data:
             custom_payload = node_data['webhookPayload']
             
-            # Handle both string and dict payload formats
+            # Handle different payload formats
             if isinstance(custom_payload, str):
                 try:
-                    import json
                     custom_payload = json.loads(custom_payload)
                     self.logger.info("Parsed webhook payload from JSON string")
                 except json.JSONDecodeError as e:
@@ -355,28 +359,70 @@ class OutputNode:
     
     def _replace_template_variables(self, template: str, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> str:
         """
-        Enhanced template variable replacement using WorkflowExecutionContext
+        Enhanced template variable replacement with fallback for common variables
         """
         if not isinstance(template, str):
             return template
             
-        # Get the workflow context
-        workflow_id = node_data.get('workflow_id') or 'default'
-        context = get_workflow_context(workflow_id)
+        # First try the workflow context approach
+        try:
+            workflow_id = node_data.get('workflow_id') or 'default'
+            context = get_workflow_context(workflow_id)
+            
+            # Add current output_data to context if not already there
+            for key, value in output_data.items():
+                if key not in context.variables:
+                    context.variables[key] = value
+            
+            # Use the context to resolve template variables
+            resolved = context.resolve_template_variables(template)
+            
+            # If template variables are still unresolved, use fallback
+            if '{' in resolved and '}' in resolved:
+                resolved = self._fallback_template_replacement(resolved, node_data, output_data)
+            
+            logger.debug(f"Template resolution: '{template}' -> '{resolved}'")
+            return resolved
+            
+        except Exception as e:
+            logger.warning(f"Workflow context template replacement failed: {e}, using fallback")
+            return self._fallback_template_replacement(template, node_data, output_data)
+    
+    def _fallback_template_replacement(self, template: str, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> str:
+        """
+        Fallback template replacement for common variables like {task_output}
+        """
+        result = template
         
-        # Add current output_data to context if not already there
+        # Handle {task_output} - find the task output from the data
+        if '{task_output}' in result:
+            task_output = self._find_task_output(output_data)
+            if task_output:
+                # Escape quotes for JSON safety
+                task_output_escaped = task_output.replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                result = result.replace('{task_output}', task_output_escaped)
+            else:
+                result = result.replace('{task_output}', 'No task output found')
+        
+        # Handle other common variables
+        replacements = {
+            '{timestamp}': datetime.now().isoformat(),
+            '{date}': datetime.now().strftime('%Y-%m-%d'),
+            '{time}': datetime.now().strftime('%H:%M:%S'),
+        }
+        
+        for placeholder, value in replacements.items():
+            result = result.replace(placeholder, str(value))
+        
+        # Handle any remaining variables from output_data
         for key, value in output_data.items():
-            if key not in context.variables:
-                context.variables[key] = value
+            placeholder = f'{{{key}}}'
+            if placeholder in result:
+                # Convert value to string and escape for JSON
+                str_value = str(value).replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r')
+                result = result.replace(placeholder, str_value)
         
-        # Use the context to resolve template variables
-        resolved = context.resolve_template_variables(template)
-        
-        # Log for debugging
-        logger.debug(f"Template resolution: '{template}' -> '{resolved}'")
-        logger.debug(f"Available variables: {list(context.variables.keys())}")
-        
-        return resolved
+        return result
     
     def _find_task_output(self, output_data: Dict[str, Any]) -> Optional[str]:
         """Smart lookup for task output data"""
@@ -1059,20 +1105,318 @@ async def process_output_node(
     inputs: Dict[str, NodeData], 
     context: Dict[str, Any] = None
 ) -> NodeData:
-    """Process function for the node processor"""
-    output_node = OutputNode()
+    """
+    Process output node with enhanced template variable resolution and standardized data handling
+    """
+    try:
+        output_type = node_data.get('outputType', 'webhook')
+        logger.info(f"Processing output node with type: {output_type}")
+        
+        # Collect all available data for template variables
+        template_context = _build_template_context(inputs, context)
+        
+        if output_type == 'webhook':
+            return await _process_webhook_output(node_data, template_context)
+        elif output_type == 'file':
+            return await _process_file_output(node_data, template_context)
+        elif output_type == 'email':
+            return await _process_email_output(node_data, template_context)
+        elif output_type == 'database':
+            return await _process_database_output(node_data, template_context)
+        else:
+            return {
+                "status": "error",
+                "message": f"Unsupported output type: {output_type}",
+                "output_type": output_type
+            }
+            
+    except Exception as e:
+        logger.error(f"Error processing output node: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Output processing failed: {str(e)}",
+            "error": str(e)
+        }
+
+def _build_template_context(inputs: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Build a comprehensive template context from all available data sources
+    """
+    template_context = {}
     
-    # Convert to expected format
-    node = {
-        "id": node_data.get("nodeId") or node_data.get("id") or "output-node",
-        "type": "output",
-        "data": node_data
-    }
+    # Add context data
+    if context:
+        template_context.update(context)
     
-    execution_context = {
-        **(context or {}),
-        "execution_id": context.get("execution_id") if context else "direct-execution",
-        "timestamp": datetime.now().isoformat()
-    }
+    # Process inputs and extract meaningful variables
+    for input_key, input_value in inputs.items():
+        if isinstance(input_value, dict):
+            # Handle agent results
+            if 'result' in input_value:
+                template_context['task_output'] = str(input_value['result'])
+                template_context['agent_result'] = str(input_value['result'])
+            
+            # Handle text outputs
+            if 'text_output' in input_value:
+                template_context['task_output'] = str(input_value['text_output'])
+                template_context['text_output'] = str(input_value['text_output'])
+            
+            # Handle output field
+            if 'output' in input_value:
+                template_context['task_output'] = str(input_value['output'])
+                template_context['output'] = str(input_value['output'])
+            
+            # Handle standardized API data
+            if input_value.get('type') == 'api_data' and 'api_data' in input_value:
+                api_data = input_value['api_data']
+                service_name = input_value.get('service_name', 'API')
+                
+                # Format standardized data for output
+                if isinstance(api_data, dict) and 'records' in api_data:
+                    records = api_data['records']
+                    
+                    # Create formatted output for different output types
+                    template_context['api_data'] = api_data
+                    template_context['records'] = records
+                    template_context['record_count'] = len(records)
+                    template_context['service_name'] = service_name
+                    
+                    # Create formatted text representation
+                    formatted_text = _format_records_for_output(records, service_name)
+                    template_context['formatted_data'] = formatted_text
+                    template_context['task_output'] = formatted_text  # Default output
+            
+            # Handle nested data
+            for nested_key, nested_value in input_value.items():
+                if isinstance(nested_value, (str, int, float, bool)):
+                    template_context[f"{input_key}_{nested_key}"] = nested_value
+        
+        elif isinstance(input_value, (str, int, float, bool)):
+            template_context[input_key] = input_value
     
-    return await output_node.process(node, inputs, execution_context)
+    # Ensure we have a task_output
+    if 'task_output' not in template_context:
+        # Try to find any meaningful output
+        for key, value in template_context.items():
+            if 'output' in key.lower() or 'result' in key.lower():
+                template_context['task_output'] = str(value)
+                break
+        else:
+            template_context['task_output'] = "No output available"
+    
+    logger.info(f"Built template context with keys: {list(template_context.keys())}")
+    return template_context
+
+def _format_records_for_output(records: List[Dict[str, Any]], service_name: str) -> str:
+    """
+    Format standardized records for human-readable output
+    """
+    if not records:
+        return f"No data available from {service_name}"
+    
+    formatted_lines = [f"📊 Data from {service_name} ({len(records)} records):\n"]
+    
+    for i, record in enumerate(records[:10]):  # Limit to first 10 records
+        record_data = record.get('data', {})
+        metadata = record.get('metadata', {})
+        
+        formatted_lines.append(f"📋 Record {i+1}:")
+        
+        # Format key fields
+        title = record_data.get('title') or record_data.get('name') or f"Record {i+1}"
+        formatted_lines.append(f"  • Title: {title}")
+        
+        description = record_data.get('description') or record_data.get('content')
+        if description:
+            desc_preview = str(description)[:100] + "..." if len(str(description)) > 100 else str(description)
+            formatted_lines.append(f"  • Description: {desc_preview}")
+        
+        # Add other relevant fields
+        for field_name, field_value in record_data.items():
+            if field_name not in ['title', 'name', 'description', 'content'] and field_value is not None:
+                formatted_lines.append(f"  • {field_name.title()}: {field_value}")
+        
+        formatted_lines.append("")  # Empty line between records
+    
+    if len(records) > 10:
+        formatted_lines.append(f"... and {len(records) - 10} more records")
+    
+    return "\n".join(formatted_lines)
+
+async def _process_webhook_output(node_data: Dict[str, Any], template_context: Dict[str, Any]) -> Dict[str, Any]:
+    """Process webhook output with proper parameter handling"""
+    try:
+        webhook_url = node_data.get('webhookUrl', '')
+        webhook_method = node_data.get('webhookMethod', 'POST')
+        webhook_headers = node_data.get('webhookHeaders', {})
+        webhook_payload = node_data.get('webhookPayload', {})
+        
+        # Resolve template variables in URL, headers, and payload
+        resolved_url = _resolve_string_template(webhook_url, template_context)
+        resolved_headers = _resolve_template_variables(webhook_headers, template_context)
+        resolved_payload = _resolve_template_variables(webhook_payload, template_context)
+        
+        # Make the webhook request
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            if webhook_method.upper() == 'GET':
+                async with session.get(resolved_url, headers=resolved_headers, params=resolved_payload) as response:
+                    response_text = await response.text()
+                    return {
+                        "success": True,
+                        "status_code": response.status,
+                        "response": response_text[:500],  # Limit response size
+                        "webhook_url": resolved_url,
+                        "method": webhook_method
+                    }
+            else:
+                async with session.post(resolved_url, headers=resolved_headers, json=resolved_payload) as response:
+                    response_text = await response.text()
+                    return {
+                        "success": True,
+                        "status_code": response.status,
+                        "response": response_text[:500],  # Limit response size
+                        "webhook_url": resolved_url,
+                        "method": webhook_method
+                    }
+                    
+    except Exception as e:
+        logger.error(f"Error sending webhook: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "webhook_url": webhook_url
+        }
+
+def _resolve_string_template(template: str, context: Dict[str, Any]) -> str:
+    """
+    Resolve template variables in a string
+    """
+    if not isinstance(template, str):
+        return template
+    
+    # Find all template variables like {variable_name}
+    pattern = r'\{([^}]+)\}'
+    matches = re.findall(pattern, template)
+    
+    resolved = template
+    for match in matches:
+        variable_name = match.strip()
+        
+        # Look for the variable in context
+        if variable_name in context:
+            value = context[variable_name]
+            resolved = resolved.replace(f'{{{match}}}', str(value))
+        else:
+            logger.warning(f"Template variable '{variable_name}' not found in context")
+            # Keep the original placeholder or replace with empty string
+            resolved = resolved.replace(f'{{{match}}}', f'[{variable_name} not found]')
+    
+    return resolved
+
+async def _process_file_output(node_data: Dict[str, Any], template_context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process file output
+    """
+    try:
+        file_path = node_data.get('filePath', 'output.txt')
+        file_content = node_data.get('fileContent', '{task_output}')
+        
+        # Resolve template variables
+        resolved_content = _resolve_string_template(file_content, template_context)
+        
+        # Write to file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(resolved_content)
+        
+        return {
+            "status": "success",
+            "message": f"File written to {file_path}",
+            "output_type": "file",
+            "file_path": file_path,
+            "content_length": len(resolved_content)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing file output: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"File output failed: {str(e)}",
+            "output_type": "file",
+            "error": str(e)
+        }
+
+async def _process_email_output(node_data: Dict[str, Any], template_context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process email output
+    """
+    try:
+        to_email = node_data.get('toEmail', '')
+        subject = node_data.get('emailSubject', 'Workflow Output')
+        body = node_data.get('emailBody', '{task_output}')
+        
+        # Resolve template variables
+        resolved_subject = _resolve_string_template(subject, template_context)
+        resolved_body = _resolve_string_template(body, template_context)
+        
+        # TODO: Implement email sending
+        logger.info(f"Email would be sent to {to_email} with subject: {resolved_subject}")
+        
+        return {
+            "status": "success",
+            "message": f"Email prepared for {to_email}",
+            "output_type": "email",
+            "to_email": to_email,
+            "subject": resolved_subject,
+            "body_length": len(resolved_body)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing email output: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Email output failed: {str(e)}",
+            "output_type": "email",
+            "error": str(e)
+        }
+
+async def _process_database_output(node_data: Dict[str, Any], template_context: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process database output
+    """
+    try:
+        table_name = node_data.get('tableName', 'workflow_output')
+        data_to_insert = template_context.get('api_data', template_context)
+        
+        # TODO: Implement database insertion
+        logger.info(f"Data would be inserted into table: {table_name}")
+        
+        return {
+            "status": "success",
+            "message": f"Data prepared for insertion into {table_name}",
+            "output_type": "database",
+            "table_name": table_name,
+            "record_count": len(data_to_insert) if isinstance(data_to_insert, list) else 1
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing database output: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Database output failed: {str(e)}",
+            "output_type": "database",
+            "error": str(e)
+        }
+
+def _resolve_template_variables(data: Any, context: Dict[str, Any]) -> Any:
+    """
+    Recursively resolve template variables in data structure
+    """
+    if isinstance(data, dict):
+        return {key: _resolve_template_variables(value, context) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [_resolve_template_variables(item, context) for item in data]
+    elif isinstance(data, str):
+        return _resolve_string_template(data, context)
+    else:
+        return data

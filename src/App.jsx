@@ -7,6 +7,7 @@ import Login from './auth/Login';
 import Signup from './auth/Signup';
 import Dashboard from './pages/Dashboard';
 import APIKeyManager from './components/APIKeyManager';
+import WorkflowDashboard from './components/WorkflowDashboard';
 import NavHeader from './components/profile/NavHeader';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
@@ -96,6 +97,11 @@ function App() {
             <AppLayout>
               <APIKeyManager />
             </AppLayout>
+          } />
+          <Route path="/workflows" element={
+            <ProtectedRoute>
+              <WorkflowDashboard />
+            </ProtectedRoute>
           } />
         </Routes>
       </AuthProvider>

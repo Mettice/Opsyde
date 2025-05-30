@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from enum import Enum
 import asyncio
+import json
 
 from models.nodes import Node, NodeType, AgentConfig
 from models.workflow import ExecutionContext
@@ -48,7 +49,14 @@ class AgentNode:
                 node_data = node.data
                 node_id = node.id
             
-            # Get agent configuration
+            # Get agent configuration with emergency token limiting
+            max_tokens = int(node_data.get("max_tokens", 4000))
+            
+            # EMERGENCY: Force token limits for crypto data
+            if any('dexscreener' in str(value).lower() for value in inputs.values()):
+                max_tokens = min(max_tokens, 300)  # Emergency limit for DexScreener
+                logger.warning(f"🚨 EMERGENCY: DexScreener detected - limiting agent to {max_tokens} tokens")
+            
             agent_config = {
                 "role": node_data.get("role", "Assistant"),
                 "goal": node_data.get("goal", "Help the user"),
@@ -56,7 +64,7 @@ class AgentNode:
                 "framework": node_data.get("framework", "openrouter"),
                 "llmModel": node_data.get("llmModel", "gpt-4o-mini"),
                 "temperature": float(node_data.get("temperature", 0.7)),
-                "max_tokens": int(node_data.get("max_tokens", 4000)),
+                "max_tokens": max_tokens,
                 "enableMemory": node_data.get("enableMemory", False),
                 "allowDelegation": node_data.get("allowDelegation", False),
                 "streamIntermediateSteps": node_data.get("streamIntermediateSteps", False)
@@ -163,25 +171,98 @@ class AgentNode:
             }
 
     def _extract_main_query(self, inputs: Dict[str, Any], node_data: Dict[str, Any]) -> str:
-        """Extract the main query/task from inputs"""
-        
-        # Look for explicit query/task
-        for key in ['query', 'task', 'prompt', 'message', 'input']:
-            if key in inputs and inputs[key]:
-                return str(inputs[key])
-        
-        # Look for text inputs
-        for key, value in inputs.items():
-            if isinstance(value, str) and value.strip():
-                return value
-            elif isinstance(value, dict):
-                if 'text' in value:
-                    return str(value['text'])
-                elif 'value' in value and isinstance(value['value'], str):
-                    return str(value['value'])
-        
-        # Fallback to agent's goal or default
-        return node_data.get("goal", "Please provide assistance based on your role and expertise.")
+        """
+        Extract the main query/task from inputs with enhanced handling for standardized data
+        """
+        try:
+            # Check for explicit query keys first
+            for key in ['query', 'task', 'prompt', 'message', 'input']:
+                if key in inputs and inputs[key]:
+                    return str(inputs[key])
+            
+            # Handle standardized API data from universal transformer
+            for input_key, input_value in inputs.items():
+                if isinstance(input_value, dict):
+                    # Check for api_data type (from triggers)
+                    if input_value.get('type') == 'api_data':
+                        api_data = input_value.get('api_data', {})
+                        service_name = input_value.get('service_name', 'Unknown API')
+                        smart_filtering_enabled = input_value.get('smart_filtering_enabled', False)
+                        
+                        # Use the already-transformed data instead of raw data
+                        if 'dexscreener' in service_name.lower():
+                            # The data transformer has already done the heavy lifting
+                            # Just use the clean, filtered data
+                            records = api_data.get('records', [])
+                            transformation_summary = api_data.get('transformation_summary', {})
+                            
+                            logger.info(f"🚨 EMERGENCY: Using pre-filtered DexScreener data: {len(records)} records")
+                            
+                            # Create ultra-compact summary from already-filtered data
+                            crypto_summary = []
+                            for i, record in enumerate(records[:2], 1):  # Max 2 records
+                                fields = record.get('fields', {})
+                                symbol = fields.get('Symbol', 'Unknown')
+                                name = fields.get('Base Token', 'Unknown')
+                                price = fields.get('Price (USD)', '0')
+                                liquidity = fields.get('Liquidity', '0')
+                                volume = fields.get('Volume', '0')
+                                
+                                crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
+                            
+                            # Ultra-minimal prompt (under 500 tokens total)
+                            query = f"""DexScreener crypto data analysis:
+
+📊 DATA ({len(records)} filtered tokens):
+{chr(10).join(crypto_summary)}
+
+Create a 2-line market digest:
+• Token highlights
+• Brief insight
+
+Keep under 100 words total."""
+                            
+                            return query
+                        
+                        # For other APIs, use the transformed data
+                        transformation_summary = api_data.get('transformation_summary', {})
+                        total_records = transformation_summary.get('total_records', 0)
+                        
+                        # Use only the summary, not the full data
+                        query = f"""Analyze {service_name} data:
+- Records: {total_records}
+- Smart filtering: {'Yes' if smart_filtering_enabled else 'No'}
+
+Provide brief insights based on your role."""
+                        
+                        return query
+                    
+                    # Handle other data types
+                    elif input_value.get('type') in ['webhook', 'schedule', 'file']:
+                        data_content = input_value.get('data', input_value.get('content', ''))
+                        return f"Process this {input_value.get('type')} data: {str(data_content)[:500]}"
+            
+            # Handle text inputs
+            text_inputs = []
+            for input_key, input_value in inputs.items():
+                if isinstance(input_value, str) and input_value.strip():
+                    text_inputs.append(input_value.strip())
+                elif isinstance(input_value, dict) and 'text' in input_value:
+                    text_inputs.append(str(input_value['text']).strip())
+            
+            if text_inputs:
+                return " ".join(text_inputs)
+            
+            # Fallback to agent's goal
+            agent_goal = node_data.get('goal', '')
+            if agent_goal:
+                return f"Execute your goal: {agent_goal}"
+            
+            return "Please provide assistance based on your role and expertise."
+            
+        except Exception as e:
+            logger.error(f"Error extracting main query: {str(e)}")
+            return "Please provide assistance based on your role and expertise."
     
     async def _execute_agent_by_framework(self, framework: str, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute agent using the specified framework"""

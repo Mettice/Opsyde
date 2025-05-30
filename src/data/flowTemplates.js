@@ -36,7 +36,36 @@ const baseTemplates = [
             role: 'Crypto Data Extraction Specialist',
             goal: 'Extract and format crypto trading data from DexScreener API responses',
             backstory: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data.',
-            prompt: 'You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data from DexScreener API responses.\n\nCRITICAL INSTRUCTIONS:\n1. Extract ONLY the raw trading data\n2. DO NOT give trading advice\n3. DO NOT analyze or recommend\n4. JUST format the data cleanly\n\nINPUT: You will receive DexScreener API data\nOUTPUT: Format it like this:\n\n🔥 NEW CRYPTO TOKENS DETECTED:\n\nToken: [TOKEN_NAME]\nSymbol: [SYMBOL]\nPrice: $[PRICE]\nChain: [BLOCKCHAIN]\nLiquidity: $[LIQUIDITY]\nVolume 24h: $[VOLUME]\nPrice Change: [CHANGE]%\nStatus: [ACTIVE/NEW/TRENDING]\n\n---\n\nIf NO new tokens: Output exactly "No new crypto data detected"\n\nREMEMBER: Extract data, don\'t give advice!',
+            prompt: `You are a crypto data extraction specialist. Extract crypto data from DexScreener API and format it cleanly.
+
+🎯 INSTRUCTIONS:
+1. You will receive DexScreener API data with this structure:
+   - "pairs" array containing crypto trading pairs
+   - Each pair has: baseToken, priceUsd, liquidity, volume, priceChange
+2. Extract ONLY the essential crypto data
+3. Format it clearly for Telegram
+4. DO NOT give trading advice
+5. Keep it concise to save tokens
+
+📊 INPUT: DexScreener API response with "pairs" array
+📤 OUTPUT: Format like this:
+
+🔥 CRYPTO DATA UPDATE:
+
+Token: [baseToken.name] ([baseToken.symbol])
+💰 Price: $[priceUsd]
+💧 Liquidity: $[liquidity.usd]
+📊 Volume 24h: $[volume.h24]
+📈 Change 24h: [priceChange.h24]%
+🔗 Chain: [chainId]
+
+---
+⏰ Updated: [current timestamp]
+
+If multiple tokens, show top 3 only.
+If no pairs in data: "No crypto data available"
+
+REMEMBER: Extract data only, no advice!`,
             framework: 'crewai',
             frameworkConfig: {
               model: 'gpt-4',
@@ -1223,28 +1252,31 @@ const baseTemplates = [
             prompt: `You are a crypto data extraction specialist. Extract crypto data from DexScreener API and format it cleanly.
 
 🎯 INSTRUCTIONS:
-1. Extract ONLY the essential crypto data
-2. Format it clearly for Telegram
-3. DO NOT give trading advice
-4. Keep it concise to save tokens
+1. You will receive DexScreener API data with this structure:
+   - "pairs" array containing crypto trading pairs
+   - Each pair has: baseToken, priceUsd, liquidity, volume, priceChange
+2. Extract ONLY the essential crypto data
+3. Format it clearly for Telegram
+4. DO NOT give trading advice
+5. Keep it concise to save tokens
 
-📊 INPUT: You receive DexScreener API data with crypto pairs
+📊 INPUT: DexScreener API response with "pairs" array
 📤 OUTPUT: Format like this:
 
 🔥 CRYPTO DATA UPDATE:
 
-Token: [TOKEN_NAME] ([SYMBOL])
-💰 Price: $[PRICE]
-💧 Liquidity: $[LIQUIDITY]
-📊 Volume 24h: $[VOLUME]
-📈 Change 24h: [CHANGE]%
-🔗 Chain: [CHAIN]
+Token: [baseToken.name] ([baseToken.symbol])
+💰 Price: $[priceUsd]
+💧 Liquidity: $[liquidity.usd]
+📊 Volume 24h: $[volume.h24]
+📈 Change 24h: [priceChange.h24]%
+🔗 Chain: [chainId]
 
 ---
-⏰ Updated: [TIMESTAMP]
+⏰ Updated: [current timestamp]
 
 If multiple tokens, show top 3 only.
-If no data: "No crypto data available"
+If no pairs in data: "No crypto data available"
 
 REMEMBER: Extract data only, no advice!`,
             framework: 'crewai',
@@ -1337,6 +1369,174 @@ REMEMBER: Extract data only, no advice!`,
         outputFormat: 'Telegram Message',
         aiCapabilities: ['Data Extraction', 'Format Conversion'],
         businessValue: 'High - Uses WORKING live trigger for real crypto data'
+      }
+    },
+    // Add this new enhanced template after the existing crypto templates
+    {
+      name: '🧠 Smart Crypto Monitor with Field Filtering',
+      description: 'Advanced crypto monitoring with intelligent field selection and token optimization - implements ChatGPT\'s smart filtering strategy',
+      thumbnail: '/img/crypto-smart-flow.png',
+      nodes: [
+        {
+          id: 'smart-crypto-trigger',
+          type: 'trigger',
+          position: { x: 100, y: 100 },
+          data: {
+            label: '🧠 Smart DexScreener Monitor',
+            triggerType: 'universal_polling',
+            serviceName: 'DexScreener',
+            apiEndpoint: 'https://api.dexscreener.com/latest/dex/search?q=PEPE',
+            pollingInterval: 60,
+            authType: 'none',
+            changeDetectionMethod: 'array_length',
+            
+            // ChatGPT's Smart Field Filtering Implementation
+            targetFields: ['baseToken.symbol', 'baseToken.name', 'priceUsd', 'liquidity.usd', 'volume.h24', 'priceChange.h24', 'chainId'],
+            excludeFields: ['info', 'labels', 'boosts', 'profile'],
+            
+            // Smart summarization settings
+            summaryMode: true,
+            maxRecords: 5,
+            maxTokens: 2000,
+            
+            nodeId: 'smart-crypto-trigger',
+            nodeType: 'trigger'
+          }
+        },
+        {
+          id: 'smart-crypto-agent',
+          type: 'agent',
+          position: { x: 350, y: 100 },
+          data: {
+            label: '🧠 Smart Crypto Analyzer',
+            role: 'Smart Crypto Data Analyst',
+            goal: 'Analyze filtered crypto data and provide intelligent insights with minimal token usage',
+            backstory: 'You are an advanced crypto analyst who works with pre-filtered, high-quality data to provide concise insights.',
+            
+            // ChatGPT's digest-style prompt instead of JSON dumps
+            prompt: `You are a smart crypto analyst receiving pre-filtered, high-quality data.
+
+🎯 INPUT FORMAT: You receive a clean summary of top crypto pairs with only essential fields:
+- Token Symbol & Name
+- Current Price (USD)
+- Liquidity (USD)
+- 24h Volume
+- 24h Price Change
+- Blockchain
+
+📊 YOUR TASK: Create a concise crypto market digest
+
+🔥 OUTPUT FORMAT:
+📈 CRYPTO MARKET DIGEST
+
+🪙 TOP TOKENS:
+• [Symbol]: $[Price] ([Change]%) - Vol: $[Volume] - Chain: [Chain]
+• [Symbol]: $[Price] ([Change]%) - Vol: $[Volume] - Chain: [Chain]
+• [Symbol]: $[Price] ([Change]%) - Vol: $[Volume] - Chain: [Chain]
+
+💡 QUICK INSIGHTS:
+- [Brief market observation]
+- [Notable price movements]
+- [Volume/liquidity highlights]
+
+⏰ Updated: [timestamp]
+
+Keep it under 500 characters for Telegram efficiency!`,
+
+            framework: 'crewai',
+            frameworkConfig: {
+              model: 'gpt-4',
+              temperature: 0.2,
+              max_tokens: 300,  // EMERGENCY: Reduced from 800 to 300 - ChatGPT's ultra-compact approach
+              api_key: ''
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.2,
+            max_tokens: 300,  // EMERGENCY: Reduced from 800 to 300
+            allowDelegation: false,
+            enableMemory: false,
+            verbose: true,
+            nodeId: 'smart-crypto-agent',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'smart-crypto-task',
+          type: 'task',
+          position: { x: 600, y: 100 },
+          data: {
+            label: '📊 Generate Market Digest',
+            description: 'Create intelligent crypto market digest from filtered data',
+            expectedOutput: 'Concise crypto market digest optimized for Telegram',
+            async: false,
+            agentId: 'smart-crypto-agent',
+            nodeId: 'smart-crypto-task',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'smart-crypto-output',
+          type: 'output',
+          position: { x: 850, y: 100 },
+          data: {
+            label: '📱 Smart Telegram Sender',
+            description: 'Send optimized crypto digest to Telegram',
+            outputType: 'webhook',
+            webhookUrl: 'https://api.telegram.org/bot{BOT_TOKEN}/sendMessage',
+            webhookMethod: 'POST',
+            webhookHeaders: {
+              'Content-Type': 'application/json'
+            },
+            webhookPayload: {
+              'chat_id': '5251498620',
+              'text': '{task_output}',
+              'parse_mode': 'HTML'
+            },
+            nodeId: 'smart-crypto-output',
+            nodeType: 'output'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-smart-trigger-agent',
+          source: 'smart-crypto-trigger',
+          target: 'smart-crypto-agent',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-smart-agent-task',
+          source: 'smart-crypto-agent',
+          target: 'smart-crypto-task',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-smart-task-output',
+          source: 'smart-crypto-task',
+          target: 'smart-crypto-output',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['Smart', 'Crypto', 'Field Filtering', 'Token Optimized', 'ChatGPT Strategy'],
+      frameworksUsed: ['crewai'],
+      version: '2.0',
+      author: 'CrewBuilder AI + ChatGPT Strategy',
+      created: '2025-05-29',
+      complexity: 'Intermediate',
+      estimatedTime: '30 seconds',
+      useCase: 'Smart crypto monitoring with intelligent field filtering and token optimization.',
+      metadata: {
+        category: 'Smart Crypto Analysis',
+        industry: ['Cryptocurrency', 'Trading', 'Data Intelligence'],
+        outputFormat: 'Optimized Telegram Digest',
+        aiCapabilities: ['Smart Field Selection', 'Token Optimization', 'Intelligent Summarization'],
+        businessValue: 'High - Efficient crypto monitoring with minimal token usage',
+        chatgptStrategy: true,
+        tokenOptimized: true,
+        smartFiltering: true
       }
     }
 ];

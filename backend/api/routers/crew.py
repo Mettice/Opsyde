@@ -195,3 +195,37 @@ async def validate_workflow(
         
     validation = await service.validate_workflow(workflow)
     return validation
+
+@router.patch("/{workflow_id}/toggle-activation", response_model=Dict[str, Any])
+async def toggle_workflow_activation(
+    workflow_id: str,
+    activation_data: Dict[str, Any],
+    service: WorkflowService = Depends(get_workflow_service)
+):
+    """Toggle workflow activation status"""
+    try:
+        is_active = activation_data.get("is_active", False)
+        
+        # Get existing workflow
+        workflow = await service.get_by_id(workflow_id)
+        if not workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found")
+        
+        # Update activation status
+        workflow["is_active"] = is_active
+        workflow["updated_at"] = datetime.now().isoformat()
+        
+        # Save updated workflow
+        updated_workflow = await service.update(workflow_id, workflow)
+        
+        return {
+            "success": True,
+            "message": f"Workflow {'activated' if is_active else 'deactivated'} successfully",
+            "workflow": serialize_node_data(updated_workflow)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error toggling workflow activation: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
