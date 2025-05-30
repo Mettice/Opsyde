@@ -95,23 +95,41 @@ def determine_execution_order(nodes: List[Union[Dict[str, Any], Node]], edges: L
     
     return order
 
-def get_node_inputs(node_id: str, edges: List[Union[Dict[str, Any], Edge]], node_results: Dict[str, Any], global_inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Get inputs for a node from its upstream nodes and global inputs"""
-    inputs = dict(global_inputs)
-    logger.info(f"Processing inputs for node {node_id}")
+def get_node_inputs(node_id: str, edges: List[Union[Dict[str, Any], Edge]], node_results: Dict[str, Any], global_inputs: Dict[str, Any] = None) -> Dict[str, Any]:
+    """
+    Get inputs for a specific node based on edges and previous results.
+    Enhanced to ensure proper data flow between trigger and agent nodes.
+    """
+    inputs = dict(global_inputs or {})
+    logger.info(f"🔧 Processing inputs for node {node_id}")
     
     # Track connected agents for tasks
     connected_agents = []
+    
+    # DEBUG: Log available node results
+    logger.info(f"🔧 Available node results: {list(node_results.keys())}")
+    for result_id, result_data in node_results.items():
+        if isinstance(result_data, dict):
+            logger.info(f"🔧 Node {result_id} result type: {result_data.get('type', 'unknown')}")
+            if result_data.get('type') == 'api_data':
+                logger.info(f"🔧 Node {result_id} has api_data with service: {result_data.get('service_name', 'unknown')}")
     
     for edge in edges:
         target = _get_target(edge)
         if target == node_id:
             source_id = _get_source(edge)
+            logger.info(f"🔧 Processing edge: {source_id} -> {node_id}")
+            
             if source_id in node_results:
                 # Get edge label from either dict or Edge object
                 edge_data = edge.get("data", {}) if isinstance(edge, dict) else getattr(edge, "data", {})
                 label = edge_data.get("label", f"input_from_{source_id}")
                 source_output = node_results[source_id]
+                
+                logger.info(f"🔧 Source output type: {type(source_output)}")
+                if isinstance(source_output, dict):
+                    logger.info(f"🔧 Source output keys: {list(source_output.keys())}")
+                    logger.info(f"🔧 Source output type field: {source_output.get('type', 'no_type')}")
                 
                 # Skip if source output is an error
                 if isinstance(source_output, dict) and source_output.get("type") == "error":
@@ -122,9 +140,27 @@ def get_node_inputs(node_id: str, edges: List[Union[Dict[str, Any], Edge]], node
                 if isinstance(source_output, dict) and source_output.get("type") == "agent_status":
                     connected_agents.append(source_output)
                 
+                # ENHANCED: Special handling for trigger -> agent data flow
                 if isinstance(source_output, dict):
+                    # Handle API data from triggers - CRITICAL FIX
+                    if source_output.get('type') == 'api_data':
+                        logger.info(f"🚨 CRITICAL: Found api_data from trigger {source_id} -> agent {node_id}")
+                        logger.info(f"🚨 Service: {source_output.get('service_name', 'unknown')}")
+                        logger.info(f"🚨 Has api_data field: {'api_data' in source_output}")
+                        
+                        # Pass the ENTIRE trigger output to the agent
+                        # This ensures the agent gets all the transformed data
+                        inputs[label] = source_output
+                        
+                        # ALSO add it as a standard "data" input for compatibility
+                        inputs["data"] = source_output
+                        inputs["trigger_data"] = source_output
+                        inputs["api_data"] = source_output.get('api_data', {})
+                        
+                        logger.info(f"✅ Successfully passed api_data to agent via multiple input keys")
+                        
                     # Handle file data
-                    if "value" in source_output and isinstance(source_output["value"], dict):
+                    elif "value" in source_output and isinstance(source_output["value"], dict):
                         if all(k in source_output["value"] for k in ["filename", "content", "type"]):
                             inputs[label] = source_output
                         else:
@@ -139,11 +175,19 @@ def get_node_inputs(node_id: str, edges: List[Union[Dict[str, Any], Edge]], node
                         inputs[label] = source_output
                 elif source_output is not None:
                     inputs[label] = {"output": str(source_output)}
+            else:
+                logger.warning(f"🔧 Source node {source_id} not found in results")
     
     # Add connected agents to task inputs
     if connected_agents:
         inputs["agent"] = connected_agents[0]
         inputs["connected_agents"] = connected_agents
+    
+    # DEBUG: Log final inputs for the node
+    logger.info(f"🔧 Final inputs for node {node_id}: {list(inputs.keys())}")
+    for key, value in inputs.items():
+        if isinstance(value, dict) and value.get('type') == 'api_data':
+            logger.info(f"🔧 Input '{key}' contains api_data for service: {value.get('service_name', 'unknown')}")
     
     return inputs
 

@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { toast } from 'react-hot-toast';
-import { useBuilderUI } from '../contexts/BuilderUIContext';
-import { saveFlow, updateFlow } from '../api';
+import { useBuilderUI } from '../../contexts/BuilderUIContext';
+import { saveFlow, updateFlow } from '../../api';
 
 export function useWorkflowExport({
   projectName,
@@ -11,7 +11,10 @@ export function useWorkflowExport({
   user,
   navigate,
   cleanNodesForSave,
-  addNotification
+  addNotification,
+  setNodes,
+  setEdges,
+  setProjectName
 }) {
   const { closeEditModal } = useBuilderUI();
   
@@ -74,18 +77,55 @@ export function useWorkflowExport({
     navigate, cleanNodesForSave, closeEditModal, addNotification
   ]);
   
-  // Load project from backend
+  // Load project from backend or file
   const loadProject = useCallback(() => {
-    // Implementation for loading projects
-    if (!user) {
-      toast.error("Please sign in to load flows");
-      navigate('/login');
-      return;
-    }
-    
-    // Navigate to projects page
-    navigate('/projects');
-  }, [user, navigate]);
+    // Create a file input element
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const projectData = JSON.parse(event.target.result);
+          
+          // Validate the imported data
+          if (!projectData.nodes || !Array.isArray(projectData.nodes)) {
+            throw new Error('Invalid project data: missing or invalid nodes');
+          }
+          
+          // Set project name
+          if (projectData.name && setProjectName) {
+            setProjectName(projectData.name);
+          }
+          
+          // Import nodes and edges
+          if (setNodes && setEdges) {
+            setNodes(projectData.nodes || []);
+            setEdges(projectData.edges || []);
+          }
+          
+          toast.success('Project loaded successfully!');
+          addNotification({
+            message: `Project "${projectData.name || 'Untitled'}" loaded successfully`,
+            type: 'success'
+          });
+        } catch (error) {
+          console.error("Error loading project:", error);
+          toast.error("Failed to load project. The file may be corrupted or in an invalid format.");
+          addNotification({
+            message: 'Failed to load project: ' + error.message,
+            type: 'error'
+          });
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  }, [addNotification, setNodes, setEdges, setProjectName]);
   
   // Export to YAML
   const exportYAML = useCallback(() => {

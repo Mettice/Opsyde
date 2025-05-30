@@ -188,81 +188,78 @@ class DataStateManager:
     async def _incremental_record_detection(self, trigger_id: str, current_data: List, 
                                           previous_state: Dict, config: Dict) -> Dict[str, Any]:
         """
-        Advanced incremental record detection with deduplication and filtering
+        Detect new or modified records in array data using intelligent comparison
         """
-        if not isinstance(current_data, list):
-            return {"has_changes": False, "error": "Data is not an array"}
-        
-        # Configuration
-        id_field = config.get("id_field", "id")
-        timestamp_field = config.get("timestamp_field")
-        filter_fields = config.get("filter_fields", [])
-        max_new_records = config.get("max_new_records", 100)
-        
-        # Get processed record IDs
-        processed_ids = await self._get_processed_record_ids(trigger_id)
-        
-        new_records = []
-        modified_records = []
-        
-        for record in current_data:
-            if not isinstance(record, dict):
-                continue
-                
-            # Generate record ID
-            record_id = self._generate_record_id(record, id_field)
-            record_hash = self._generate_record_hash(record, filter_fields)
+        try:
+            id_field = config.get("id_field", "id")
+            max_new_records = config.get("max_new_records", 10)
             
-            if record_id not in processed_ids:
-                # New record
-                new_records.append({
-                    "id": record_id,
-                    "data": record,
-                    "hash": record_hash,
-                    "detected_at": datetime.now().isoformat()
-                })
+            # NEW: Get user-selected change detection fields
+            change_detection_fields = config.get("change_detection_fields", None)
+            
+            # Get previously processed record hashes
+            processed_records = await self._get_processed_record_ids(trigger_id)
+            
+            new_records = []
+            modified_records = []
+            
+            for record in current_data:
+                if not isinstance(record, dict):
+                    continue
                 
-                # Mark as processed
-                await self._mark_record_processed(trigger_id, record_id, record_hash)
+                record_id = self._generate_record_id(record, id_field)
                 
-                if len(new_records) >= max_new_records:
-                    logger.warning(f"Reached max new records limit ({max_new_records}) for {trigger_id}")
-                    break
-            else:
-                # Check if record was modified
-                previous_hash = await self._get_record_hash(trigger_id, record_id)
-                if previous_hash and previous_hash != record_hash:
-                    modified_records.append({
+                # Generate hash using user-selected fields or smart defaults
+                record_hash = self._generate_record_hash(record, change_detection_fields)
+                
+                if record_id not in processed_records:
+                    # New record
+                    new_records.append({
                         "id": record_id,
                         "data": record,
-                        "previous_hash": previous_hash,
-                        "current_hash": record_hash,
-                        "modified_at": datetime.now().isoformat()
+                        "hash": record_hash
                     })
-                    
-                    # Update hash
-                    await self._update_record_hash(trigger_id, record_id, record_hash)
-        
-        has_changes = len(new_records) > 0 or len(modified_records) > 0
-        
-        return {
-            "has_changes": has_changes,
-            "change_type": "incremental_records",
-            "new_records": new_records,
-            "modified_records": modified_records,
-            "deleted_records": [],
-            "summary": {
-                "new_count": len(new_records),
-                "modified_count": len(modified_records),
-                "total_processed": len(processed_ids),
-                "current_total": len(current_data)
-            },
-            "metadata": {
-                "detection_method": "incremental_records",
-                "timestamp": datetime.now().isoformat(),
-                "config": config
+                    await self._mark_record_processed(trigger_id, record_id, record_hash)
+                else:
+                    # Check if existing record was modified
+                    stored_hash = await self._get_record_hash(trigger_id, record_id)
+                    if stored_hash != record_hash:
+                        modified_records.append({
+                            "id": record_id,
+                            "data": record,
+                            "old_hash": stored_hash,
+                            "new_hash": record_hash
+                        })
+                        await self._update_record_hash(trigger_id, record_id, record_hash)
+            
+            # Limit new records to prevent overwhelming the system
+            if len(new_records) > max_new_records:
+                logger.warning(f"Limiting new records from {len(new_records)} to {max_new_records}")
+                new_records = new_records[:max_new_records]
+            
+            has_changes = len(new_records) > 0 or len(modified_records) > 0
+            
+            return {
+                "has_changes": has_changes,
+                "change_type": "incremental_records",
+                "new_records": new_records,
+                "modified_records": modified_records,
+                "summary": {
+                    "new_count": len(new_records),
+                    "modified_count": len(modified_records),
+                    "total_processed": len(current_data),
+                    "change_detection_fields": change_detection_fields or "all_fields_except_metadata"
+                }
             }
-        }
+            
+        except Exception as e:
+            logger.error(f"Error in incremental record detection: {str(e)}")
+            return {
+                "has_changes": False,
+                "change_type": "error",
+                "error": str(e),
+                "summary": {"error": str(e)}
+            }
     
     async def _array_length_detection(self, trigger_id: str, current_data: Any, 
                                     previous_state: Dict, config: Dict) -> Dict[str, Any]:
@@ -560,11 +557,39 @@ class DataStateManager:
     def _generate_record_hash(self, record: Dict, filter_fields: List[str] = None) -> str:
         """Generate a hash for a record, optionally filtering fields"""
         if filter_fields:
+            # User explicitly specified which fields to include - respect their choice
             filtered_record = {k: v for k, v in record.items() if k in filter_fields}
         else:
-            filtered_record = record
+            # No user filtering specified - use smart defaults but be less aggressive
+            # Only filter out truly meaningless fields that change constantly
+            always_volatile_fields = {
+                # System/cache fields that are never meaningful for business logic
+                'cache_time', 'cache_key', 'etag', 'last_fetch', 'sync_time', 
+                'refresh_time', 'update_count', 'internal_id', 'debug',
+                
+                # Metadata that rarely affects business decisions
+                'metadata', 'meta', 'info'
+            }
+            
+            # Keep most fields by default - only exclude truly meaningless ones
+            filtered_record = {}
+            for k, v in record.items():
+                # Skip only the always-volatile fields (case-insensitive)
+                if k.lower() in always_volatile_fields:
+                    continue
+                    
+                # Skip nested always-volatile fields
+                if isinstance(v, dict):
+                    filtered_v = {}
+                    for nested_k, nested_v in v.items():
+                        if nested_k.lower() not in always_volatile_fields:
+                            filtered_v[nested_k] = nested_v
+                    if filtered_v:  # Only include if there's meaningful data
+                        filtered_record[k] = filtered_v
+                else:
+                    filtered_record[k] = v
         
-        return hashlib.md5(json.dumps(filtered_record, sort_keys=True).encode()).hexdigest()
+        return hashlib.md5(json.dumps(filtered_record, sort_keys=True, default=str).encode()).hexdigest()
     
     def _generate_data_hash(self, data: Any) -> str:
         """Generate a hash for any data structure"""

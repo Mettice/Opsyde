@@ -40,7 +40,7 @@ import { flowTemplates } from '../data/flowTemplates';
 // Custom Hooks
 import { useNodeManagement } from '../hooks/useNodeManagement';
 import { useFlowExecution } from '../hooks/useFlowExecution';
-import { useWorkflowExport } from '../hooks/useWorkflowExport';
+import { useWorkflowExport } from './builders/useWorkflowExport';
 import { useToolTemplates } from '../hooks/useToolTemplates';
 import { useTriggers } from '../hooks/useTriggers';
 import useThrottledViewport from '../hooks/useThrottledViewport';
@@ -331,7 +331,10 @@ const BuilderPageContent = () => {
     user,
     navigate,
     cleanNodesForSave,
-    addNotification
+    addNotification,
+    setNodes,
+    setEdges,
+    setProjectName
   });
   
   // Add undo/redo handlers

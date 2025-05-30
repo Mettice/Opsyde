@@ -1,0 +1,100 @@
+{
+  "name": "DexScreener Live Monitor",
+  "nodes": [
+    {
+      "id": "dexscreener-live-trigger",
+      "type": "trigger",
+      "position": { "x": 100, "y": 100 },
+      "data": {
+        "label": "DexScreener Live Monitor",
+        "description": "Live monitoring of DexScreener for PEPE tokens",
+        "triggerType": "universal_polling",
+        "serviceName": "DexScreener",
+        "apiEndpoint": "https://api.dexscreener.com/latest/dex/search?q=PEPE",
+        "pollingInterval": 60,
+        "authType": "none",
+        "changeDetectionMethod": "array_length",
+        "nodeId": "dexscreener-live-trigger",
+        "nodeType": "trigger"
+      }
+    },
+    {
+      "id": "crypto-agent",
+      "type": "agent",
+      "position": { "x": 400, "y": 100 },
+      "data": {
+        "label": "Crypto Data Extractor",
+        "role": "Crypto Data Extraction Specialist",
+        "goal": "Extract and format crypto trading data from DexScreener API responses",
+        "backstory": "You are a crypto data extraction specialist. Your ONLY job is to extract and format trading data.",
+        "prompt": "Extract crypto data from DexScreener API and format it cleanly. DO NOT give trading advice, just extract and format the data.",
+        "framework": "openai",
+        "llmModel": "gpt-4o-mini",
+        "temperature": 0.3,
+        "maxTokens": 300,
+        "nodeId": "crypto-agent",
+        "nodeType": "agent"
+      }
+    },
+    {
+      "id": "crypto-task",
+      "type": "task",
+      "position": { "x": 700, "y": 100 },
+      "data": {
+        "label": "Extract Crypto Data",
+        "description": "Extract and format crypto data from DexScreener",
+        "expectedOutput": "Formatted crypto data ready for Telegram",
+        "agentId": "crypto-agent",
+        "nodeId": "crypto-task",
+        "nodeType": "task"
+      }
+    },
+    {
+      "id": "telegram-output",
+      "type": "output",
+      "position": { "x": 1000, "y": 100 },
+      "data": {
+        "label": "Telegram Sender",
+        "description": "Send crypto data to Telegram",
+        "outputType": "webhook",
+        "webhookUrl": "https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        "webhookMethod": "POST",
+        "webhookHeaders": {
+          "Content-Type": "application/json"
+        },
+        "webhookPayload": {
+          "chat_id": "5251498620",
+          "text": "{task_output}"
+        },
+        "nodeId": "telegram-output",
+        "nodeType": "output"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "source": "dexscreener-live-trigger",
+      "target": "crypto-agent",
+      "type": "smoothstep"
+    },
+    {
+      "id": "edge-2",
+      "source": "crypto-agent",
+      "target": "crypto-task",
+      "type": "smoothstep"
+    },
+    {
+      "id": "edge-3",
+      "source": "crypto-task",
+      "target": "telegram-output",
+      "type": "bezier"
+    }
+  ],
+  "metadata": {
+    "createdAt": "2025-05-29T12:45:00.000000",
+    "format": "json",
+    "description": "DexScreener live monitoring workflow with emergency token limiting",
+    "originalTrigger": "dexscreener-live-trigger"
+  }
+} 

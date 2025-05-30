@@ -389,21 +389,75 @@ async def debug_test_api_polling_simple(
                 
                 if response.status == 200:
                     try:
-                        data = await response.json()
-                        logger.info(f"Successfully got JSON data")
+                        # Check content type to handle different response formats
+                        content_type = response.headers.get('content-type', '').lower()
+                        
+                        if 'text/csv' in content_type or 'csv' in api_endpoint.lower():
+                            # Handle CSV response (Google Sheets, etc.)
+                            logger.info(f"Detected CSV response, parsing as CSV")
+                            csv_text = await response.text()
+                            
+                            # Parse CSV into JSON-like structure
+                            import csv
+                            import io
+                            
+                            csv_reader = csv.reader(io.StringIO(csv_text))
+                            rows = list(csv_reader)
+                            
+                            if rows:
+                                headers = rows[0]  # First row as headers
+                                data_rows = rows[1:]  # Remaining rows as data
+                                
+                                # Convert to JSON-like structure
+                                data = {
+                                    "values": rows,  # Google Sheets API format
+                                    "headers": headers,
+                                    "data_rows": data_rows,
+                                    "records": [  # Alternative format for easier processing
+                                        {headers[i]: (row[i] if i < len(row) else '') for i in range(len(headers))}
+                                        for row in data_rows
+                                    ],
+                                    "source": "csv_parsed",
+                                    "total_rows": len(data_rows),
+                                    "total_columns": len(headers)
+                                }
+                                
+                                logger.info(f"Successfully parsed CSV: {len(headers)} columns, {len(data_rows)} data rows")
+                            else:
+                                data = {"error": "Empty CSV response", "raw_csv": csv_text}
+                        
+                        else:
+                            # Handle JSON response (normal APIs)
+                            data = await response.json()
+                            logger.info(f"Successfully got JSON data")
+                        
+                        # Apply field filtering if specified (like the agent will receive)
+                        filtered_data = data
+                        selected_fields = test_data.get('selectedFields', [])
+                        target_fields = test_data.get('targetFields', [])
+                        exclude_fields = test_data.get('excludeFields', [])
+                        max_records = test_data.get('maxRecords', 10)
+                        
+                        if selected_fields or target_fields or exclude_fields:
+                            logger.info(f"Applying field filtering: selected={len(selected_fields)}, target={len(target_fields)}, exclude={len(exclude_fields)}")
+                            filtered_data = _apply_field_filtering(data, selected_fields, target_fields, exclude_fields, max_records)
+                            logger.info(f"Filtered data applied - this is what your agent will receive")
                         
                         # Simple analysis without AI
-                        analysis = _basic_api_analysis(data, test_data.get('changeDetectionMethod', 'array_length'))
+                        analysis = _basic_api_analysis(filtered_data, test_data.get('changeDetectionMethod', 'array_length'))
                         
                         return {
                             "success": True,
                             "status_code": response.status,
                             "service_detected": service_name,
                             "endpoint_tested": api_endpoint,
-                            "sample_data": data,
+                            "sample_data": filtered_data,  # Show filtered data
+                            "raw_data": data if filtered_data != data else None,  # Include raw data if filtering was applied
                             "data_structure": analysis.get("data_structure", {}),
                             "change_detection_info": analysis.get("change_detection_info", {}),
-                            "note": "Simple analysis without AI"
+                            "filtering_applied": selected_fields or target_fields or exclude_fields,
+                            "content_type": content_type,
+                            "note": "Simple analysis without AI" + (" - Field filtering applied" if (selected_fields or target_fields or exclude_fields) else "") + (" - CSV parsed" if 'csv' in content_type else "")
                         }
                         
                     except Exception as json_error:
@@ -497,44 +551,76 @@ async def debug_test_api_polling(
                 
                 if response.status == 200:
                     try:
-                        data = await response.json()
-                        logger.info(f"Successfully got JSON data, keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+                        # Check content type to handle different response formats
+                        content_type = response.headers.get('content-type', '').lower()
                         
-                        # Always start with basic analysis as fallback
-                        basic_analysis = _basic_api_analysis(data, change_method)
-                        
-                        # Try AI analysis but don't fail if it doesn't work
-                        try:
-                            ai_analysis = await _ai_analyze_api_response(
-                                data, service_name, change_method, api_endpoint
-                            )
+                        if 'text/csv' in content_type or 'csv' in api_endpoint.lower():
+                            # Handle CSV response (Google Sheets, etc.)
+                            logger.info(f"Detected CSV response, parsing as CSV")
+                            csv_text = await response.text()
                             
-                            # Merge AI analysis with basic analysis
-                            final_analysis = {
-                                **basic_analysis,
-                                **ai_analysis,
-                                "ai_analysis_success": True
-                            }
+                            # Parse CSV into JSON-like structure
+                            import csv
+                            import io
                             
-                        except Exception as ai_error:
-                            logger.warning(f"AI analysis failed, using basic analysis: {str(ai_error)}")
-                            final_analysis = {
-                                **basic_analysis,
-                                "ai_analysis_success": False,
-                                "ai_analysis_error": str(ai_error)
-                            }
+                            csv_reader = csv.reader(io.StringIO(csv_text))
+                            rows = list(csv_reader)
+                            
+                            if rows:
+                                headers = rows[0]  # First row as headers
+                                data_rows = rows[1:]  # Remaining rows as data
+                                
+                                # Convert to JSON-like structure
+                                data = {
+                                    "values": rows,  # Google Sheets API format
+                                    "headers": headers,
+                                    "data_rows": data_rows,
+                                    "records": [  # Alternative format for easier processing
+                                        {headers[i]: (row[i] if i < len(row) else '') for i in range(len(headers))}
+                                        for row in data_rows
+                                    ],
+                                    "source": "csv_parsed",
+                                    "total_rows": len(data_rows),
+                                    "total_columns": len(headers)
+                                }
+                                
+                                logger.info(f"Successfully parsed CSV: {len(headers)} columns, {len(data_rows)} data rows")
+                            else:
+                                data = {"error": "Empty CSV response", "raw_csv": csv_text}
                         
-                        # Always include the essential fields
-                        final_analysis.update({
+                        else:
+                            # Handle JSON response (normal APIs)
+                            data = await response.json()
+                            logger.info(f"Successfully got JSON data")
+                        
+                        # Apply field filtering if specified (like the agent will receive)
+                        filtered_data = data
+                        selected_fields = test_data.get('selectedFields', [])
+                        target_fields = test_data.get('targetFields', [])
+                        exclude_fields = test_data.get('excludeFields', [])
+                        max_records = test_data.get('maxRecords', 10)
+                        
+                        if selected_fields or target_fields or exclude_fields:
+                            logger.info(f"Applying field filtering: selected={len(selected_fields)}, target={len(target_fields)}, exclude={len(exclude_fields)}")
+                            filtered_data = _apply_field_filtering(data, selected_fields, target_fields, exclude_fields, max_records)
+                            logger.info(f"Filtered data applied - this is what your agent will receive")
+                        
+                        # Simple analysis without AI
+                        analysis = _basic_api_analysis(filtered_data, test_data.get('changeDetectionMethod', 'array_length'))
+                        
+                        return {
                             "success": True,
                             "status_code": response.status,
                             "service_detected": service_name,
                             "endpoint_tested": api_endpoint,
-                            "sample_data": data  # Include the actual data for preview
-                        })
-                        
-                        logger.info(f"Analysis completed successfully")
-                        return final_analysis
+                            "sample_data": filtered_data,  # Show filtered data
+                            "raw_data": data if filtered_data != data else None,  # Include raw data if filtering was applied
+                            "data_structure": analysis.get("data_structure", {}),
+                            "change_detection_info": analysis.get("change_detection_info", {}),
+                            "filtering_applied": selected_fields or target_fields or exclude_fields,
+                            "content_type": content_type,
+                            "note": "Simple analysis without AI" + (" - Field filtering applied" if (selected_fields or target_fields or exclude_fields) else "") + (" - CSV parsed" if 'csv' in content_type else "")
+                        }
                         
                     except Exception as json_error:
                         logger.error(f"Failed to parse JSON response: {str(json_error)}")
@@ -885,4 +971,200 @@ async def debug_test_scheduling(
             }
             
     except Exception as e:
-        return {"success": False, "error": str(e)} 
+        return {"success": False, "error": str(e)}
+
+@router.post("/data-approval/{trigger_id}")
+async def handle_data_approval(
+    trigger_id: str,
+    approval_data: Dict[str, Any],
+    trigger_service: TriggerService = Depends(get_trigger_service)
+) -> Dict[str, Any]:
+    """Handle user approval of detected data changes before sending to agent"""
+    try:
+        approved_data = approval_data.get("approved_data", [])
+        selected_fields = approval_data.get("selected_fields", [])
+        
+        if not approved_data:
+            return {
+                "success": False,
+                "message": "No data approved for processing"
+            }
+        
+        # Get the trigger flow
+        flow = await trigger_service.get_trigger_flow(trigger_id)
+        if not flow:
+            return {
+                "success": False,
+                "message": f"Trigger {trigger_id} not found"
+            }
+        
+        # Filter the approved data to only include selected fields
+        filtered_data = []
+        for item in approved_data:
+            if isinstance(item, dict) and selected_fields:
+                filtered_item = {}
+                for field_path in selected_fields:
+                    # Extract field value using dot notation
+                    value = _get_nested_value(item, field_path)
+                    if value is not None:
+                        _set_nested_value(filtered_item, field_path, value)
+                if filtered_item:
+                    filtered_data.append(filtered_item)
+            else:
+                filtered_data.append(item)
+        
+        # Add the approved data to the flow context
+        flow["approved_data"] = filtered_data
+        flow["user_selected_fields"] = selected_fields
+        flow["approval_timestamp"] = datetime.now().isoformat()
+        
+        # Execute the workflow with the approved data
+        return StreamingResponse(
+            run_crew(flow),
+            media_type="text/event-stream",
+            headers={
+                "X-Execution-ID": f"approved_{trigger_id}_{datetime.now().timestamp()}",
+                "X-Trigger-ID": trigger_id,
+                "X-Data-Source": "user_approved"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in data approval for {trigger_id}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def _get_nested_value(data: dict, path: str):
+    """Get nested value from dictionary using dot notation"""
+    try:
+        keys = path.split('.')
+        value = data
+        for key in keys:
+            if isinstance(value, dict):
+                value = value.get(key)
+            elif isinstance(value, list) and key.isdigit():
+                value = value[int(key)]
+            elif isinstance(value, list) and key.startswith('[') and key.endswith(']'):
+                index = int(key[1:-1])
+                value = value[index] if 0 <= index < len(value) else None
+            else:
+                return None
+        return value
+    except:
+        return None
+
+def _set_nested_value(data: dict, path: str, value):
+    """Set nested value in dictionary using dot notation"""
+    try:
+        keys = path.split('.')
+        current = data
+        for key in keys[:-1]:
+            if key not in current:
+                current[key] = {}
+            current = current[key]
+        current[keys[-1]] = value
+    except:
+        pass
+
+def _apply_field_filtering(data: Any, selected_fields: List[str], target_fields: List[str], exclude_fields: List[str], max_records: int = 10) -> Any:
+    """Apply field filtering to API data to show what the agent will actually receive"""
+    try:
+        if not (selected_fields or target_fields or exclude_fields):
+            return data
+        
+        def filter_record(record: dict) -> dict:
+            """Filter a single record based on field selections"""
+            if not isinstance(record, dict):
+                return record
+            
+            filtered_record = {}
+            
+            # If we have selected fields (from field discovery), use those
+            if selected_fields:
+                for field_path in selected_fields:
+                    value = _get_nested_value(record, field_path)
+                    if value is not None:
+                        _set_nested_value(filtered_record, field_path, value)
+            
+            # If we have target fields (manual include), use those
+            elif target_fields:
+                for field_path in target_fields:
+                    value = _get_nested_value(record, field_path)
+                    if value is not None:
+                        _set_nested_value(filtered_record, field_path, value)
+            
+            # Otherwise start with all fields and exclude specified ones
+            else:
+                filtered_record = record.copy()
+                for field_path in exclude_fields:
+                    _remove_nested_field(filtered_record, field_path)
+            
+            return filtered_record
+        
+        # Apply filtering based on data structure
+        if isinstance(data, list):
+            # Direct array - filter each item and limit records
+            filtered_items = [filter_record(item) for item in data[:max_records]]
+            return filtered_items
+            
+        elif isinstance(data, dict):
+            # Check for CSV parsed data first
+            if data.get('source') == 'csv_parsed' and 'records' in data:
+                # CSV format with records array
+                filtered_data = data.copy()
+                filtered_records = [filter_record(record) for record in data['records'][:max_records]]
+                filtered_data['records'] = filtered_records
+                # Update metadata
+                filtered_data['total_rows'] = len(filtered_records)
+                return filtered_data
+            
+            # Check for common API response patterns
+            elif 'pairs' in data and isinstance(data['pairs'], list):
+                # DexScreener format
+                filtered_data = data.copy()
+                filtered_pairs = [filter_record(pair) for pair in data['pairs'][:max_records]]
+                filtered_data['pairs'] = filtered_pairs
+                return filtered_data
+                
+            elif 'records' in data and isinstance(data['records'], list):
+                # Airtable format
+                filtered_data = data.copy()
+                filtered_records = [filter_record(record) for record in data['records'][:max_records]]
+                filtered_data['records'] = filtered_records
+                return filtered_data
+                
+            elif 'data' in data and isinstance(data['data'], list):
+                # Generic data wrapper
+                filtered_data = data.copy()
+                filtered_items = [filter_record(item) for item in data['data'][:max_records]]
+                filtered_data['data'] = filtered_items
+                return filtered_data
+                
+            else:
+                # Single object
+                return filter_record(data)
+        
+        return data
+        
+    except Exception as e:
+        logger.error(f"Error applying field filtering: {str(e)}")
+        return data
+
+def _remove_nested_field(data: dict, path: str):
+    """Remove field from nested dictionary using dot notation"""
+    try:
+        keys = path.split('.')
+        current = data
+        
+        for key in keys[:-1]:
+            if isinstance(current, dict) and key in current:
+                current = current[key]
+            else:
+                return
+        
+        if isinstance(current, dict) and keys[-1] in current:
+            del current[keys[-1]]
+    except:
+        pass 
