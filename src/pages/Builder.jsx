@@ -500,65 +500,152 @@ const BuilderPageContent = () => {
       const sourceNode = nodes.find(node => node.id === edge.source);
       if (!sourceNode) return null;
       
-      // Get output schema based on node type
+      // FIXED: Return the actual node data instead of just schema
+      // The LogicEditor needs the full node configuration to analyze trigger settings
       const nodeType = sourceNode.type || sourceNode.data?.nodeType;
       const nodeLabel = sourceNode.data?.label || sourceNode.data?.name || `${nodeType} Node`;
       
+      console.log('🔍 getConnectedNodes: Processing node:', {
+        id: sourceNode.id,
+        type: nodeType,
+        label: nodeLabel,
+        data: sourceNode.data
+      });
+      
       return {
         id: sourceNode.id,
-        type: nodeLabel, // Use the actual label for display
-        nodeType: nodeType, // Keep the actual node type
-        outputs: getOutputSchemaForNode(sourceNode.data, nodeType)
+        type: nodeType, // Use the actual node type for LogicEditor processing
+        label: nodeLabel, // Keep label for display
+        data: sourceNode.data, // CRITICAL: Pass the full node data for analysis
+        outputs: getOutputSchemaForNode(sourceNode.data, nodeType) // Keep schema for backward compatibility
       };
     }).filter(Boolean); // Remove null entries
     
+    console.log('🔍 getConnectedNodes: Returning connected nodes:', connectedNodes);
     return connectedNodes;
   }, [nodes, edges]);
   
   // Function to get output schema for each node type (same as in EditModal)
   const getOutputSchemaForNode = (nodeData, nodeType) => {
-    const schemas = {
-      agent: {
-        response: { type: 'string', sample: 'AI agent response text' },
-        status: { type: 'string', sample: 'completed' },
-        token_usage: { type: 'number', sample: 150 },
-        execution_time: { type: 'number', sample: 2.5 }
-      },
-      task: {
-        result: { type: 'string', sample: 'Task execution result' },
-        status: { type: 'string', sample: 'success' },
-        output: { type: 'object', sample: '{data: "processed"}' },
-        duration: { type: 'number', sample: 1.5 }
-      },
-      tool: {
-        response: { type: 'object', sample: '{result: "tool output"}' },
-        status_code: { type: 'number', sample: 200 },
-        success: { type: 'boolean', sample: true },
-        error: { type: 'string', sample: null }
-      },
-      input: {
-        value: { type: 'string', sample: 'User input text' },
-        type: { type: 'string', sample: 'text' },
-        timestamp: { type: 'number', sample: Date.now() }
-      },
-      chatbot: {
-        message: { type: 'string', sample: 'Chatbot response' },
-        conversation_id: { type: 'string', sample: 'conv_123' },
-        user_input: { type: 'string', sample: 'User message' }
-      },
-      trigger: {
-        triggered: { type: 'boolean', sample: true },
-        trigger_time: { type: 'string', sample: '2024-01-01T12:00:00Z' },
-        payload: { type: 'object', sample: '{data: "trigger data"}' }
-      },
-      delay: {
-        completed: { type: 'boolean', sample: true },
-        duration: { type: 'string', sample: '5s' },
-        start_time: { type: 'string', sample: '2024-01-01T12:00:00Z' }
+    // For trigger nodes, return the actual discovered fields from the API
+    if (nodeType === 'trigger') {
+      const triggerType = nodeData?.triggerType;
+      
+      if (triggerType === 'universal_polling') {
+        // Use the actual discovered fields from field discovery
+        const discoveredFields = nodeData?.discoveredFields || [];
+        const selectedFields = nodeData?.selectedFields || [];
+        
+        if (discoveredFields.length > 0) {
+          // Return the actual discovered fields
+          return discoveredFields.map(fieldPath => ({
+            name: fieldPath,
+            type: 'string', // We can't determine exact type without API call, but string is safe default
+            sample: `Value from ${fieldPath}`,
+            description: `Field from ${nodeData?.serviceName || 'API'}: ${fieldPath}`
+          }));
+        }
+        
+        // If no fields discovered yet, return generic trigger outputs
+        return [
+          {
+            name: 'triggered',
+            type: 'boolean',
+            sample: true,
+            description: 'Whether the trigger was activated'
+          },
+          {
+            name: 'trigger_time',
+            type: 'string',
+            sample: new Date().toISOString(),
+            description: 'When the trigger was activated'
+          },
+          {
+            name: 'api_data',
+            type: 'object',
+            sample: 'Data from API endpoint',
+            description: `Data from ${nodeData?.serviceName || 'API'} endpoint`
+          }
+        ];
       }
+      
+      // For other trigger types, return basic trigger outputs
+      return [
+        {
+          name: 'triggered',
+          type: 'boolean',
+          sample: true,
+          description: 'Whether the trigger was activated'
+        },
+        {
+          name: 'trigger_time',
+          type: 'string',
+          sample: new Date().toISOString(),
+          description: 'When the trigger was activated'
+        },
+        {
+          name: 'payload',
+          type: 'object',
+          sample: 'Trigger payload data',
+          description: 'Data received by the trigger'
+        }
+      ];
+    }
+    
+    // For non-trigger nodes, return basic schema (these are less critical for Logic Node)
+    const basicSchemas = {
+      agent: [
+        {
+          name: 'result',
+          type: 'string',
+          sample: 'Agent output',
+          description: 'Result from agent execution'
+        },
+        {
+          name: 'status',
+          type: 'string',
+          sample: 'success',
+          description: 'Execution status'
+        }
+      ],
+      task: [
+        {
+          name: 'result',
+          type: 'string',
+          sample: 'Task result',
+          description: 'Result from task execution'
+        },
+        {
+          name: 'status',
+          type: 'string',
+          sample: 'success',
+          description: 'Execution status'
+        }
+      ],
+      tool: [
+        {
+          name: 'response',
+          type: 'object',
+          sample: 'Tool response',
+          description: 'Response from tool execution'
+        },
+        {
+          name: 'success',
+          type: 'boolean',
+          sample: true,
+          description: 'Whether tool execution was successful'
+        }
+      ]
     };
     
-    return schemas[nodeType] || {};
+    return basicSchemas[nodeType] || [
+      {
+        name: 'output',
+        type: 'string',
+        sample: 'Node output',
+        description: `Output from ${nodeType} node`
+      }
+    ];
   };
 
   const [showCrewAIImporter, setShowCrewAIImporter] = useState(false);
@@ -630,6 +717,70 @@ const BuilderPageContent = () => {
 
     loadWorkflowFromDashboard();
   }, []);
+
+  // NEW: Toggle between local and global field access
+  const [globalFieldAccess, setGlobalFieldAccess] = useState(true); 
+
+  // NEW: Global field access  gets ALL previous nodes in execution path
+  const getAllPreviousNodes = useCallback((nodeId) => {
+    if (!nodeId) return [];
+    
+    const visitedNodes = new Set();
+    const previousNodes = [];
+    
+    // Recursive function to trace back through the execution path
+    const tracePreviousNodes = (currentNodeId) => {
+      if (visitedNodes.has(currentNodeId)) return; // Prevent infinite loops
+      visitedNodes.add(currentNodeId);
+      
+      // Get all edges that connect TO this node
+      const incomingEdges = (edges || []).filter(edge => edge && edge.target === currentNodeId);
+      
+      for (const edge of incomingEdges) {
+        const sourceNode = nodes.find(node => node.id === edge.source);
+        if (!sourceNode) continue;
+        
+        const nodeType = sourceNode.type || sourceNode.data?.nodeType;
+        const nodeLabel = sourceNode.data?.label || sourceNode.data?.name || `${nodeType} Node`;
+        
+        // Add this node to our previous nodes list
+        const nodeInfo = {
+          id: sourceNode.id,
+          type: nodeType,
+          label: nodeLabel,
+          data: sourceNode.data,
+          outputs: getOutputSchemaForNode(sourceNode.data, nodeType),
+          executionOrder: previousNodes.length // Track execution order
+        };
+        
+        // Only add if not already in the list
+        if (!previousNodes.find(n => n.id === sourceNode.id)) {
+          previousNodes.push(nodeInfo);
+        }
+        
+        // Recursively trace back from this node
+        tracePreviousNodes(edge.source);
+      }
+    };
+    
+    // Start tracing from the given node
+    tracePreviousNodes(nodeId);
+    
+    // Sort by execution order (triggers first, then in dependency order)
+    previousNodes.sort((a, b) => {
+      // Triggers should come first
+      if (a.type === 'trigger' && b.type !== 'trigger') return -1;
+      if (b.type === 'trigger' && a.type !== 'trigger') return 1;
+      
+      // Then by execution order
+      return a.executionOrder - b.executionOrder;
+    });
+    
+    console.log('🌐 getAllPreviousNodes: Found', previousNodes.length, 'previous nodes for', nodeId);
+    console.log('🌐 Previous nodes:', previousNodes.map(n => `${n.label} (${n.type})`));
+    
+    return previousNodes;
+  }, [nodes, edges, getOutputSchemaForNode]);
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -730,6 +881,22 @@ const BuilderPageContent = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
               Duplicate
+            </button>
+            
+            {/* Field Access Mode Toggle */}
+            <button
+              onClick={() => setGlobalFieldAccess(!globalFieldAccess)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors flex items-center gap-2 ${
+                globalFieldAccess 
+                  ? 'bg-green-600 hover:bg-green-700 text-white' 
+                  : 'bg-gray-600 hover:bg-gray-700 text-white'
+              }`}
+              title={globalFieldAccess ? 'Global Field Access' : 'Local Field Access (direct connections only)'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              {globalFieldAccess ? 'Global' : 'Local'}
             </button>
           </div>
         </div>
@@ -897,7 +1064,7 @@ const BuilderPageContent = () => {
           onSave={onSaveEdit}
           nodeData={selectedNode.data}
           nodeType={selectedNode.type}
-          connectedNodes={getConnectedNodes(selectedNode.id)}
+          connectedNodes={globalFieldAccess ? getAllPreviousNodes(selectedNode.id) : getConnectedNodes(selectedNode.id)}
         />
       )}
       

@@ -694,6 +694,15 @@ Analyze the ACTUAL response structure and provide recommendations in this JSON f
         "confidence": 0.95,
         "explanation": "Clear explanation of what to monitor and why"
     }},
+    "smart_filtering_config": {{
+        "recommended_target_fields": ["most.important.field", "second.important.field"],
+        "recommended_exclude_fields": ["noise.field", "metadata.field"],
+        "recommended_max_records": 5,
+        "recommended_max_tokens": 2000,
+        "reasoning": "why these fields are most important for AI processing",
+        "confidence": 0.90,
+        "auto_apply": true
+    }},
     "service_insights": {{
         "detected_service": "actual service name based on response structure",
         "api_type": "REST|GraphQL|webhook",
@@ -705,11 +714,14 @@ Analyze the ACTUAL response structure and provide recommendations in this JSON f
 IMPORTANT: 
 - Base ALL recommendations on the ACTUAL response structure
 - Use REAL field paths from the response
+- For smart_filtering_config, select 3-5 MOST IMPORTANT fields that contain meaningful data
+- Exclude fields that are metadata, IDs, timestamps, or debugging info
+- Recommend record limits based on data size and complexity
 - Don't make assumptions about what the service "might" be
 - Analyze the actual data patterns and structure
 - Provide specific, actionable recommendations
 
-Focus on practical recommendations for change detection monitoring based on what's actually in the response.
+Focus on practical recommendations for change detection monitoring and smart filtering based on what's actually in the response.
 """
         
         # Get AI analysis using OpenAI instead of OpenRouter
@@ -747,6 +759,7 @@ Focus on practical recommendations for change detection monitoring based on what
                     **ai_analysis.get("data_structure", {})
                 },
                 "change_detection_info": ai_analysis.get("change_detection_recommendations", {}),
+                "smart_filtering_config": ai_analysis.get("smart_filtering_config", {}),
                 "ai_insights": ai_analysis.get("service_insights", {}),
                 "ai_raw_response": ai_response
             }
