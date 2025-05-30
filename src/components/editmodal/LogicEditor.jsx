@@ -166,50 +166,246 @@ const LogicEditor = ({
   const [showExamples, setShowExamples] = useState(false);
   const [showFieldGuide, setShowFieldGuide] = useState(false);
 
-  // Get all available fields from connected nodes (enhanced detection)
-  const detectFieldsFromAgent = (agentData) => {
-    const fields = [
-      // Standard agent fields
-      { id: 'response', type: 'string', sample: 'AI response text', description: 'Main AI response' },
-      { id: 'status', type: 'string', sample: 'completed', description: 'Execution status' },
-      { id: 'token_usage', type: 'number', sample: 1500, description: 'Tokens consumed' },
-      { id: 'execution_time', type: 'number', sample: 2.5, description: 'Time in seconds' }
-    ];
-
-    // Parse expected outputs from agent's prompt
-    const prompt = agentData?.prompt || '';
+  // FIXED: Real field detection from connected nodes
+  useEffect(() => {
+    console.log('🔍 LogicEditor: Analyzing connected nodes:', connectedNodes);
     
-    // Crypto trading patterns
-    if (prompt.includes('decision') || prompt.includes('BUY') || prompt.includes('trading')) {
-      fields.push(
-        { id: 'decision', type: 'string', sample: 'STRONG_BUY', description: 'Trading decision' },
-        { id: 'confidence', type: 'number', sample: 0.85, description: 'Confidence score (0-1)' },
-        { id: 'risk_score', type: 'number', sample: 0.3, description: 'Risk assessment (0-1)' },
-        { id: 'reasons', type: 'array', sample: ['High liquidity', 'Good volume'], description: 'Decision reasons' },
-        { id: 'red_flags', type: 'array', sample: [], description: 'Warning signals' }
-      );
+    const detectRealFields = async () => {
+      if (!connectedNodes || connectedNodes.length === 0) {
+        console.log('🔍 No connected nodes found');
+        setAvailableFields([]);
+        return;
+      }
+      
+      let detectedFields = [];
+      
+      for (const node of connectedNodes) {
+        console.log('🔍 Processing connected node:', node);
+        
+        const nodeType = node.type;
+        const nodeData = node.data || {};
+        
+        if (nodeType === 'trigger') {
+          const triggerType = nodeData.triggerType;
+          
+          if (triggerType === 'universal_polling') {
+            // REAL FIELD DETECTION: Use discovered fields if available
+            if (nodeData.discoveredFields && nodeData.discoveredFields.length > 0) {
+              console.log('🎯 Found discovered fields in trigger:', nodeData.discoveredFields);
+              
+              nodeData.discoveredFields.forEach(fieldPath => {
+                detectedFields.push({
+                  id: fieldPath,
+                  type: 'dynamic',
+                  description: `Discovered field from ${nodeData.serviceName || 'API'}`,
+                  sample: 'detected_value',
+                  source: 'discovered'
+                });
+              });
+            }
+            // FALLBACK: Try to get fields by calling the API
+            else if (nodeData.apiEndpoint) {
+              console.log('🔍 No discovered fields, attempting to fetch from API:', nodeData.apiEndpoint);
+              
+              try {
+                const response = await fetch('http://localhost:8000/api/triggers/debug/test-api-polling-simple', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    apiEndpoint: nodeData.apiEndpoint,
+                    authType: nodeData.authType || 'none',
+                    apiKey: nodeData.apiKey || '',
+                    bearerToken: nodeData.bearerToken || '',
+                    username: nodeData.username || '',
+                    password: nodeData.password || '',
+                    serviceName: nodeData.serviceName || 'Unknown API'
+                  })
+                });
+                
+                if (response.ok) {
+                  const result = await response.json();
+                  if (result.success && result.sample_data) {
+                    console.log('🎯 Successfully fetched API data for field detection:', result.sample_data);
+                    
+                    // Extract fields from the actual API response
+                    const extractedFields = extractFieldsFromApiData(result.sample_data, nodeData.serviceName);
+                    console.log('🎯 Extracted fields from API:', extractedFields);
+                    
+                    extractedFields.forEach(field => {
+                      detectedFields.push({
+                        id: field,
+                        type: 'dynamic',
+                        description: `Field from ${nodeData.serviceName || 'API'} response`,
+                        sample: 'api_value',
+                        source: 'api_fetch'
+                      });
+                    });
+                  }
+                }
+              } catch (error) {
+                console.error('🔍 Failed to fetch API data for field detection:', error);
+              }
+            }
+            
+            // Add standard trigger fields
+            detectedFields.push(
+              {
+                id: 'status',
+                type: 'string',
+                description: 'Trigger execution status',
+                sample: 'success',
+                source: 'standard'
+              },
+              {
+                id: 'message',
+                type: 'string',
+                description: 'Trigger status message',
+                sample: 'Data fetched successfully',
+                source: 'standard'
+              },
+              {
+                id: 'service_name',
+                type: 'string',
+                description: 'Name of the service',
+                sample: nodeData.serviceName || 'API Service',
+                source: 'standard'
+              }
+            );
+          }
+          else {
+            // Other trigger types - basic fields
+            detectedFields.push(
+              {
+                id: 'triggered',
+                type: 'boolean',
+                description: 'Whether trigger was activated',
+                sample: true,
+                source: 'standard'
+              },
+              {
+                id: 'trigger_time',
+                type: 'string',
+                description: 'When trigger was activated',
+                sample: '2024-01-01T12:00:00Z',
+                source: 'standard'
+              }
+            );
+          }
+        }
+        else if (nodeType === 'agent') {
+          // Agent output fields
+          detectedFields.push(
+            {
+              id: 'response',
+              type: 'string',
+              description: 'AI agent response text',
+              sample: 'AI agent response',
+              source: 'agent'
+            },
+            {
+              id: 'status',
+              type: 'string',
+              description: 'Agent execution status',
+              sample: 'completed',
+              source: 'agent'
+            }
+          );
+        }
+        // Add other node types as needed
+      }
+      
+      console.log('🎯 Final detected fields:', detectedFields);
+      setAvailableFields(detectedFields);
+    };
+    
+    detectRealFields();
+  }, [connectedNodes]);
+  
+  // Helper function to extract fields from API data
+  const extractFieldsFromApiData = (data, serviceName) => {
+    const fields = [];
+    
+    try {
+      // Handle CSV parsed data (Google Sheets)
+      if (data.source === 'csv_parsed' && data.headers && data.records) {
+        data.headers.forEach(header => {
+          fields.push(`records[0].${header}`);
+        });
+        return fields;
+      }
+      
+      // Handle Airtable format
+      if (data.records && Array.isArray(data.records) && data.records.length > 0) {
+        const firstRecord = data.records[0];
+        if (firstRecord.fields) {
+          Object.keys(firstRecord.fields).forEach(field => {
+            fields.push(`records[0].fields.${field}`);
+          });
+        }
+        return fields;
+      }
+      
+      // Handle DexScreener format
+      if (data.pairs && Array.isArray(data.pairs) && data.pairs.length > 0) {
+        const extractNestedFields = (obj, prefix = '') => {
+          if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+            for (const [key, value] of Object.entries(obj)) {
+              const fieldPath = prefix ? `${prefix}.${key}` : key;
+              if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                fields.push(fieldPath);
+                extractNestedFields(value, fieldPath);
+              } else {
+                fields.push(fieldPath);
+              }
+            }
+          }
+        };
+        extractNestedFields(data.pairs[0], 'pairs[0]');
+        return fields;
+      }
+      
+      // Handle direct array
+      if (Array.isArray(data) && data.length > 0) {
+        const extractNestedFields = (obj, prefix = '') => {
+          if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+            for (const [key, value] of Object.entries(obj)) {
+              const fieldPath = prefix ? `${prefix}.${key}` : key;
+              if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                fields.push(fieldPath);
+                extractNestedFields(value, fieldPath);
+              } else {
+                fields.push(fieldPath);
+              }
+            }
+          }
+        };
+        extractNestedFields(data[0], '[0]');
+        return fields;
+      }
+      
+      // Handle generic object
+      if (typeof data === 'object' && data !== null) {
+        const extractNestedFields = (obj, prefix = '') => {
+          if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+            for (const [key, value] of Object.entries(obj)) {
+              const fieldPath = prefix ? `${prefix}.${key}` : key;
+              if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                fields.push(fieldPath);
+                extractNestedFields(value, fieldPath);
+              } else {
+                fields.push(fieldPath);
+              }
+            }
+          }
+        };
+        extractNestedFields(data);
+        return fields;
+      }
+      
+    } catch (error) {
+      console.error('🔍 Error extracting fields from API data:', error);
     }
-
-    // Market analysis patterns
-    if (prompt.includes('market') || prompt.includes('analysis') || prompt.includes('research')) {
-      fields.push(
-        { id: 'market_trend', type: 'string', sample: 'bullish', description: 'Market direction' },
-        { id: 'sentiment', type: 'string', sample: 'positive', description: 'Market sentiment' },
-        { id: 'score', type: 'number', sample: 7.5, description: 'Analysis score' },
-        { id: 'recommendation', type: 'string', sample: 'buy', description: 'Action recommendation' }
-      );
-    }
-
-    // Email/content generation patterns
-    if (prompt.includes('email') || prompt.includes('content') || prompt.includes('write')) {
-      fields.push(
-        { id: 'subject', type: 'string', sample: 'Email subject', description: 'Email subject line' },
-        { id: 'body', type: 'string', sample: 'Email content', description: 'Email body text' },
-        { id: 'tone', type: 'string', sample: 'professional', description: 'Content tone' },
-        { id: 'word_count', type: 'number', sample: 250, description: 'Content length' }
-      );
-    }
-
+    
     return fields;
   };
 
@@ -320,17 +516,6 @@ const LogicEditor = ({
       operators: ['&&', '||', '!', '()', 'and', 'or', 'not']
     }
   };
-
-  useEffect(() => {
-    // Detect available fields based on connected nodes
-    // This would be enhanced to actually analyze the workflow
-    const mockAgentData = {
-      prompt: formData.description || 'trading decision analysis'
-    };
-    
-    const fields = detectFieldsFromAgent(mockAgentData);
-    setAvailableFields(fields);
-  }, [formData.description]);
 
   // Parse existing condition into visual builder format
   useEffect(() => {
@@ -686,13 +871,19 @@ const LogicEditor = ({
           <textarea
             name="condition"
             value={formData.condition || ''}
-            onChange={handleInputChange}
-            className="w-full p-3 border rounded-lg font-mono text-sm"
-            rows="3"
-            placeholder="Enter your condition (e.g., decision == 'STRONG_BUY' && confidence > 0.8)"
+            onChange={(e) => {
+              console.log('🔍 Logic condition input changed:', e.target.value);
+              handleInputChange(e);
+            }}
+            onFocus={() => console.log('🔍 Logic condition textarea focused')}
+            onBlur={() => console.log('🔍 Logic condition textarea blurred')}
+            className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+            rows="4"
+            placeholder="Enter your condition (e.g., records[0].Category == 'Hot' && records[0].Email.includes('@'))"
+            style={{ zIndex: 1 }}
           />
           <div className="text-xs text-gray-500 mt-1">
-            💡 Use field names directly (decision, confidence) or with inputs prefix (inputs.decision)
+            💡 Use field names from the detected fields above (e.g., records[0].Name, records[0].Category)
           </div>
         </div>
 
