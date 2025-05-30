@@ -359,13 +359,17 @@ class EnhancedCrewAIRunner:
     async def _fallback_execution(self, agent_config: Dict[str, Any], 
                                 task_config: Dict[str, Any],
                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Fallback when CrewAI is not available - respects user's LLM provider choice"""
+        """Fallback when CrewAI is not available - respects user's LLM provider choice with emergency token limiting"""
         
         # Get framework config to determine provider
         framework_config = agent_config.get('frameworkConfig', {})
         provider = framework_config.get('provider', 'openai')
         model = framework_config.get('model', 'gpt-4')
         temperature = framework_config.get('temperature', 0.7)
+        max_tokens = framework_config.get('max_tokens', 4000)  # Respect user configuration
+        
+        # Respect user configuration - no more emergency overrides!
+        logger.info(f"🤖 Using user-configured max_tokens: {max_tokens}")
         
         # Simulate CrewAI behavior using direct LLM calls
         role = agent_config.get('role', 'Assistant')
@@ -373,6 +377,7 @@ class EnhancedCrewAIRunner:
         backstory = agent_config.get('backstory', '')
         task_description = task_config.get('description', '')
         
+        # Build standard prompt respecting user preferences
         prompt = f"""You are a {role}.
 Goal: {goal}
 Backstory: {backstory}
@@ -382,14 +387,19 @@ Task: {task_description}
 """
         
         if inputs:
-            input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
-            prompt += f"Input Data:\n{input_lines}\n\n"
+            # Process input data efficiently (DataStateManager handles filtering)
+            input_summary = []
+            for k, v in inputs.items():
+                input_line = f'{k}: {str(v)}'
+                input_summary.append(input_line)
+            
+            prompt += f"Input Data:\n{chr(10).join(input_summary)}\n\n"
         
         prompt += "Please complete this task based on your role and the provided information."
         
         messages = [{"role": "user", "content": prompt}]
         
-        # Use the appropriate provider based on user selection
+        # Use the appropriate provider based on user selection WITH max_tokens
         try:
             if provider == 'openai':
                 # Use OpenAI directly
@@ -397,7 +407,8 @@ Task: {task_description}
                 response = await run_openai_chat(
                     messages=messages,
                     model=model,
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
             elif provider == 'anthropic':
                 # Use Anthropic directly
@@ -405,7 +416,8 @@ Task: {task_description}
                 response = await run_anthropic_chat(
                     messages=messages,
                     model=model,
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
             elif provider == 'openrouter':
                 # Use OpenRouter
@@ -413,7 +425,8 @@ Task: {task_description}
                 response = await run_openrouter_chat(
                     messages=messages,
                     model=model,
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
             else:
                 # Default fallback to OpenAI
@@ -421,7 +434,8 @@ Task: {task_description}
                 response = await run_openai_chat(
                     messages=messages,
                     model='gpt-4',
-                    temperature=temperature
+                    temperature=temperature,
+                    max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
                 
         except ImportError:
@@ -439,7 +453,8 @@ Task: {task_description}
             response = await run_openrouter_chat(
                 messages=messages,
                 model=openrouter_model,
-                temperature=temperature
+                temperature=temperature,
+                max_tokens=max_tokens  # CRITICAL: Pass max_tokens
             )
         
         return {
@@ -448,6 +463,8 @@ Task: {task_description}
             "framework": "crewai_fallback",
             "provider_used": provider,
             "model_used": model,
+            "max_tokens_used": max_tokens,
+            "emergency_mode": False,
             "success": True,
             "note": f"CrewAI not available - using {provider} fallback implementation"
         }

@@ -1,0 +1,457 @@
+{
+  "name": "Car Wash Google drive",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_FOLDER_ID"
+        },
+        "event": "fileCreated",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -360
+      ],
+      "id": "0857cbc4-c8fe-49f0-966e-34d1d6245921",
+      "name": "Google Drive Trigger - New Car Wash Photo"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {
+          "fileName": "={{ $json.name }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        180,
+        -360
+      ],
+      "id": "0365bf5f-91ff-4b05-be08-cc4af8a5fa3a",
+      "name": "Download Image"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "operation": "analyze",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o"
+        },
+        "text": "You are a professional car wash quality inspector. Analyze this car wash image and provide a detailed JSON response with the following structure:\n{\n  \"qualityScore\": (0-100),\n  \"overallAssessment\": \"pass\" or \"fail\",\n  \"issues\": [\n    {\n      \"type\": \"water_spots|poor_lighting|dirt|soap_residue|missed_areas|scratches|other\",\n      \"severity\": \"low|medium|high\",\n      \"location\": \"specific area of the car\",\n      \"description\": \"detailed description of the issue\"\n    }\n  ],\n  \"recommendations\": [\"specific actionable steps to fix issues\"]\n}\n\nBe thorough and specific. A score below 80 should be marked as 'fail'.",
+        "inputType": "binaryData",
+        "options": {
+          "detail": "high",
+          "maxTokens": 1500
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        400,
+        -360
+      ],
+      "id": "6b1af0db-c0b6-4062-b466-474f0d167202",
+      "name": "Analyze Car Wash Quality",
+      "credentials": {
+        "openAiApi": {
+          "id": "7Qo85TfYOyT5i3MU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the OpenAI analysis response\nconst aiResponse = $input.item.json.message;\nlet analysisResult;\n\ntry {\n  // Extract JSON from the response\n  const jsonMatch = aiResponse.match(/\\{[\\s\\S]*\\}/);\n  if (jsonMatch) {\n    analysisResult = JSON.parse(jsonMatch[0]);\n  } else {\n    throw new Error(\"No JSON found in response\");\n  }\n} catch (error) {\n  // Fallback if parsing fails\n  analysisResult = {\n    qualityScore: 0,\n    overallAssessment: \"fail\",\n    issues: [{\n      type: \"parsing_error\",\n      severity: \"high\",\n      location: \"system\",\n      description: \"Failed to parse AI response: \" + error.message\n    }],\n    recommendations: [\"Please retry the inspection\"]\n  };\n}\n\n// Add metadata from the file\nanalysisResult.timestamp = new Date().toISOString();\nanalysisResult.fileName = $('Google Drive Trigger - New Car Wash Photo').item.json.name;\nanalysisResult.fileId = $('Google Drive Trigger - New Car Wash Photo').item.json.id;\nanalysisResult.contractorId = extractContractorFromFileName(analysisResult.fileName);\nanalysisResult.inspectionId = generateInspectionId();\n\n// Helper functions\nfunction extractContractorFromFileName(fileName) {\n  // Extract contractor ID from filename\n  // Example: \"contractor123_location_date.jpg\" -> \"contractor123\"\n  const match = fileName.match(/^([^_]+)_/);\n  return match ? match[1] : 'unknown';\n}\n\nfunction generateInspectionId() {\n  return 'INS-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);\n}\n\nreturn {\n  json: analysisResult\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        -440
+      ],
+      "id": "b2330111-d855-4938-bdd2-cf2350b7e102",
+      "name": "Parse Analysis Results"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.overallAssessment }}",
+                    "rightValue": "fail",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "2cc9c0e1-cda6-42c1-839d-237c46d67ca6"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Failed Quality Check"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        -240
+      ],
+      "id": "53fef2c9-f716-415d-a855-befb6020227c",
+      "name": "Quality Check Router",
+      "outputNames": [
+        "Passed Quality Check"
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat"
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.6,
+      "position": [
+        940,
+        -560
+      ],
+      "id": "f7b72b52-e5d5-4cb6-a5b6-2cae7a6da5d0",
+      "name": "Generate Contractor Feedback",
+      "credentials": {
+        "openAiApi": {
+          "id": "7Qo85TfYOyT5i3MU",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "messageType": "block",
+        "blocksUi": {
+          "blocksValues": [
+            {
+              "type": "header",
+              "text": {
+                "type": "plain_text",
+                "text": "⚠️ Car Wash Quality Alert"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Inspection ID:* {{ $('Parse Analysis Results').item.json.inspectionId }}\\n*Quality Score:* {{ $('Parse Analysis Results').item.json.qualityScore }}/100\\n*Status:* ❌ FAILED\\n*Contractor:* {{ $('Parse Analysis Results').item.json.contractorId }}\\n*File:* {{ $('Parse Analysis Results').item.json.fileName }}"
+              }
+            },
+            {
+              "type": "divider"
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Issues Found:*\\n{{ $('Parse Analysis Results').item.json.issues.map((i, idx) => `${idx + 1}. *${i.type.replace('_', ' ')}* (${i.severity}): ${i.description} - _${i.location}_`).join('\\n') }}"
+              }
+            },
+            {
+              "type": "section",
+              "text": {
+                "type": "mrkdwn",
+                "text": "*Contractor Message:*\\n```{{ $json.message }}```"
+              }
+            }
+          ]
+        },
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1300,
+        -680
+      ],
+      "id": "85c50ab8-14b0-4471-928a-25a3d691e032",
+      "name": "Notify Slack - Failed",
+      "webhookId": "ab38f37c-6412-479b-a205-cf268801a0d4"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Parse Analysis Results').item.json.contractorId }}@yourcompany.com",
+        "subject": "🚨 Car Wash Quality Inspection Failed - Immediate Action Required",
+        "message": "<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;\">\n  <div style=\"background-color: #ff4444; color: white; padding: 20px; text-align: center;\">\n    <h1 style=\"margin: 0;\">Quality Inspection Failed</h1>\n  </div>\n  \n  <div style=\"padding: 20px; background-color: #f5f5f5;\">\n    <p><strong>Inspection ID:</strong> {{ $('Parse Analysis Results').item.json.inspectionId }}</p>\n    <p><strong>Date:</strong> {{ $('Parse Analysis Results').item.json.timestamp }}</p>\n    <p><strong>Quality Score:</strong> <span style=\"color: #ff4444; font-size: 24px; font-weight: bold;\">{{ $('Parse Analysis Results').item.json.qualityScore }}/100</span></p>\n    \n    <h2 style=\"color: #333;\">Issues Found:</h2>\n    <ul style=\"background-color: white; padding: 20px; border-radius: 5px;\">\n      {{ $('Parse Analysis Results').item.json.issues.map(i => `<li><strong>${i.type.replace('_', ' ')}:</strong> ${i.description} (${i.location}) - <span style=\"color: ${i.severity === 'high' ? '#ff4444' : i.severity === 'medium' ? '#ff9944' : '#ffcc44'}\">${i.severity.toUpperCase()}</span></li>`).join('') }}\n    </ul>\n    \n    <h2 style=\"color: #333;\">Required Actions:</h2>\n    <div style=\"background-color: white; padding: 20px; border-radius: 5px;\">\n      {{ $('Generate Contractor Feedback').item.json.message }}\n    </div>\n    \n    <div style=\"text-align: center; margin-top: 30px;\">\n      <p style=\"color: #666;\">Please address these issues immediately and resubmit photos for verification.</p>\n    </div>\n  </div>\n</div>",
+        "options": {
+          "replyTo": "quality@yourcarwash.com"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1240,
+        -340
+      ],
+      "id": "49d026d6-25f1-418d-a559-535bc44693a7",
+      "name": "Email Contractor - Failed",
+      "webhookId": "057efde5-541f-4bae-a08e-1c26f5700466"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "YOUR_GOOGLE_SHEET_ID"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Inspections"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Inspection ID": "={{ $('Parse Analysis Results').item.json.inspectionId }}",
+            "Timestamp": "={{ $('Parse Analysis Results').item.json.timestamp }}",
+            "Contractor ID": "={{ $('Parse Analysis Results').item.json.contractorId }}",
+            "File Name": "={{ $('Parse Analysis Results').item.json.fileName }}",
+            "Quality Score": "={{ $('Parse Analysis Results').item.json.qualityScore }}",
+            "Assessment": "={{ $('Parse Analysis Results').item.json.overallAssessment }}",
+            "Issues Count": "={{ $('Parse Analysis Results').item.json.issues.length }}",
+            "Issue Types": "={{ $('Parse Analysis Results').item.json.issues.map(i => i.type).join(', ') }}",
+            "Severities": "={{ $('Parse Analysis Results').item.json.issues.map(i => i.severity).join(', ') }}",
+            "Feedback Sent": "={{ $('Generate Contractor Feedback').item.json.message ? 'Yes' : 'No' }}"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1500,
+        -240
+      ],
+      "id": "1c423ac2-f4e4-4751-a232-3143209e4cdf",
+      "name": "Log to Google Sheets"
+    },
+    {
+      "parameters": {
+        "text": "✅ Car Wash Passed Quality Check\\n\\n*Inspection ID:* {{ $json.inspectionId }}\\n*Quality Score:* {{ $json.qualityScore }}/100\\n*Contractor:* {{ $json.contractorId }}\\n*File:* {{ $json.fileName }}\\n\\nNo significant issues found. Good work!",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1080,
+        -120
+      ],
+      "id": "f09a95b0-3633-42ea-b826-6ecb2f858bd6",
+      "name": "Notify Slack - Passed",
+      "webhookId": "603a68d4-d982-44e7-9331-c4922e02ee20"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Parse Analysis Results').item.json.issues.length > 0 }}",
+              "value2": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1720,
+        -360
+      ],
+      "id": "e4dbff2d-a3c0-49ab-932a-56f5a05a48bb",
+      "name": "Check for Issues"
+    },
+    {
+      "parameters": {
+        "content": "Car Wash Quality Control Workflow (Summary)\nThis workflow automatically:\n\nMonitors a Google Drive folder for new car wash photos\n\nUses GPT-4 Vision to analyze the images\n\nScores the quality and detects issues\n\nRoutes failed inspections for follow-up\n\nSends notifications and logs results\n\nSetup Instructions\nSet your Google Drive folder ID in the trigger node\n\nAdd credentials for Google Drive, Gmail, Slack, OpenAI, and Sheets\n\nUpdate Slack channels and email addresses as needed\n\nCreate a Google Sheet with these columns:\n\nInspection ID\n\nTimestamp\n\nContractor ID\n\nFile Name\n\nQuality Score\n\nAssessment\n\nIssues Count\n\nIssue Types\n\nSeverities\n\nFeedback Sent",
+        "height": 770,
+        "width": 803
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        -660
+      ],
+      "id": "6a239ff1-3059-446a-9ed7-db424af3780a",
+      "name": "Setup Instructions"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Drive Trigger - New Car Wash Photo": {
+      "main": [
+        [
+          {
+            "node": "Download Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Image": {
+      "main": [
+        [
+          {
+            "node": "Analyze Car Wash Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Car Wash Quality": {
+      "main": [
+        [
+          {
+            "node": "Parse Analysis Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Analysis Results": {
+      "main": [
+        [
+          {
+            "node": "Quality Check Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Check Router": {
+      "main": [
+        [
+          {
+            "node": "Generate Contractor Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Slack - Passed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Contractor Feedback": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack - Failed",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email Contractor - Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Slack - Failed": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Contractor - Failed": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Slack - Passed": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Check for Issues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "cbc75f3c-97b5-4d27-b4ea-2cd0844a20ee",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4ed796176a6601af9b5b4ff548e03860dc98e2e6d5b53550d2f85a6fe585ad17"
+  },
+  "id": "7OmbjT7l3xWNDatC",
+  "tags": []
+}

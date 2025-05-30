@@ -157,36 +157,18 @@ class UniversalDataTransformer:
         source_name: str
     ) -> List[Dict]:
         """
-        Apply ChatGPT's smart filtering strategy with emergency DexScreener protection
+        Apply smart filtering strategy respecting user configuration
         """
         try:
-            # EMERGENCY: Ultra-aggressive DexScreener filtering
-            if 'dexscreener' in source_name.lower():
-                logger.warning(f"🚨 EMERGENCY: DexScreener ultra-filtering activated")
-                max_records = min(max_records, 2)  # Force maximum 2 records
-                
-                # Ultra-minimal essential fields only
-                essential_fields = [
-                    'baseToken.symbol', 'baseToken.name', 
-                    'priceUsd', 'liquidity.usd', 'volume.h24'
-                ]
-                target_fields = essential_fields
-                
-                # Remove all noise fields
-                exclude_fields = [
-                    'info', 'labels', 'boosts', 'profile', 'websites', 'socials',
-                    'quoteToken', 'pairCreatedAt', 'chainId', 'dexId', 'url',
-                    'priceNative', 'priceChange', 'txns', 'marketCap', 'fdv'
-                ]
-                
-                logger.warning(f"🚨 DexScreener emergency limits: max_records={max_records}, fields={len(essential_fields)}")
+            # Respect user configuration - no more emergency overrides!
+            logger.info(f"🎯 Applying smart filtering: max_records={max_records}, target_fields={len(target_fields)}, exclude_fields={len(exclude_fields)}")
             
-            # Step 1: Limit number of records first
+            # Step 1: Limit number of records based on user setting
             if len(records_data) > max_records:
                 records_data = records_data[:max_records]
                 logger.info(f"🎯 Limited to {max_records} records (was {len(records_data)})")
             
-            # Step 2: Apply field filtering
+            # Step 2: Apply field filtering based on user configuration
             if target_fields or exclude_fields:
                 filtered_records = []
                 for record in records_data:
@@ -195,7 +177,12 @@ class UniversalDataTransformer:
                 records_data = filtered_records
                 logger.info(f"🎯 Applied field filtering: include={len(target_fields)}, exclude={len(exclude_fields)}")
             
-            # Step 3: Apply source-specific optimizations
+            # Step 3: Apply source-specific optimizations (user-friendly suggestions, not overrides)
+            if 'dexscreener' in source_name.lower() and not target_fields and not exclude_fields:
+                # Provide helpful defaults for DexScreener, but don't force them
+                logger.info(f"💡 DexScreener detected - consider using target fields like: baseToken.symbol, priceUsd, liquidity.usd")
+            
+            # Step 4: Apply source-specific optimizations
             optimized_records = []
             for record in records_data:
                 optimized_record = self._apply_source_specific_filtering(record, source_name)

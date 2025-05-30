@@ -49,13 +49,11 @@ class AgentNode:
                 node_data = node.data
                 node_id = node.id
             
-            # Get agent configuration with emergency token limiting
+            # Get agent configuration
             max_tokens = int(node_data.get("max_tokens", 4000))
             
-            # EMERGENCY: Force token limits for crypto data
-            if any('dexscreener' in str(value).lower() for value in inputs.values()):
-                max_tokens = min(max_tokens, 300)  # Emergency limit for DexScreener
-                logger.warning(f"🚨 EMERGENCY: DexScreener detected - limiting agent to {max_tokens} tokens")
+            # Respect user configuration - no more emergency overrides!
+            logger.info(f"🤖 Using user-configured max_tokens: {max_tokens}")
             
             agent_config = {
                 "role": node_data.get("role", "Assistant"),
@@ -175,29 +173,116 @@ class AgentNode:
         Extract the main query/task from inputs with enhanced handling for standardized data
         """
         try:
-            # Check for explicit query keys first
+            # DEBUG: Log what the agent is actually receiving
+            logger.info(f"🔧 DEBUG: Agent received {len(inputs)} inputs")
+            for key, value in inputs.items():
+                logger.info(f"🔧 DEBUG: Input '{key}': type={type(value)}")
+                if isinstance(value, dict):
+                    logger.info(f"🔧 DEBUG: Input '{key}' dict keys: {list(value.keys())}")
+                    if 'type' in value:
+                        logger.info(f"🔧 DEBUG: Input '{key}' has type: {value.get('type')}")
+                        if value.get('type') == 'api_data':
+                            logger.info(f"🔧 DEBUG: Found api_data! Service: {value.get('service_name', 'unknown')}")
+                elif hasattr(value, 'value'):
+                    logger.info(f"🔧 DEBUG: Input '{key}' has value attribute: {type(value.value)}")
+            
+            # PRIORITY 1: Check for explicit query keys first
             for key in ['query', 'task', 'prompt', 'message', 'input']:
                 if key in inputs and inputs[key]:
+                    logger.info(f"🔧 DEBUG: Using explicit query from '{key}'")
                     return str(inputs[key])
             
-            # Handle standardized API data from universal transformer
+            # PRIORITY 2: Handle API data from triggers - CRITICAL PATH
+            api_data_found = False
+            
+            # NEW: Check for nested value structure first (most common case)
             for input_key, input_value in inputs.items():
-                if isinstance(input_value, dict):
-                    # Check for api_data type (from triggers)
-                    if input_value.get('type') == 'api_data':
-                        api_data = input_value.get('api_data', {})
-                        service_name = input_value.get('service_name', 'Unknown API')
-                        smart_filtering_enabled = input_value.get('smart_filtering_enabled', False)
+                if isinstance(input_value, dict) and 'value' in input_value:
+                    nested_value = input_value.get('value', {})
+                    if isinstance(nested_value, dict) and nested_value.get('type') == 'api_data':
+                        api_data_found = True
+                        logger.info(f"🚨 CRITICAL: Found api_data in nested value for input '{input_key}'")
                         
-                        # Use the already-transformed data instead of raw data
+                        api_data = nested_value.get('api_data', {})
+                        service_name = nested_value.get('service_name', 'Unknown API')
+                        smart_filtering_enabled = nested_value.get('smart_filtering_enabled', False)
+                        
+                        logger.info(f"🚨 Service: {service_name}, Smart filtering: {smart_filtering_enabled}")
+                        logger.info(f"🚨 API data keys: {list(api_data.keys()) if isinstance(api_data, dict) else 'not dict'}")
+                        
+                        # Handle DexScreener data with ultra-compact processing
                         if 'dexscreener' in service_name.lower():
-                            # The data transformer has already done the heavy lifting
-                            # Just use the clean, filtered data
                             records = api_data.get('records', [])
                             transformation_summary = api_data.get('transformation_summary', {})
                             
-                            logger.info(f"🚨 EMERGENCY: Using pre-filtered DexScreener data: {len(records)} records")
+                            logger.info(f"🚨 EMERGENCY: Processing DexScreener data from nested value: {len(records)} records")
                             
+                            if records:
+                                # Create ultra-compact summary from already-filtered data
+                                crypto_summary = []
+                                for i, record in enumerate(records[:2], 1):  # Max 2 records
+                                    fields = record.get('fields', {})
+                                    symbol = fields.get('Symbol', 'Unknown')
+                                    name = fields.get('Base Token', 'Unknown')
+                                    price = fields.get('Price (USD)', '0')
+                                    liquidity = fields.get('Liquidity', '0')
+                                    volume = fields.get('Volume', '0')
+                                    
+                                    crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
+                                
+                                # Ultra-minimal prompt (under 500 tokens total)
+                                query = f"""DexScreener crypto data analysis:
+
+📊 DATA ({len(records)} filtered tokens):
+{chr(10).join(crypto_summary)}
+
+Create a 2-line market digest:
+• Token highlights
+• Brief insight
+
+Keep under 100 words total."""
+                                
+                                logger.info(f"✅ Generated DexScreener query from nested value with {len(crypto_summary)} tokens")
+                                return query
+                            else:
+                                logger.warning("🚨 No records found in DexScreener nested value data")
+                                return "No DexScreener data available for analysis."
+                        
+                        # For other APIs, use the transformed data
+                        transformation_summary = api_data.get('transformation_summary', {})
+                        total_records = transformation_summary.get('total_records', 0)
+                        
+                        # Use only the summary, not the full data
+                        query = f"""Analyze {service_name} data:
+- Records: {total_records}
+- Smart filtering: {'Yes' if smart_filtering_enabled else 'No'}
+
+Provide brief insights based on your role."""
+                        
+                        logger.info(f"✅ Generated query for {service_name} from nested value")
+                        return query
+            
+            # EXISTING: Check for direct api_data structure
+            for input_key, input_value in inputs.items():
+                if isinstance(input_value, dict) and input_value.get('type') == 'api_data':
+                    api_data_found = True
+                    logger.info(f"🚨 CRITICAL: Found api_data in direct structure for input '{input_key}'")
+                    
+                    api_data = input_value.get('api_data', {})
+                    service_name = input_value.get('service_name', 'Unknown API')
+                    smart_filtering_enabled = input_value.get('smart_filtering_enabled', False)
+                    
+                    logger.info(f"🚨 Service: {service_name}, Smart filtering: {smart_filtering_enabled}")
+                    logger.info(f"🚨 API data keys: {list(api_data.keys()) if isinstance(api_data, dict) else 'not dict'}")
+                    
+                    # Handle DexScreener data with ultra-compact processing
+                    if 'dexscreener' in service_name.lower():
+                        records = api_data.get('records', [])
+                        transformation_summary = api_data.get('transformation_summary', {})
+                        
+                        logger.info(f"🚨 EMERGENCY: Processing DexScreener data from direct structure: {len(records)} records")
+                        
+                        if records:
                             # Create ultra-compact summary from already-filtered data
                             crypto_summary = []
                             for i, record in enumerate(records[:2], 1):  # Max 2 records
@@ -222,27 +307,64 @@ Create a 2-line market digest:
 
 Keep under 100 words total."""
                             
+                            logger.info(f"✅ Generated DexScreener query from direct structure with {len(crypto_summary)} tokens")
                             return query
-                        
-                        # For other APIs, use the transformed data
-                        transformation_summary = api_data.get('transformation_summary', {})
-                        total_records = transformation_summary.get('total_records', 0)
-                        
-                        # Use only the summary, not the full data
-                        query = f"""Analyze {service_name} data:
-- Records: {total_records}
-- Smart filtering: {'Yes' if smart_filtering_enabled else 'No'}
-
-Provide brief insights based on your role."""
-                        
-                        return query
-                    
-                    # Handle other data types
-                    elif input_value.get('type') in ['webhook', 'schedule', 'file']:
-                        data_content = input_value.get('data', input_value.get('content', ''))
-                        return f"Process this {input_value.get('type')} data: {str(data_content)[:500]}"
+                        else:
+                            logger.warning("🚨 No records found in DexScreener direct structure data")
+                            return "No DexScreener data available for analysis."
             
-            # Handle text inputs
+            # PRIORITY 3: Check for NodeData wrappers
+            for input_key, input_value in inputs.items():
+                if hasattr(input_value, 'value') and isinstance(input_value.value, dict):
+                    logger.info(f"🔧 DEBUG: Checking NodeData wrapper for input '{input_key}'")
+                    wrapped_value = input_value.value
+                    if wrapped_value.get('type') == 'api_data':
+                        api_data_found = True
+                        logger.info(f"🚨 CRITICAL: Found api_data in NodeData wrapper '{input_key}'")
+                        
+                        api_data = wrapped_value.get('api_data', {})
+                        service_name = wrapped_value.get('service_name', 'Unknown API')
+                        smart_filtering_enabled = wrapped_value.get('smart_filtering_enabled', False)
+                        
+                        # Handle DexScreener data with ultra-compact processing
+                        if 'dexscreener' in service_name.lower():
+                            records = api_data.get('records', [])
+                            transformation_summary = api_data.get('transformation_summary', {})
+                            
+                            logger.info(f"🚨 EMERGENCY: Processing DexScreener data from NodeData: {len(records)} records")
+                            
+                            if records:
+                                # Create ultra-compact summary from already-filtered data
+                                crypto_summary = []
+                                for i, record in enumerate(records[:2], 1):  # Max 2 records
+                                    fields = record.get('fields', {})
+                                    symbol = fields.get('Symbol', 'Unknown')
+                                    name = fields.get('Base Token', 'Unknown')
+                                    price = fields.get('Price (USD)', '0')
+                                    liquidity = fields.get('Liquidity', '0')
+                                    volume = fields.get('Volume', '0')
+                                    
+                                    crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
+                                
+                                # Ultra-minimal prompt (under 500 tokens total)
+                                query = f"""DexScreener crypto data analysis:
+
+📊 DATA ({len(records)} filtered tokens):
+{chr(10).join(crypto_summary)}
+
+Create a 2-line market digest:
+• Token highlights
+• Brief insight
+
+Keep under 100 words total."""
+                                
+                                logger.info(f"✅ Generated DexScreener query from NodeData with {len(crypto_summary)} tokens")
+                                return query
+                            else:
+                                logger.warning("🚨 No records found in DexScreener NodeData")
+                                return "No DexScreener data available for analysis."
+            
+            # PRIORITY 4: Handle text inputs
             text_inputs = []
             for input_key, input_value in inputs.items():
                 if isinstance(input_value, str) and input_value.strip():
@@ -251,14 +373,22 @@ Provide brief insights based on your role."""
                     text_inputs.append(str(input_value['text']).strip())
             
             if text_inputs:
+                logger.info(f"🔧 DEBUG: Using text inputs: {len(text_inputs)} items")
                 return " ".join(text_inputs)
             
-            # Fallback to agent's goal
+            # PRIORITY 5: Fallback to agent's goal
             agent_goal = node_data.get('goal', '')
             if agent_goal:
+                logger.info(f"🔧 DEBUG: Falling back to agent goal")
                 return f"Execute your goal: {agent_goal}"
             
-            return "Please provide assistance based on your role and expertise."
+            # FINAL FALLBACK
+            if api_data_found:
+                logger.warning("🚨 API data was found but couldn't be processed - using fallback")
+                return "Analyze the provided API data and provide insights based on your role."
+            else:
+                logger.warning("🚨 No API data found in any inputs - using generic fallback")
+                return "Please provide assistance based on your role and expertise."
             
         except Exception as e:
             logger.error(f"Error extracting main query: {str(e)}")

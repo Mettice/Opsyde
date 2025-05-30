@@ -761,6 +761,251 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
             )}
           </div>
 
+          {/* SIMPLIFIED: Universal Data Selection */}
+          <div className="mb-4">
+            <div className="bg-gradient-to-r from-blue-50 to-green-50 p-4 rounded-lg border border-blue-200">
+              <h3 className="font-semibold text-blue-800 mb-2">🎯 Data Selection Workflow</h3>
+              <p className="text-sm text-blue-700 mb-3">
+                Control what data reaches your agent. Review detected changes before processing.
+              </p>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="requireDataApproval"
+                      checked={formData.requireDataApproval || false}
+                      onChange={(e) => handleInputChange({ target: { name: 'requireDataApproval', value: e.target.checked } })}
+                      className="mr-2"
+                    />
+                    <span className="font-medium text-blue-800">🔍 Review Data Before Agent Processing</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!formData.apiEndpoint) {
+                        toast.error('Please set API endpoint first');
+                        return;
+                      }
+                      
+                      try {
+                        toast.loading('🔍 Discovering available fields...', { id: 'discover-fields' });
+                        
+                        const response = await fetch('http://localhost:8000/api/triggers/debug/test-api-polling-simple', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            apiEndpoint: formData.apiEndpoint,
+                            authType: formData.authType || 'none',
+                            apiKey: formData.apiKey || '',
+                            bearerToken: formData.bearerToken || '',
+                            username: formData.username || '',
+                            password: formData.password || '',
+                            serviceName: formData.serviceName || 'Unknown API'
+                          })
+                        });
+                        
+                        if (response.ok) {
+                          const result = await response.json();
+                          if (result.success && result.sample_data) {
+                            // Smart field extraction for different API types
+                            const extractSmartFields = (data) => {
+                              let fieldsToExtract = [];
+                              
+                              // Handle CSV parsed data (Google Sheets)
+                              if (data.source === 'csv_parsed' && data.headers && data.records) {
+                                // For CSV data, the fields are simply the column headers
+                                fieldsToExtract = data.headers.map((header, index) => `records[0].${header}`);
+                                console.log('🔍 Detected CSV format, extracted column headers as fields:', fieldsToExtract);
+                                return fieldsToExtract;
+                              }
+                              
+                              // Handle Airtable format: { records: [{ fields: {...} }] }
+                              if (data.records && Array.isArray(data.records) && data.records.length > 0) {
+                                const firstRecord = data.records[0];
+                                if (firstRecord.fields) {
+                                  fieldsToExtract = Object.keys(firstRecord.fields).map(field => `records[0].fields.${field}`);
+                                  console.log('🔍 Detected Airtable format, extracted fields:', fieldsToExtract);
+                                }
+                              }
+                              // Handle DexScreener format: { pairs: [...] } or direct array
+                              else if (data.pairs && Array.isArray(data.pairs) && data.pairs.length > 0) {
+                                const extractFields = (obj, prefix = '') => {
+                                  const fields = [];
+                                  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+                                    for (const [key, value] of Object.entries(obj)) {
+                                      const fieldPath = prefix ? `${prefix}.${key}` : key;
+                                      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                                        fields.push(fieldPath);
+                                        const nestedFields = extractFields(value, fieldPath);
+                                        fields.push(...nestedFields);
+                                      } else {
+                                        fields.push(fieldPath);
+                                      }
+                                    }
+                                  }
+                                  return fields;
+                                };
+                                fieldsToExtract = extractFields(data.pairs[0], 'pairs[0]');
+                                console.log('🔍 Detected structured API format, extracted fields:', fieldsToExtract);
+                              }
+                              // Handle direct array format
+                              else if (Array.isArray(data) && data.length > 0) {
+                                const extractFields = (obj, prefix = '') => {
+                                  const fields = [];
+                                  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+                                    for (const [key, value] of Object.entries(obj)) {
+                                      const fieldPath = prefix ? `${prefix}.${key}` : key;
+                                      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                                        fields.push(fieldPath);
+                                        const nestedFields = extractFields(value, fieldPath);
+                                        fields.push(...nestedFields);
+                                      } else {
+                                        fields.push(fieldPath);
+                                      }
+                                    }
+                                  }
+                                  return fields;
+                                };
+                                fieldsToExtract = extractFields(data[0], '[0]');
+                                console.log('🔍 Detected direct array format, extracted fields:', fieldsToExtract);
+                              }
+                              // Handle generic object
+                              else if (typeof data === 'object') {
+                                const extractFields = (obj, prefix = '') => {
+                                  const fields = [];
+                                  if (typeof obj === 'object' && obj !== null && !Array.isArray(obj)) {
+                                    for (const [key, value] of Object.entries(obj)) {
+                                      const fieldPath = prefix ? `${prefix}.${key}` : key;
+                                      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                                        fields.push(fieldPath);
+                                        const nestedFields = extractFields(value, fieldPath);
+                                        fields.push(...nestedFields);
+                                      } else {
+                                        fields.push(fieldPath);
+                                      }
+                                    }
+                                  }
+                                  return fields;
+                                };
+                                fieldsToExtract = extractFields(data);
+                                console.log('🔍 Detected generic object format, extracted fields:', fieldsToExtract);
+                              }
+                              
+                              return fieldsToExtract;
+                            };
+                            
+                            const discoveredFields = extractSmartFields(result.sample_data);
+                            handleInputChange({ target: { name: 'discoveredFields', value: discoveredFields } });
+                            handleInputChange({ target: { name: 'showFieldSelection', value: true } });
+                            
+                            toast.success(`✅ Discovered ${discoveredFields.length} fields!`, {
+                              id: 'discover-fields',
+                              duration: 3000
+                            });
+                          } else {
+                            toast.error('Failed to discover fields', { id: 'discover-fields' });
+                          }
+                        } else {
+                          toast.error('Failed to connect to API', { id: 'discover-fields' });
+                        }
+                      } catch (error) {
+                        toast.error(`Error: ${error.message}`, { id: 'discover-fields' });
+                      }
+                    }}
+                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
+                  >
+                    🔍 Discover Fields
+                  </button>
+                </div>
+                
+                {formData.requireDataApproval ? (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded text-sm">
+                    <strong>✅ Interactive Mode:</strong> When data changes are detected, you'll review and select what to send to your agent.
+                    <br />
+                    <span className="text-green-700">Perfect for ensuring your agent only processes relevant data!</span>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+                    <strong>⚡ Auto Mode:</strong> All detected changes will automatically be sent to your agent.
+                    <br />
+                    <span className="text-yellow-700">Enable "Review Data" for more control over what your agent processes.</span>
+                  </div>
+                )}
+                
+                {/* Field Selection (only show if fields discovered) */}
+                {formData.showFieldSelection && formData.discoveredFields && formData.discoveredFields.length > 0 && (
+                  <div className="p-3 bg-white border border-blue-300 rounded">
+                    <div className="mb-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Available Fields ({formData.discoveredFields.length})
+                      </label>
+                      <p className="text-xs text-gray-600 mb-2">
+                        Select which fields to monitor for changes. Only changes in selected fields will trigger your workflow.
+                      </p>
+                    </div>
+                    
+                    <div className="max-h-32 overflow-y-auto border border-gray-200 rounded p-2">
+                      <div className="grid grid-cols-1 gap-1">
+                        {formData.discoveredFields.map((field, index) => (
+                          <label key={index} className="flex items-center text-sm">
+                            <input
+                              type="checkbox"
+                              checked={(formData.selectedFields || []).includes(field)}
+                              onChange={(e) => {
+                                const currentFields = formData.selectedFields || [];
+                                const newFields = e.target.checked 
+                                  ? [...currentFields, field]
+                                  : currentFields.filter(f => f !== field);
+                                handleInputChange({ target: { name: 'selectedFields', value: newFields } });
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="font-mono text-xs text-gray-700">{field}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* Quick selection buttons */}
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleInputChange({ target: { name: 'selectedFields', value: formData.discoveredFields } });
+                        }}
+                        className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
+                      >
+                        ✅ Select All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleInputChange({ target: { name: 'selectedFields', value: [] } });
+                        }}
+                        className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded"
+                      >
+                        🗑️ Clear All
+                      </button>
+                    </div>
+                    
+                    {/* Selection summary */}
+                    {formData.selectedFields && formData.selectedFields.length > 0 && (
+                      <div className="mt-3 p-2 bg-blue-100 border border-blue-300 rounded text-xs">
+                        <strong>✅ Monitoring {formData.selectedFields.length} fields:</strong>
+                        <div className="mt-1 font-mono">
+                          {formData.selectedFields.slice(0, 3).join(', ')}
+                          {formData.selectedFields.length > 3 && ` ... and ${formData.selectedFields.length - 3} more`}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* NEW: Field Filtering Section */}
           <div className="mb-4">
             <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
@@ -944,6 +1189,226 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
             </div>
           </div>
 
+          {/* Smart Endpoint Guidance - Universal Detection */}
+          {formData.apiEndpoint && (
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
+              <strong>🔍 Smart Endpoint Analysis:</strong>
+              <div className="mt-2">
+                {(() => {
+                  const url = formData.apiEndpoint.toLowerCase();
+                  
+                  // DexScreener Detection
+                  if (url.includes('dexscreener.com')) {
+                    if (url.includes('token-boosts')) {
+                      return (
+                        <div className="space-y-2">
+                          <div className="p-2 bg-yellow-100 border border-yellow-300 rounded">
+                            <strong>⚠️ Token Boosts Endpoint Detected</strong>
+                            <p className="text-yellow-700 mt-1">
+                              This endpoint provides promotion data, not trading data (price, volume, market cap).
+                            </p>
+                          </div>
+                          <div className="text-blue-700">
+                            <strong>💡 For Trading Data, Consider:</strong>
+                            <ul className="mt-1 ml-4 list-disc">
+                              <li><code>/latest/dex/search?q=TOKEN</code> - Search for specific tokens</li>
+                              <li><code>/latest/dex/pairs/CHAIN/ADDRESS</code> - Specific pair data</li>
+                              <li><code>/token-profiles/latest/v1</code> - Token profiles with metadata</li>
+                            </ul>
+                          </div>
+                        </div>
+                      );
+                    } else if (url.includes('/search')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ Trading Data Endpoint</strong>
+                          <p className="text-green-700 mt-1">
+                            This endpoint provides trading data: price, volume, liquidity, market cap.
+                          </p>
+                        </div>
+                      );
+                    } else if (url.includes('/pairs/')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ Specific Pair Endpoint</strong>
+                          <p className="text-green-700 mt-1">
+                            This endpoint provides detailed data for a specific trading pair.
+                          </p>
+                        </div>
+                      );
+                    } else if (url.includes('token-profiles')) {
+                      return (
+                        <div className="p-2 bg-blue-100 border border-blue-300 rounded">
+                          <strong>📊 Token Profiles Endpoint</strong>
+                          <p className="text-blue-700 mt-1">
+                            This endpoint provides token metadata and profile information.
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="p-2 bg-gray-100 border border-gray-300 rounded">
+                          <strong>🤔 Unknown DexScreener Endpoint</strong>
+                          <p className="text-gray-700 mt-1">
+                            Use "Preview Data" to see what this endpoint returns.
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // Airtable Detection
+                  else if (url.includes('airtable.com')) {
+                    if (url.includes('api.airtable.com')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ Airtable API Endpoint</strong>
+                          <p className="text-green-700 mt-1">
+                            This will return records from your Airtable base. Make sure you have the correct API key.
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded">
+                          <strong>⚠️ Airtable Web URL Detected</strong>
+                          <p className="text-yellow-700 mt-1">
+                            This looks like a web URL. For API access, use: <code>https://api.airtable.com/v0/BASE_ID/TABLE_NAME</code>
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // Google Sheets Detection
+                  else if (url.includes('docs.google.com') || url.includes('sheets.googleapis.com')) {
+                    if (url.includes('/export?format=csv')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ Google Sheets CSV Export</strong>
+                          <p className="text-green-700 mt-1">
+                            This will return CSV data. Make sure the sheet is publicly accessible.
+                          </p>
+                        </div>
+                      );
+                    } else if (url.includes('sheets.googleapis.com')) {
+                      return (
+                        <div className="p-2 bg-blue-100 border border-blue-300 rounded">
+                          <strong>📊 Google Sheets API</strong>
+                          <p className="text-blue-700 mt-1">
+                            This uses the official Google Sheets API. Ensure you have proper authentication.
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded">
+                          <strong>⚠️ Google Sheets Web URL</strong>
+                          <p className="text-yellow-700 mt-1">
+                            For API access, use the CSV export URL or Google Sheets API endpoint.
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // GitHub Detection
+                  else if (url.includes('github.com') || url.includes('api.github.com')) {
+                    if (url.includes('api.github.com')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ GitHub API Endpoint</strong>
+                          <p className="text-green-700 mt-1">
+                            This will return GitHub data (repos, issues, etc.). Consider rate limits.
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded">
+                          <strong>⚠️ GitHub Web URL</strong>
+                          <p className="text-yellow-700 mt-1">
+                            For API access, use: <code>https://api.github.com/repos/OWNER/REPO/issues</code>
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // Notion Detection
+                  else if (url.includes('notion.com') || url.includes('api.notion.com')) {
+                    if (url.includes('api.notion.com')) {
+                      return (
+                        <div className="p-2 bg-green-100 border border-green-300 rounded">
+                          <strong>✅ Notion API Endpoint</strong>
+                          <p className="text-green-700 mt-1">
+                            This will return Notion database or page data. Ensure proper integration setup.
+                          </p>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div className="p-2 bg-yellow-100 border border-yellow-300 rounded">
+                          <strong>⚠️ Notion Web URL</strong>
+                          <p className="text-yellow-700 mt-1">
+                            For API access, use: <code>https://api.notion.com/v1/databases/DATABASE_ID/query</code>
+                          </p>
+                        </div>
+                      );
+                    }
+                  }
+                  
+                  // Slack Detection
+                  else if (url.includes('slack.com')) {
+                    return (
+                      <div className="p-2 bg-blue-100 border border-blue-300 rounded">
+                        <strong>📱 Slack API Endpoint</strong>
+                        <p className="text-blue-700 mt-1">
+                          This will return Slack data. Make sure you have proper bot permissions and tokens.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  // Generic API Detection
+                  else if (url.includes('api.') || url.includes('/api/')) {
+                    return (
+                      <div className="p-2 bg-blue-100 border border-blue-300 rounded">
+                        <strong>🔗 API Endpoint Detected</strong>
+                        <p className="text-blue-700 mt-1">
+                          This appears to be an API endpoint. Use "Preview Data" to see the response structure.
+                        </p>
+                      </div>
+                    );
+                  }
+                  
+                  // Unknown/Generic URL
+                  else {
+                    return (
+                      <div className="p-2 bg-gray-100 border border-gray-300 rounded">
+                        <strong>🤔 Unknown Endpoint Type</strong>
+                        <p className="text-gray-700 mt-1">
+                          Use "Preview Data" to test this endpoint and see what data it returns.
+                        </p>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+              
+              {/* Universal Guidance */}
+              <div className="mt-3 p-2 bg-white border border-blue-300 rounded">
+                <strong>💡 Universal Tips:</strong>
+                <ul className="mt-1 ml-4 list-disc text-blue-700">
+                  <li>Use "Preview Data" to see exactly what this endpoint returns</li>
+                  <li>Check authentication requirements for your specific service</li>
+                  <li>Consider rate limits and polling frequency</li>
+                  <li>Test with a longer polling interval first (5+ minutes)</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* AI-Powered Test API Connection Button */}
           <div className="mb-4">
             <div className="flex gap-2">
@@ -1001,7 +1466,14 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                       username: formData.username || '',
                       password: formData.password || '',
                       changeDetectionMethod: formData.changeDetectionMethod || 'array_length',
-                      serviceName: formData.serviceName || 'Unknown API'
+                      serviceName: formData.serviceName || 'Unknown API',
+                      // ADD FIELD FILTERING TO PREVIEW
+                      selectedFields: formData.selectedFields || [],
+                      targetFields: formData.targetFields || [],
+                      excludeFields: formData.excludeFields || [],
+                      summaryMode: formData.summaryMode || false,
+                      maxRecords: formData.maxRecords || 10,
+                      maxTokens: formData.maxTokens || 4000
                     };
                     
                     console.log('🔍 Request body:', requestBody);
@@ -1037,6 +1509,27 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                       // Create a user-friendly data preview
                       let previewText = "📊 Data Structure Preview:\n\n";
                       
+                      // Show filtering status
+                      if (result.filtering_applied) {
+                        const selectedCount = (formData.selectedFields || []).length;
+                        const targetCount = (formData.targetFields || []).length;
+                        const excludeCount = (formData.excludeFields || []).length;
+                        
+                        previewText += "🎯 FILTERED DATA (What Your Agent Will Receive):\n";
+                        if (selectedCount > 0) {
+                          previewText += `✅ Selected ${selectedCount} specific fields\n`;
+                        }
+                        if (targetCount > 0) {
+                          previewText += `✅ Including ${targetCount} target fields\n`;
+                        }
+                        if (excludeCount > 0) {
+                          previewText += `✅ Excluding ${excludeCount} unwanted fields\n`;
+                        }
+                        previewText += "\n";
+                      } else {
+                        previewText += "📋 RAW DATA (No filtering applied):\n\n";
+                      }
+                      
                       // Analyze the data structure for better display
                       const data = result.sample_data;
                       
@@ -1047,8 +1540,29 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                           previewText += `📄 First item:\n${JSON.stringify(data[0], null, 2)}`;
                         }
                       } else if (typeof data === 'object' && data !== null) {
+                        // Check for CSV parsed data (Google Sheets)
+                        if (data.source === 'csv_parsed' && data.headers && data.records) {
+                          previewText += `📊 Google Sheets CSV: ${data.total_rows} rows, ${data.total_columns} columns\n`;
+                          previewText += `🔑 Column headers: ${data.headers.join(', ')}\n\n`;
+                          
+                          if (data.records.length > 0) {
+                            previewText += `📄 Sample record (first row):\n`;
+                            const firstRecord = data.records[0];
+                            for (const [key, value] of Object.entries(firstRecord)) {
+                              previewText += `  ${key}: "${value}"\n`;
+                            }
+                            
+                            if (data.records.length > 1) {
+                              previewText += `\n📄 Second record:\n`;
+                              const secondRecord = data.records[1];
+                              for (const [key, value] of Object.entries(secondRecord)) {
+                                previewText += `  ${key}: "${value}"\n`;
+                              }
+                            }
+                          }
+                        }
                         // Check for common patterns
-                        if (data.records && Array.isArray(data.records)) {
+                        else if (data.records && Array.isArray(data.records)) {
                           previewText += `📊 Airtable-style: ${data.records.length} records\n`;
                           if (data.records.length > 0) {
                             const firstRecord = data.records[0];
@@ -1079,7 +1593,13 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
                         previewText = previewText.substring(0, 800) + '\n\n... (truncated)';
                       }
                       
-                      previewText += '\n\n💡 This is what your agent will receive!';
+                      if (result.filtering_applied) {
+                        previewText += '\n\n🎯 This filtered data is what your agent will receive!';
+                        previewText += '\n💡 Raw data has been filtered based on your field selections.';
+                      } else {
+                        previewText += '\n\n📋 This raw data is what your agent will receive!';
+                        previewText += '\n💡 No field filtering applied - agent gets all data.';
+                      }
                       
                       toast.success(previewText, {
                         id: 'preview-data',
@@ -1120,13 +1640,23 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
               <button
                 type="button"
                 onClick={async () => {
-                  if (!formData.apiEndpoint) {
-                    toast.error('Please enter an API endpoint first');
-                    return;
-                  }
-                  
                   try {
                     toast.loading('🤖 AI is analyzing your API...', { id: 'test-connection' });
+                    
+                    // Check if this is a CSV endpoint (Google Sheets, etc.)
+                    if (formData.apiEndpoint && (formData.apiEndpoint.includes('output=csv') || formData.apiEndpoint.includes('export?format=csv'))) {
+                      // For CSV endpoints, use the simple test instead of AI analysis
+                      toast.success('📊 CSV endpoint detected - using simple analysis instead of AI', {
+                        id: 'test-connection',
+                        duration: 3000
+                      });
+                      
+                      // Trigger the simple preview instead
+                      setTimeout(() => {
+                        document.querySelector('button[onclick*="preview-data"]')?.click();
+                      }, 500);
+                      return;
+                    }
                     
                     // Use the backend debug endpoint with AI analysis
                     const response = await fetch('http://localhost:8000/api/triggers/debug/test-api-polling', {
@@ -1428,6 +1958,117 @@ const TriggerEditor = ({ formData, handleInputChange }) => {
               </div>
             </div>
           )}
+
+          {/* Test Data Approval Workflow */}
+          <div className="mb-4">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!formData.apiEndpoint) {
+                    toast.error('Please set API endpoint first');
+                    return;
+                  }
+                  
+                  try {
+                    toast.loading('🔍 Testing data approval workflow...', { id: 'test-approval' });
+                    
+                    // Simulate the approval workflow
+                    const mockChanges = [
+                      {
+                        type: "new",
+                        id: "record_1",
+                        data: {
+                          "baseToken.symbol": "PEPE",
+                          "priceUsd": "0.00001234",
+                          "volume.h24": 1000000,
+                          "liquidity.usd": 500000
+                        }
+                      },
+                      {
+                        type: "modified",
+                        id: "record_2", 
+                        data: {
+                          "baseToken.symbol": "DOGE",
+                          "priceUsd": "0.08456",
+                          "volume.h24": 2000000,
+                          "liquidity.usd": 750000
+                        }
+                      }
+                    ];
+                    
+                    // Show approval interface
+                    const approvalMessage = `
+🔍 Data Approval Required
+
+${mockChanges.length} changes detected:
+• ${mockChanges.filter(r => r.type === 'new').length} new records
+• ${mockChanges.filter(r => r.type === 'modified').length} modified records
+
+Selected Fields: ${(formData.selectedFields || ['All fields']).join(', ')}
+
+In the real workflow:
+1. ✅ You review the actual data
+2. ✅ Select which records to process  
+3. ✅ Agent only gets approved data
+4. ✅ Future polling uses same settings
+
+This prevents unwanted data from reaching your agent!
+                    `;
+                    
+                    toast.success(approvalMessage, {
+                      id: 'test-approval',
+                      duration: 10000,
+                      style: {
+                        maxWidth: '500px',
+                        fontSize: '12px',
+                        whiteSpace: 'pre-line'
+                      }
+                    });
+                    
+                  } catch (error) {
+                    toast.error(`Error: ${error.message}`, { id: 'test-approval' });
+                  }
+                }}
+                className="px-3 py-2 bg-green-100 hover:bg-green-200 text-green-700 text-sm rounded transition-colors"
+              >
+                🧪 Test Approval Workflow
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  const workflow = `
+🎯 Your New Workflow:
+
+1. 🔍 Trigger detects API changes
+2. 📋 You review detected data  
+3. ✅ Select what to send to agent
+4. 🤖 Agent processes only approved data
+5. ⚡ Future runs use same settings
+
+Benefits:
+• ✅ Full control over agent input
+• ✅ No unwanted data processing  
+• ✅ Universal for any API
+• ✅ Clean, focused results
+                  `;
+                  
+                  toast.success(workflow, {
+                    duration: 8000,
+                    style: {
+                      maxWidth: '400px',
+                      fontSize: '12px',
+                      whiteSpace: 'pre-line'
+                    }
+                  });
+                }}
+                className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded transition-colors"
+              >
+                💡 How It Works
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>
