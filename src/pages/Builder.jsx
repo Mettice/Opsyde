@@ -595,6 +595,39 @@ const BuilderPageContent = () => {
     }
   }, [setNodes, setEdges, addNotification, flowInstance]);
 
+  // Load workflow from dashboard if available
+  useEffect(() => {
+    const loadWorkflowFromDashboard = () => {
+      const workflowData = localStorage.getItem('loadWorkflow');
+      if (workflowData) {
+        try {
+          const workflow = JSON.parse(workflowData);
+          
+          // Load the workflow data
+          if (workflow.nodes) {
+            setNodes(workflow.nodes);
+          }
+          if (workflow.edges) {
+            setEdges(workflow.edges);
+          }
+          if (workflow.name) {
+            setProjectName(workflow.name);
+          }
+          
+          // Clear the localStorage item
+          localStorage.removeItem('loadWorkflow');
+          
+          toast.success(`Loaded workflow: ${workflow.name || 'Untitled'}`);
+        } catch (error) {
+          console.error('Error loading workflow from dashboard:', error);
+          toast.error('Failed to load workflow from dashboard');
+        }
+      }
+    };
+
+    loadWorkflowFromDashboard();
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* Top Toolbar - Essential Actions */}

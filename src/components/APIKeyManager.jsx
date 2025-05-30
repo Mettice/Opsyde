@@ -9,6 +9,7 @@ const APIKeyManager = () => {
     const [userSettings, setUserSettings] = useState(null);
     const [availableProviders, setAvailableProviders] = useState([]);
     const [usageStats, setUsageStats] = useState(null);
+    const [monthlyTokens, setMonthlyTokens] = useState(100000);
   
     // Load user settings and API keys on component mount
     useEffect(() => {
@@ -239,321 +240,369 @@ const APIKeyManager = () => {
     }
   
     return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">🔑 API Key Manager</h1>
-          <p className="text-gray-600">
-            Manage your API keys for unlimited LLM providers. Set once, use everywhere across all workflows.
-          </p>
-          
-          {/* Stats Summary */}
-          {usageStats && (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <div className="text-2xl font-bold text-blue-600">{usageStats.total_keys}</div>
-                <div className="text-sm text-blue-700">Total Keys</div>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Compact Header */}
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+                  🔑 API Key Manager
+                </h1>
+                <p className="text-gray-600 text-sm mt-1">Manage your API keys for external services</p>
               </div>
-              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                <div className="text-2xl font-bold text-green-600">{usageStats.valid_keys}</div>
-                <div className="text-sm text-green-700">Valid Keys</div>
-              </div>
-              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-                <div className="text-2xl font-bold text-yellow-600">{usageStats.invalid_keys}</div>
-                <div className="text-sm text-yellow-700">Invalid Keys</div>
-              </div>
-              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                <div className="text-2xl font-bold text-purple-600">{usageStats.supported_providers}</div>
-                <div className="text-sm text-purple-700">Available Providers</div>
-              </div>
-            </div>
-          )}
-        </div>
-  
-        {/* Provider Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {availableProviders.map((provider) => (
-            <APIKeyCard
-              key={provider.id}
-              provider={provider}
-              existingKey={keys[provider.id]}
-              onSave={saveApiKey}
-              onValidate={validateApiKey}
-              onDelete={deleteApiKey}
-            />
-          ))}
-        </div>
-  
-        {/* Usage Analytics */}
-        {usageStats && usageStats.provider_stats && (
-          <div className="mt-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">📊 Usage Analytics</h2>
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Provider
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Usage Count
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Last Used
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {usageStats.provider_stats.map((stat) => (
-                      <tr key={stat.provider}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <span className="text-lg mr-2">{stat.icon}</span>
-                            <span className="font-medium text-gray-900">{stat.provider_name}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            stat.validation_status === 'valid' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {stat.validation_status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {stat.usage_count}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {stat.last_used ? new Date(stat.last_used).toLocaleDateString() : 'Never'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              
+              {/* Compact Status Overview */}
+              <div className="flex gap-4">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{keys ? Object.keys(keys).length : 0}</div>
+                  <div className="text-xs text-gray-500">Total Keys</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                    {keys ? Object.values(keys).filter(key => key?.isValid).length : 0}
+                  </div>
+                  <div className="text-xs text-gray-500">Valid Keys</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-purple-600">{availableProviders?.length || 0}</div>
+                  <div className="text-xs text-gray-500">Providers</div>
+                </div>
               </div>
             </div>
           </div>
-        )}
-  
-        {/* Cost Calculator */}
-        <CostCalculator providers={availableProviders} usageStats={usageStats} />
+
+          {/* Main Content Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left Column - API Keys */}
+            <div className="lg:col-span-2">
+              <div className="bg-white rounded-xl shadow-lg p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  🔐 Your API Keys
+                  <span className="ml-2 text-sm bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                    {keys ? Object.keys(keys).length : 0} configured
+                  </span>
+                </h2>
+                
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    <span className="ml-2 text-gray-600">Loading API keys...</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {availableProviders?.map(provider => (
+                      <APIKeyCard
+                        key={provider.id}
+                        provider={provider}
+                        existingKey={keys?.[provider.id]}
+                        onSave={saveApiKey}
+                        onValidate={validateApiKey}
+                        onDelete={deleteApiKey}
+                      />
+                    )) || <div className="text-gray-500">No providers available</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right Column - Analytics & Tools */}
+            <div className="space-y-6">
+              
+              {/* Usage Analytics - Compact */}
+              <div className="bg-white rounded-xl shadow-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  📊 Usage Analytics
+                </h3>
+                
+                {usageStats && Object.keys(usageStats).length > 0 ? (
+                  <div className="space-y-3">
+                    {Object.entries(usageStats).map(([provider, stats]) => (
+                      <div key={provider} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <div className="flex items-center">
+                          <div className={`w-2 h-2 rounded-full mr-2 ${
+                            keys[provider]?.isValid ? 'bg-green-500' : 'bg-red-500'
+                          }`}></div>
+                          <span className="text-sm font-medium">{provider}</span>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-semibold">{stats?.usage_count || 0}</div>
+                          <div className="text-xs text-gray-500">uses</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No usage data available</p>
+                )}
+              </div>
+
+              {/* Cost Calculator - Compact */}
+              <div className="bg-white rounded-xl shadow-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                  💰 Cost Calculator
+                </h3>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Monthly Token Estimate
+                    </label>
+                    <input
+                      type="number"
+                      value={monthlyTokens}
+                      onChange={(e) => setMonthlyTokens(Number(e.target.value))}
+                      className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="100000"
+                    />
+                  </div>
+                  
+                  <CostCalculator providers={availableProviders} usageStats={usageStats} monthlyTokens={monthlyTokens} />
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="bg-white rounded-xl shadow-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">⚡ Quick Actions</h3>
+                
+                <div className="space-y-2">
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="w-full bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    🔄 Refresh All Keys
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      if (keys && Object.keys(keys).length > 0) {
+                        Object.keys(keys).forEach(provider => validateApiKey(provider));
+                      } else {
+                        toast.info('No API keys to validate');
+                      }
+                    }}
+                    className="w-full bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    ✅ Validate All Keys
+                  </button>
+                  
+                  <button
+                    onClick={() => window.open('/builder', '_blank')}
+                    className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-2 rounded-lg text-sm transition-colors"
+                  >
+                    🚀 Go to Builder
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
   
   const APIKeyCard = ({ provider, existingKey, onSave, onValidate, onDelete }) => {
-    const [apiKey, setApiKey] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
+    const [apiKey, setApiKey] = useState(existingKey?.masked_value || '');
+    const [isEditing, setIsEditing] = useState(!existingKey);
     const [showKey, setShowKey] = useState(false);
-  
+    const [testing, setTesting] = useState(false);
+    const [validating, setValidating] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
     const handleTestAndSave = async () => {
       if (!apiKey.trim()) {
         toast.error('Please enter an API key');
         return;
       }
-  
-      setIsLoading(true);
+
       try {
-        const success = await onSave(provider.id, apiKey);
-        if (success) {
-          setApiKey('');
-          setShowKey(false);
-        }
+        setTesting(true);
+        await onSave(provider.id, apiKey);
+        setIsEditing(false);
+        toast.success(`${provider.name} API key saved successfully!`);
+      } catch (error) {
+        toast.error(`Failed to save ${provider.name} API key: ${error.message}`);
       } finally {
-        setIsLoading(false);
+        setTesting(false);
       }
     };
-  
+
     const handleValidate = async () => {
       if (!existingKey) {
         toast.error('No API key to validate');
         return;
       }
-  
-      setIsLoading(true);
+
       try {
+        setValidating(true);
         await onValidate(provider.id);
+      } catch (error) {
+        toast.error(`Validation failed: ${error.message}`);
       } finally {
-        setIsLoading(false);
+        setValidating(false);
       }
     };
-  
+
     const handleDelete = async () => {
-      if (!existingKey) {
+      if (!window.confirm(`Are you sure you want to delete the ${provider.name} API key?`)) {
         return;
       }
-  
-      if (window.confirm(`Are you sure you want to delete the ${provider.name} API key?`)) {
-        setIsLoading(true);
-        try {
-          await onDelete(provider.id);
-        } finally {
-          setIsLoading(false);
-        }
+
+      try {
+        setDeleting(true);
+        await onDelete(provider.id);
+        setApiKey('');
+        setIsEditing(true);
+        toast.success(`${provider.name} API key deleted`);
+      } catch (error) {
+        toast.error(`Failed to delete API key: ${error.message}`);
+      } finally {
+        setDeleting(false);
       }
     };
-  
+
     const getStatusColor = () => {
-      if (!existingKey) return 'bg-gray-100 text-gray-800';
-      
-      switch (existingKey.validation_status) {
-        case 'valid':
-          return 'bg-green-100 text-green-800';
-        case 'invalid':
-          return 'bg-red-100 text-red-800';
-        default:
-          return 'bg-yellow-100 text-yellow-800';
-      }
+      if (!existingKey) return 'bg-gray-100 text-gray-600';
+      return existingKey.isValid ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700';
     };
-  
+
     const getStatusText = () => {
       if (!existingKey) return 'Not configured';
-      return existingKey.validation_status || 'Unknown';
+      return existingKey.isValid ? 'Valid' : 'Invalid';
     };
-  
+
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-lg transition-shadow">
-        <div className="flex items-start justify-between mb-4">
+      <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center">
-            <span className="text-2xl mr-3">{provider.icon}</span>
+            <span className="text-lg mr-2">{provider.icon}</span>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">{provider.name}</h3>
-              <p className="text-sm text-gray-600">{provider.description}</p>
+              <h3 className="font-semibold text-gray-900 text-sm">{provider.name}</h3>
+              <p className="text-xs text-gray-500">{provider.description}</p>
             </div>
           </div>
-          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor()}`}>
+          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor()}`}>
             {getStatusText()}
           </span>
         </div>
-  
-        {/* Key Format Info */}
-        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-          <div className="text-xs text-gray-600 mb-1">Expected format:</div>
-          <code className="text-sm font-mono text-gray-800">{provider.key_format}</code>
-        </div>
-  
+
+        {/* API Key Input */}
+        {isEditing ? (
+          <div className="space-y-3">
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={`Enter your ${provider.name} API key`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+              >
+                {showKey ? '👁️' : '🙈'}
+              </button>
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={handleTestAndSave}
+                disabled={testing || !apiKey.trim()}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                {testing ? '⏳ Saving...' : '💾 Save Key'}
+              </button>
+              
+              {existingKey && (
+                <button
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-2 border border-gray-300 text-gray-700 rounded-md text-sm hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Key Display */}
+            <div className="bg-gray-50 p-2 rounded border text-sm font-mono">
+              {showKey ? existingKey?.key_value || 'No key' : existingKey?.masked_value || 'No key'}
+            </div>
+            
+            {/* Action Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md text-sm transition-colors"
+              >
+                ✏️ Edit
+              </button>
+              
+              <button
+                onClick={handleValidate}
+                disabled={validating}
+                className="flex-1 bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded-md text-sm transition-colors"
+              >
+                {validating ? '⏳' : '✅'} Test
+              </button>
+              
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-md text-sm transition-colors"
+              >
+                {deleting ? '⏳' : '🗑️'}
+              </button>
+            </div>
+            
+            <button
+              onClick={() => setShowKey(!showKey)}
+              className="w-full text-xs text-gray-500 hover:text-gray-700"
+            >
+              {showKey ? '🙈 Hide key' : '👁️ Show key'}
+            </button>
+          </div>
+        )}
+
         {/* Pricing Info */}
-        {provider.pricing_info && (
-          <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-            <div className="text-xs text-blue-600 mb-1">Pricing:</div>
-            <div className="text-sm text-blue-800">
-              {typeof provider.pricing_info === 'object' ? (
-                Object.entries(provider.pricing_info).map(([key, value]) => (
-                  <div key={key} className="text-xs">
-                    {key}: {typeof value === 'object' ? JSON.stringify(value) : value}
-                  </div>
-                ))
-              ) : (
-                provider.pricing_info
-              )}
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="text-xs text-gray-500">
+            <div className="flex justify-between">
+              <span>Input:</span>
+              <span>${provider.pricing?.input || '0.001'}/1K tokens</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Output:</span>
+              <span>${provider.pricing?.output || '0.002'}/1K tokens</span>
             </div>
           </div>
-        )}
-  
-        {/* Supported Models */}
-        {provider.supported_models && provider.supported_models.length > 0 && (
-          <div className="mb-4">
-            <div className="text-xs text-gray-600 mb-2">Supported models ({provider.supported_models.length}):</div>
-            <div className="flex flex-wrap gap-1">
-              {provider.supported_models.slice(0, 3).map((model) => (
-                <span key={model} className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                  {model}
-                </span>
-              ))}
-              {provider.supported_models.length > 3 && (
-                <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded">
-                  +{provider.supported_models.length - 3} more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-  
-        {/* Existing Key Info */}
-        {existingKey && (
-          <div className="mb-4 p-3 bg-green-50 rounded-lg">
-            <div className="flex justify-between items-center">
-              <div>
-                <div className="text-sm font-medium text-green-800">Key configured</div>
-                <div className="text-xs text-green-600">
-                  {existingKey.masked_value} • Used {existingKey.usage_count || 0} times
-                </div>
-                {existingKey.last_used && (
-                  <div className="text-xs text-green-600">
-                    Last used: {new Date(existingKey.last_used).toLocaleDateString()}
-                  </div>
+          
+          {provider.supported_models && (
+            <div className="mt-2">
+              <div className="text-xs text-gray-500 mb-1">Models ({provider.supported_models.length}):</div>
+              <div className="flex flex-wrap gap-1">
+                {provider.supported_models.slice(0, 3).map(model => (
+                  <span key={model} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                    {model}
+                  </span>
+                ))}
+                {provider.supported_models.length > 3 && (
+                  <span className="text-xs text-gray-500">+{provider.supported_models.length - 3} more</span>
                 )}
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleValidate}
-                  disabled={isLoading}
-                  className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded disabled:opacity-50"
-                >
-                  {isLoading ? '...' : 'Validate'}
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={isLoading}
-                  className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded disabled:opacity-50"
-                >
-                  Delete
-                </button>
-              </div>
             </div>
-          </div>
-        )}
-  
-        {/* API Key Input */}
-        <div className="space-y-3">
-          <div>
-            <input
-              type={showKey ? 'text' : 'password'}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={`Enter your ${provider.name} API key`}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <div className="flex items-center justify-between mt-2">
-              <label className="flex items-center text-sm text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={showKey}
-                  onChange={(e) => setShowKey(e.target.checked)}
-                  className="mr-2"
-                />
-                Show key
-              </label>
-              <a
-                href={provider.get_key_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-xs text-blue-600 hover:text-blue-800"
-              >
-                Get API key →
-              </a>
-            </div>
-          </div>
-  
-          <button
-            onClick={handleTestAndSave}
-            disabled={isLoading || !apiKey.trim()}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-md font-medium transition-colors"
-          >
-            {isLoading ? 'Saving...' : existingKey ? 'Update Key' : 'Save Key'}
-          </button>
+          )}
         </div>
       </div>
     );
   };
   
-  const CostCalculator = ({ providers, usageStats }) => {
-    const [monthlyTokens, setMonthlyTokens] = useState(100000);
-  
+  const CostCalculator = ({ providers, usageStats, monthlyTokens }) => {
     const calculateCosts = () => {
       if (!providers || !usageStats) return [];
   
@@ -584,52 +633,12 @@ const APIKeyManager = () => {
     const totalCost = costs.reduce((sum, cost) => sum + (cost.hasKey ? cost.estimatedCost : 0), 0);
   
     return (
-      <div className="mt-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">💰 Cost Calculator</h2>
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Estimated monthly tokens:
-            </label>
-            <input
-              type="number"
-              value={monthlyTokens}
-              onChange={(e) => setMonthlyTokens(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-  
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {costs.map((cost) => (
-              <div key={cost.provider} className={`p-4 rounded-lg border ${
-                cost.hasKey ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'
-              }`}>
-                <div className="flex items-center mb-2">
-                  <span className="text-lg mr-2">{cost.icon}</span>
-                  <span className="font-medium">{cost.provider}</span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  {cost.hasKey ? (
-                    <>
-                      <div>Est. cost: ${cost.estimatedCost.toFixed(2)}/month</div>
-                      <div>Usage: {cost.usageCount} times</div>
-                    </>
-                  ) : (
-                    <div>No API key configured</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-  
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="text-lg font-semibold text-blue-900">
-              Total estimated monthly cost: ${totalCost.toFixed(2)}
-            </div>
-            <div className="text-sm text-blue-700 mt-1">
-              Based on {monthlyTokens.toLocaleString()} tokens across {costs.filter(c => c.hasKey).length} configured providers
-            </div>
-          </div>
+      <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="text-lg font-semibold text-blue-900">
+          Total estimated monthly cost: ${totalCost.toFixed(2)}
+        </div>
+        <div className="text-sm text-blue-700 mt-1">
+          Based on {monthlyTokens.toLocaleString()} tokens across {costs.filter(c => c.hasKey).length} configured providers
         </div>
       </div>
     );

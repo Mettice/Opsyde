@@ -598,12 +598,20 @@ class TriggerService(BaseService[Dict]):
             return False
 
     async def _check_field_value_change(self, trigger_id: str, data: dict, trigger_data: Dict) -> bool:
-        """Check if a specific field value has changed"""
+        """Check if a specific field value has changed - UNIVERSAL VERSION"""
         try:
             change_field = trigger_data.get('changeDetectionField')
+            
+            # UNIVERSAL FIELD DETECTION - Auto-detect important fields if not specified
             if not change_field:
-                return False
-                
+                detected_field = self._detect_important_field(data, trigger_data)
+                if detected_field:
+                    change_field = detected_field
+                    logger.info(f"[UNIVERSAL FIELD] Auto-detected important field: '{change_field}' for {trigger_id}")
+                else:
+                    logger.warning(f"[UNIVERSAL FIELD] No suitable field found for monitoring")
+                    return False
+            
             # Get current value using dot notation
             current_value = self._get_nested_value(data, change_field)
             
@@ -614,19 +622,118 @@ class TriggerService(BaseService[Dict]):
             if last_value is None:
                 # First time, store the value
                 setattr(self, stored_key, current_value)
-                logger.info(f"[FIELD CHECK] Initial value stored for {trigger_id}: {current_value}")
+                logger.info(f"[UNIVERSAL FIELD] Initial value stored for {trigger_id}: '{change_field}' = {current_value}")
                 return False
             elif current_value != last_value:
                 # Value changed
                 setattr(self, stored_key, current_value)
-                logger.info(f"[FIELD CHECK] Field '{change_field}' changed for {trigger_id}: {last_value} -> {current_value}")
+                logger.info(f"[UNIVERSAL FIELD] Field '{change_field}' changed for {trigger_id}: {last_value} -> {current_value}")
                 return True
                 
             return False
             
         except Exception as e:
-            logger.error(f"[FIELD CHECK] Error for {trigger_id}: {str(e)}")
+            logger.error(f"[UNIVERSAL FIELD] Error for {trigger_id}: {str(e)}")
             return False
+
+    def _detect_important_field(self, data: dict, trigger_data: Dict) -> str:
+        """
+        UNIVERSAL FIELD DETECTION - Automatically find important fields to monitor
+        Looks for status, count, timestamp, or other significant fields
+        """
+        try:
+            service_name = trigger_data.get('serviceName', '').lower()
+            
+            # Step 1: Look for common important field patterns
+            important_patterns = [
+                'status', 'state', 'count', 'total', 'length', 'size',
+                'updated_at', 'modified_at', 'last_modified', 'timestamp',
+                'version', 'revision', 'build', 'release',
+                'active', 'enabled', 'live', 'online'
+            ]
+            
+            found_fields = []
+            
+            # Check root level fields
+            for key, value in data.items():
+                key_lower = key.lower()
+                for pattern in important_patterns:
+                    if pattern in key_lower:
+                        found_fields.append({
+                            'field': key,
+                            'value': value,
+                            'pattern': pattern,
+                            'score': self._score_field_importance(key, value, pattern, service_name)
+                        })
+            
+            # Check nested fields (one level deep)
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    for nested_key, nested_value in value.items():
+                        nested_key_lower = nested_key.lower()
+                        for pattern in important_patterns:
+                            if pattern in nested_key_lower:
+                                found_fields.append({
+                                    'field': f"{key}.{nested_key}",
+                                    'value': nested_value,
+                                    'pattern': pattern,
+                                    'score': self._score_field_importance(nested_key, nested_value, pattern, service_name)
+                                })
+            
+            # Step 2: If we found important fields, return the highest scoring one
+            if found_fields:
+                best_field = max(found_fields, key=lambda x: x['score'])
+                logger.info(f"[FIELD DETECTION] Selected '{best_field['field']}' (pattern: {best_field['pattern']}, score: {best_field['score']})")
+                return best_field['field']
+            
+            # Step 3: Fallback - look for arrays and monitor their length
+            for key, value in data.items():
+                if isinstance(value, list):
+                    logger.info(f"[FIELD DETECTION] Fallback to array length monitoring: '{key}' with {len(value)} items")
+                    return key
+            
+            logger.warning(f"[FIELD DETECTION] No suitable field found for monitoring")
+            return None
+            
+        except Exception as e:
+            logger.error(f"[FIELD DETECTION] Error detecting important field: {str(e)}")
+            return None
+
+    def _score_field_importance(self, field_name: str, field_value: Any, pattern: str, service_name: str) -> float:
+        """Score a field based on how important it is for change detection"""
+        score = 0.0
+        
+        # Base score for pattern match
+        pattern_scores = {
+            'status': 10.0, 'state': 10.0, 'count': 8.0, 'total': 8.0,
+            'updated_at': 9.0, 'modified_at': 9.0, 'timestamp': 7.0,
+            'version': 6.0, 'active': 5.0, 'enabled': 5.0
+        }
+        score += pattern_scores.get(pattern, 3.0)
+        
+        # Value type scoring
+        if isinstance(field_value, (int, float)):
+            score += 3.0  # Numbers are good for change detection
+        elif isinstance(field_value, str) and len(str(field_value)) < 50:
+            score += 2.0  # Short strings are good
+        elif isinstance(field_value, bool):
+            score += 4.0  # Booleans are excellent for change detection
+        
+        # Service-specific scoring
+        service_field_patterns = {
+            'airtable': {'modified_time': 5.0, 'created_time': 3.0},
+            'github': {'updated_at': 5.0, 'state': 4.0, 'merged': 4.0},
+            'slack': {'ts': 5.0, 'latest': 4.0},
+            'notion': {'last_edited_time': 5.0, 'status': 4.0}
+        }
+        
+        for service, patterns in service_field_patterns.items():
+            if service in service_name:
+                for pattern_key, bonus in patterns.items():
+                    if pattern_key in field_name.lower():
+                        score += bonus
+        
+        return score
 
     async def _check_response_hash_change(self, trigger_id: str, data: dict, trigger_data: Dict) -> bool:
         """Check if the entire response has changed using hash comparison"""
@@ -658,16 +765,40 @@ class TriggerService(BaseService[Dict]):
             return False
 
     async def _check_array_length_change(self, trigger_id: str, data: dict, trigger_data: Dict) -> bool:
-        """Check if an array length has changed (useful for new records)"""
+        """Check if an array length has changed (useful for new records) - UNIVERSAL VERSION"""
         try:
-            change_field = trigger_data.get('changeDetectionField', 'data')
+            change_field = trigger_data.get('changeDetectionField')
+            
+            # UNIVERSAL ARRAY DETECTION - Find the best array to monitor
+            if not change_field:
+                # Auto-detect the main array field
+                detected_field = self._detect_main_array_field(data, trigger_data)
+                if detected_field:
+                    change_field = detected_field
+                    logger.info(f"[UNIVERSAL ARRAY] Auto-detected main array field: '{change_field}' for {trigger_id}")
+                else:
+                    logger.warning(f"[UNIVERSAL ARRAY] No suitable array field found for {trigger_id}")
+                    return False
             
             # Get array using dot notation
             array_data = self._get_nested_value(data, change_field)
             
             if not isinstance(array_data, list):
-                logger.warning(f"[ARRAY CHECK] Field '{change_field}' is not an array for {trigger_id}")
-                return False
+                logger.warning(f"[UNIVERSAL ARRAY] Field '{change_field}' is not an array for {trigger_id}")
+                # If the specified field is not an array, try auto-detection as fallback
+                if trigger_data.get('changeDetectionField'):  # Only if user specified a field
+                    logger.info(f"[UNIVERSAL ARRAY] Attempting auto-detection as fallback for {trigger_id}")
+                    detected_field = self._detect_main_array_field(data, trigger_data)
+                    if detected_field:
+                        change_field = detected_field
+                        array_data = self._get_nested_value(data, change_field)
+                        logger.info(f"[UNIVERSAL ARRAY] Fallback detected field: '{change_field}' for {trigger_id}")
+                        if not isinstance(array_data, list):
+                            return False
+                    else:
+                        return False
+                else:
+                    return False
                 
             current_length = len(array_data)
             
@@ -677,32 +808,149 @@ class TriggerService(BaseService[Dict]):
             
             if last_length is None:
                 setattr(self, stored_key, current_length)
-                logger.info(f"[ARRAY CHECK] Initial length stored for {trigger_id}: {current_length}")
+                logger.info(f"[UNIVERSAL ARRAY] Initial length stored for {trigger_id}: {current_length} items in '{change_field}'")
                 return False
             elif current_length > last_length:
                 # ONLY trigger on INCREASE (new records added)
                 new_records_count = current_length - last_length
                 setattr(self, stored_key, current_length)
-                logger.info(f"[ARRAY CHECK] NEW RECORDS DETECTED for {trigger_id}: {new_records_count} new records added (total: {current_length})")
+                logger.info(f"[UNIVERSAL ARRAY] NEW RECORDS DETECTED for {trigger_id}: {new_records_count} new records added to '{change_field}' (total: {current_length})")
                 
                 # Store the new records for the agent to process
-                if new_records_count > 0 and hasattr(self, '_store_new_records'):
+                if new_records_count > 0:
                     new_records = array_data[-new_records_count:]  # Get the last N records
                     setattr(self, f"new_records_{trigger_id}", new_records)
-                    logger.info(f"[ARRAY CHECK] Stored {len(new_records)} new records for processing")
+                    logger.info(f"[UNIVERSAL ARRAY] Stored {len(new_records)} new records for processing")
                 
                 return True
             elif current_length < last_length:
                 # Records were deleted - update count but don't trigger
                 setattr(self, stored_key, current_length)
-                logger.info(f"[ARRAY CHECK] Records deleted for {trigger_id}: {last_length} -> {current_length} (no trigger)")
+                logger.info(f"[UNIVERSAL ARRAY] Records deleted for {trigger_id}: {last_length} -> {current_length} (no trigger)")
                 return False
                 
             return False
             
         except Exception as e:
-            logger.error(f"[ARRAY CHECK] Error for {trigger_id}: {str(e)}")
+            logger.error(f"[UNIVERSAL ARRAY] Error for {trigger_id}: {str(e)}")
             return False
+
+    def _detect_main_array_field(self, data: dict, trigger_data: Dict) -> str:
+        """
+        UNIVERSAL ARRAY DETECTION - Automatically find the main array field in any API response
+        Works with: Airtable (records), DexScreener (pairs), GitHub (items), Slack (messages), etc.
+        """
+        try:
+            service_name = trigger_data.get('serviceName', '').lower()
+            
+            # Step 1: Look for arrays at the root level
+            root_arrays = []
+            for key, value in data.items():
+                if isinstance(value, list) and len(value) > 0:
+                    root_arrays.append({
+                        'field': key,
+                        'count': len(value),
+                        'sample_item': value[0] if value else None
+                    })
+            
+            if not root_arrays:
+                # Step 2: Look for arrays in nested objects (one level deep)
+                for key, value in data.items():
+                    if isinstance(value, dict):
+                        for nested_key, nested_value in value.items():
+                            if isinstance(nested_value, list) and len(nested_value) > 0:
+                                root_arrays.append({
+                                    'field': f"{key}.{nested_key}",
+                                    'count': len(nested_value),
+                                    'sample_item': nested_value[0] if nested_value else None
+                                })
+            
+            if not root_arrays:
+                logger.warning(f"[ARRAY DETECTION] No arrays found in API response")
+                return None
+            
+            # Step 3: Score arrays based on likelihood of being the main data array
+            scored_arrays = []
+            for array_info in root_arrays:
+                score = self._score_array_field(array_info, service_name)
+                scored_arrays.append({
+                    **array_info,
+                    'score': score
+                })
+            
+            # Step 4: Return the highest scoring array
+            best_array = max(scored_arrays, key=lambda x: x['score'])
+            
+            logger.info(f"[ARRAY DETECTION] Found {len(root_arrays)} arrays, selected '{best_array['field']}' with {best_array['count']} items (score: {best_array['score']})")
+            
+            return best_array['field']
+            
+        except Exception as e:
+            logger.error(f"[ARRAY DETECTION] Error detecting main array: {str(e)}")
+            return None
+
+    def _score_array_field(self, array_info: dict, service_name: str) -> float:
+        """
+        Score an array field based on how likely it is to be the main data array
+        Higher score = more likely to be the main data
+        """
+        field_name = array_info['field'].lower()
+        count = array_info['count']
+        sample_item = array_info['sample_item']
+        
+        score = 0.0
+        
+        # Base score from array size (larger arrays are more likely to be main data)
+        if count > 0:
+            score += min(count / 10.0, 5.0)  # Cap at 5 points for size
+        
+        # Field name scoring - common patterns for main data arrays
+        main_data_patterns = [
+            'records', 'items', 'data', 'results', 'entries', 'rows',
+            'pairs', 'tokens', 'coins', 'trades', 'transactions',
+            'messages', 'posts', 'comments', 'issues', 'pulls',
+            'users', 'contacts', 'leads', 'customers', 'orders',
+            'products', 'files', 'documents', 'pages', 'articles'
+        ]
+        
+        for pattern in main_data_patterns:
+            if pattern in field_name:
+                score += 10.0  # High score for recognized patterns
+                break
+        
+        # Service-specific scoring
+        service_patterns = {
+            'airtable': ['records'],
+            'dexscreener': ['pairs'],
+            'github': ['items', 'issues', 'pulls'],
+            'slack': ['messages', 'channels'],
+            'notion': ['results', 'pages'],
+            'stripe': ['data', 'charges', 'customers'],
+            'hubspot': ['results', 'contacts', 'deals']
+        }
+        
+        for service, patterns in service_patterns.items():
+            if service in service_name:
+                for pattern in patterns:
+                    if pattern in field_name:
+                        score += 15.0  # Very high score for service-specific matches
+                        break
+        
+        # Sample item scoring - objects with multiple fields are more likely to be main data
+        if isinstance(sample_item, dict):
+            field_count = len(sample_item.keys())
+            if field_count > 3:
+                score += 5.0  # Bonus for rich objects
+            if field_count > 10:
+                score += 5.0  # Extra bonus for very rich objects
+        
+        # Penalty for metadata-like arrays
+        metadata_patterns = ['meta', 'debug', 'log', 'error', 'warning', 'info']
+        for pattern in metadata_patterns:
+            if pattern in field_name:
+                score -= 5.0  # Penalty for metadata
+        
+        return score
 
     async def _check_timestamp_change(self, trigger_id: str, data: dict, trigger_data: Dict) -> bool:
         """Check if a timestamp field has changed"""

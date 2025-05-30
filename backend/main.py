@@ -309,7 +309,14 @@ async def run_crew_endpoint(
         logger.info(f"Executing workflow with {len(data.get('nodes', []))} nodes")
         return StreamingResponse(
             runner.execute_workflow(data),
-            media_type="text/event-stream"
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*"
+            }
         )
     except ValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -318,6 +325,54 @@ async def run_crew_endpoint(
     except Exception as e:
         logger.error(f"Error executing workflow: {str(e)}")
         raise HTTPException(status_code=500, detail="Workflow execution failed")
+
+@app.post("/run-crew-sync")
+async def run_crew_sync_endpoint(
+    data: dict,
+    runner: UnifiedRunner = Depends(get_unified_runner)
+):
+    """Execute a crew workflow synchronously (non-streaming) for debugging"""
+    try:
+        # Format inputs
+        if "inputs" not in data:
+            data["inputs"] = {}
+        elif isinstance(data["inputs"], str):
+            try:
+                data["inputs"] = json.loads(data["inputs"])
+            except:
+                data["inputs"] = {"input": data["inputs"]}
+        
+        logger.info(f"Executing workflow synchronously with {len(data.get('nodes', []))} nodes")
+        
+        # Collect all results
+        results = []
+        node_results = {}
+        
+        async for item in runner.execute_workflow(data):
+            # Convert any NodeData objects to dictionaries
+            item = convert_nodedata_to_dict(item)
+            results.append(item)
+            
+            # Extract node results
+            if isinstance(item, dict) and "node_id" in item:
+                node_results[item["node_id"]] = item
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "success": True,
+                "logs": results,
+                "node_results": node_results,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ExecutionError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing workflow: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Workflow execution failed: {str(e)}")
 
 @app.post("/api/execute-flow")
 async def execute_flow_endpoint(

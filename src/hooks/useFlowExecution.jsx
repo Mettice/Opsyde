@@ -450,12 +450,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
       
       // Execute the flow using streaming API with enhanced error handling
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => {
-          controller.abort();
-        }, 300000); // 5 minute timeout
-        
-        const response = await fetch(`${API_URL}/run-crew`, {
+        const response = await fetch(`${API_URL}/run-crew-sync`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -466,155 +461,50 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
             edges: cleanedEdges,
             inputs: inputs || {}
           }),
-          signal: controller.signal
         });
-        
-        clearTimeout(timeoutId);
         
         if (!response.ok) {
           const errorText = await response.text();
           throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
         }
         
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
+        // Handle synchronous JSON response
+        const result = await response.json();
         
-        if (!reader) {
-          throw new Error('No response body reader available');
+        if (!result.success) {
+          throw new Error(result.error || 'Execution failed');
         }
         
-        let buffer = '';
-        let allLogs = [];
-        let nodeResults = {};
-        let hasReceivedData = false;
+        let allLogs = result.logs || [];
+        let nodeResults = result.node_results || {};
+        let hasReceivedData = allLogs.length > 0;
         
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            
-            if (done) break;
-            
-            hasReceivedData = true;
-            
-            // Decode the chunk and add to buffer
-            buffer += decoder.decode(value, { stream: true });
-            
-            // Process complete lines
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
-            
-            for (const line of lines) {
-              if (line.trim()) {
-                try {
-                  // Parse JSON line
-                  const rawLogEntry = JSON.parse(line);
-                  console.log('📨 Raw log entry:', rawLogEntry);
-                  
-                  // Process and enhance the log entry
-                  const logEntry = processLogEntry(rawLogEntry, nodeMap);
-                  console.log('✨ Processed log entry:', logEntry);
-                  
-                  allLogs.push(logEntry);
-                  
-                  // Update node state based on log entry
-                  if (logEntry.node_id) {
-                    const nodeId = logEntry.node_id;
-                    let status = logEntry.status || 'processing';
-                    let progress = logEntry.progress || 50;
-                    
-                    // Map different status values
-                    if (status === 'started' || status === 'running') {
-                      status = 'processing';
-                      progress = 25;
-                    } else if (status === 'completed' || status === 'finished' || status === 'success') {
-                      status = 'success';
-                      progress = 100;
-                    } else if (status === 'error' || status === 'failed') {
-                      status = 'error';
-                      progress = 0;
-                    }
-                    
-                    console.log(`🎯 Updating node ${nodeId}: ${status} (${progress}%)`);
-                    updateNodeState(nodeId, status, progress, {
-                      executionTime: logEntry.execution_time || Math.random() * 2 + 1,
-                      cost: logEntry.cost || Math.random() * 0.01,
-                      result: logEntry.result
-                    });
-                  }
-                  
-                  // Add to structured logs in real-time
-                  setStructuredLogs(prev => [...prev, logEntry]);
-                  
-                  // Generate enhanced text log
-                  const logText = generateTextLog(logEntry);
-                  setTextLogs(prev => [...prev, logText]);
-                  
-                  // Extract and store node results
-                  if (logEntry.node_id) {
-                    nodeResults[logEntry.node_id] = {
-                      nodeId: logEntry.node_id,
-                      nodeType: logEntry.node_type,
-                      nodeName: logEntry.node_name,
-                      result: logEntry.result,
-                      status: logEntry.status,
-                      timestamp: logEntry.timestamp,
-                      error: logEntry.error
-                    };
-                  }
-                } catch (parseError) {
-                  console.warn('Failed to parse log line:', line, parseError);
-                  // Add as text log if JSON parsing fails
-                  setTextLogs(prev => [...prev, `📝 ${line.substring(0, 200)}...`]);
-                }
-              }
-            }
-          }
-        } catch (readerError) {
-          console.error('Error reading stream:', readerError);
-          if (readerError.name === 'AbortError') {
-            throw new Error('Execution timed out after 5 minutes');
-          }
-          throw readerError;
-        } finally {
-          reader.releaseLock();
-        }
-        
-        // Process any remaining buffer content
-        if (buffer.trim()) {
+        // Process logs and update UI
+        allLogs.forEach(logEntry => {
           try {
-            const rawLogEntry = JSON.parse(buffer);
-            const logEntry = processLogEntry(rawLogEntry, nodeMap);
-            allLogs.push(logEntry);
-            setStructuredLogs(prev => [...prev, logEntry]);
+            const processedLog = processLogEntry(logEntry, nodeMap);
+            setStructuredLogs(prev => [...prev, processedLog]);
             
-            if (logEntry.node_id) {
-              const nodeId = logEntry.node_id;
-              const status = logEntry.status || 'completed';
-              updateNodeState(nodeId, status, 100, {
-                executionTime: logEntry.execution_time || Math.random() * 2 + 1,
-                cost: logEntry.cost || Math.random() * 0.01
-              });
+            // Generate text log
+            const textLog = generateTextLog(processedLog);
+            setTextLogs(prev => [...prev, textLog]);
+            
+            // Update node state
+            if (processedLog.node_id) {
+              const nodeId = processedLog.node_id;
+              const status = processedLog.status || 'completed';
+              const progress = status === 'error' ? 0 : 100;
               
-              nodeResults[logEntry.node_id] = {
-                nodeId: logEntry.node_id,
-                nodeType: logEntry.node_type,
-                nodeName: logEntry.node_name,
-                result: logEntry.result,
-                status: logEntry.status,
-                timestamp: logEntry.timestamp,
-                error: logEntry.error
-              };
+              updateNodeState(nodeId, status, progress, {
+                executionTime: processedLog.execution_time || Math.random() * 2 + 1,
+                cost: processedLog.cost || Math.random() * 0.01
+              });
             }
           } catch (parseError) {
-            console.warn('Failed to parse remaining buffer:', buffer, parseError);
-            setTextLogs(prev => [...prev, `📝 ${buffer.substring(0, 200)}...`]);
+            console.warn('Failed to process log entry:', logEntry, parseError);
+            setTextLogs(prev => [...prev, `📝 ${JSON.stringify(logEntry).substring(0, 200)}...`]);
           }
-        }
-        
-        // Check if we received any data
-        if (!hasReceivedData) {
-          throw new Error('No data received from server. The execution may have failed to start.');
-        }
+        });
         
         // Update execution state
         setExecutionState(nodeResults);
