@@ -18,7 +18,8 @@ const AVAILABLE_LLM_PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic', description: 'Claude models' },
   { value: 'openrouter', label: 'OpenRouter', description: 'Multiple models via API' },
   { value: 'gemini', label: 'Google Gemini', description: 'Google\'s AI models' },
-  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' }
+  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' },
+  { value: 'perplexity', label: 'Perplexity AI', description: 'Real-time web search models' }
 ];
 
 const LLM_MODELS = {
@@ -45,14 +46,22 @@ const LLM_MODELS = {
     { value: 'microsoft/DialoGPT-medium', label: 'DialoGPT Medium', context: '1K', cost: 'Low' },
     { value: 'microsoft/phi-2', label: 'Phi-2', context: '2K', cost: 'Low' },
     { value: 'mistralai/Mistral-7B-Instruct-v0.2', label: 'Mistral 7B', context: '8K', cost: 'Low' }
+  ],
+  perplexity: [
+    { value: 'sonar-pro', label: 'Sonar Pro (Advanced search)', context: '200K', cost: 'Variable' },
+    { value: 'sonar', label: 'Sonar (Lightweight search)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-deep-research', label: 'Sonar Deep Research (Comprehensive reports)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro (Chain of Thought)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-reasoning', label: 'Sonar Reasoning (Fast reasoning)', context: '128K', cost: 'Variable' },
+    { value: 'r1-1776', label: 'R1-1776 (Offline chat model)', context: '128K', cost: 'Variable' }
   ]
 };
 
 const FRAMEWORK_LLM_COMPATIBILITY = {
-  crewai: ['openai', 'anthropic', 'openrouter', 'gemini'],
-  langchain: ['openai', 'anthropic', 'openrouter', 'huggingface'],
-  autogen: ['openai', 'anthropic', 'openrouter'],
-  llamaindex: ['openai', 'anthropic', 'openrouter', 'huggingface'],
+  crewai: ['openai', 'anthropic', 'openrouter', 'gemini', 'perplexity'],
+  langchain: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity'],
+  autogen: ['openai', 'anthropic', 'openrouter', 'perplexity'],
+  llamaindex: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity'],
   huggingface: [], // Uses models directly
   webhook: [] // No LLM needed
 };
@@ -310,7 +319,7 @@ const EnhancedAgentEditor = ({
                       name="llmProvider"
                       value={llm.value}
                       checked={isSelected}
-                      onChange={handleInputChange}
+                      onChange={handleLocalInputChange}
                       className="mr-3"
                       required
                     />
@@ -349,7 +358,7 @@ const EnhancedAgentEditor = ({
             <select
               name="llmModel"
               value={formData.llm?.model || formData.llmModel || ''}
-              onChange={handleInputChange}
+              onChange={handleLocalInputChange}
               className="w-full p-3 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
               required
             >
@@ -375,7 +384,7 @@ const EnhancedAgentEditor = ({
                 type="number"
                 name="temperature"
                 value={formData.temperature || 0.7}
-                onChange={handleInputChange}
+                onChange={handleLocalInputChange}
                 min="0"
                 max="2"
                 step="0.1"
@@ -391,7 +400,7 @@ const EnhancedAgentEditor = ({
                 type="number"
                 name="max_tokens"
                 value={formData.max_tokens || 1000}
-                onChange={handleInputChange}
+                onChange={handleLocalInputChange}
                 min="1"
                 max="4096"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
@@ -438,7 +447,7 @@ const EnhancedAgentEditor = ({
             type="text"
             name="role"
             value={formData.role || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder="e.g., Senior Software Engineer, Research Analyst, Content Creator"
             required
@@ -453,7 +462,7 @@ const EnhancedAgentEditor = ({
           <textarea
             name="goal"
             value={formData.goal || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             rows="3"
             placeholder="What is this agent's primary objective? Be specific about what you want them to accomplish."
@@ -469,7 +478,7 @@ const EnhancedAgentEditor = ({
           <textarea
             name="backstory"
             value={formData.backstory || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             rows="3"
             placeholder="Background and context for this agent. This helps shape their personality and approach."
@@ -487,7 +496,7 @@ const EnhancedAgentEditor = ({
                 id="allowDelegation"
                 name="allowDelegation"
                 checked={formData.allowDelegation || false}
-                onChange={handleInputChange}
+                onChange={handleLocalInputChange}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
               <label htmlFor="allowDelegation" className="ml-2 block text-sm text-gray-700">
@@ -502,7 +511,7 @@ const EnhancedAgentEditor = ({
                 id="enableMemory"
                 name="enableMemory"
                 checked={formData.enableMemory || false}
-                onChange={handleInputChange}
+                onChange={handleLocalInputChange}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
               <label htmlFor="enableMemory" className="ml-2 block text-sm text-gray-700">
@@ -517,7 +526,7 @@ const EnhancedAgentEditor = ({
                 id="verbose"
                 name="verbose"
                 checked={formData.verbose || false}
-                onChange={handleInputChange}
+                onChange={handleLocalInputChange}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
               <label htmlFor="verbose" className="ml-2 block text-sm text-gray-700">
@@ -544,7 +553,7 @@ const EnhancedAgentEditor = ({
           <textarea
             name="systemMessage"
             value={formData.systemMessage || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             rows="3"
             placeholder="You are a helpful AI assistant specialized in..."
             className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
@@ -560,7 +569,7 @@ const EnhancedAgentEditor = ({
           <select
             name="chainType"
             value={formData.chainType || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
             required
           >
@@ -588,7 +597,7 @@ const EnhancedAgentEditor = ({
           <textarea
             name="systemMessage"
             value={formData.systemMessage || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             rows="3"
             placeholder="You are a helpful AI assistant..."
             className="w-full p-3 border border-orange-300 rounded-md focus:ring-2 focus:ring-orange-500"
@@ -604,7 +613,7 @@ const EnhancedAgentEditor = ({
           <select
             name="agentType"
             value={formData.agentType || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-orange-300 rounded-md focus:ring-2 focus:ring-orange-500"
             required
           >
@@ -632,7 +641,7 @@ const EnhancedAgentEditor = ({
             <select
               name="indexType"
               value={formData.indexType || ''}
-              onChange={handleInputChange}
+              onChange={handleLocalInputChange}
               className="w-full p-3 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               required
             >
@@ -652,7 +661,7 @@ const EnhancedAgentEditor = ({
             <select
               name="documentsSource"
               value={formData.documentsSource || ''}
-              onChange={handleInputChange}
+              onChange={handleLocalInputChange}
               className="w-full p-3 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
               required
             >
@@ -681,7 +690,7 @@ const EnhancedAgentEditor = ({
             type="text"
             name="modelName"
             value={formData.modelName || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             placeholder="e.g., microsoft/DialoGPT-medium"
             className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
             required
@@ -696,7 +705,7 @@ const EnhancedAgentEditor = ({
           <select
             name="taskType"
             value={formData.taskType || ''}
-            onChange={handleInputChange}
+            onChange={handleLocalInputChange}
             className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
             required
           >
@@ -720,7 +729,7 @@ const EnhancedAgentEditor = ({
           type="url"
           name="frameworkConfig.url"
           value={formData.frameworkConfig?.url || ''}
-          onChange={handleInputChange}
+          onChange={handleLocalInputChange}
           placeholder="https://your-webhook-endpoint.com"
           className="w-full p-2 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
           required
@@ -731,6 +740,78 @@ const EnhancedAgentEditor = ({
       </div>
     </div>
   );
+
+  const handleLocalInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    
+    if (name.startsWith('llm.')) {
+      const llmField = name.split('.')[1];
+      const updatedFormData = {
+        ...formData,
+        llm: {
+          ...formData.llm,
+          [llmField]: type === 'checkbox' ? checked : value
+        }
+      };
+      handleInputChange({ target: { name: 'llm', value: updatedFormData.llm } });
+    } else if (name.startsWith('frameworkConfig.')) {
+      const configField = name.split('.')[1];
+      const updatedFormData = {
+        ...formData,
+        frameworkConfig: {
+          ...formData.frameworkConfig,
+          [configField]: type === 'checkbox' ? checked : value
+        }
+      };
+      handleInputChange({ target: { name: 'frameworkConfig', value: updatedFormData.frameworkConfig } });
+    } else if (name === 'llmProvider') {
+      const newProvider = type === 'checkbox' ? checked : value;
+      
+      // CRITICAL FIX: Auto-select first available model when provider changes
+      const availableModels = LLM_MODELS[newProvider] || [];
+      const newModel = availableModels.length > 0 ? availableModels[0].value : '';
+      
+      console.log(`🔍 Provider changed to: ${newProvider}, auto-selecting model: ${newModel}`);
+      
+      const updatedFormData = {
+        ...formData,
+        llm: {
+          ...formData.llm,
+          provider: newProvider,
+          model: newModel  // Auto-update model when provider changes
+        },
+        frameworkConfig: {
+          ...formData.frameworkConfig,
+          provider: newProvider,
+          model: newModel  // Also update framework config
+        },
+        llmProvider: newProvider,
+        llmModel: newModel  // Update legacy field too
+      };
+      
+      // Update both provider and model
+      handleInputChange({ target: { name: 'llmProvider', value: newProvider } });
+      handleInputChange({ target: { name: 'llmModel', value: newModel } });
+      
+    } else if (name === 'llmModel') {
+      // Map llmModel to llm.model and frameworkConfig.model
+      setFormData(prev => ({
+        ...prev,
+        llm: {
+          ...prev.llm,
+          model: type === 'checkbox' ? checked : value
+        },
+        frameworkConfig: {
+          ...prev.frameworkConfig,
+          model: type === 'checkbox' ? checked : value
+        },
+        llmModel: type === 'checkbox' ? checked : value
+      }));
+      handleInputChange({ target: { name: 'llmModel', value: value } });
+    } else {
+      handleInputChange(e);
+    }
+  };
 
   return (
     <div className="space-y-6">

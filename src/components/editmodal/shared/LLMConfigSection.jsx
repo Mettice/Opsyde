@@ -38,6 +38,14 @@ const LLMConfigSection = ({
         { value: 'mistralai/Mistral-7B-Instruct-v0.2', label: 'Mistral 7B Instruct' },
         { value: 'google/flan-t5-xxl', label: 'FLAN-T5 XXL' }
       ],
+      perplexity: [
+        { value: 'sonar-pro', label: 'Sonar Pro (Advanced search)' },
+        { value: 'sonar', label: 'Sonar (Lightweight search)' },
+        { value: 'sonar-deep-research', label: 'Sonar Deep Research (Comprehensive reports)' },
+        { value: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro (Chain of Thought)' },
+        { value: 'sonar-reasoning', label: 'Sonar Reasoning (Fast reasoning)' },
+        { value: 'r1-1776', label: 'R1-1776 (Offline chat model)' }
+      ],
       crewai: [
         { value: 'gpt-4', label: 'GPT-4 (via CrewAI)' },
         { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (via CrewAI)' }
@@ -66,6 +74,7 @@ const LLMConfigSection = ({
       anthropic: 4096,
       openrouter: 32000,
       huggingface: 8192,
+      perplexity: 32000,
       crewai: 32000,
       autogen: 32000,
       llamaindex: 32000
@@ -74,7 +83,7 @@ const LLMConfigSection = ({
   };
 
   const requiresApiKey = (framework) => {
-    return ['openai', 'anthropic', 'openrouter', 'huggingface'].includes(framework);
+    return ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity'].includes(framework);
   };
 
   const tempRange = getTemperatureRange(framework);

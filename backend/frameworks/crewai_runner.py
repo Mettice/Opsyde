@@ -51,6 +51,7 @@ class EnhancedCrewAIRunner:
         """Get appropriate LLM based on configuration with token tracking"""
         provider = framework_config.get('provider', 'openai')
         model = framework_config.get('model', 'gpt-4')
+        api_key = framework_config.get('api_key', '')
         
         # Enhanced LLM config for 0.1.21
         llm_config = {
@@ -59,13 +60,59 @@ class EnhancedCrewAIRunner:
             'callbacks': self._get_token_callbacks()  # For token tracking
         }
         
+        # Handle BYOK (Bring Your Own Keys) format
+        actual_api_key = None
+        if api_key:
+            if api_key.startswith('[BYOK:'):
+                # Extract the actual API key from BYOK format
+                # The actual key should be injected by the execution context
+                logger.debug(f"BYOK key detected for provider: {provider}")
+                # The execution context should have already replaced this with the actual key
+                # If we still see [BYOK:], it means the key wasn't properly injected
+                logger.warning(f"BYOK key not properly injected for {provider}")
+            else:
+                # Direct API key
+                actual_api_key = api_key
+                logger.debug(f"Direct API key provided for {provider}")
+        
+        # Add API key to config if we have one
+        if actual_api_key:
+            llm_config['api_key'] = actual_api_key
+            logger.info(f"✅ Using API key for {provider} (model: {model})")
+        else:
+            logger.warning(f"❌ No API key available for {provider} (model: {model})")
+
         if provider == 'openai':
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(model=model, **llm_config)
         elif provider == 'anthropic':
             from langchain_anthropic import ChatAnthropic
             return ChatAnthropic(model=model, **llm_config)
-        # Add other providers as needed
+        elif provider == 'perplexity':
+            # Don't try to create an LLM for Perplexity - use fallback execution instead
+            logger.info(f"🔍 Perplexity provider detected - will use direct API calls")
+            return None  # This forces fallback execution
+        elif provider == 'openrouter':
+            from langchain_openai import ChatOpenAI
+            # OpenRouter uses OpenAI-compatible API
+            openrouter_config = {
+                **llm_config,
+                'base_url': 'https://openrouter.ai/api/v1',
+                'model': model
+            }
+            return ChatOpenAI(**openrouter_config)
+        elif provider == 'gemini' or provider == 'google':
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                return ChatGoogleGenerativeAI(model=model, **llm_config)
+            except ImportError:
+                logger.warning("Google Generative AI not available, falling back to OpenAI")
+                from langchain_openai import ChatOpenAI
+                return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
+        else:
+            logger.warning(f"Unknown provider {provider}, falling back to OpenAI")
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
     
     def _get_token_callbacks(self):
         """Get callbacks for token usage tracking"""
@@ -361,10 +408,27 @@ class EnhancedCrewAIRunner:
                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
         """Fallback when CrewAI is not available - respects user's LLM provider choice with emergency token limiting"""
         
+        # DEBUG: Log the entire agent_config to see what we're getting
+        logger.info(f"🔍 DEBUG agent_config: {agent_config}")
+        
         # Get framework config to determine provider
         framework_config = agent_config.get('frameworkConfig', {})
+        logger.info(f"🔍 DEBUG framework_config: {framework_config}")
+        
+        # FIXED: Extract provider and model from frameworkConfig first, then fallback
         provider = framework_config.get('provider', 'openai')
         model = framework_config.get('model', 'gpt-4')
+        
+        # If model is still gpt-4, try to get it from other locations
+        if model == 'gpt-4':
+            # Try to get from agent_config directly
+            model = (
+                agent_config.get('llm', {}).get('model') or
+                agent_config.get('llmModel') or
+                agent_config.get('model') or
+                'gpt-4'
+            )
+        
         temperature = framework_config.get('temperature', 0.7)
         max_tokens = framework_config.get('max_tokens', 4000)  # Respect user configuration
         
@@ -400,10 +464,12 @@ Task: {task_description}
         messages = [{"role": "user", "content": prompt}]
         
         # Use the appropriate provider based on user selection WITH max_tokens
+        logger.info(f"🔍 Fallback execution: provider={provider}, model={model}")
         try:
             if provider == 'openai':
                 # Use OpenAI directly
-                from backend.frameworks.openai_runner import run_openai_chat
+                logger.info("🔍 Using OpenAI runner")
+                from .openai_runner import run_openai_chat
                 response = await run_openai_chat(
                     messages=messages,
                     model=model,
@@ -412,15 +478,79 @@ Task: {task_description}
                 )
             elif provider == 'anthropic':
                 # Use Anthropic directly
-                from backend.frameworks.anthropic_runner import run_anthropic_chat
+                logger.info("🔍 Using Anthropic runner")
+                from .anthropic_runner import run_anthropic_chat
                 response = await run_anthropic_chat(
                     messages=messages,
                     model=model,
                     temperature=temperature,
                     max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
+            elif provider == 'perplexity':
+                # Use Perplexity directly
+                logger.info("🔍 Using Perplexity runner")
+                from .perplexity_runner import run_perplexity_chat
+                
+                # Get API key from framework config
+                api_key = framework_config.get('api_key')
+                logger.info(f"🔑 Perplexity API key available: {bool(api_key)}")
+                
+                response = await run_perplexity_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,  # CRITICAL: Pass max_tokens
+                    api_key=api_key  # CRITICAL: Pass API key
+                )
+            elif provider in ['google', 'gemini']:
+                # Use Google/Gemini directly
+                logger.info("🔍 Using Google/Gemini runner")
+                from .gemini_runner import run_gemini_chat
+                
+                # Get API key from framework config
+                api_key = framework_config.get('api_key') or framework_config.get('google_api_key')
+                logger.info(f"🔑 Google API key available: {bool(api_key)}")
+                
+                response = await run_gemini_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    api_key=api_key
+                )
+            elif provider == 'cohere':
+                # Use Cohere via OpenRouter (since we don't have a dedicated runner)
+                logger.info("🔍 Using Cohere via OpenRouter")
+                from .openrouter_runner import run_openrouter_chat
+                
+                # Map to OpenRouter format
+                openrouter_model = f"cohere/{model}" if not model.startswith("cohere/") else model
+                
+                response = await run_openrouter_chat(
+                    messages=messages,
+                    model=openrouter_model,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+            elif provider in ['huggingface', 'hf']:
+                # Use HuggingFace directly
+                logger.info("🔍 Using HuggingFace runner")
+                from .huggingface_runner import run_huggingface_chat
+                
+                # Get API key from framework config
+                api_key = framework_config.get('api_key') or framework_config.get('huggingface_api_key')
+                logger.info(f"🔑 HuggingFace API key available: {bool(api_key)}")
+                
+                response = await run_huggingface_chat(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    api_key=api_key
+                )
             elif provider == 'openrouter':
                 # Use OpenRouter
+                logger.info("🔍 Using OpenRouter runner")
                 from .openrouter_runner import run_openrouter_chat
                 response = await run_openrouter_chat(
                     messages=messages,
@@ -429,17 +559,34 @@ Task: {task_description}
                     max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
             else:
-                # Default fallback to OpenAI
-                from backend.frameworks.openai_runner import run_openai_chat
-                response = await run_openai_chat(
+                # Default fallback to OpenRouter (most comprehensive)
+                logger.info(f"🔍 Unknown provider {provider}, falling back to OpenRouter")
+                from .openrouter_runner import run_openrouter_chat
+                
+                # Try to map provider to OpenRouter format
+                if provider in ['openai']:
+                    openrouter_model = f"openai/{model}"
+                elif provider in ['anthropic']:
+                    openrouter_model = f"anthropic/{model}"
+                elif provider in ['google', 'gemini']:
+                    openrouter_model = f"google/{model}"
+                elif provider in ['cohere']:
+                    openrouter_model = f"cohere/{model}"
+                elif provider in ['meta', 'llama']:
+                    openrouter_model = f"meta-llama/{model}"
+                else:
+                    openrouter_model = model
+                
+                response = await run_openrouter_chat(
                     messages=messages,
-                    model='gpt-4',
+                    model=openrouter_model,
                     temperature=temperature,
                     max_tokens=max_tokens  # CRITICAL: Pass max_tokens
                 )
                 
-        except ImportError:
+        except ImportError as e:
             # If specific provider runner doesn't exist, fallback to OpenRouter
+            logger.error(f"🔍 ImportError for {provider}: {e}, falling back to OpenRouter")
             from .openrouter_runner import run_openrouter_chat
             
             # Map provider models to OpenRouter format

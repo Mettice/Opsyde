@@ -42,12 +42,15 @@ function cleanDataForBackend(obj) {
 }
 
 // Unified node executor
-export async function executeNode(node, connectedAgentData, inputs = {}) {
+export async function executeNode(node, connectedAgentData, inputs = {}, workflowContext = null) {
   try {
+
+    const resolvedNode = resolveInheritance(node, workflowContext);
     // Prefer node.data.nodeType over node.type
-    const nodeType = node.data?.nodeType || node.type;
-    const nodeData = node.data || {};
-    const nodeId = node.id || nodeData.nodeId || "unknown";
+    const nodeType = resolvedNode.data?.nodeType || resolvedNode.type;
+    const nodeData = resolvedNode.data || {};
+    const nodeId = resolvedNode.id || nodeData.nodeId || "unknown";
+
 
     // For task nodes, ensure we have a connected agent with proper data
     if (nodeType === "task") {
@@ -60,6 +63,32 @@ export async function executeNode(node, connectedAgentData, inputs = {}) {
       const missingFields = requiredFields.filter(field => !connectedAgentData[field]);
       if (missingFields.length > 0) {
         throw new Error(`Missing required agent fields: ${missingFields.join(", ")}`);
+      }
+function resolveInheritance(node, workflowContext) {
+        if (!workflowContext || !node.data?.inherits_from) {
+          return node; // No inheritance, return as-is
+        }
+        
+        const parentNode = workflowContext.nodes?.find(n => n.id === node.data.inherits_from);
+        if (!parentNode) {
+          return node; // Parent not found, return as-is
+        }
+        
+        // Merge parent data with node data (node data takes precedence)
+        const mergedData = {
+          ...parentNode.data,
+          ...node.data,
+          // Special handling for nested objects like frameworkConfig
+          frameworkConfig: {
+            ...parentNode.data?.frameworkConfig,
+            ...node.data?.frameworkConfig
+          }
+        };
+        
+        return {
+          ...node,
+          data: mergedData
+        };
       }
 
       // Sanitize and structure agent data

@@ -8,84 +8,58 @@ logger = logging.getLogger(__name__)
 # Framework metadata with proper separation between LLMs and frameworks
 FRAMEWORK_METADATA = {
     "crewai": {
-        "type": "framework",
+        "name": "CrewAI",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": True,
         "supports_multi_agent": True,
-        "agent_fields": {
-            "required": ["role", "goal", "backstory"],
-            "optional": ["allowDelegation", "verbose", "maxIterations"]
-        },
-        "task_fields": {
-            "required": ["description", "expectedOutput"],
-            "optional": ["context", "outputFile"]
-        },
-        "supported_llms": ["openai", "anthropic", "openrouter", "gemini"]
+        "required_fields": ["systemMessage", "agentType"],
+        "optional_fields": ["tools", "memory", "maxIterations"]
     },
     "langchain": {
-        "type": "framework", 
+        "name": "LangChain",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": True,
         "supports_multi_agent": False,
-        "agent_fields": {
-            "required": ["systemMessage", "chainType"],
-            "optional": ["tools", "memoryType", "outputParser"]
-        },
-        "task_fields": {
-            "required": ["prompt"],
-            "optional": ["inputVariables", "examples"]
-        },
-        "supported_llms": ["openai", "anthropic", "openrouter", "huggingface"]
+        "required_fields": ["chainType"],
+        "optional_fields": ["memory", "tools", "temperature", "maxTokens"]
     },
     "autogen": {
-        "type": "framework",
+        "name": "AutoGen",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": True,
         "supports_multi_agent": True,
-        "agent_fields": {
-            "required": ["systemMessage", "agentType"],
-            "optional": ["humanInputMode", "maxConsecutiveAutoReply", "codeExecution"]
-        },
-        "task_fields": {
-            "required": ["message"],
-            "optional": ["maxRounds", "summary"]
-        },
-        "supported_llms": ["openai", "anthropic", "openrouter"]
+        "required_fields": ["systemMessage", "agentType"],
+        "optional_fields": ["tools", "memory", "maxRounds"]
     },
     "llamaindex": {
-        "type": "framework",
+        "name": "LlamaIndex",
         "requires_llm": True,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "agent_fields": {
-            "required": ["indexType", "documentsSource"],
-            "optional": ["chunkSize", "chunkOverlap", "embeddingModel"]
-        },
-        "task_fields": {
-            "required": ["query", "queryMode"],
-            "optional": ["similarityTopK", "responseMode"]
-        },
-        "supported_llms": ["openai", "anthropic", "openrouter", "huggingface"]
+        "required_fields": ["indexType", "documentsSource"],
+        "optional_fields": ["chunkSize", "overlap"]
     },
     "huggingface": {
-        "type": "framework",
+        "name": "HuggingFace",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "agent_fields": {
-            "required": ["modelName", "taskType"],
-            "optional": ["maxLength", "temperature", "doSample"]
-        },
-        "task_fields": {
-            "required": ["input"],
-            "optional": ["context", "question"]
-        },
-        "supported_llms": []  # Uses HuggingFace models directly
+        "required_fields": ["modelName"],
+        "optional_fields": ["temperature", "maxTokens"]
+    },
+    "universal_api": {
+        "name": "Universal API",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["api_endpoint_hint", "ai_description", "api_research_result"]
     }
 }
 
@@ -145,6 +119,23 @@ LLM_METADATA = {
         "parameters": {
             "temperature": {"min": 0, "max": 1, "default": 0.7},
             "max_tokens": {"min": 1, "max": 2048, "default": 1000},
+            "top_p": {"min": 0, "max": 1, "default": 1}
+        }
+    },
+    "perplexity": {
+        "type": "llm_provider",
+        "api_key_required": True,
+        "models": [
+            {"id": "sonar-pro", "name": "Sonar Pro (Advanced search)", "context": 200000, "cost_tier": "medium"},
+            {"id": "sonar", "name": "Sonar (Lightweight search)", "context": 128000, "cost_tier": "low"},
+            {"id": "sonar-deep-research", "name": "Sonar Deep Research (Comprehensive reports)", "context": 128000, "cost_tier": "high"},
+            {"id": "sonar-reasoning-pro", "name": "Sonar Reasoning Pro (Chain of Thought)", "context": 128000, "cost_tier": "medium"},
+            {"id": "sonar-reasoning", "name": "Sonar Reasoning (Fast reasoning)", "context": 128000, "cost_tier": "low"},
+            {"id": "r1-1776", "name": "R1-1776 (Offline chat model)", "context": 128000, "cost_tier": "medium"}
+        ],
+        "parameters": {
+            "temperature": {"min": 0, "max": 2, "default": 0.7},
+            "max_tokens": {"min": 1, "max": 32000, "default": 1000},
             "top_p": {"min": 0, "max": 1, "default": 1}
         }
     },
@@ -211,35 +202,69 @@ class EnhancedFrameworkRegistry:
     
     def register_all_frameworks(self):
         """Register all available frameworks"""
+        logger.info("🔧 Starting framework registration...")
+        
         try:
-            from backend.frameworks.crewai_runner import run_crewai_tool
+            logger.info("🔧 Attempting to import CrewAI runner...")
+            from frameworks.crewai_runner import run_crewai_tool
             self.register("crewai", run_crewai_tool)
-        except ImportError:
-            logger.warning("CrewAI runner not available")
+            logger.info("✅ CrewAI runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ CrewAI runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ CrewAI runner failed with unexpected error: {e}")
         
         try:
-            from backend.frameworks.langchain_runner import run_langchain_tool
+            logger.info("🔧 Attempting to import LangChain runner...")
+            from frameworks.langchain_runner import run_langchain_tool
             self.register("langchain", run_langchain_tool)
-        except ImportError:
-            logger.warning("LangChain runner not available")
+            logger.info("✅ LangChain runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ LangChain runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ LangChain runner failed with unexpected error: {e}")
         
         try:
-            from backend.frameworks.autogen_runner import run_autogen_tool
+            logger.info("🔧 Attempting to import AutoGen runner...")
+            from frameworks.autogen_runner import run_autogen_tool
             self.register("autogen", run_autogen_tool)
-        except ImportError:
-            logger.warning("AutoGen runner not available")
+            logger.info("✅ AutoGen runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ AutoGen runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ AutoGen runner failed with unexpected error: {e}")
         
         try:
-            from backend.frameworks.llamaindex_runner import run_llamaindex_tool
+            logger.info("🔧 Attempting to import LlamaIndex runner...")
+            from frameworks.llamaindex_runner import run_llamaindex_tool
             self.register("llamaindex", run_llamaindex_tool)
-        except ImportError:
-            logger.warning("LlamaIndex runner not available")
+            logger.info("✅ LlamaIndex runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ LlamaIndex runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ LlamaIndex runner failed with unexpected error: {e}")
         
         try:
-            from backend.frameworks.huggingface_runner import run_huggingface_tool
+            logger.info("🔧 Attempting to import HuggingFace runner...")
+            from frameworks.huggingface_runner import run_huggingface_tool
             self.register("huggingface", run_huggingface_tool)
-        except ImportError:
-            logger.warning("HuggingFace runner not available")
+            logger.info("✅ HuggingFace runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ HuggingFace runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ HuggingFace runner failed with unexpected error: {e}")
+        
+        try:
+            logger.info("🔧 Attempting to import Universal API runner...")
+            from frameworks.universal_api_runner import run_universal_api_tool
+            self.register("universal_api", run_universal_api_tool)
+            logger.info("✅ Universal API runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ Universal API runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ Universal API runner failed with unexpected error: {e}")
+        
+        logger.info(f"🔧 Framework registration complete. Registered {len(self._frameworks)} frameworks: {list(self._frameworks.keys())}")
     
     def register(self, name: str, runner_func: Callable):
         """Register a framework runner"""
@@ -336,9 +361,30 @@ class EnhancedFrameworkRegistry:
                 "error_type": type(e).__name__
             }
     
-    def get_available_frameworks(self) -> List[str]:
-        """Get list of available frameworks"""
-        return list(self._frameworks.keys())
+    def get_available_frameworks(self):
+        """Get list of available frameworks with their status"""
+        availability = self._check_framework_availability()
+        
+        frameworks = []
+        for name, runner_func in self._frameworks.items():
+            try:
+                is_available = availability.get(name, False)
+                
+                frameworks.append({
+                    "name": name,
+                    "available": is_available,
+                    "runner": runner_func.__name__ if hasattr(runner_func, '__name__') else "Function",
+                    "status": "Available" if is_available else "Not installed"
+                })
+            except Exception as e:
+                frameworks.append({
+                    "name": name,
+                    "available": False,
+                    "runner": "Error",
+                    "status": f"Error: {str(e)}"
+                })
+        
+        return frameworks
     
     def get_framework_metrics(self, framework: str) -> Dict[str, Any]:
         """Get execution metrics for a framework"""
@@ -355,6 +401,50 @@ class EnhancedFrameworkRegistry:
         # Update average execution time
         total_time = metrics["avg_execution_time"] * (metrics["total_executions"] - 1)
         metrics["avg_execution_time"] = (total_time + execution_time) / metrics["total_executions"]
+
+    def _get_universal_api_runner(self):
+        """Get Universal API runner"""
+        try:
+            from frameworks.universal_api_runner import run_universal_api_tool
+            return run_universal_api_tool
+        except ImportError as e:
+            logger.warning(f"Universal API runner not available: {e}")
+            return None
+
+    def _check_framework_availability(self):
+        """Check which frameworks are available"""
+        availability = {}
+        
+        # Check each framework
+        for framework in self._frameworks.keys():
+            try:
+                if framework == "crewai":
+                    import crewai
+                    availability[framework] = True
+                elif framework == "langchain":
+                    import langchain
+                    availability[framework] = True
+                elif framework == "autogen":
+                    import autogen
+                    availability[framework] = True
+                elif framework == "llamaindex":
+                    import llama_index.core
+                    availability[framework] = True
+                elif framework == "huggingface":
+                    import transformers
+                    availability[framework] = True
+                elif framework == "universal_api":
+                    # Universal API is always available as it's built-in
+                    availability[framework] = True
+                else:
+                    availability[framework] = False
+            except ImportError:
+                availability[framework] = False
+            except Exception as e:
+                logger.warning(f"Error checking {framework} availability: {e}")
+                availability[framework] = False
+        
+        return availability
 
 # Global registry instance
 framework_registry = EnhancedFrameworkRegistry()

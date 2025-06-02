@@ -19,12 +19,12 @@ except ImportError:
 
 from models.data import NodeData
 from frameworks.ai_integration_runner import AIIntegrationRunner
-from frameworks import framework_registry
+from framework_registry import framework_registry
 from utils.logging import get_logger
 from core.workflow_data_manager import get_workflow_context
 
 # Import the universal data transformer for output formatting
-from backend.core.data_transformer import data_transformer
+from core.data_transformer import data_transformer
 
 logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ class OutputNode:
         
         # Initialize AI runner for smart outputs
         try:
-            from backend.frameworks.ai_runner import AIRunner
+            from frameworks.ai_runner import AIRunner
             self.ai_runner = AIRunner()
             self.logger.info("AI runner initialized for smart outputs")
         except ImportError:
@@ -489,7 +489,7 @@ class OutputNode:
         """Send data via email"""
         try:
             from frameworks.email_notifier import send_email
-            
+        
             # Get email configuration from multiple possible sources
             email = (
                 node_data.get('email') or 
@@ -502,7 +502,7 @@ class OutputNode:
             
             self.logger.info(f"Processing email output - Email: {email}, Subject: {subject}")
             self.logger.info(f"Output data structure: {output_data}")
-            
+        
             if not email:
                 error_msg = "Email address is required for email output"
                 self.logger.error(error_msg)

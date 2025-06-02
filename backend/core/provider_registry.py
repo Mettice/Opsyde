@@ -22,6 +22,7 @@ class ProviderConfig:
     get_key_url: Optional[str] = None
     supported_models: List[str] = None
     framework_mappings: List[str] = None  # Which frameworks can use this provider
+    requires_api_key: bool = True  # Most providers require API keys
     
     def __post_init__(self):
         if self.supported_models is None:
@@ -219,22 +220,26 @@ class ProviderRegistry:
             framework_mappings=["replicate", "crewai", "langchain"]
         )
         
-        # Perplexity AI
+        # Perplexity
         perplexity = ProviderConfig(
             id="perplexity",
             name="Perplexity AI",
-            description="Online LLMs with real-time web search capabilities",
+            description="Real-time web search models",
             icon="🔍",
             key_format="pplx-...",
-            validation_url="https://api.perplexity.ai/models",
+            validation_url="https://api.perplexity.ai/chat/completions",
             pricing_info={
-                "llama-3-sonar-large": {"input": 0.001, "output": 0.001},
-                "llama-3-sonar-small": {"input": 0.0002, "output": 0.0002}
+                "sonar-pro": {"input": 0.001, "output": 0.001},
+                "sonar": {"input": 0.0002, "output": 0.0002},
+                "sonar-reasoning": {"input": 0.001, "output": 0.005},
+                "sonar-reasoning-pro": {"input": 0.001, "output": 0.005},
+                "sonar-deep-research": {"input": 0.002, "output": 0.008},
+                "r1-1776": {"input": 0.001, "output": 0.001}
             },
             get_key_url="https://www.perplexity.ai/settings/api",
             supported_models=[
-                "llama-3-sonar-large-32k-online", "llama-3-sonar-small-32k-online",
-                "llama-3-8b-instruct", "llama-3-70b-instruct", "mixtral-8x7b-instruct"
+                "sonar-pro", "sonar", "sonar-deep-research",
+                "sonar-reasoning-pro", "sonar-reasoning", "r1-1776"
             ],
             framework_mappings=["perplexity", "crewai", "langchain"]
         )

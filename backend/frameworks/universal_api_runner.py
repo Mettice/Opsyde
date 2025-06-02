@@ -5,8 +5,8 @@ import aiohttp
 from typing import Dict, Any, Optional
 from datetime import datetime
 
-from backend.utils.logging import get_logger
-from backend.frameworks.shared_api_research import research_for_tool
+from utils.logging import get_logger
+from frameworks.shared_api_research import research_for_tool
 
 logger = get_logger(__name__)
 

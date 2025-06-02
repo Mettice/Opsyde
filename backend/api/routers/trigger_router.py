@@ -605,8 +605,16 @@ async def debug_test_api_polling(
                             filtered_data = _apply_field_filtering(data, selected_fields, target_fields, exclude_fields, max_records)
                             logger.info(f"Filtered data applied - this is what your agent will receive")
                         
-                        # Simple analysis without AI
-                        analysis = _basic_api_analysis(filtered_data, test_data.get('changeDetectionMethod', 'array_length'))
+                        # 🔥 THE KEY FIX: Use AI analysis instead of basic analysis
+                        try:
+                            logger.info(f"🤖 Starting AI analysis for {service_name}")
+                            analysis = await _ai_analyze_api_response(filtered_data, service_name, change_method, api_endpoint)
+                            logger.info(f"✅ AI analysis completed successfully")
+                        except Exception as ai_error:
+                            logger.warning(f"⚠️ AI analysis failed, falling back to basic analysis: {str(ai_error)}")
+                            analysis = _basic_api_analysis(filtered_data, change_method)
+                            analysis["ai_analysis_fallback"] = True
+                            analysis["ai_error"] = str(ai_error)
                         
                         return {
                             "success": True,
@@ -617,9 +625,12 @@ async def debug_test_api_polling(
                             "raw_data": data if filtered_data != data else None,  # Include raw data if filtering was applied
                             "data_structure": analysis.get("data_structure", {}),
                             "change_detection_info": analysis.get("change_detection_info", {}),
+                            "smart_filtering_config": analysis.get("smart_filtering_config", {}),  # 🔥 NOW INCLUDES SMART FILTERING
+                            "ai_insights": analysis.get("ai_insights", {}),
                             "filtering_applied": selected_fields or target_fields or exclude_fields,
                             "content_type": content_type,
-                            "note": "Simple analysis without AI" + (" - Field filtering applied" if (selected_fields or target_fields or exclude_fields) else "") + (" - CSV parsed" if 'csv' in content_type else "")
+                            "ai_powered": not analysis.get("ai_analysis_fallback", False),
+                            "note": "AI-powered analysis" + (" with smart filtering recommendations" if analysis.get("smart_filtering_config") else "") + (" - Field filtering applied" if (selected_fields or target_fields or exclude_fields) else "") + (" - CSV parsed" if 'csv' in content_type else "")
                         }
                         
                     except Exception as json_error:

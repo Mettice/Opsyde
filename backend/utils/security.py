@@ -1,3 +1,9 @@
+#!/usr/bin/env python3
+"""
+🔐 Security and Authentication Utilities
+Handles user authentication and authorization
+"""
+
 import os
 # Fix JWT import - try both package names
 import logging
@@ -36,14 +42,21 @@ from cryptography.fernet import Fernet
 from pathlib import Path
 import json
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from .logging import get_logger
+from dotenv import load_dotenv
 
 logger = get_logger(__name__)
 
+# Load environment variables
+load_dotenv('.env')
+
 # OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# Security scheme
+security = HTTPBearer(auto_error=False)
 
 class SecurityManager:
     """Manages security operations including encryption, tokens, and validation"""
@@ -307,11 +320,109 @@ class APIKeyManager:
             logger.error(f"Error revoking API key: {str(e)}")
             return False
 
-# Create a global security manager instance
-security_manager = SecurityManager(os.getenv("JWT_SECRET_KEY"), os.getenv("JWT_ALGORITHM"))
+# Example usage:
+# token = security_manager.create_token({"user_id": "123"})
+# data = security_manager.verify_token(token)
+# encrypted = security_manager.encrypt_data("sensitive data")
+# decrypted = security_manager.decrypt_data(encrypted)
+# is_valid = security_manager.validate_input("user@example.com")
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
-    """Get current authenticated user from JWT token"""
+# Create global security manager instance
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-here")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", JWT_SECRET_KEY)
+security_manager = SecurityManager(secret_key=SUPABASE_JWT_SECRET)
+
+# TODO: Production implementation should include:
+# 1. JWT token validation with Supabase
+# 2. User session management
+# 3. Role-based access control
+# 4. Rate limiting per user
+# 5. Audit logging
+
+def get_current_user_optional(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
+) -> Optional[Dict[str, Any]]:
+    """
+    Get current user from Supabase JWT token (optional - returns None if no token)
+    """
+    try:
+        if not credentials:
+            # No token provided - return None for anonymous access
+            logger.info("🔓 No authentication token provided - anonymous access")
+            return None
+        
+        # Get the JWT token from Authorization header
+        token = credentials.credentials
+        
+        # Validate Supabase JWT token
+        supabase_jwt_secret = os.getenv("SUPABASE_JWT_SECRET")
+        if not supabase_jwt_secret:
+            logger.warning("⚠️ SUPABASE_JWT_SECRET not configured - using development mode")
+            # For development, if no JWT secret is configured, treat as anonymous
+            return None
+        
+        try:
+            # Decode and validate the Supabase JWT token
+            payload = jwt.decode(token, supabase_jwt_secret, algorithms=["HS256"])
+            
+            # Extract user information from Supabase token
+            user_id = payload.get("sub")  # Supabase user ID
+            email = payload.get("email")
+            
+            if user_id:
+                logger.info(f"🔐 Authenticated Supabase user: {user_id}")
+                return {
+                    "id": user_id,
+                    "email": email,
+                    "aud": payload.get("aud"),
+                    "role": payload.get("role", "authenticated")
+                }
+            else:
+                logger.warning("🔒 Invalid Supabase token - no user ID")
+                return None
+                
+        except jwt.ExpiredSignatureError:
+            logger.warning("🔒 Supabase token has expired")
+            return None
+        except jwt.InvalidTokenError as e:
+            logger.warning(f"🔒 Invalid Supabase token: {str(e)}")
+            return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error validating Supabase token: {str(e)}")
+        return None
+
+def get_current_user_required(
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+) -> Dict[str, Any]:
+    """
+    Get current user (required - raises exception if no valid user)
+    """
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return current_user
+
+def get_user_id_for_request(
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+) -> str:
+    """
+    Get user ID for the current request
+    Returns authenticated user ID or 'anonymous' for unauthenticated requests
+    """
+    if current_user and current_user.get("id"):
+        logger.info(f"🔐 Authenticated user: {current_user['id']}")
+        return str(current_user["id"])
+    else:
+        logger.info("🔓 Anonymous user request")
+        return "anonymous"
+
+async def get_current_user_async(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """Legacy async function for backward compatibility"""
     try:
         payload = security_manager.verify_token(token)
         return payload
@@ -323,21 +434,5 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-async def get_current_user_optional(token: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Get current user if authenticated, otherwise return None"""
-    if not token:
-        return None
-    
-    try:
-        payload = security_manager.verify_token(token)
-        return payload
-    except Exception:
-        # If any error occurs, just return None (unauthenticated)
-        return None
-
-# Example usage:
-# token = security_manager.create_token({"user_id": "123"})
-# data = security_manager.verify_token(token)
-# encrypted = security_manager.encrypt_data("sensitive data")
-# decrypted = security_manager.decrypt_data(encrypted)
-# is_valid = security_manager.validate_input("user@example.com")
+# Backward compatibility aliases for existing imports (after function definitions)
+get_current_user = get_current_user_required

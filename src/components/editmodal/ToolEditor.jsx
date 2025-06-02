@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import { ToolType, FRAMEWORK_OPTIONS } from '../EditModall';
+import { toast } from 'react-hot-toast';
 
 // Modern Universal API Builder Component
 const UniversalApiBuilder = ({ 
@@ -10,514 +11,389 @@ const UniversalApiBuilder = ({
   handleInputChange, 
   onApiResearch, 
   isResearching, 
-  researchResult 
+  researchResult,
+  availableApiKeys = [],
+  loadingApiKeys = false
 }) => {
-  const [researchStep, setResearchStep] = useState(0);
-  
-  const researchSteps = [
-    { icon: "🔍", text: "Searching for API documentation...", color: "text-blue-600" },
-    { icon: "🔐", text: "Analyzing authentication methods...", color: "text-purple-600" },
-    { icon: "🔧", text: "Discovering endpoints and parameters...", color: "text-indigo-600" },
-    { icon: "⚙️", text: "Generating integration configuration...", color: "text-green-600" },
-    { icon: "🧪", text: "Testing connection...", color: "text-orange-600" }
-  ];
+  // LLM selection state
+  const [selectedLLM, setSelectedLLM] = useState(formData.selectedLLM || '');
+
+  // Get available LLMs based on API keys (matching AgentEditor pattern)
+  const getAvailableLLMs = () => {
+    const llms = [];
+    
+    availableApiKeys.forEach(key => {
+      if (key.validation_status === 'valid') {
+        switch (key.provider) {
+          case 'openai':
+            llms.push({
+              provider: 'openai',
+              name: 'OpenAI GPT',
+              models: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
+              icon: '🤖'
+            });
+            break;
+          case 'anthropic':
+            llms.push({
+              provider: 'anthropic',
+              name: 'Anthropic Claude',
+              models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
+              icon: '🧠'
+            });
+            break;
+          case 'openrouter':
+            llms.push({
+              provider: 'openrouter',
+              name: 'OpenRouter',
+              models: ['openai/gpt-4', 'anthropic/claude-3-opus', 'meta-llama/llama-2-70b-chat'],
+              icon: '🌐'
+            });
+            break;
+        }
+      }
+    });
+    
+    return llms;
+  };
+
+  // Auto-select first available LLM ONLY ONCE when API keys are loaded
+  useEffect(() => {
+    const availableLLMs = getAvailableLLMs();
+    if (availableLLMs.length > 0 && !selectedLLM && !formData.selectedLLM) {
+      const firstLLM = availableLLMs[0];
+      setSelectedLLM(firstLLM.provider);
+      
+      // Update form data without causing infinite loop
+      handleInputChange({ 
+        target: { 
+          name: 'selectedLLM', 
+          value: firstLLM.provider 
+        } 
+      });
+      
+      toast.success(`🤖 Auto-selected ${firstLLM.name} for API research`);
+    }
+  }, [availableApiKeys.length]); // Only depend on the length, not the full array
+
+  // Handle LLM selection change
+  const handleLLMChange = (e) => {
+    const newLLM = e.target.value;
+    setSelectedLLM(newLLM);
+    
+    // Update form data
+    handleInputChange({ 
+      target: { 
+        name: 'selectedLLM', 
+        value: newLLM 
+      } 
+    });
+
+    // Auto-inject API key if available
+    if (newLLM && availableApiKeys.length > 0) {
+      const matchingKey = availableApiKeys.find(key => 
+        key.provider === newLLM && key.validation_status === 'valid'
+      );
+      
+      if (matchingKey) {
+        const placeholder = `[BYOK:${matchingKey.provider}]`;
+        
+        handleInputChange({ 
+          target: { 
+            name: 'apiKey', 
+            value: placeholder 
+          } 
+        });
+        
+        toast.success(`🔑 Auto-injected ${matchingKey.provider_name} API key from BYOK Manager`);
+      }
+    }
+  };
 
   const handleStartResearch = async () => {
-    if (!formData.api_service_name || !formData.ai_description) {
-      alert('Please provide both service name and description');
+    // Validation
+    if (!formData.serviceName?.trim()) {
+      toast.error('Please enter a service name');
+      return;
+    }
+    
+    if (!formData.description?.trim()) {
+      toast.error('Please enter a description of what you want to do');
       return;
     }
 
-    setResearchStep(0);
-    const interval = setInterval(() => {
-      setResearchStep(prev => {
-        if (prev < researchSteps.length - 1) {
-          return prev + 1;
-        } else {
-          clearInterval(interval);
-          return prev;
-        }
-      });
-    }, 1500);
+    if (!selectedLLM) {
+      toast.error('Please select an AI model for research');
+      return;
+    }
 
-    await onApiResearch({
-      service_name: formData.api_service_name,
-      description: formData.ai_description,
-      endpoint_hint: formData.api_endpoint_hint
-    });
+    const researchData = {
+      serviceName: formData.serviceName,
+      description: formData.description,
+      selectedLLM: selectedLLM ? { provider: selectedLLM } : null
+    };
+
+    await onApiResearch(researchData);
   };
 
+  const availableLLMs = getAvailableLLMs();
+
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 border border-blue-200/50 shadow-lg">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-      
-      <div className="relative p-8">
-        {/* Header */}
-        <div className="flex items-start space-x-4 mb-8">
-          <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
-            <span className="text-2xl">🌐</span>
-          </div>
-          <div className="flex-1">
-            <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-700 to-purple-700 bg-clip-text text-transparent">
-              AI-Powered API Discovery
-            </h3>
-            <p className="text-slate-600 mt-2 leading-relaxed">
+    <div className="space-y-4">
+      <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-blue-200">
+        <h3 className="font-semibold text-blue-800 mb-2">🤖 AI-Powered API Discovery</h3>
+        <p className="text-sm text-blue-700">
               Let our AI research and configure any API automatically. Just describe what you want to do.
             </p>
           </div>
-        </div>
 
-        <div className="space-y-6">
+      {/* LLM Selection */}
+      <div className="mb-4">
+        <label className="block text-gray-700 mb-1 font-medium">
+          🤖 Choose AI Model for Research
+          <span className="text-red-500 ml-1">*</span>
+        </label>
+        
+        {loadingApiKeys ? (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+              <span className="text-blue-700 text-sm">Loading available AI models...</span>
+        </div>
+          </div>
+        ) : availableLLMs.length === 0 ? (
+          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+            <span className="text-yellow-700 text-sm">⚠️ No AI models available. Please add API keys in BYOK Manager.</span>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="ml-2 text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
+            >
+              Add Keys
+            </button>
+          </div>
+        ) : (
+          <select
+            value={selectedLLM}
+            onChange={handleLLMChange}
+            className="w-full p-3 border rounded-lg"
+          >
+            <option value="">Select AI Model...</option>
+            {availableLLMs.map((llm) => (
+              <option key={llm.provider} value={llm.provider}>
+                {llm.icon} {llm.name} - {llm.models[0]} (Ready)
+              </option>
+            ))}
+          </select>
+        )}
+        
+        {selectedLLM && (
+          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm">
+            <span className="text-green-700">
+              🔑 API key auto-loaded from BYOK Manager for {availableLLMs.find(l => l.provider === selectedLLM)?.name}
+            </span>
+          </div>
+        )}
+      </div>
+
           {/* Service Name Input */}
-          <div className="space-y-3">
-            <label className="flex items-center text-slate-800 font-semibold text-sm">
-              <span className="flex items-center justify-center w-6 h-6 bg-blue-100 rounded-full text-xs mr-3">🎯</span>
-              What service do you want to connect to?
+      <div className="mb-4">
+        <label className="block text-gray-700 mb-1 font-medium">
+          🎯 What service do you want to connect to?
+          <span className="text-red-500 ml-1">*</span>
             </label>
-            <div className="relative">
               <input
                 type="text"
-                name="api_service_name"
-                value={formData.api_service_name || ''}
+          name="serviceName"
+          value={formData.serviceName || ''}
                 onChange={handleInputChange}
-                placeholder="Linear, Stripe, Slack, your-company-api.com..."
-                className="w-full px-4 py-4 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all duration-200 text-slate-700 placeholder-slate-400 shadow-sm"
-              />
-              <div className="absolute inset-y-0 right-0 flex items-center pr-4">
-                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-              </div>
-            </div>
-            <p className="text-xs text-blue-600 flex items-center">
-              <span className="mr-1">✨</span>
-              Works with any public API or your company's internal services
-            </p>
+          className="w-full p-3 border rounded-lg"
+          placeholder="e.g., Gmail, Slack, Airtable, Notion, Stripe, GitHub..."
+        />
           </div>
 
           {/* Action Description */}
-          <div className="space-y-3">
-            <label className="flex items-center text-slate-800 font-semibold text-sm">
-              <span className="flex items-center justify-center w-6 h-6 bg-purple-100 rounded-full text-xs mr-3">📝</span>
-              What do you want to accomplish?
+      <div className="mb-4">
+        <label className="block text-gray-700 mb-1 font-medium">
+          📝 What do you want to accomplish?
+          <span className="text-red-500 ml-1">*</span>
             </label>
             <textarea
-              name="ai_description"
-              value={formData.ai_description || ''}
+          name="description"
+          value={formData.description || ''}
               onChange={handleInputChange}
-              placeholder="Examples:
-• Create issues in Linear with custom fields and assignees
-• Send personalized Slack messages to team channels  
-• Process payments through Stripe with customer data
-• Update inventory in our internal ERP system"
-              className="w-full px-4 py-4 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500/20 focus:border-purple-400 transition-all duration-200 text-slate-700 placeholder-slate-400 shadow-sm resize-none"
-              rows="5"
-            />
+          className="w-full p-3 border rounded-lg h-24"
+          placeholder="e.g., Send email notifications, Create calendar events, Update spreadsheet rows, Post to Slack channels..."
+        />
+        <div className="text-xs text-gray-500 mt-1">
+          💡 Be specific about what you want to do - this helps our AI find the right API endpoints
           </div>
-
-          {/* Optional API Hint */}
-          <div className="space-y-3">
-            <label className="flex items-center text-slate-800 font-semibold text-sm">
-              <span className="flex items-center justify-center w-6 h-6 bg-green-100 rounded-full text-xs mr-3">🔗</span>
-              API Endpoint (optional)
-            </label>
-            <input
-              type="url"
-              name="api_endpoint_hint"
-              value={formData.api_endpoint_hint || ''}
-              onChange={handleInputChange}
-              placeholder="https://api.linear.app/graphql"
-              className="w-full px-4 py-3 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-green-500/20 focus:border-green-400 transition-all duration-200 text-slate-700 placeholder-slate-400 shadow-sm"
-            />
-            <p className="text-xs text-green-600 flex items-center">
-              <span className="mr-1">💡</span>
-              Helps speed up discovery if you know the API URL
-            </p>
           </div>
 
           {/* Research Button */}
-          <div className="flex justify-center pt-6">
             <button
               type="button"
               onClick={handleStartResearch}
-              disabled={isResearching || !formData.api_service_name || !formData.ai_description}
-              className={`group relative px-8 py-4 rounded-xl font-semibold transition-all duration-300 transform ${
-                isResearching || !formData.api_service_name || !formData.ai_description
-                  ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95'
-              }`}
-            >
-              <div className="flex items-center">
+        disabled={isResearching || !selectedLLM}
+        className={`w-full py-3 px-4 rounded-lg font-medium transition-all duration-200 ${
+          isResearching || !selectedLLM
+            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+        }`}
+      >
                 {isResearching ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-3"></div>
-                    Researching API...
-                  </>
-                ) : (
-                  <>
-                    <span className="mr-3 text-lg">🚀</span>
-                    Start AI Research
-                  </>
-                )}
-              </div>
-              {!isResearching && !(!formData.api_service_name || !formData.ai_description) && (
-                <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-400 to-purple-400 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></div>
+          <span className="flex items-center justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+            🤖 AI is researching...
+          </span>
+        ) : (
+          '🚀 Start AI Research & Configuration'
               )}
             </button>
-          </div>
-
-          {/* Research Progress */}
-          {isResearching && (
-            <div className="mt-8 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-slate-200/50 shadow-lg">
-              <h4 className="font-bold text-slate-800 mb-6 flex items-center">
-                <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center mr-3">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                </div>
-                AI Research in Progress
-              </h4>
-              <div className="space-y-4">
-                {researchSteps.map((step, index) => (
-                  <div key={index} className={`flex items-center transition-all duration-500 ${
-                    index <= researchStep ? 'opacity-100' : 'opacity-40'
-                  }`}>
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full mr-4 transition-all duration-500 ${
-                      index < researchStep 
-                        ? 'bg-green-100 text-green-600' 
-                        : index === researchStep 
-                        ? 'bg-blue-100 text-blue-600 scale-110' 
-                        : 'bg-slate-100 text-slate-400'
-                    }`}>
-                      <span className="text-sm">{step.icon}</span>
-                    </div>
-                    <span className={`text-sm font-medium ${
-                      index <= researchStep ? step.color : 'text-slate-400'
-                    }`}>
-                      {step.text}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Research Results */}
           {researchResult && (
-            <div className={`p-6 rounded-2xl border shadow-lg ${
+        <div className={`mt-4 p-4 rounded-lg border ${
               researchResult.success 
-                ? 'bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200/50'
-                : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-200/50'
+            ? 'bg-green-50 border-green-200' 
+            : researchResult.auth_required 
+              ? 'bg-yellow-50 border-yellow-200'
+              : 'bg-red-50 border-red-200'
             }`}>
               {researchResult.success ? (
-                <div>
-                  <h4 className="font-bold text-green-800 mb-6 flex items-center text-lg">
-                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mr-3">
-                      <span className="text-white text-sm">✓</span>
+            <>
+              <h4 className="font-semibold text-green-800 mb-2">✅ Research Complete!</h4>
+              <div className="text-sm text-green-700">
+                <p><strong>Service:</strong> {researchResult.service || 'Detected'}</p>
+                <p><strong>Configuration:</strong> {researchResult.summary || 'API endpoints and authentication configured'}</p>
                     </div>
-                    API Configuration Complete!
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center text-sm">
-                        <span className="w-20 text-green-700 font-medium">Service:</span>
-                        <span className="text-green-800 font-semibold">{researchResult.service_name}</span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="w-20 text-green-700 font-medium">Type:</span>
-                        <span className="px-2 py-1 bg-green-100 text-green-800 rounded-md text-xs font-medium">
-                          {researchResult.api_type}
-                        </span>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="w-20 text-green-700 font-medium">Auth:</span>
-                        <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md text-xs font-medium">
-                          {researchResult.auth_type}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="text-sm">
-                        <span className="text-green-700 font-medium">Base URL:</span>
-                        <code className="block mt-1 px-3 py-2 bg-green-100/50 text-green-800 rounded-lg text-xs font-mono break-all">
-                          {researchResult.base_url}
-                        </code>
-                      </div>
-                      <div className="flex items-center text-sm">
-                        <span className="w-20 text-green-700 font-medium">Confidence:</span>
-                        <div className="flex items-center">
-                          <div className="w-20 h-2 bg-green-200 rounded-full mr-2">
-                            <div 
-                              className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full"
-                              style={{ width: `${(researchResult.confidence * 100)}%` }}
-                            ></div>
-                          </div>
-                          <span className="text-green-800 font-semibold text-xs">
-                            {(researchResult.confidence * 100).toFixed(0)}%
-                          </span>
+            </>
+          ) : researchResult.auth_required ? (
+            <>
+              <h4 className="font-semibold text-yellow-800 mb-2">🔐 Authentication Required</h4>
+              <div className="text-sm text-yellow-700 space-y-3">
+                <p><strong>Service:</strong> {researchResult.auth_guidance?.service || 'Unknown'}</p>
+                <p><strong>Auth Type:</strong> {researchResult.auth_guidance?.auth_type || 'API Key/Token'}</p>
+                
+                {researchResult.auth_guidance && (
+                  <div className="bg-white border border-yellow-300 rounded p-3 mt-3">
+                    <h5 className="font-semibold text-yellow-800 mb-2">📋 Setup Instructions:</h5>
+                    <ol className="text-xs text-yellow-700 space-y-1 list-decimal list-inside">
+                      {researchResult.auth_guidance.steps.map((step, index) => (
+                        <li key={index}>{step}</li>
+                      ))}
+                    </ol>
+                    
+                    <div className="mt-3 space-y-2">
+                      <div className="p-2 bg-yellow-100 border border-yellow-300 rounded text-xs">
+                        <strong>Token Format:</strong> <code className="bg-yellow-200 px-1 rounded">{researchResult.auth_guidance.token_format}</code>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                  {researchResult.endpoints && (
-                    <div className="mt-6">
-                      <h5 className="font-semibold text-green-800 mb-3">Available Actions:</h5>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {researchResult.endpoints.slice(0, 4).map((endpoint, i) => (
-                          <div key={i} className="p-3 bg-white/60 rounded-lg border border-green-200/50">
-                            <div className="font-medium text-green-800 text-sm">{endpoint.name}</div>
-                            <div className="text-green-600 text-xs mt-1">{endpoint.description}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="mt-6 p-4 bg-gradient-to-r from-green-100/50 to-emerald-100/50 rounded-xl border border-green-200/30">
-                    <div className="flex items-center text-green-800 text-sm font-medium">
-                      <span className="mr-2">🎉</span>
-                      Configuration automatically applied! Ready to use.
-                    </div>
-                  </div>
-
-                  {/* Authentication Configuration Section */}
-                  {(researchResult.auth_required || researchResult.auth_type) && researchResult.auth_type !== 'none' && (
-                    <div className="mt-6 p-6 bg-gradient-to-br from-amber-50 to-yellow-50 rounded-xl border border-amber-200/50">
-                      <h5 className="font-bold text-amber-800 mb-4 flex items-center">
-                        <div className="w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center mr-3">
-                          <span className="text-white text-sm">🔐</span>
-                        </div>
-                        Authentication Required
-                      </h5>
                       
-                      <div className="space-y-4">
-                        <div className="p-4 bg-white/60 rounded-lg border border-amber-200/30">
-                          <div className="text-sm text-amber-800 mb-2">
-                            <strong>Authentication Type:</strong> {researchResult.auth_type}
-                          </div>
-                          {researchResult.auth_instructions && (
-                            <div className="text-sm text-amber-700 mb-3">
-                              <strong>Instructions:</strong> {researchResult.auth_instructions}
-                            </div>
-                          )}
-                          {researchResult.documentation_url && (
-                            <div className="text-sm">
-                              <a 
-                                href={researchResult.documentation_url} 
+                      {researchResult.auth_guidance.documentation && (
+                        <div className="p-2 bg-blue-100 border border-blue-300 rounded text-xs">
+                          <strong>📚 Documentation:</strong> 
+                          <a 
+                            href={researchResult.auth_guidance.documentation} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
-                                className="text-blue-600 hover:text-blue-800 underline"
+                            className="text-blue-600 hover:text-blue-800 underline ml-1"
                               >
-                                📚 View API Documentation
+                            {researchResult.auth_guidance.documentation}
                               </a>
                             </div>
                           )}
-                        </div>
-
-                        {/* Authentication Input Fields */}
-                        <div className="space-y-3">
-                          {researchResult.auth_type === 'api_key' && (
-                            <div>
-                              <label className="block text-sm font-medium text-amber-800 mb-2">
-                                API Key
-                              </label>
-                              <input
-                                type="password"
-                                placeholder="Enter your API key..."
-                                className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white/80"
-                                onChange={(e) => {
-                                  const newConfig = {
-                                    ...localFrameworkConfig,
-                                    api_key: e.target.value,
-                                    headers: {
-                                      ...localFrameworkConfig.headers,
-                                      [researchResult.auth_header || 'Authorization']: 
-                                        researchResult.auth_format 
-                                          ? researchResult.auth_format.replace('{token}', e.target.value).replace('{key}', e.target.value)
-                                          : e.target.value
-                                    }
-                                  };
-                                  setLocalFrameworkConfig(newConfig);
-                                  handleInputChange({
-                                    target: { name: 'frameworkConfig', value: newConfig }
-                                  });
-                                }}
-                              />
+                      
+                      {researchResult.auth_guidance.security_note && (
+                        <div className="p-2 bg-red-100 border border-red-300 rounded text-xs">
+                          <strong>🔒 Security:</strong> {researchResult.auth_guidance.security_note}
                             </div>
                           )}
 
-                          {researchResult.auth_type === 'bearer_token' && (
-                            <div>
-                              <label className="block text-sm font-medium text-amber-800 mb-2">
-                                Bearer Token
-                              </label>
-                              <input
-                                type="password"
-                                placeholder="Enter your bearer token..."
-                                className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white/80"
-                                onChange={(e) => {
-                                  const newConfig = {
-                                    ...localFrameworkConfig,
-                                    bearer_token: e.target.value,
-                                    headers: {
-                                      ...localFrameworkConfig.headers,
-                                      'Authorization': `Bearer ${e.target.value}`
-                                    }
-                                  };
-                                  setLocalFrameworkConfig(newConfig);
-                                  handleInputChange({
-                                    target: { name: 'frameworkConfig', value: newConfig }
-                                  });
-                                }}
-                              />
+                      {researchResult.auth_guidance.additional_setup && (
+                        <div className="p-2 bg-orange-100 border border-orange-300 rounded text-xs">
+                          <strong>⚠️ Additional Setup:</strong> {researchResult.auth_guidance.additional_setup}
                             </div>
                           )}
-
-                          {researchResult.auth_type === 'oauth2' && (
-                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                              <div className="text-sm text-blue-800 mb-2">
-                                <strong>OAuth2 Setup Required</strong>
-                              </div>
-                              <p className="text-sm text-blue-700 mb-3">
-                                This service requires OAuth2 authentication. You'll need to:
-                              </p>
-                              <ol className="text-sm text-blue-700 space-y-1 ml-4">
-                                <li>1. Create an app in the service's developer portal</li>
-                                <li>2. Get your client ID and secret</li>
-                                <li>3. Configure the OAuth flow</li>
-                              </ol>
-                              <div className="mt-3">
-                                <input
-                                  type="password"
-                                  placeholder="Access token (if you already have one)..."
-                                  className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 bg-white/80"
-                                  onChange={(e) => {
-                                    const newConfig = {
-                                      ...localFrameworkConfig,
-                                      access_token: e.target.value,
-                                      headers: {
-                                        ...localFrameworkConfig.headers,
-                                        'Authorization': `Bearer ${e.target.value}`
-                                      }
-                                    };
-                                    setLocalFrameworkConfig(newConfig);
-                                    handleInputChange({
-                                      target: { name: 'frameworkConfig', value: newConfig }
-                                    });
-                                  }}
-                                />
                               </div>
                             </div>
                           )}
 
-                          {researchResult.auth_type === 'basic_auth' && (
-                            <div className="space-y-3">
-                              <div>
-                                <label className="block text-sm font-medium text-amber-800 mb-2">
-                                  Username
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="Enter username..."
-                                  className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white/80"
-                                  onChange={(e) => {
-                                    const newConfig = {
-                                      ...localFrameworkConfig,
-                                      username: e.target.value
-                                    };
-                                    setLocalFrameworkConfig(newConfig);
-                                    handleInputChange({
-                                      target: { name: 'frameworkConfig', value: newConfig }
-                                    });
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-amber-800 mb-2">
-                                  Password
-                                </label>
-                                <input
-                                  type="password"
-                                  placeholder="Enter password..."
-                                  className="w-full px-3 py-2 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-400 bg-white/80"
-                                  onChange={(e) => {
-                                    const newConfig = {
-                                      ...localFrameworkConfig,
-                                      password: e.target.value,
-                                      headers: {
-                                        ...localFrameworkConfig.headers,
-                                        'Authorization': `Basic ${btoa(`${localFrameworkConfig.username || ''}:${e.target.value}`)}`
-                                      }
-                                    };
-                                    setLocalFrameworkConfig(newConfig);
-                                    handleInputChange({
-                                      target: { name: 'frameworkConfig', value: newConfig }
-                                    });
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mt-4 p-3 bg-amber-100/50 rounded-lg border border-amber-200/30">
-                          <div className="flex items-start text-amber-800 text-sm">
-                            <span className="mr-2 mt-0.5">🔒</span>
-                            <div>
-                              <strong>Security Note:</strong> Your credentials are stored locally and used only for API calls. 
-                              They are not sent to our servers.
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setResearchResult(null)}
+                    className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
+                  >
+                    Dismiss
+                  </button>
+                  {researchResult.auth_guidance?.documentation && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(researchResult.auth_guidance.documentation, '_blank')}
+                      className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+                    >
+                      📚 View Docs
+                    </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Scroll to authentication section
+                      const authSection = document.querySelector('[name="authType"]');
+                      if (authSection) {
+                        authSection.scrollIntoView({ behavior: 'smooth' });
+                        authSection.focus();
+                      }
+                    }}
+                    className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
+                  >
+                    🔧 Configure Auth
+                  </button>
+                              </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <h4 className="font-semibold text-red-800 mb-2">❌ Research Failed</h4>
+              <div className="text-sm text-red-700 space-y-2">
+                <p><strong>Error:</strong> {researchResult.error}</p>
+                {researchResult.suggestion && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded p-2 mt-2">
+                    <p className="text-yellow-800">
+                      <strong>💡 Suggestion:</strong> {researchResult.suggestion}
+                    </p>
+                            </div>
+                          )}
+                {researchResult.raw_response && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-red-600 hover:text-red-800">
+                      🔍 View raw AI response
+                    </summary>
+                    <div className="mt-2 p-2 bg-gray-100 rounded text-xs font-mono text-gray-700 max-h-32 overflow-y-auto">
+                      {researchResult.raw_response}
+                        </div>
+                  </details>
+                )}
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setResearchResult(null)}
+                    className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.open('/api-keys', '_blank')}
+                    className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded"
+                  >
+                    Check API Keys
+                  </button>
                 </div>
-              ) : (
-                <div>
-                  <h4 className="font-bold text-red-800 mb-4 flex items-center">
-                    <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center mr-3">
-                      <span className="text-white text-sm">✕</span>
                     </div>
-                    Research Failed
-                  </h4>
-                  <p className="text-red-700 mb-4">{researchResult.error}</p>
-                  {researchResult.suggestions && (
-                    <div className="p-4 bg-red-100/50 rounded-lg border border-red-200/50">
-                      <h5 className="font-semibold text-red-800 mb-2">💡 Suggestions:</h5>
-                      <ul className="space-y-1">
-                        {researchResult.suggestions.map((suggestion, i) => (
-                          <li key={i} className="text-red-700 text-sm flex items-start">
-                            <span className="mr-2 mt-0.5">•</span>
-                            {suggestion}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+            </>
                   )}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Examples Section */}
-          <div className="mt-8 p-6 bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-2xl border border-slate-200/50">
-            <h4 className="font-bold text-slate-800 mb-4 flex items-center">
-              <span className="mr-2">🧠</span>
-              What Our AI Can Research:
-            </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {[
-                "Linear", "Stripe", "Slack", "GitHub", "Shopify",
-                "WordPress", "Webflow", "Reddit", "Discord", "Internal APIs"
-              ].map((service, i) => (
-                <div key={i} className="p-2 bg-white/60 rounded-lg border border-slate-200/50 text-center">
-                  <div className="text-xs font-medium text-slate-700">{service}</div>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs text-slate-600 mt-4 italic text-center">
-              🌟 If it has documentation, our AI can configure it automatically
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
@@ -534,27 +410,16 @@ const ToolEditor = ({
   saveTestInput,
   connectedNodes = []
 }) => {
-  const [isResearching, setIsResearching] = useState(false);
-  const [researchResult, setResearchResult] = useState(null);
-  const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
-
-  // BYOK Integration - Load API Keys from API Key Manager
+  // 🔑 BYOK State Management (matching AgentEditor pattern)
   const [availableApiKeys, setAvailableApiKeys] = useState([]);
   const [loadingApiKeys, setLoadingApiKeys] = useState(true);
   const [apiKeyError, setApiKeyError] = useState(null);
 
-  const parentAgent = connectedNodes.find(node => 
-    node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
-  );
-  const isInheritingFromAgent = formData.inherits_from && parentAgent;
+  // API research state
+  const [isResearching, setIsResearching] = useState(false);
+  const [researchResult, setResearchResult] = useState(null);
 
-  useEffect(() => {
-    if (formData.frameworkConfig) {
-      setLocalFrameworkConfig(formData.frameworkConfig);
-    }
-  }, [formData.framework]);
-
-  // Load API Keys from BYOK Manager
+  // 🔑 Load API Keys from BYOK Manager (matching AgentEditor pattern)
   useEffect(() => {
     const loadApiKeys = async () => {
       try {
@@ -564,149 +429,311 @@ const ToolEditor = ({
         
         if (result.success && result.data.api_keys) {
           setAvailableApiKeys(result.data.api_keys);
-          console.log('🔑 Tool Editor: Loaded API keys:', result.data.api_keys);
+          setApiKeyError(null);
+          console.log('✅ Loaded API keys for ToolEditor:', result.data.api_keys.length);
+        } else {
+          setApiKeyError('Failed to load API keys');
+          console.error('❌ Failed to load API keys:', result);
         }
       } catch (error) {
-        console.error('🔑 Tool Editor: Error loading API keys:', error);
-        setApiKeyError('Failed to load API keys from BYOK Manager');
+        console.error('Error loading API keys:', error);
+        setApiKeyError('Error connecting to API Key Manager');
       } finally {
         setLoadingApiKeys(false);
       }
     };
 
     loadApiKeys();
-  }, []);
+  }, []); // Only run once on mount
+
+  // Get available frameworks based on API keys (matching AgentEditor pattern)
+  const getAvailableFrameworks = () => {
+    const frameworks = [];
+    
+    availableApiKeys.forEach(key => {
+      if (key.validation_status === 'valid') {
+        switch (key.provider) {
+          case 'openai':
+            frameworks.push({ value: 'openai', label: '🤖 OpenAI GPT', provider: 'openai' });
+            break;
+          case 'anthropic':
+            frameworks.push({ value: 'anthropic', label: '🧠 Anthropic Claude', provider: 'anthropic' });
+            break;
+          case 'openrouter':
+            frameworks.push({ value: 'openrouter', label: '🌐 OpenRouter', provider: 'openrouter' });
+            break;
+        }
+      }
+    });
+    
+    // Always include built-in options
+    frameworks.push(
+      { value: 'webhook', label: '🔗 Webhook', provider: 'none' },
+      { value: 'api', label: '🌐 REST API', provider: 'none' },
+      { value: 'database', label: '🗄️ Database', provider: 'none' }
+    );
+    
+    return frameworks;
+  };
+
+  // Existing state
+  const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
+
+  // Find parent agent for inheritance
+  const parentAgent = connectedNodes.find(
+    node => node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
+  );
+  const isInheritingFromAgent = formData.inherits_from && parentAgent;
+
+  useEffect(() => {
+    if (formData.frameworkConfig) {
+      setLocalFrameworkConfig(formData.frameworkConfig);
+    }
+  }, [formData.framework]);
 
   const handleToolTypeChange = (e) => {
     const newToolType = e.target.value;
     handleInputChange(e);
     
-    if (!isInheritingFromAgent && newToolType !== 'universal_api') {
-      setTimeout(() => {
-        handleInputChange({ target: { name: 'framework', value: '' } });
-        setLocalFrameworkConfig({});
-      }, 0);
+    // Reset related fields when tool type changes
+    if (newToolType !== 'universal_api_builder') {
+      handleInputChange({ target: { name: 'serviceName', value: '' } });
+      handleInputChange({ target: { name: 'description', value: '' } });
+      handleInputChange({ target: { name: 'selectedLLM', value: '' } });
     }
   };
 
   const handleApiResearch = async (researchData) => {
+    try {
     setIsResearching(true);
     setResearchResult(null);
 
-    try {
-      // Get API URL from environment or use default
-      const API_URL = window.REACT_APP_API_URL || 'http://localhost:8000';
+      // Prepare the request body with LLM information
+      const requestBody = {
+        service_name: researchData.serviceName,
+        description: researchData.description,
+        selected_llm: researchData.selectedLLM
+      };
       
-      console.log('Starting API research with data:', researchData);
-      console.log('Using API URL:', `${API_URL}/api/tools/research-api`);
+      // Add endpoint hint if available
+      if (researchData.endpointHint) {
+        requestBody.endpoint_hint = researchData.endpointHint;
+      }
       
-      const response = await fetch(`${API_URL}/api/tools/research-api`, {
+      console.log('🤖 Starting API research with:', requestBody);
+      
+      const response = await fetch('http://localhost:8000/api/tools/research-api', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          // Add authorization header if available (optional)
-          ...(localStorage.getItem('token') && {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          })
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(researchData)
+        body: JSON.stringify(requestBody)
       });
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('API Error Response:', errorText);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText}`);
-      }
-
+      
+      if (response.ok) {
       const result = await response.json();
-      console.log('API Research Result:', result);
-      console.log('Auth details:', {
-        auth_required: result.auth_required,
-        auth_type: result.auth_type,
-        auth_header: result.auth_header,
-        auth_format: result.auth_format,
-        auth_instructions: result.auth_instructions
-      });
+        console.log('✅ API research result:', result);
       setResearchResult(result);
 
       if (result.success) {
-        const autoConfig = {
-          toolType: 'universal_api',
-          framework: 'universal_api',
-          frameworkConfig: {
-            url: result.base_url,
-            method: result.primary_endpoints?.[0]?.method || result.primary_method || 'POST',
-            headers: result.default_headers || {},
-            auth_type: result.auth_type,
-            protocol: result.protocol,
-            endpoints: result.endpoints,
-            protocol_config: result.protocol_config
-          },
-          ai_generated: true,
-          api_research_result: result
-        };
-
-        console.log('Auto-configuring tool with:', autoConfig);
-
-        Object.keys(autoConfig).forEach(key => {
+          toast.success(`✅ Research complete! Found configuration for ${result.service || researchData.serviceName}`);
+          
+          // Auto-apply configuration if available
+          if (result.configuration) {
+            const config = result.configuration;
+            
+            // Update framework configuration
+            const newFrameworkConfig = {
+              ...localFrameworkConfig,
+              service_name: config.service_name || researchData.serviceName,
+              base_url: config.base_url,
+              auth_type: config.auth_type,
+              endpoints: config.endpoints,
+              headers: config.headers || {},
+              auto_configured: true
+            };
+            
+            setLocalFrameworkConfig(newFrameworkConfig);
+            handleInputChange({
+              target: {
+                name: 'frameworkConfig',
+                value: newFrameworkConfig
+              }
+            });
+            
+            // Update tool type to API if not already set
+            if (formData.toolType === 'universal_api_builder') {
           handleInputChange({
-            target: { name: key, value: autoConfig[key] }
+                target: {
+                  name: 'toolType',
+                  value: 'api'
+                }
+              });
+            }
+            
+            toast.success('🔧 Configuration automatically applied!');
+          }
+        } else {
+          // Handle failure cases with helpful messages
+          const errorMessage = result.error || 'Unknown error occurred';
+          const suggestion = result.suggestion || 'Please try again with different parameters';
+          
+          console.error('❌ API research failed:', result);
+          
+          // Check if this is an authentication requirement
+          if (result.auth_required || result.auth_guidance) {
+            // Show authentication guidance
+            const authGuidance = result.auth_guidance;
+            if (authGuidance) {
+              // Show detailed authentication setup instructions
+              const authMessage = `🔐 Authentication Required for ${authGuidance.service}
+
+${authGuidance.auth_type} needed. Here's how to get it:
+
+${authGuidance.steps.join('\n')}
+
+Token format: ${authGuidance.token_format}
+
+📚 Documentation: ${authGuidance.documentation}
+
+${authGuidance.security_note ? `🔒 Security: ${authGuidance.security_note}` : ''}
+
+${authGuidance.additional_setup ? `⚠️ Additional setup: ${authGuidance.additional_setup}` : ''}`;
+
+              toast.error(authMessage, {
+                duration: 15000,
+                style: {
+                  maxWidth: '600px',
+                  fontSize: '12px',
+                  whiteSpace: 'pre-line'
+                }
+              });
+              
+              // Also show a shorter message
+              setTimeout(() => {
+                toast.info(`💡 After getting your ${authGuidance.auth_type}, come back and configure the authentication in the Tool settings`, {
+                  duration: 8000
+                });
+              }, 2000);
+            } else {
+              toast.error(`🔐 ${errorMessage}`, {
+                duration: 6000
+              });
+            }
+          } else {
+            // Show detailed error message
+            toast.error(`❌ ${errorMessage}`, {
+              duration: 6000,
+              style: {
+                maxWidth: '500px'
+              }
+            });
+            
+            // Show suggestion as a separate info toast
+            if (suggestion && suggestion !== errorMessage) {
+              setTimeout(() => {
+                toast.info(`💡 ${suggestion}`, {
+                  duration: 8000,
+                  style: {
+                    maxWidth: '500px'
+                  }
+                });
+              }, 1000);
+            }
+          }
+          
+          // Set research result to show the failure in UI
+          setResearchResult({
+            success: false,
+            error: errorMessage,
+            suggestion: suggestion,
+            auth_required: result.auth_required,
+            auth_guidance: result.auth_guidance,
+            raw_response: result.raw_response
           });
+        }
+      } else {
+        const errorText = await response.text();
+        console.error('❌ API research failed:', response.status, errorText);
+        
+        let errorMessage = `Request failed: ${response.status} ${response.statusText}`;
+        let suggestion = 'Check your internet connection and try again';
+        
+        if (response.status === 422) {
+          errorMessage = 'Invalid request format';
+          suggestion = 'Please check that all required fields are filled correctly';
+        } else if (response.status === 500) {
+          errorMessage = 'Server error occurred';
+          suggestion = 'The AI service may be temporarily unavailable. Please try again in a few minutes';
+        } else if (response.status === 401 || response.status === 403) {
+          errorMessage = 'Authentication failed';
+          suggestion = 'Please check your API keys in the BYOK Manager';
+        }
+        
+        toast.error(`❌ ${errorMessage}`);
+        setTimeout(() => {
+          toast.info(`💡 ${suggestion}`, { duration: 6000 });
+        }, 1000);
+        
+        setResearchResult({
+          success: false,
+          error: errorMessage,
+          suggestion: suggestion
         });
-
-        setLocalFrameworkConfig(autoConfig.frameworkConfig);
       }
-    } catch (error) {
-      console.error('API Research Error:', error);
       
-      let errorMessage = error.message;
-      let suggestions = [
-        'Check if the backend server is running on ' + (window.REACT_APP_API_URL || 'http://localhost:8000'),
-        'Verify the service name is correct',
-        'Try with a more detailed description'
-      ];
-
-      // Handle specific error types
-      if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-        errorMessage = 'Cannot connect to the backend server';
-        suggestions = [
-          'Make sure the backend server is running',
-          'Check if the API URL is correct: ' + (window.REACT_APP_API_URL || 'http://localhost:8000'),
-          'Verify there are no firewall or network issues'
-        ];
-      } else if (error.message.includes('401')) {
-        errorMessage = 'Authentication required or invalid';
-        suggestions = [
-          'Try logging in again',
-          'Check if your session has expired',
-          'Contact support if the issue persists'
-        ];
-      } else if (error.message.includes('500')) {
-        errorMessage = 'Server error occurred during API research';
-        suggestions = [
-          'Try again in a few moments',
-          'Check the backend logs for more details',
-          'Try with a simpler service description'
-        ];
+    } catch (error) {
+      console.error('❌ API research error:', error);
+      
+      let errorMessage = `Network error: ${error.message}`;
+      let suggestion = 'Check your internet connection and ensure the backend server is running';
+      
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = 'Cannot connect to backend server';
+        suggestion = 'Make sure the backend server is running on localhost:8000';
       }
+      
+      toast.error(`❌ ${errorMessage}`);
+      setTimeout(() => {
+        toast.info(`💡 ${suggestion}`, { duration: 6000 });
+      }, 1000);
 
       setResearchResult({
         success: false,
         error: errorMessage,
-        suggestions: suggestions
+        suggestion: suggestion
       });
     } finally {
       setIsResearching(false);
     }
   };
 
+  // Handle framework change with auto-injection
   const handleFrameworkChangeLocal = (e) => {
-    const framework = e.target.value;
-    handleFrameworkChange(e);
-    setLocalFrameworkConfig(formData.frameworkConfig || {});
+    const newFramework = e.target.value;
+    handleInputChange(e);
+    
+    // Auto-inject API key if available
+    if (newFramework && availableApiKeys.length > 0) {
+      const framework = newFramework.toLowerCase();
+      let matchingKey = null;
+
+      // Map framework to provider
+      if (framework.includes('openai')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'openai' && key.validation_status === 'valid');
+      } else if (framework.includes('anthropic')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'anthropic' && key.validation_status === 'valid');
+      } else if (framework.includes('openrouter')) {
+        matchingKey = availableApiKeys.find(key => key.provider === 'openrouter' && key.validation_status === 'valid');
+      }
+
+      // Auto-inject the API key if found
+      if (matchingKey && !formData.apiKey) {
+        const placeholder = `[BYOK:${matchingKey.provider}]`;
+        handleInputChange({ target: { name: 'apiKey', value: placeholder } });
+        toast.success(`🔑 Auto-injected ${matchingKey.provider_name} API key from BYOK Manager`);
+      }
+    }
   };
 
   const handleFrameworkConfigChange = (e) => {
@@ -810,14 +837,14 @@ const ToolEditor = ({
     }
   };
 
-  // Render BYOK Status for Tool Editor
+  // 🔑 Render BYOK Status Indicator (matching AgentEditor pattern)
   const renderBYOKStatus = () => {
     if (loadingApiKeys) {
       return (
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <div className="flex items-center">
             <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-            <span className="text-sm text-blue-700">Loading your API keys...</span>
+            <span className="text-blue-700 text-sm">Loading API keys...</span>
           </div>
         </div>
       );
@@ -826,30 +853,34 @@ const ToolEditor = ({
     if (apiKeyError) {
       return (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
-            <span className="text-sm text-red-700">{apiKeyError}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-red-700 text-sm">⚠️ {apiKeyError}</span>
+            <button
+              type="button"
+              onClick={() => window.open('/api-keys', '_blank')}
+              className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
+            >
+              Manage Keys
+            </button>
           </div>
         </div>
       );
     }
 
     const validKeys = availableApiKeys.filter(key => key.validation_status === 'valid');
-    
-    if (validKeys.length === 0) {
+    const totalKeys = availableApiKeys.length;
+
+    if (totalKeys === 0) {
       return (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <span className="text-yellow-600 mr-2">🔑</span>
-              <span className="text-sm text-yellow-700">No API keys configured</span>
-            </div>
+            <span className="text-yellow-700 text-sm">🔑 No API keys configured for AI tools</span>
             <button
               type="button"
               onClick={() => window.open('/api-keys', '_blank')}
-              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+              className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
             >
-              Add API Keys
+              Add Keys
             </button>
           </div>
         </div>
@@ -859,16 +890,18 @@ const ToolEditor = ({
     return (
       <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
         <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <span className="text-green-600 mr-2">🔑</span>
-            <span className="text-sm text-green-700">
-              {validKeys.length} API key{validKeys.length > 1 ? 's' : ''} available: {validKeys.map(k => k.provider_name).join(', ')}
-            </span>
-          </div>
+          <span className="text-green-700 text-sm">
+            ✅ {validKeys.length}/{totalKeys} API keys ready
+            {validKeys.length > 0 && (
+              <span className="ml-2 text-xs">
+                ({validKeys.map(k => k.provider_name).join(', ')})
+              </span>
+            )}
+          </span>
           <button
             type="button"
             onClick={() => window.open('/api-keys', '_blank')}
-            className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm"
+            className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
           >
             Manage Keys
           </button>
@@ -999,6 +1032,8 @@ const ToolEditor = ({
           onApiResearch={handleApiResearch}
           isResearching={isResearching}
           researchResult={researchResult}
+          availableApiKeys={availableApiKeys}
+          loadingApiKeys={loadingApiKeys}
         />
       )}
 

@@ -5,6 +5,116 @@ import { flowTemplates as cvTemplates } from './flowTemplates/cvTemplates';
 
 // Define base templates
 const baseTemplates = [
+    // NEW: Simple API Key Test Template
+    {
+      name: '🔑 API Key Test - Simple Agent + Task',
+      description: 'A simple workflow to test API key injection with CrewAI agent and task. Perfect for verifying that your API keys are working correctly.',
+      thumbnail: '/img/api-key-test-flow.png',
+      nodes: [
+        {
+          id: 'input-api-test',
+          type: 'input',
+          position: { x: 100, y: 200 },
+          data: {
+            label: '📝 Test Query',
+            inputType: 'text',
+            placeholder: 'Enter your test question here (e.g., "What are the latest trends in AI?")',
+            description: 'Enter any question to test the API key integration',
+            value: 'What are the latest trends in AI automation for small businesses?',
+            nodeId: 'input-api-test',
+            nodeType: 'input'
+          }
+        },
+        {
+          id: 'agent-api-test',
+          type: 'agent',
+          position: { x: 350, y: 200 },
+          data: {
+            label: '🤖 Test Agent',
+            role: 'Research Assistant',
+            goal: 'Provide helpful information on any topic',
+            backstory: 'You are a knowledgeable research assistant with access to current information. You provide clear, accurate, and helpful responses.',
+            framework: 'crewai',
+            llm: {
+              provider: 'perplexity',
+              model: 'llama-3.1-sonar-small-128k-online'
+            },
+            llmModel: 'llama-3.1-sonar-small-128k-online',
+            temperature: 0.7,
+            max_tokens: 1000,
+            allowDelegation: false,
+            enableMemory: false,
+            verbose: true,
+            nodeId: 'agent-api-test',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-api-test',
+          type: 'task',
+          position: { x: 600, y: 200 },
+          data: {
+            label: '🎯 Research Task',
+            description: 'Answer the user\'s question with current, accurate information',
+            expectedOutput: 'A clear, informative response to the user\'s question with relevant details and current information',
+            async: false,
+            agentId: 'agent-api-test',
+            nodeId: 'task-api-test',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'output-api-test',
+          type: 'output',
+          position: { x: 850, y: 200 },
+          data: {
+            label: '📤 Test Results',
+            outputType: 'text',
+            description: 'Display the agent\'s response',
+            nodeId: 'output-api-test',
+            nodeType: 'output'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-input-agent',
+          source: 'input-api-test',
+          target: 'agent-api-test',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-agent-task', 
+          source: 'agent-api-test',
+          target: 'task-api-test',
+          type: 'smoothstep',
+          animated: true
+        },
+        {
+          id: 'edge-task-output',
+          source: 'task-api-test',
+          target: 'output-api-test',
+          type: 'smoothstep',
+          animated: true
+        }
+      ],
+      tags: ['API Key Test', 'Simple', 'CrewAI', 'Perplexity', 'Getting Started'],
+      frameworksUsed: ['crewai'],
+      version: '1.0',
+      author: 'CrewBuilder AI',
+      created: '2024-12-19',
+      complexity: 'Simple',
+      estimatedTime: '30 seconds',
+      useCase: 'Perfect for testing API key injection and verifying that your Perplexity API key is working correctly with CrewAI agents.',
+      metadata: {
+        category: 'Testing',
+        industry: ['All'],
+        outputFormat: 'Text Response',
+        aiCapabilities: ['Research', 'Question Answering'],
+        businessValue: 'High - Verifies API key integration is working correctly'
+      }
+    },
     // NEW: Simple Crypto Data Extractor Template
     {
       name: '🔥 Simple Crypto Data Extractor',

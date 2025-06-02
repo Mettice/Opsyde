@@ -11,10 +11,41 @@ from backend.utils.logging import get_logger
 logger = get_logger(__name__)
 router = APIRouter(tags=["tools"])
 
+async def get_current_user_optional(request: Request) -> Optional[Dict]:
+    """Get current user if authenticated, otherwise return None"""
+    try:
+        # Try to get the Authorization header
+        auth_header = request.headers.get("Authorization")
+        logger.debug(f"Authorization header: {auth_header[:20] if auth_header else 'None'}...")
+        
+        if not auth_header:
+            logger.debug("No Authorization header found")
+            return None
+            
+        if not auth_header.startswith("Bearer "):
+            logger.debug("Authorization header doesn't start with 'Bearer '")
+            return None
+        
+        # Extract token
+        token = auth_header.split(" ")[1]
+        logger.debug(f"Extracted token: {token[:20]}...")
+        
+        # Verify token
+        payload = security_manager.verify_token(token)
+        logger.debug(f"Token verified successfully for user: {payload.get('user_id', 'unknown')}")
+        return payload
+        
+    except Exception as e:
+        # Log the specific error for debugging
+        logger.debug(f"Authentication failed (optional): {str(e)}")
+        # If any error occurs, just return None (unauthenticated)
+        return None
+
 class APIResearchRequest(BaseModel):
     service_name: str
     description: str
     endpoint_hint: Optional[str] = None
+    selected_llm: Optional[Dict[str, str]] = None
 
 class APIResearchResponse(BaseModel):
     success: bool
@@ -34,19 +65,57 @@ class APIResearchResponse(BaseModel):
 
 @router.post("/research-api", response_model=APIResearchResponse)
 async def research_api(
-    request: APIResearchRequest
+    request: APIResearchRequest,
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Enhanced API research supporting all protocols"""
+    """Enhanced API research supporting all protocols with BYOK LLM selection"""
     try:
         # Debug logging
-        logger.info(f"Research API called without authentication (testing)")
+        logger.info(f"Research API called for {request.service_name}")
+        logger.info(f"Selected LLM: {request.selected_llm}")
+        logger.info(f"Current user: {current_user.get('user_id') if current_user else 'anonymous'}")
         
-        # Handle unauthenticated request for testing
-        user_id = 'anonymous'
-        logger.info(f"API research request for {request.service_name} by user {user_id}")
+        # Prepare user keys based on selected LLM
+        user_keys = {}
+        if request.selected_llm:
+            # Get the selected provider
+            provider = request.selected_llm.get('provider')
+            
+            if provider:
+                # Get the actual API key from BYOK system
+                try:
+                    # Use actual user ID if authenticated, otherwise anonymous
+                    user_id = current_user.get('user_id') if current_user else "anonymous"
+                    
+                    # Get user's execution keys from BYOK system
+                    from backend.services.user_settings_service import user_settings_service
+                    execution_keys = await user_settings_service.get_user_keys_for_execution(user_id)
+                    
+                    # Map provider to the expected key format
+                    if provider == 'openai' and 'openai' in execution_keys:
+                        user_keys['openai_key'] = execution_keys['openai']
+                        logger.info(f"Using OpenAI key from BYOK system")
+                    elif provider == 'anthropic' and 'anthropic' in execution_keys:
+                        user_keys['anthropic_key'] = execution_keys['anthropic']
+                        logger.info(f"Using Anthropic key from BYOK system")
+                    elif provider == 'openrouter' and 'openrouter' in execution_keys:
+                        user_keys['openrouter_key'] = execution_keys['openrouter']
+                        logger.info(f"Using OpenRouter key from BYOK system")
+                    else:
+                        logger.warning(f"No {provider} key found in BYOK system for user {user_id}")
+                        
+                except Exception as byok_error:
+                    logger.error(f"Failed to get keys from BYOK system: {str(byok_error)}")
+                    # Fallback to environment variables
+                    logger.info("Falling back to environment variables")
+                    user_keys = await _get_user_api_keys('anonymous')
+            else:
+                logger.warning("Selected LLM missing provider")
+        else:
+            # Fallback to environment variables if no LLM selected
+            logger.info("No LLM selected, falling back to environment variables")
+            user_keys = await _get_user_api_keys('anonymous')
         
-        # Use empty dict for user keys since we're testing without auth
-        user_keys = await _get_user_api_keys(user_id)
         logger.info(f"User keys available: {list(user_keys.keys()) if user_keys else 'None'}")
         
         # Use shared research
@@ -54,7 +123,7 @@ async def research_api(
             service_name=request.service_name,
             description=request.description,
             endpoint_hint=request.endpoint_hint,
-            user_keys=user_keys
+            user_id=current_user.get('user_id') if current_user else "anonymous"
         )
         
         logger.info(f"API research completed for {request.service_name}: {research_result.get('success')}")
@@ -70,26 +139,65 @@ async def research_api(
 @router.post("/research-output-api", response_model=APIResearchResponse)
 async def research_output_api(
     request: APIResearchRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Research API for output integrations"""
+    """Research API for output integrations - Enhanced with BYOK support"""
     try:
-        from backend.frameworks.shared_api_research import research_for_output
+        logger.info(f"Output API research request: {request.service_name} - {request.description}")
+        logger.info(f"Current user: {current_user.get('user_id') if current_user else 'anonymous'}")
         
-        # Get user's API keys for enhanced research
-        user_keys = await _get_user_api_keys(current_user.get("id"))
+        # Handle LLM selection and user keys
+        user_keys = {}
+        
+        if request.selected_llm and request.selected_llm.get('provider'):
+            try:
+                # Get user's API keys from BYOK system
+                from backend.services.user_settings_service import user_settings_service
+                
+                # Use actual user ID if authenticated, otherwise anonymous
+                user_id = current_user.get('user_id') if current_user else "anonymous"
+                
+                # Get user execution keys based on selected LLM provider
+                user_execution_keys = await user_settings_service.get_user_keys_for_execution(user_id)
+                
+                # Map the provider to the correct key format
+                provider = request.selected_llm.get('provider')
+                if provider in user_execution_keys:
+                    user_keys[f"{provider}_key"] = user_execution_keys[provider]
+                    logger.info(f"Using user's {provider} key from BYOK system")
+                else:
+                    logger.warning(f"No {provider} key found in BYOK system for user {user_id}")
+                        
+            except Exception as byok_error:
+                logger.error(f"Failed to get keys from BYOK system: {str(byok_error)}")
+                # Fallback to environment variables
+                logger.info("Falling back to environment variables")
+                user_keys = await _get_user_api_keys('anonymous')
+        else:
+            # Fallback to environment variables if no LLM selected
+            logger.info("No LLM selected, falling back to environment variables")
+            user_keys = await _get_user_api_keys('anonymous')
+        
+        logger.info(f"User keys available: {list(user_keys.keys()) if user_keys else 'None'}")
+        
+        # Use shared research for output
+        from backend.frameworks.shared_api_research import research_for_output
         
         result = await research_for_output(
             service_name=request.service_name,
             description=request.description,
             endpoint_hint=request.endpoint_hint,
-            user_keys=user_keys
+            user_id=current_user.get('user_id') if current_user else "anonymous"
         )
+        
+        logger.info(f"Output API research completed for {request.service_name}: {result.get('success')}")
         
         return APIResearchResponse(**result)
         
     except Exception as e:
         logger.error(f"Output API research failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return APIResearchResponse(
             success=False,
             error=str(e),
@@ -99,78 +207,82 @@ async def research_output_api(
 @router.post("/research-email-format", response_model=APIResearchResponse)
 async def research_email_format(
     request: APIResearchRequest,
-    current_user: Dict = Depends(get_current_user)
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Research email formatting and configuration for smart email outputs"""
+    """Research email formatting and configuration for smart email outputs - Enhanced with BYOK support"""
     try:
-        from backend.frameworks.ai_integration_runner import AIIntegrationRunner
+        logger.info(f"Email format research request: {request.service_name} - {request.description}")
+        logger.info(f"Current user: {current_user.get('user_id') if current_user else 'anonymous'}")
         
-        ai_runner = AIIntegrationRunner()
+        # Handle LLM selection and user keys
+        user_keys = {}
         
-        # Build email-specific research prompt
-        email_config = {
-            "description": request.description,
-            "email_style": getattr(request, 'email_style', 'professional'),
-            "output_type": "smart_email",
-            "service_type": "email"
-        }
+        if request.selected_llm and request.selected_llm.get('provider'):
+            try:
+                # Get user's API keys from BYOK system
+                from backend.services.user_settings_service import user_settings_service
+                
+                # Use actual user ID if authenticated, otherwise anonymous
+                user_id = current_user.get('user_id') if current_user else "anonymous"
+                
+                # Get user execution keys based on selected LLM provider
+                user_execution_keys = await user_settings_service.get_user_keys_for_execution(user_id)
+                
+                # Map the provider to the correct key format
+                provider = request.selected_llm.get('provider')
+                if provider in user_execution_keys:
+                    user_keys[f"{provider}_key"] = user_execution_keys[provider]
+                    logger.info(f"Using user's {provider} key from BYOK system for email research")
+                else:
+                    logger.warning(f"No {provider} key found in BYOK system for user {user_id}")
+                        
+            except Exception as byok_error:
+                logger.error(f"Failed to get keys from BYOK system: {str(byok_error)}")
+                # Fallback to environment variables
+                logger.info("Falling back to environment variables")
+                user_keys = await _get_user_api_keys('anonymous')
+        else:
+            # Fallback to environment variables if no LLM selected
+            logger.info("No LLM selected, falling back to environment variables")
+            user_keys = await _get_user_api_keys('anonymous')
         
-        # Generate email format plan
-        result = await ai_runner._generate_integration_plan_with_user_key(
-            output_type="smart_email",
-            ai_config=email_config,
-            data={"sample": "workflow data"},
-            llm_config={
-                "provider": "openai",
-                "model": "gpt-4",
-                "key": "demo-key"  # You'll need to get user's actual key
-            }
+        # Use shared research for email formatting
+        from backend.frameworks.shared_api_research import research_for_output
+        
+        # Build email-specific description
+        email_description = f"Email formatting and delivery for: {request.description}"
+        
+        result = await research_for_output(
+            service_name="Email Service",
+            description=email_description,
+            endpoint_hint=request.endpoint_hint,
+            user_id=current_user.get('user_id') if current_user else "anonymous"
         )
         
-        if result.get("success"):
-            plan = result.get("plan", {})
-            return APIResearchResponse(
-                success=True,
-                service_name="Email",
-                api_type="SMTP/Email Service",
-                base_url="email://smart-formatting",
-                auth_type="smtp_credentials",
-                primary_method="SEND",
-                endpoints=[
-                    {
-                        "name": "send_formatted_email",
-                        "description": "Send AI-formatted email",
-                        "method": "POST"
-                    }
-                ],
-                default_headers={"Content-Type": "text/html"},
-                sample_input={
-                    "recipient": "user@example.com",
-                    "subject": plan.get("subject_template", "AI-Generated Report"),
-                    "style": email_config.get("email_style", "professional"),
-                    "data": "workflow_results"
-                },
-                confidence=0.95,
-                protocol="email",
-                protocol_config={
-                    "email_format": plan.get("email_format", "html"),
-                    "template_style": plan.get("template_style", "professional"),
-                    "include_attachments": plan.get("include_attachments", False)
+        # Enhance result for email-specific use case
+        if result.get('success'):
+            result.update({
+                "service_name": "Email",
+                "api_type": "SMTP/Email Service",
+                "base_url": "email://smart-formatting",
+                "auth_type": "smtp_credentials",
+                "primary_method": "SEND",
+                "protocol": "email",
+                "protocol_config": {
+                    "email_format": "html",
+                    "template_style": "professional",
+                    "include_attachments": False
                 }
-            )
-        else:
-            return APIResearchResponse(
-                success=False,
-                error="Failed to generate email format plan",
-                suggestions=[
-                    "Try being more specific about the email style",
-                    "Specify the type of data to include in the email",
-                    "Mention any branding or formatting requirements"
-                ]
-            )
+            })
+        
+        logger.info(f"Email format research completed: {result.get('success')}")
+        
+        return APIResearchResponse(**result)
             
     except Exception as e:
         logger.error(f"Email format research failed: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return APIResearchResponse(
             success=False,
             error=str(e),
@@ -288,53 +400,15 @@ async def test_endpoint():
     }
 
 async def _get_user_api_keys(user_id: str) -> Dict[str, str]:
-    """Get user's API keys for research (implement based on your user settings)"""
-    try:
-        # If you have user settings service implemented:
-        # from backend.services.user_settings_service import user_settings_service
-        # settings = await user_settings_service.get_user_settings(int(user_id))
-        # return {
-        #     "openai_key": await user_settings_service.get_api_key(int(user_id), "openai"),
-        #     "anthropic_key": await user_settings_service.get_api_key(int(user_id), "anthropic"),
-        # }
-        
-        # For now, fallback to environment variables
-        import os
-        return {
-            "openai_key": os.getenv("OPENAI_API_KEY"),
-            "anthropic_key": os.getenv("ANTHROPIC_API_KEY"),
-            "openrouter_key": os.getenv("OPENROUTER_API_KEY")
-        }
-    except Exception as e:
-        logger.warning(f"Could not get user API keys: {str(e)}")
-        return {}
-
-async def get_current_user_optional(request: Request) -> Optional[Dict]:
-    """Get current user if authenticated, otherwise return None"""
-    try:
-        # Try to get the Authorization header
-        auth_header = request.headers.get("Authorization")
-        logger.debug(f"Authorization header: {auth_header[:20] if auth_header else 'None'}...")
-        
-        if not auth_header:
-            logger.debug("No Authorization header found")
-            return None
-            
-        if not auth_header.startswith("Bearer "):
-            logger.debug("Authorization header doesn't start with 'Bearer '")
-            return None
-        
-        # Extract token
-        token = auth_header.split(" ")[1]
-        logger.debug(f"Extracted token: {token[:20]}...")
-        
-        # Verify token
-        payload = security_manager.verify_token(token)
-        logger.debug(f"Token verified successfully for user: {payload.get('user_id', 'unknown')}")
-        return payload
-        
-    except Exception as e:
-        # Log the specific error for debugging
-        logger.debug(f"Authentication failed (optional): {str(e)}")
-        # If any error occurs, just return None (unauthenticated)
-        return None
+    """Get user API keys from environment variables or user settings"""
+    import os
+    
+    # For now, return environment variables
+    # In the future, this could be enhanced to get user-specific keys
+    return {
+        'openai_key': os.getenv('OPENAI_API_KEY'),
+        'anthropic_key': os.getenv('ANTHROPIC_API_KEY'),
+        'openrouter_key': os.getenv('OPENROUTER_API_KEY'),
+        'huggingface_key': os.getenv('HUGGINGFACE_API_KEY'),
+        'groq_key': os.getenv('GROQ_API_KEY')
+    }

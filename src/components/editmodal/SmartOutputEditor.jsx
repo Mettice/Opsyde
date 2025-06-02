@@ -30,7 +30,12 @@ const SmartOutputEditor = ({
   handleInputChange, 
   onTestIntegration, 
   isTestingIntegration, 
-  testResult 
+  testResult,
+  // NEW: Add LLM selection props
+  availableLLMs = [],
+  selectedLLM = '',
+  onLLMChange,
+  loadingApiKeys = false
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -129,6 +134,62 @@ const SmartOutputEditor = ({
       </div>
 
       <div className="space-y-6">
+        {/* AI Model Selection */}
+        <div>
+          <label className="block text-gray-800 mb-2 font-medium">
+            🤖 Choose AI Model for Smart Integration
+          </label>
+          {loadingApiKeys ? (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                <span className="text-sm text-blue-700">Loading your API keys from BYOK Manager...</span>
+              </div>
+            </div>
+          ) : availableLLMs.length === 0 ? (
+            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <span className="text-yellow-600 mr-2">🔑</span>
+                  <span className="text-sm text-yellow-700">No valid API keys found in BYOK Manager</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => window.open('/api-keys', '_blank')}
+                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+                >
+                  Add API Keys
+                </button>
+              </div>
+              <p className="text-xs text-yellow-600 mt-2">
+                Add and validate OpenAI, Anthropic, or OpenRouter API keys in the BYOK Manager to enable AI integration
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <select
+                value={selectedLLM}
+                onChange={(e) => onLLMChange && onLLMChange(e.target.value)}
+                className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-700"
+              >
+                <option value="">Select AI Model...</option>
+                {availableLLMs.map((llm) => (
+                  <option key={llm.provider} value={llm.provider}>
+                    {llm.provider === 'openai' ? '🧠 OpenAI GPT-4' :
+                     llm.provider === 'anthropic' ? '🎭 Anthropic Claude' :
+                     llm.provider === 'openrouter' ? '🌐 OpenRouter (Multi-Model)' :
+                     `🤖 ${llm.provider}`} - {llm.masked_value}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-purple-600 flex items-center">
+                <span className="mr-1">🔐</span>
+                Using your secure API keys from BYOK Manager ({availableLLMs.length} valid key{availableLLMs.length > 1 ? 's' : ''} available)
+              </p>
+            </div>
+          )}
+        </div>
+
         {/* Main Description */}
         <div>
           <label className="block text-gray-800 mb-2 font-medium">
@@ -392,7 +453,12 @@ SmartOutputEditor.propTypes = {
   handleInputChange: PropTypes.func.isRequired,
   onTestIntegration: PropTypes.func.isRequired,
   isTestingIntegration: PropTypes.bool.isRequired,
-  testResult: PropTypes.object
+  testResult: PropTypes.object,
+  // NEW: Add LLM selection props
+  availableLLMs: PropTypes.array,
+  selectedLLM: PropTypes.string,
+  onLLMChange: PropTypes.func,
+  loadingApiKeys: PropTypes.bool
 };
 
 export default SmartOutputEditor;

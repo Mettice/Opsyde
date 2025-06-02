@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 🔑 User Settings API Router
-Complete BYOK (Bring Your Own Keys) API endpoints
+Complete BYOK (Bring Your Own Keys) API endpoints using Unified Service
 """
 
 from fastapi import APIRouter, HTTPException, Depends, Request, status
@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 import logging
 from pydantic import BaseModel
 
+# UPDATED: Import the unified service that automatically chooses between direct DB and REST API
 from services.user_settings_service import user_settings_service
 from models.user_settings import (
     UserSettings, APIKeyResponse, UserSettingsResponse, 
@@ -37,59 +38,70 @@ class UserPreferencesUpdate(BaseModel):
     timezone: Optional[str] = None
     notifications: Optional[Dict[str, bool]] = None
 
-@router.on_event("startup")
-async def startup_event():
-    """Initialize the user settings service"""
-    await user_settings_service.initialize()
-
 @router.get("/", response_model=UserSettingsResponse)
 async def get_user_settings(
     request: Request,
     current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Get user settings and API keys"""
+    """Get user settings and API keys using unified service"""
     try:
-        # Use authenticated user ID or fallback to 'anonymous'
-        user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
+        # ENHANCED: Better user ID handling for both Supabase and anonymous users
+        if current_user and current_user.get("id"):
+            user_id = str(current_user["id"])
+            logger.info(f"🔑 Getting settings for authenticated user: {user_id}")
+        else:
+            # For anonymous users, use a special anonymous UUID
+            user_id = "anonymous"
+            logger.info(f"🔑 Getting settings for anonymous user")
         
-        settings = await user_settings_service.get_user_settings(user_id)
-        
-        # Get API keys separately for better control
-        api_keys = await user_settings_service.get_user_api_keys(user_id)
+        # FIXED: Use the correct method from unified service
+        api_keys_data = await user_settings_service.get_user_api_keys(user_id)
+        usage_stats = await user_settings_service.get_usage_stats(user_id)
         
         # Convert to response format with provider registry information
         api_keys_response = []
-        for key in api_keys:
-            provider = provider_registry.get_provider(key.provider)
+        for key_data in api_keys_data:
+            provider = provider_registry.get_provider(key_data.get('provider_id', ''))
             api_keys_response.append({
-                "provider": key.provider,
-                "provider_name": provider.name if provider else key.provider,
+                "provider": key_data.get('provider_id', ''),
+                "provider_name": provider.name if provider else key_data.get('provider_id', ''),
                 "provider_icon": provider.icon if provider else "🔑",
-                "key_value": key.key_value,
-                "masked_value": key.masked_value,
-                "is_active": key.is_active,
-                "validation_status": key.validation_status,
-                "usage_count": key.usage_count,
-                "created_at": key.created_at.isoformat() if key.created_at else None,
-                "last_used": key.last_used.isoformat() if key.last_used else None
+                "key_value": key_data.get('encrypted_key', ''),  # Don't expose actual key
+                "masked_value": key_data.get('masked_value', ''),
+                "is_active": key_data.get('is_active', False),
+                "validation_status": key_data.get('validation_status', 'pending'),
+                "usage_count": key_data.get('usage_count', 0),
+                "created_at": key_data.get('created_at'),
+                "last_used": key_data.get('last_used')
             })
+        
+        # Create settings response
+        settings_dict = {
+            'user_id': user_id,
+            'api_keys': api_keys_response,
+            'preferences': {
+                'theme': 'light',
+                'language': 'en',
+                'notifications': True
+            },
+            'quotas': {
+                'monthly_requests': 1000,
+                'daily_requests': 100
+            },
+            'monthly_usage': usage_stats.get('monthly_usage', {}),
+            'usage_limits': usage_stats.get('usage_limits', {})
+        }
+        
+        logger.info(f"✅ Retrieved settings with {len(api_keys_response)} API keys for user {user_id}")
         
         return UserSettingsResponse(
             success=True,
-            settings={
-                "user_id": settings.user_id,
-                "api_keys": api_keys_response,
-                "preferences": settings.preferences,
-                "quotas": settings.quotas,
-                "created_at": settings.created_at.isoformat() if settings.created_at else None,
-                "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
-                "last_login": settings.last_login.isoformat() if settings.last_login else None
-            },
+            settings=settings_dict,
             message="Settings retrieved successfully"
         )
         
     except Exception as e:
-        logger.error(f"Error getting user settings: {str(e)}")
+        logger.error(f"❌ Error getting user settings: {str(e)}")
         return UserSettingsResponse(
             success=False,
             message=f"Failed to get settings: {str(e)}"
@@ -100,9 +112,15 @@ async def add_api_key(
     request: APIKeyRequest,
     current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Add or update an API key"""
+    """Add or update an API key using unified service"""
     try:
-        user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
+        # ENHANCED: Better user ID handling
+        if current_user and current_user.get("id"):
+            user_id = str(current_user["id"])
+            logger.info(f"🔑 Adding API key for authenticated user: {user_id}")
+        else:
+            user_id = "anonymous"
+            logger.info(f"🔑 Adding API key for anonymous user")
         
         # Validate provider exists in registry
         provider = provider_registry.get_provider(request.provider)
@@ -113,22 +131,25 @@ async def add_api_key(
                 message=f"Unknown provider: {request.provider}. Available providers: {available_providers}"
             )
         
-        success = await user_settings_service.add_api_key(user_id, request.provider, request.api_key)
+        # FIXED: Use the correct method from unified service
+        success = await user_settings_service.save_user_api_key(user_id, request.provider, request.api_key)
         
         if success:
+            logger.info(f"✅ Successfully added {provider.name} API key for user {user_id}")
             return APIKeyResponse(
                 success=True,
                 message=f"{provider.name} API key added successfully",
                 data={"provider_id": request.provider}
             )
         else:
+            logger.error(f"❌ Failed to add {provider.name} API key for user {user_id}")
             return APIKeyResponse(
                 success=False,
                 message="Failed to add API key"
             )
             
     except Exception as e:
-        logger.error(f"Error adding API key: {str(e)}")
+        logger.error(f"❌ Error adding API key: {str(e)}")
         return APIKeyResponse(
             success=False,
             message=f"Failed to add API key: {str(e)}"
@@ -139,30 +160,39 @@ async def list_api_keys(
     request: Request,
     current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """List all API keys for the user with provider information"""
+    """List all API keys for the user using unified service"""
     try:
-        user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
+        # ENHANCED: Better user ID handling
+        if current_user and current_user.get("id"):
+            user_id = str(current_user["id"])
+            logger.info(f"🔑 Listing API keys for authenticated user: {user_id}")
+        else:
+            user_id = "anonymous"
+            logger.info(f"🔑 Listing API keys for anonymous user")
         
-        api_keys = await user_settings_service.get_user_api_keys(user_id)
+        # FIXED: Use the correct method from unified service
+        api_keys_data = await user_settings_service.get_user_api_keys(user_id)
         
         keys_response = []
-        for key in api_keys:
-            provider = provider_registry.get_provider(key.provider)
+        for key_data in api_keys_data:
+            provider = provider_registry.get_provider(key_data.get('provider_id', ''))
             keys_response.append({
-                "provider": key.provider,
-                "provider_name": provider.name if provider else key.provider,
+                "provider": key_data.get('provider_id', ''),
+                "provider_name": provider.name if provider else key_data.get('provider_id', ''),
                 "provider_description": provider.description if provider else "",
                 "provider_icon": provider.icon if provider else "🔑",
-                "key_value": key.key_value,
-                "masked_value": key.masked_value,
-                "is_active": key.is_active,
-                "validation_status": key.validation_status,
-                "usage_count": key.usage_count,
-                "created_at": key.created_at.isoformat() if key.created_at else None,
-                "last_used": key.last_used.isoformat() if key.last_used else None,
+                "key_value": key_data.get('encrypted_key', ''),  # Don't expose actual key
+                "masked_value": key_data.get('masked_value', ''),
+                "is_active": key_data.get('is_active', False),
+                "validation_status": key_data.get('validation_status', 'pending'),
+                "usage_count": key_data.get('usage_count', 0),
+                "created_at": key_data.get('created_at'),
+                "last_used": key_data.get('last_used'),
                 "supported_models": provider.supported_models if provider else [],
                 "pricing_info": provider.pricing_info if provider else {}
             })
+        
+        logger.info(f"✅ Retrieved {len(keys_response)} API keys for user {user_id}")
         
         return APIKeyResponse(
             success=True,
@@ -176,7 +206,7 @@ async def list_api_keys(
         )
         
     except Exception as e:
-        logger.error(f"Error listing API keys: {str(e)}")
+        logger.error(f"❌ Error listing API keys: {str(e)}")
         return APIKeyResponse(
             success=False,
             message=f"Failed to list API keys: {str(e)}"
@@ -187,9 +217,13 @@ async def validate_api_key(
     request: APIKeyValidationRequest,
     current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Validate a specific API key"""
+    """Validate a specific API key in Supabase"""
     try:
-        user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
+        # ENHANCED: Better user ID handling
+        if current_user and current_user.get("id"):
+            user_id = str(current_user["id"])
+        else:
+            user_id = "anonymous"
         
         # Validate provider exists
         provider = provider_registry.get_provider(request.provider)
@@ -202,6 +236,8 @@ async def validate_api_key(
         
         is_valid = await user_settings_service.validate_api_key(user_id, request.provider)
         
+        logger.info(f"🔍 Validated {provider.name} API key for user {user_id}: {is_valid}")
+        
         return ValidationResponse(
             valid=is_valid,
             provider=request.provider,
@@ -211,7 +247,7 @@ async def validate_api_key(
         )
         
     except Exception as e:
-        logger.error(f"Error validating API key: {str(e)}")
+        logger.error(f"❌ Error validating API key: {str(e)}")
         return ValidationResponse(
             valid=False,
             provider=request.provider,
@@ -223,37 +259,70 @@ async def delete_api_key(
     provider_id: str,
     current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
-    """Delete an API key"""
+    """Delete an API key from Supabase"""
     try:
-        user_id = current_user.get("id", "anonymous") if current_user else "anonymous"
-        
-        # Validate provider exists
-        provider = provider_registry.get_provider(provider_id)
-        if not provider:
-            return APIKeyResponse(
-                success=False,
-                message=f"Unknown provider: {provider_id}"
-            )
+        # ENHANCED: Better user ID handling
+        if current_user and current_user.get("id"):
+            user_id = str(current_user["id"])
+        else:
+            user_id = "anonymous"
         
         success = await user_settings_service.delete_api_key(user_id, provider_id)
         
         if success:
+            logger.info(f"✅ Deleted {provider_id} API key for user {user_id}")
             return APIKeyResponse(
                 success=True,
-                message=f"{provider.name} API key deleted successfully",
-                data={"provider_id": provider_id}
+                message=f"{provider_id} API key deleted successfully"
             )
         else:
+            logger.warning(f"⚠️ API key not found for deletion: {user_id}, {provider_id}")
             return APIKeyResponse(
                 success=False,
-                message=f"No API key found for provider: {provider.name}"
+                message="API key not found"
             )
             
     except Exception as e:
-        logger.error(f"Error deleting API key: {str(e)}")
+        logger.error(f"❌ Error deleting API key: {str(e)}")
         return APIKeyResponse(
             success=False,
             message=f"Failed to delete API key: {str(e)}"
+        )
+
+@router.get("/providers", response_model=APIKeyResponse)
+async def list_providers():
+    """List all available providers from the registry"""
+    try:
+        providers = provider_registry.get_all_providers()
+        
+        providers_response = []
+        for provider in providers:
+            providers_response.append({
+                "id": provider.id,
+                "name": provider.name,
+                "description": provider.description,
+                "icon": provider.icon,
+                "supported_models": provider.supported_models,
+                "pricing_info": provider.pricing_info,
+                "requires_api_key": provider.requires_api_key
+            })
+        
+        logger.info(f"📋 Listed {len(providers_response)} available providers")
+        
+        return APIKeyResponse(
+            success=True,
+            message="Providers retrieved successfully",
+            data={
+                "providers": providers_response,
+                "total_providers": len(providers_response)
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error listing providers: {str(e)}")
+        return APIKeyResponse(
+            success=False,
+            message=f"Failed to list providers: {str(e)}"
         )
 
 @router.get("/usage", response_model=APIKeyResponse)
@@ -316,41 +385,6 @@ async def update_preferences(
         return APIKeyResponse(
             success=False,
             message=f"Failed to update preferences: {str(e)}"
-        )
-
-@router.get("/providers", response_model=APIKeyResponse)
-async def get_supported_providers():
-    """Get all supported providers with their configurations"""
-    try:
-        providers = provider_registry.get_all_providers()
-        
-        provider_data = []
-        for provider in providers:
-            provider_data.append({
-                "id": provider.id,
-                "name": provider.name,
-                "description": provider.description,
-                "icon": provider.icon,
-                "key_format": provider.key_format,
-                "get_key_url": provider.get_key_url,
-                "supported_models": provider.supported_models,
-                "pricing_info": provider.pricing_info
-            })
-        
-        return APIKeyResponse(
-            success=True,
-            message="Providers retrieved successfully",
-            data={
-                "providers": provider_data,
-                "total_providers": len(provider_data)
-            }
-        )
-        
-    except Exception as e:
-        logger.error(f"Error getting providers: {str(e)}")
-        return APIKeyResponse(
-            success=False,
-            message=f"Failed to get providers: {str(e)}"
         )
 
 @router.get("/providers/{provider_id}", response_model=APIKeyResponse)

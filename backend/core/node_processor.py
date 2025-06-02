@@ -33,22 +33,29 @@ class NodeProcessor:
         
     def _get_handler(self, node_type: str) -> Optional[Callable]:
         """Get handler with lazy loading support"""
+        logger.info(f"🔍 Getting handler for node type: {node_type}")
+        
         # Check if already loaded
         if node_type in self.handlers:
+            logger.info(f"✅ Handler for {node_type} already loaded")
             return self.handlers[node_type]
             
         # Try lazy loading
         if node_type in self._lazy_imports:
             module_path, function_name = self._lazy_imports[node_type]
+            logger.info(f"🔄 Lazy loading {node_type}: {module_path}.{function_name}")
             try:
                 module = importlib.import_module(module_path)
                 handler = getattr(module, function_name)
                 # Cache the loaded handler
                 self.handlers[node_type] = handler
+                logger.info(f"✅ Successfully loaded handler for {node_type}")
                 return handler
             except (ImportError, AttributeError) as e:
-                logger.error(f"Failed to lazy load handler for {node_type}: {e}")
+                logger.error(f"❌ Failed to lazy load handler for {node_type}: {e}")
                 return None
+        else:
+            logger.warning(f"⚠️ No lazy import registered for node type: {node_type}")
                 
         return None
     
@@ -118,7 +125,17 @@ class NodeProcessor:
             
             # Execute handler with timing
             start_time = datetime.now()
-            result = await handler(node_data, wrapped_inputs, execution_context)
+            logger.info(f"🚀 About to execute handler for {node_type} with inputs: {list(wrapped_inputs.keys())}")
+            logger.info(f"🚀 Handler function: {handler}")
+            logger.info(f"🚀 Node data keys: {list(node_data.keys())}")
+            
+            try:
+                result = await handler(node_data, wrapped_inputs, execution_context)
+                logger.info(f"🚀 Handler execution completed for {node_type}")
+            except Exception as handler_error:
+                logger.error(f"❌ Handler execution failed for {node_type}: {str(handler_error)}", exc_info=True)
+                raise handler_error
+                
             execution_time = (datetime.now() - start_time).total_seconds()
             
             # Log performance metrics
@@ -157,3 +174,4 @@ node_processor.register_lazy_handler("tool", "nodes.tool_node", "process_tool_no
 node_processor.register_lazy_handler("trigger", "nodes.trigger_node", "process_trigger_node")
 node_processor.register_lazy_handler("chat", "nodes.chat_node", "process_chat_node")
 node_processor.register_lazy_handler("logic", "nodes.logic_node", "process_logic_node")
+node_processor.register_lazy_handler("delay", "nodes.delay_node", "process_delay_node")

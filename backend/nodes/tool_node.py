@@ -20,7 +20,7 @@ from tools.webhook_tools import run_webhook_tool
 from tools.custom_tools import run_custom_tool
 
 # NEW: Import universal API runner
-from universal_api_runner import run_universal_api_tool
+from frameworks.universal_api_runner import run_universal_api_tool
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class ToolNode:
             if framework_handler:
                 return await self._execute_with_framework_handler(
                     framework_handler, 
-                    config.dict(), 
+                    node_data,  # Pass original node_data instead of config.dict()
                     inputs, 
                     context
                 )
@@ -50,7 +50,7 @@ class ToolNode:
             tool_type = config.tool_type
             
             if tool_type == "llm":
-                result = await self._process_llm_tool(config.framework, config.dict(), inputs)
+                result = await self._process_llm_tool(node_data, inputs)  # Pass original node_data
             elif tool_type == "api":
                 result = await self._process_api_tool(config.dict(), inputs)
             elif tool_type == "webhook":
@@ -164,14 +164,14 @@ class ToolNode:
     async def _execute_with_framework_handler(
         self, 
         framework_handler, 
-        framework_config: Dict[str, Any], 
+        node_data: Dict[str, Any], 
         inputs: Dict[str, Any], 
         context: ExecutionContext
     ) -> Dict[str, Any]:
         """Execute tool using framework handler from registry"""
         try:
             # Execute with the framework handler - pass config and inputs as separate parameters
-            result = await framework_handler(config=framework_config, inputs=inputs)
+            result = await framework_handler(config=node_data, inputs=inputs)
             
             if result.get("success", False):
                 return {
@@ -257,7 +257,7 @@ class ToolNode:
     ) -> Dict[str, Any]:
         """Perform API research for a universal API tool"""
         try:
-            from backend.frameworks.universal_api_runner import UniversalAPIRunner
+            from frameworks.universal_api_runner import UniversalAPIRunner
             
             # Get user API keys for research
             user_keys = await self._get_user_api_keys_from_context(context)
@@ -328,10 +328,10 @@ class ToolNode:
             logger.warning(f"Could not get user API keys from context: {str(e)}")
             return {}
 
-    async def _process_llm_tool(self, framework: str, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def _process_llm_tool(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Process LLM-based tool"""
         try:
-            result = await run_llm_tool(framework, config, inputs)
+            result = await run_llm_tool(config, inputs)
             return {
                 "success": True,
                 "type": "llm_result",
@@ -477,8 +477,8 @@ async def process_tool_node(
     context: Dict[str, Any] = None
 ) -> NodeData:
     """Enhanced process function for tool nodes with Universal API support"""
-    from backend.models.data import NodeData
-    from backend.models.workflow import ExecutionContext
+    from models.data import NodeData
+    from models.workflow import ExecutionContext
     
     tool_node = ToolNode()
     

@@ -55,17 +55,29 @@ class AgentNode:
             # Respect user configuration - no more emergency overrides!
             logger.info(f"🤖 Using user-configured max_tokens: {max_tokens}")
             
+            # CRITICAL: Preserve the enhanced frameworkConfig that contains the API key
+            enhanced_framework_config = node_data.get("frameworkConfig", {})
+            logger.info(f"🔧 Enhanced frameworkConfig from context: {enhanced_framework_config}")
+            
             agent_config = {
                 "role": node_data.get("role", "Assistant"),
                 "goal": node_data.get("goal", "Help the user"),
                 "backstory": node_data.get("backstory", ""),
                 "framework": node_data.get("framework", "openrouter"),
                 "llmModel": node_data.get("llmModel", "gpt-4o-mini"),
+                "llmProvider": (
+                    node_data.get("llm", {}).get("provider") or
+                    node_data.get("llmProvider") or
+                    node_data.get("frameworkConfig", {}).get("provider") or
+                    "openai"
+                ),
                 "temperature": float(node_data.get("temperature", 0.7)),
                 "max_tokens": max_tokens,
                 "enableMemory": node_data.get("enableMemory", False),
                 "allowDelegation": node_data.get("allowDelegation", False),
-                "streamIntermediateSteps": node_data.get("streamIntermediateSteps", False)
+                "streamIntermediateSteps": node_data.get("streamIntermediateSteps", False),
+                # CRITICAL: Include the enhanced frameworkConfig with API key
+                "frameworkConfig": enhanced_framework_config
             }
             
             logger.info(f"🤖 Processing agent: {agent_config['role']} (framework: {agent_config['framework']})")
@@ -109,7 +121,7 @@ class AgentNode:
                 collaboration_context += "\nPlease consider this information in your response.\n"
             
             # Determine the main query/task
-            main_query = self._extract_main_query(formatted_inputs, node_data)
+            main_query = self._extract_main_query(formatted_inputs)
             
             # Add collaboration context to the query
             if collaboration_context:
@@ -127,7 +139,15 @@ class AgentNode:
                 "framework": framework,
                 "result": result,
                 "timestamp": datetime.now().isoformat(),
-                "collaborating_agents": [agent["name"] for agent in collaborating_agents]
+                "collaborating_agents": [agent["name"] for agent in collaborating_agents],
+                "llm": {
+                    "provider": agent_config.get("llmProvider", "openai"),
+                    "model": agent_config.get("llmModel", "gpt-4")
+                },
+                "llmProvider": agent_config.get("llmProvider", "openai"),
+                "llmModel": agent_config.get("llmModel", "gpt-4"),
+                "temperature": agent_config.get("temperature", 0.7),
+                "max_tokens": agent_config.get("max_tokens", 4000)
             }
             
             logger.info(f"✅ Agent {agent_config['role']} completed successfully")
@@ -141,20 +161,28 @@ class AgentNode:
                 "agent_name": node_data.get("label", agent_config["role"]),
                 "role": agent_config["role"],
                 "framework": framework,
+                "llm": {
+                    "provider": agent_config.get("llmProvider", "openai"),
+                    "model": agent_config.get("llmModel", "gpt-4")
+                },
+                "llmProvider": agent_config.get("llmProvider", "openai"),
+                "llmModel": agent_config.get("llmModel", "gpt-4"),
+                "temperature": agent_config.get("temperature", 0.7),
+                "max_tokens": agent_config.get("max_tokens", 4000),
                 "metadata": {
                     "node_id": node_id,
                     "node_type": "agent",
                     "timestamp": datetime.now().isoformat(),
                     "collaborating_agents": collaborating_agents,
-                    "agent_result": {
-                        "type": "agent_result",
-                        "agent_name": node_data.get("label", agent_config["role"]),
-                        "role": agent_config["role"],
-                        "framework": framework,
-                        "result": result,
-                        "timestamp": datetime.now().isoformat(),
-                        "collaborating_agents": [agent["name"] for agent in collaborating_agents]
-                    }
+                    "llm": {
+                        "provider": agent_config.get("llmProvider", "openai"),
+                        "model": agent_config.get("llmModel", "gpt-4")
+                    },
+                    "llmProvider": agent_config.get("llmProvider", "openai"),
+                    "llmModel": agent_config.get("llmModel", "gpt-4"),
+                    "temperature": agent_config.get("temperature", 0.7),
+                    "max_tokens": agent_config.get("max_tokens", 4000),
+                    "agent_result": agent_result
                 }
             }
             
@@ -168,7 +196,7 @@ class AgentNode:
                 "timestamp": datetime.now().isoformat()
             }
 
-    def _extract_main_query(self, inputs: Dict[str, Any], node_data: Dict[str, Any]) -> str:
+    def _extract_main_query(self, inputs: Dict[str, Any]) -> str:
         """
         Extract the main query/task from inputs with enhanced handling for standardized data
         """
@@ -176,18 +204,16 @@ class AgentNode:
             # DEBUG: Log what the agent is actually receiving
             logger.info(f"🔧 DEBUG: Agent received {len(inputs)} inputs")
             for key, value in inputs.items():
-                logger.info(f"🔧 DEBUG: Input '{key}': type={type(value)}")
                 if isinstance(value, dict):
-                    logger.info(f"🔧 DEBUG: Input '{key}' dict keys: {list(value.keys())}")
-                    if 'type' in value:
-                        logger.info(f"🔧 DEBUG: Input '{key}' has type: {value.get('type')}")
-                        if value.get('type') == 'api_data':
-                            logger.info(f"🔧 DEBUG: Found api_data! Service: {value.get('service_name', 'unknown')}")
-                elif hasattr(value, 'value'):
-                    logger.info(f"🔧 DEBUG: Input '{key}' has value attribute: {type(value.value)}")
+                    logger.info(f"🔧 DEBUG: Input '{key}': dict with {len(value)} keys")
+                elif isinstance(value, list):
+                    logger.info(f"🔧 DEBUG: Input '{key}': list with {len(value)} items")
+                else:
+                    logger.info(f"🔧 DEBUG: Input '{key}': {type(value).__name__}")
             
-            # PRIORITY 1: Check for explicit query keys first
-            for key in ['query', 'task', 'prompt', 'message', 'input']:
+            # PRIORITY 1: Check for explicit query/task fields
+            query_fields = ['query', 'task', 'prompt', 'instruction', 'message', 'request']
+            for key in query_fields:
                 if key in inputs and inputs[key]:
                     logger.info(f"🔧 DEBUG: Using explicit query from '{key}'")
                     return str(inputs[key])
@@ -195,199 +221,101 @@ class AgentNode:
             # PRIORITY 2: Handle API data from triggers - CRITICAL PATH
             api_data_found = False
             
-            # NEW: Check for nested value structure first (most common case)
-            for input_key, input_value in inputs.items():
-                if isinstance(input_value, dict) and 'value' in input_value:
-                    nested_value = input_value.get('value', {})
-                    if isinstance(nested_value, dict) and nested_value.get('type') == 'api_data':
-                        api_data_found = True
-                        logger.info(f"🚨 CRITICAL: Found api_data in nested value for input '{input_key}'")
-                        
-                        api_data = nested_value.get('api_data', {})
-                        service_name = nested_value.get('service_name', 'Unknown API')
-                        smart_filtering_enabled = nested_value.get('smart_filtering_enabled', False)
-                        
-                        logger.info(f"🚨 Service: {service_name}, Smart filtering: {smart_filtering_enabled}")
-                        logger.info(f"🚨 API data keys: {list(api_data.keys()) if isinstance(api_data, dict) else 'not dict'}")
-                        
-                        # Handle DexScreener data with ultra-compact processing
-                        if 'dexscreener' in service_name.lower():
-                            records = api_data.get('records', [])
-                            transformation_summary = api_data.get('transformation_summary', {})
-                            
-                            logger.info(f"🚨 EMERGENCY: Processing DexScreener data from nested value: {len(records)} records")
-                            
-                            if records:
-                                # Create ultra-compact summary from already-filtered data
-                                crypto_summary = []
-                                for i, record in enumerate(records[:2], 1):  # Max 2 records
-                                    fields = record.get('fields', {})
-                                    symbol = fields.get('Symbol', 'Unknown')
-                                    name = fields.get('Base Token', 'Unknown')
-                                    price = fields.get('Price (USD)', '0')
-                                    liquidity = fields.get('Liquidity', '0')
-                                    volume = fields.get('Volume', '0')
-                                    
-                                    crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
-                                
-                                # Ultra-minimal prompt (under 500 tokens total)
-                                query = f"""DexScreener crypto data analysis:
-
-📊 DATA ({len(records)} filtered tokens):
-{chr(10).join(crypto_summary)}
-
-Create a 2-line market digest:
-• Token highlights
-• Brief insight
-
-Keep under 100 words total."""
-                                
-                                logger.info(f"✅ Generated DexScreener query from nested value with {len(crypto_summary)} tokens")
-                                return query
-                            else:
-                                logger.warning("🚨 No records found in DexScreener nested value data")
-                                return "No DexScreener data available for analysis."
-                        
-                        # For other APIs, use the transformed data
-                        transformation_summary = api_data.get('transformation_summary', {})
-                        total_records = transformation_summary.get('total_records', 0)
-                        
-                        # Use only the summary, not the full data
-                        query = f"""Analyze {service_name} data:
-- Records: {total_records}
-- Smart filtering: {'Yes' if smart_filtering_enabled else 'No'}
-
-Provide brief insights based on your role."""
-                        
-                        logger.info(f"✅ Generated query for {service_name} from nested value")
-                        return query
-            
-            # EXISTING: Check for direct api_data structure
-            for input_key, input_value in inputs.items():
-                if isinstance(input_value, dict) and input_value.get('type') == 'api_data':
-                    api_data_found = True
-                    logger.info(f"🚨 CRITICAL: Found api_data in direct structure for input '{input_key}'")
+            # Check for standardized API data structure
+            if 'api_data' in inputs and isinstance(inputs['api_data'], dict):
+                api_data = inputs['api_data']
+                logger.info(f"🔧 DEBUG: Found api_data structure")
+                
+                # Look for summary or description in the API data
+                if 'summary' in api_data:
+                    logger.info(f"🔧 DEBUG: Using API data summary")
+                    return f"Please analyze this data: {api_data['summary']}"
+                
+                # Look for records or data arrays
+                if 'records' in api_data and isinstance(api_data['records'], list):
+                    record_count = len(api_data['records'])
+                    logger.info(f"🔧 DEBUG: Found {record_count} records in API data")
                     
-                    api_data = input_value.get('api_data', {})
-                    service_name = input_value.get('service_name', 'Unknown API')
-                    smart_filtering_enabled = input_value.get('smart_filtering_enabled', False)
-                    
-                    logger.info(f"🚨 Service: {service_name}, Smart filtering: {smart_filtering_enabled}")
-                    logger.info(f"🚨 API data keys: {list(api_data.keys()) if isinstance(api_data, dict) else 'not dict'}")
-                    
-                    # Handle DexScreener data with ultra-compact processing
-                    if 'dexscreener' in service_name.lower():
-                        records = api_data.get('records', [])
-                        transformation_summary = api_data.get('transformation_summary', {})
-                        
-                        logger.info(f"🚨 EMERGENCY: Processing DexScreener data from direct structure: {len(records)} records")
-                        
-                        if records:
-                            # Create ultra-compact summary from already-filtered data
-                            crypto_summary = []
-                            for i, record in enumerate(records[:2], 1):  # Max 2 records
-                                fields = record.get('fields', {})
-                                symbol = fields.get('Symbol', 'Unknown')
-                                name = fields.get('Base Token', 'Unknown')
-                                price = fields.get('Price (USD)', '0')
-                                liquidity = fields.get('Liquidity', '0')
-                                volume = fields.get('Volume', '0')
-                                
-                                crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
-                            
-                            # Ultra-minimal prompt (under 500 tokens total)
-                            query = f"""DexScreener crypto data analysis:
-
-📊 DATA ({len(records)} filtered tokens):
-{chr(10).join(crypto_summary)}
-
-Create a 2-line market digest:
-• Token highlights
-• Brief insight
-
-Keep under 100 words total."""
-                            
-                            logger.info(f"✅ Generated DexScreener query from direct structure with {len(crypto_summary)} tokens")
-                            return query
+                    if record_count > 0:
+                        # Create a summary of the data for the agent
+                        sample_record = api_data['records'][0]
+                        if isinstance(sample_record, dict):
+                            fields = list(sample_record.keys())[:5]  # First 5 fields
+                            return f"Please analyze this data containing {record_count} records with fields: {', '.join(fields)}. Here's the data: {str(api_data['records'][:3])}"  # Show first 3 records
                         else:
-                            logger.warning("🚨 No records found in DexScreener direct structure data")
-                            return "No DexScreener data available for analysis."
+                            return f"Please analyze this data containing {record_count} records: {str(api_data['records'][:3])}"
+                
+                # Look for data arrays
+                if 'data' in api_data and isinstance(api_data['data'], list):
+                    data_count = len(api_data['data'])
+                    logger.info(f"🔧 DEBUG: Found {data_count} data items in API data")
+                    
+                    if data_count > 0:
+                        return f"Please analyze this data containing {data_count} items: {str(api_data['data'][:3])}"
+                
+                # Fallback: use the entire api_data structure
+                api_data_found = True
+                logger.info(f"🔧 DEBUG: Using entire api_data structure as fallback")
+                return f"Please analyze this API data: {str(api_data)[:500]}..."  # Truncate for safety
             
-            # PRIORITY 3: Check for NodeData wrappers
-            for input_key, input_value in inputs.items():
-                if hasattr(input_value, 'value') and isinstance(input_value.value, dict):
-                    logger.info(f"🔧 DEBUG: Checking NodeData wrapper for input '{input_key}'")
-                    wrapped_value = input_value.value
-                    if wrapped_value.get('type') == 'api_data':
-                        api_data_found = True
-                        logger.info(f"🚨 CRITICAL: Found api_data in NodeData wrapper '{input_key}'")
-                        
-                        api_data = wrapped_value.get('api_data', {})
-                        service_name = wrapped_value.get('service_name', 'Unknown API')
-                        smart_filtering_enabled = wrapped_value.get('smart_filtering_enabled', False)
-                        
-                        # Handle DexScreener data with ultra-compact processing
-                        if 'dexscreener' in service_name.lower():
-                            records = api_data.get('records', [])
-                            transformation_summary = api_data.get('transformation_summary', {})
-                            
-                            logger.info(f"🚨 EMERGENCY: Processing DexScreener data from NodeData: {len(records)} records")
-                            
-                            if records:
-                                # Create ultra-compact summary from already-filtered data
-                                crypto_summary = []
-                                for i, record in enumerate(records[:2], 1):  # Max 2 records
-                                    fields = record.get('fields', {})
-                                    symbol = fields.get('Symbol', 'Unknown')
-                                    name = fields.get('Base Token', 'Unknown')
-                                    price = fields.get('Price (USD)', '0')
-                                    liquidity = fields.get('Liquidity', '0')
-                                    volume = fields.get('Volume', '0')
-                                    
-                                    crypto_summary.append(f"Token {i}: {symbol} ({name}) - Price: ${price}")
-                                
-                                # Ultra-minimal prompt (under 500 tokens total)
-                                query = f"""DexScreener crypto data analysis:
-
-📊 DATA ({len(records)} filtered tokens):
-{chr(10).join(crypto_summary)}
-
-Create a 2-line market digest:
-• Token highlights
-• Brief insight
-
-Keep under 100 words total."""
-                                
-                                logger.info(f"✅ Generated DexScreener query from NodeData with {len(crypto_summary)} tokens")
-                                return query
-                            else:
-                                logger.warning("🚨 No records found in DexScreener NodeData")
-                                return "No DexScreener data available for analysis."
+            # PRIORITY 3: Handle raw API data structures (legacy support)
+            for key, value in inputs.items():
+                if isinstance(value, dict):
+                    # Check for common API response patterns
+                    if 'records' in value and isinstance(value['records'], list):
+                        record_count = len(value['records'])
+                        logger.info(f"🔧 DEBUG: Found {record_count} records in '{key}'")
+                        return f"Please analyze this data from {key} containing {record_count} records: {str(value['records'][:2])}"
+                    
+                    elif 'data' in value and isinstance(value['data'], list):
+                        data_count = len(value['data'])
+                        logger.info(f"🔧 DEBUG: Found {data_count} data items in '{key}'")
+                        return f"Please analyze this data from {key} containing {data_count} items: {str(value['data'][:2])}"
+                    
+                    elif 'pairs' in value and isinstance(value['pairs'], list):
+                        # DexScreener format
+                        pairs_count = len(value['pairs'])
+                        logger.info(f"🔧 DEBUG: Found {pairs_count} trading pairs in '{key}'")
+                        return f"Please analyze this trading data from {key} containing {pairs_count} pairs: {str(value['pairs'][:2])}"
+                
+                elif isinstance(value, list) and len(value) > 0:
+                    # Direct array of data
+                    logger.info(f"🔧 DEBUG: Found array with {len(value)} items in '{key}'")
+                    return f"Please analyze this data from {key} containing {len(value)} items: {str(value[:2])}"
             
-            # PRIORITY 4: Handle text inputs
-            text_inputs = []
-            for input_key, input_value in inputs.items():
-                if isinstance(input_value, str) and input_value.strip():
-                    text_inputs.append(input_value.strip())
-                elif isinstance(input_value, dict) and 'text' in input_value:
-                    text_inputs.append(str(input_value['text']).strip())
+            # PRIORITY 4: Handle trigger outputs
+            if 'output' in inputs:
+                output = inputs['output']
+                if isinstance(output, str) and len(output.strip()) > 10:
+                    logger.info(f"🔧 DEBUG: Using trigger output")
+                    return f"Please analyze this information: {output}"
+                elif isinstance(output, dict):
+                    logger.info(f"🔧 DEBUG: Using structured trigger output")
+                    return f"Please analyze this data: {str(output)}"
             
-            if text_inputs:
-                logger.info(f"🔧 DEBUG: Using text inputs: {len(text_inputs)} items")
-                return " ".join(text_inputs)
+            # PRIORITY 5: Handle any structured data
+            for key, value in inputs.items():
+                if isinstance(value, (dict, list)) and str(value).strip():
+                    logger.info(f"🔧 DEBUG: Using structured data from '{key}'")
+                    return f"Please analyze this {key}: {str(value)[:300]}..."
             
-            # PRIORITY 5: Fallback to agent's goal
-            agent_goal = node_data.get('goal', '')
-            if agent_goal:
-                logger.info(f"🔧 DEBUG: Falling back to agent goal")
-                return f"Execute your goal: {agent_goal}"
+            # PRIORITY 6: Handle simple string inputs
+            for key, value in inputs.items():
+                if isinstance(value, str) and len(value.strip()) > 5:
+                    logger.info(f"🔧 DEBUG: Using string input from '{key}'")
+                    return value.strip()
+            
+            # PRIORITY 7: Fallback - combine all non-empty inputs
+            non_empty_inputs = {k: v for k, v in inputs.items() if v}
+            if non_empty_inputs:
+                logger.info(f"🔧 DEBUG: Using combined inputs as fallback")
+                return f"Please help with this information: {str(non_empty_inputs)[:200]}..."
             
             # FINAL FALLBACK
+            logger.warning(f"🔧 DEBUG: No suitable input found, using default query")
             if api_data_found:
-                logger.warning("🚨 API data was found but couldn't be processed - using fallback")
-                return "Analyze the provided API data and provide insights based on your role."
+                return "Please analyze the provided API data and provide insights."
             else:
-                logger.warning("🚨 No API data found in any inputs - using generic fallback")
                 return "Please provide assistance based on your role and expertise."
             
         except Exception as e:
@@ -410,6 +338,8 @@ Keep under 100 words total."""
                 return await self._execute_huggingface_agent(agent_config, query, inputs)
             elif framework == "openrouter":
                 return await self._execute_openrouter_agent(agent_config, query, inputs)
+            elif framework == "perplexity":
+                return await self._execute_perplexity_agent(agent_config, query, inputs)
             else:
                 # Fallback to OpenRouter
                 logger.warning(f"Unknown framework {framework}, falling back to OpenRouter")
@@ -423,25 +353,46 @@ Keep under 100 words total."""
     async def _execute_crewai_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using CrewAI framework"""
         try:
-            from backend.frameworks.crewai_runner import EnhancedCrewAIRunner
+            from frameworks.crewai_runner import EnhancedCrewAIRunner
             
             runner = EnhancedCrewAIRunner()
             
-            # Prepare CrewAI configuration
+            # Use the existing frameworkConfig if available (it already has the API key injected)
+            existing_framework_config = agent_config.get("frameworkConfig", {})
+            
+            # Extract LLM info from multiple possible locations
+            llm_provider = (
+                agent_config.get("llm", {}).get("provider") or  # New frontend format
+                agent_config.get("llmProvider") or              # Legacy format
+                agent_config.get("llm_provider") or             # Alternative format
+                "openai"                                        # Default fallback
+            )
+            
+            llm_model = (
+                agent_config.get("llm", {}).get("model") or     # New frontend format
+                agent_config.get("llmModel") or                 # Legacy format
+                agent_config.get("llm_model") or                # Alternative format
+                "gpt-4"                                         # Default fallback
+            )
+            
+            # Prepare CrewAI configuration - preserve the enhanced frameworkConfig
             crewai_config = {
                 "role": agent_config["role"],
                 "goal": agent_config["goal"],
                 "backstory": agent_config["backstory"],
-                "frameworkConfig": {
-                    "provider": "openai",
-                    "model": agent_config["llmModel"],
-                    "temperature": agent_config["temperature"],
-                    "max_tokens": agent_config["max_tokens"]
+                "frameworkConfig": existing_framework_config if existing_framework_config else {
+                    "provider": llm_provider,
+                    "model": llm_model,
+                    "temperature": agent_config.get("temperature", 0.7),
+                    "max_tokens": agent_config.get("max_tokens", 4000)
                 },
-                "allowDelegation": agent_config["allowDelegation"],
-                "enableMemory": agent_config["enableMemory"],
+                "allowDelegation": agent_config.get("allowDelegation", False),
+                "enableMemory": agent_config.get("enableMemory", False),
                 "verbose": True
             }
+            
+            # Log the frameworkConfig to verify API key is present
+            logger.info(f"🔧 CrewAI config frameworkConfig: {crewai_config['frameworkConfig']}")
             
             task_config = {
                 "description": query,
@@ -458,11 +409,11 @@ Keep under 100 words total."""
     async def _execute_langchain_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using LangChain framework"""
         try:
-            from backend.frameworks.langchain_runner import run_langchain_tool
+            from frameworks.langchain_runner import run_langchain_tool
             
             config = {
                 "chain_type": "simple_chain",
-                "provider": "openai",
+                "provider": agent_config.get("llmProvider", "openai"),
                 "model": agent_config["llmModel"],
                 "temperature": agent_config["temperature"],
                 "max_tokens": agent_config["max_tokens"],
@@ -479,7 +430,7 @@ Keep under 100 words total."""
     async def _execute_autogen_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using AutoGen framework"""
         try:
-            from backend.frameworks.autogen_runner import run_autogen_tool
+            from frameworks.autogen_runner import run_autogen_tool
             
             config = {
                 "agent_type": "assistant",
@@ -502,7 +453,7 @@ Keep under 100 words total."""
     async def _execute_llamaindex_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using LlamaIndex framework"""
         try:
-            from backend.frameworks.llamaindex_runner import run_llamaindex_tool
+            from frameworks.llamaindex_runner import run_llamaindex_tool
             
             config = {
                 "index_type": "simple",
@@ -522,7 +473,7 @@ Keep under 100 words total."""
     async def _execute_huggingface_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using HuggingFace framework"""
         try:
-            from backend.frameworks.huggingface_runner import run_huggingface_tool
+            from frameworks.huggingface_runner import run_huggingface_tool
             
             config = {
                 "model": agent_config.get("llmModel", "microsoft/DialoGPT-medium"),
@@ -542,7 +493,7 @@ Keep under 100 words total."""
     async def _execute_openrouter_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
         """Execute using OpenRouter framework"""
         try:
-            from backend.frameworks.openrouter_runner import run_openrouter_chat
+            from frameworks.openrouter_runner import run_openrouter_chat
             
             # Build system message
             system_message = f"You are {agent_config['role']}. {agent_config['goal']}"
@@ -567,6 +518,42 @@ Keep under 100 words total."""
             logger.error(f"OpenRouter execution failed: {str(e)}")
             return f"I'm {agent_config['role']}. I'm ready to help but encountered a technical issue: {str(e)}"
 
+    async def _execute_perplexity_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
+        """Execute using Perplexity framework"""
+        try:
+            from frameworks.perplexity_runner import run_perplexity_chat
+            
+            # Build system message
+            system_message = f"You are {agent_config['role']}. {agent_config['goal']}"
+            if agent_config.get('backstory'):
+                system_message += f"\n\nBackground: {agent_config['backstory']}"
+            
+            # Prepare messages for Perplexity
+            messages = [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": query}
+            ]
+            
+            # Get model from frameworkConfig or fallback
+            model = agent_config.get("frameworkConfig", {}).get("model") or agent_config.get("llmModel", "sonar-pro")
+            temperature = agent_config.get("frameworkConfig", {}).get("temperature") or agent_config.get("temperature", 0.7)
+            max_tokens = agent_config.get("frameworkConfig", {}).get("max_tokens") or agent_config.get("max_tokens", 2000)
+            
+            logger.info(f"🔮 Executing Perplexity agent with model: {model}")
+            
+            response = await run_perplexity_chat(
+                messages=messages,
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Perplexity execution failed: {str(e)}")
+            return f"I'm {agent_config['role']}. I encountered an error while processing your request: {str(e)}"
+
 
 # Standalone function for backward compatibility
 async def process_agent_node(
@@ -575,10 +562,10 @@ async def process_agent_node(
     context: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
-    Process an agent node with the given data and inputs
+    Process an agent node with proper error handling and context management
     """
     try:
-        agent_node = AgentNode()
+        logger.info(f"Processing agent node with data: {node_data.get('label', 'Unknown Agent')}")
         
         # Create execution context with required fields
         exec_context = ExecutionContext(
@@ -586,15 +573,16 @@ async def process_agent_node(
             execution_id=context.get('execution_id', 'direct-execution') if context else 'direct-execution'
         )
         
-        # Create node object
+        # Create Node object from node_data
         node = Node(
-            id=node_data.get('id', 'unknown'),
-            type='agent',
+            id=node_data.get('id', 'agent-node'),
+            type=NodeType.AGENT,
             data=node_data,
-            position=node_data.get('position', {'x': 0, 'y': 0})
+            position={"x": 0, "y": 0}  # Add default position for single node execution
         )
         
-        # Process the node
+        # Create agent processor and process
+        agent_node = AgentNode()
         result = await agent_node.process(node, inputs, exec_context)
         
         return result
@@ -602,8 +590,7 @@ async def process_agent_node(
     except Exception as e:
         logger.error(f"Error in process_agent_node: {str(e)}")
         return {
-            "success": False,
-            "type": "error",
+            "status": "error",
             "error": str(e),
-            "timestamp": datetime.now().isoformat()
+            "message": f"Agent processing failed: {str(e)}"
         }
