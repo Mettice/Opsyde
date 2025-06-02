@@ -53,21 +53,55 @@ class EnhancedLangChainRunner:
         model = config.get('model', 'gpt-4')
         temperature = config.get('temperature', 0.7)
         max_tokens = config.get('max_tokens', 4000)
+        api_key = config.get('api_key', '')
+        
+        # Base LLM config
+        llm_config = {
+            'temperature': temperature,
+            'max_tokens': max_tokens
+        }
+        
+        # Only add API key to llm_config if not passing it explicitly
+        if api_key and not api_key.startswith('[BYOK:'):
+            pass  # We'll pass api_key explicitly for each provider
         
         if provider == 'openai':
             return ChatOpenAI(
                 model=model,
-                temperature=temperature,
-                max_tokens=max_tokens
+                api_key=api_key,
+                **llm_config
             )
         elif provider == 'anthropic':
             return ChatAnthropic(
                 model=model,
-                temperature=temperature,
-                max_tokens=max_tokens
+                api_key=api_key,
+                **llm_config
             )
+        elif provider == 'perplexity':
+            # Perplexity uses OpenAI-compatible API
+            return ChatOpenAI(
+                model=model,
+                base_url='https://api.perplexity.ai',
+                api_key=api_key,
+                **llm_config
+            )
+        elif provider == 'openrouter':
+            # OpenRouter uses OpenAI-compatible API
+            return ChatOpenAI(
+                model=model,
+                base_url='https://openrouter.ai/api/v1',
+                **llm_config
+            )
+        elif provider == 'gemini' or provider == 'google':
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                return ChatGoogleGenerativeAI(model=model, **llm_config)
+            except ImportError:
+                logger.warning("Google Generative AI not available, falling back to OpenAI")
+                return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
         else:
             # Fallback to OpenAI
+            logger.warning(f"Unknown provider {provider}, falling back to OpenAI")
             return ChatOpenAI(model='gpt-4', temperature=temperature)
     
     def get_output_parser(self, parser_type: str):
@@ -422,35 +456,50 @@ class EnhancedLangChainRunner:
 
 # Main execution function
 async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Main entry point for LangChain tool execution"""
-    
-    if not LANGCHAIN_AVAILABLE:
+    """Enhanced LangChain tool execution with better provider support"""
+    try:
+        framework_config = config.get("frameworkConfig", {})
+        provider = framework_config.get("provider", "openai").lower()
+        model = framework_config.get("model", "gpt-3.5-turbo")
+        api_key = framework_config.get("api_key") or config.get("api_key") or config.get("perplexity_api_key")
+        
+        logger.info(f"🔧 LangChain tool: provider={provider}, model={model}, api_key={'[FOUND]' if api_key else '[MISSING]'}")
+        
+        # Use the LLM tools for better provider support
+        if provider == "perplexity":
+            from tools.llm_tools import run_llm_tool
+            return await run_llm_tool(config, inputs)
+        
+        # For other providers, use LangChain if available
+        if not LANGCHAIN_AVAILABLE:
+            return {
+                "success": False,
+                "error": "LangChain not available",
+                "framework": "langchain"
+            }
+        
+        runner = EnhancedLangChainRunner()
+        chain_type = framework_config.get("chainType", "simple")
+        
+        if chain_type == "simple":
+            return await runner.run_simple_chain(framework_config, inputs)
+        elif chain_type == "conversation":
+            return await runner.run_conversation_chain(framework_config, inputs)
+        elif chain_type == "rag":
+            return await runner.run_rag_chain(framework_config, inputs)
+        else:
+            return {
+                "success": False,
+                "error": f"Unsupported chain type: {chain_type}",
+                "framework": "langchain"
+            }
+            
+    except Exception as e:
+        logger.error(f"LangChain tool execution failed: {str(e)}")
         return {
-            "type": "error",
-            "error": "LangChain not available",
-            "framework": "langchain",
-            "success": False
-        }
-    
-    runner = EnhancedLangChainRunner()
-    
-    # Determine chain type
-    chain_type = config.get('chainType', 'simple')
-    
-    if chain_type == 'simple' or chain_type == 'llm':
-        return await runner.run_simple_chain(config, inputs)
-    elif chain_type == 'conversation':
-        return await runner.run_conversation_chain(config, inputs)
-    elif chain_type == 'rag' or chain_type == 'retrieval_qa':
-        return await runner.run_rag_chain(config, inputs)
-    elif chain_type == 'agent':
-        return await runner.run_agent_chain(config, inputs)
-    else:
-        return {
-            "type": "error",
-            "error": f"Unsupported chain type: {chain_type}",
-            "framework": "langchain",
-            "success": False
+            "success": False,
+            "error": str(e),
+            "framework": "langchain"
         }
 
 # Backward compatibility

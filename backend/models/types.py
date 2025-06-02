@@ -24,6 +24,8 @@ class LLMProvider(str, Enum):
     ANTHROPIC = "anthropic"
     OPENROUTER = "openrouter"
     HUGGINGFACE = "huggingface"
+    PERPLEXITY = "perplexity"
+    
 
 class APIType(str, Enum):
     """API types"""

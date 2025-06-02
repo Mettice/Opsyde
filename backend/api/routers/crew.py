@@ -1,18 +1,22 @@
- #api/routers/crew.py
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from typing import Dict, Any, List
+#api/routers/crew.py
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
+from typing import Dict, Any, List, Optional
 import json
 from datetime import datetime
+import logging
 
 from models.workflow import Workflow, WorkflowInput
-from services.workflow_service import WorkflowService
-from api.dependencies import get_workflow_service
+from services.workflow_service import WorkflowService, get_workflow_service
 from fastapi.responses import JSONResponse
+from core.runner import UnifiedRunner
+from utils.security import get_current_user_optional
 
 # Import the serialization helper
 from backend.models.data import NodeData
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
+
+logger = logging.getLogger(__name__)
 
 # Helper function to serialize node data objects
 def serialize_node_data(obj, depth=0):
@@ -132,12 +136,38 @@ async def delete_workflow(
 async def execute_workflow(
     workflow_id: str,
     inputs: Dict[str, Any] = None,
-    service: WorkflowService = Depends(get_workflow_service)
+    service: WorkflowService = Depends(get_workflow_service),
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
 ):
     """Execute a workflow"""
     try:
-        # Start workflow execution
-        execution_stream = service.execute_workflow(workflow_id, inputs or {})
+        # Get the workflow data
+        workflow = await service.get_workflow(workflow_id)
+        if not workflow:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "error": f"Workflow not found: {workflow_id}",
+                    "timestamp": datetime.now().isoformat()
+                }
+            )
+        
+        # Get user ID for API key injection
+        user_id = current_user.get("id") if current_user else None
+        logger.info(f"🔐 Executing workflow {workflow_id} for user: {user_id}")
+        
+        # Convert workflow to dict format for runner
+        workflow_data = {
+            "workflow_id": workflow_id,
+            "nodes": [node.dict() if hasattr(node, 'dict') else node for node in workflow.nodes],
+            "edges": [edge.dict() if hasattr(edge, 'dict') else edge for edge in workflow.edges],
+            "inputs": inputs or {}
+        }
+        
+        # Use runner instead of engine for proper API key injection
+        runner = UnifiedRunner()
+        execution_stream = runner.execute_workflow(workflow_data, user_id=user_id)
         
         # Process the results to ensure proper serialization
         results = []
@@ -148,8 +178,8 @@ async def execute_workflow(
             serialized_result = serialize_node_data(result)
             
             # Store individual node results
-            if "nodeId" in serialized_result:
-                node_results[serialized_result["nodeId"]] = serialized_result
+            if "node_id" in serialized_result:
+                node_results[serialized_result["node_id"]] = serialized_result
                 
             # Store the result for streaming
             results.append(serialized_result)
@@ -173,6 +203,7 @@ async def execute_workflow(
             }
         )
     except Exception as e:
+        logger.error(f"Error executing workflow {workflow_id}: {str(e)}")
         return JSONResponse(
             status_code=200,  # Use 200 for frontend compatibility
             content={

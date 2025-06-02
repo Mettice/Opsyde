@@ -862,32 +862,113 @@ class UniversalDataTransformer:
             return 0.5
 
     def _filter_record_fields(self, record: Dict, target_fields: List[str], exclude_fields: List[str]) -> Dict:
-        """Filter record fields based on include/exclude lists"""
-        try:
-            if not isinstance(record, dict):
-                return record
-            
-            filtered_record = {}
-            
-            # Include only target fields if specified
-            if target_fields:
-                for field_path in target_fields:
-                    value = self._get_nested_field(record, field_path)
-                    if value is not None:
-                        self._set_nested_field(filtered_record, field_path, value)
-            else:
-                # Include all fields except excluded ones
-                filtered_record = record.copy()
-            
-            # Remove excluded fields
-            for field_path in exclude_fields:
-                self._remove_nested_field(filtered_record, field_path)
-            
-            return filtered_record
-            
-        except Exception as e:
-            logger.error(f"Error filtering record fields: {str(e)}")
+        """
+        Filter record fields based on target and exclude lists
+        """
+        if not target_fields and not exclude_fields:
             return record
+            
+        filtered_record = {}
+        
+        # If target fields specified, only include those
+        if target_fields:
+            for field in target_fields:
+                if field in record:
+                    filtered_record[field] = record[field]
+                elif '.' in field:
+                    # Handle nested fields like 'baseToken.symbol'
+                    value = self._get_nested_field(record, field)
+                    if value is not None:
+                        self._set_nested_field(filtered_record, field, value)
+        else:
+            # Include all fields
+            filtered_record = record.copy()
+        
+        # Remove excluded fields
+        for field in exclude_fields:
+            if field in filtered_record:
+                del filtered_record[field]
+            elif '.' in field:
+                # Handle nested field removal
+                self._remove_nested_field(filtered_record, field)
+        
+        return filtered_record
+
+    def transform_for_target(
+        self, 
+        source_output: Any, 
+        source_type: str, 
+        target_type: str,
+        edge_label: str = None
+    ) -> Dict[str, Any]:
+        """
+        Transform data from source node type to target node type format
+        This method provides compatibility with the graph utilities
+        
+        Args:
+            source_output: Output from source node
+            source_type: Type of source node (trigger, agent, task, etc.)
+            target_type: Type of target node
+            edge_label: Label of the connecting edge
+            
+        Returns:
+            Transformed data compatible with target node
+        """
+        try:
+            logger.info(f"🔄 Transforming {source_type} → {target_type}")
+            
+            # Handle NodeData wrapper
+            if hasattr(source_output, 'value'):
+                actual_data = source_output.value
+            else:
+                actual_data = source_output
+            
+            # Simple transformation based on target type
+            if target_type == 'logic':
+                # Logic nodes need simple key-value pairs for condition evaluation
+                if isinstance(actual_data, dict):
+                    return actual_data
+                else:
+                    return {"value": actual_data}
+                    
+            elif target_type == 'chat':
+                # Chat nodes need text input
+                if isinstance(actual_data, dict):
+                    # Extract meaningful text from the data
+                    text_content = ""
+                    if "value" in actual_data:
+                        text_content = str(actual_data["value"])
+                    elif "message" in actual_data:
+                        text_content = str(actual_data["message"])
+                    else:
+                        text_content = str(actual_data)
+                    return {"text_input": text_content}
+                else:
+                    return {"text_input": str(actual_data)}
+                    
+            elif target_type == 'output':
+                # Output nodes can handle any data
+                return {"output_data": actual_data}
+                
+            elif target_type == 'delay':
+                # Delay nodes pass data through
+                return {"passthrough_data": actual_data}
+                
+            else:
+                # Generic transformation
+                if isinstance(actual_data, dict):
+                    return actual_data
+                else:
+                    return {"value": actual_data}
+                    
+        except Exception as e:
+            logger.error(f"❌ Data transformation failed: {str(e)}")
+            return {
+                "type": "error",
+                "error": f"Data transformation failed: {str(e)}",
+                "source_type": source_type,
+                "target_type": target_type
+            }
 
 # Global transformer instance
 data_transformer = UniversalDataTransformer() 

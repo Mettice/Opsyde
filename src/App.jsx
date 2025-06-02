@@ -30,12 +30,13 @@ function ProtectedRoute({ children }) {
 function AppLayout({ children }) {
   const location = useLocation();
   const isBuilderPage = location.pathname === '/builder';
+  const isHomePage = location.pathname === '/';
   const [showHelp, setShowHelp] = useState(false);
   const [projectName, setProjectName] = useState("Untitled Workflow");
   const [editingProjectName, setEditingProjectName] = useState(false);
   
-  // Don't render NavHeader for builder page as it has its own
-  if (isBuilderPage) {
+  // Don't render NavHeader for builder page or homepage (landing page)
+  if (isBuilderPage || isHomePage) {
     return children;
   }
   

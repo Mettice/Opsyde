@@ -9,7 +9,7 @@ import json
 from services.data_state_manager import data_state_manager
 
 # Import the universal data transformer
-from backend.core.data_transformer import data_transformer
+from core.data_transformer import data_transformer
 
 logger = logging.getLogger(__name__)
 

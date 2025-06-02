@@ -19,7 +19,7 @@ from core.node_processor import node_processor
 # NEW: Import enhanced framework registry
 from framework_registry import framework_registry, validate_framework_llm_combination
 
-from core.workflow_execution_context import get_execution_context
+from core.workflow_execution_context import create_execution_context
 from frameworks.crewai_runner import EnhancedCrewAIRunner
 from frameworks.openai_runner import run_openai_chat
 from frameworks.openrouter_runner import run_openrouter_chat
@@ -50,11 +50,11 @@ class UnifiedRunner:
         """
         return determine_execution_order(nodes, edges)
     
-    def get_node_inputs(self, node_id: str, edges: List[Dict], node_results: Dict, global_inputs: Dict = None) -> Dict[str, Any]:
+    def get_node_inputs(self, node_id: str, edges: List[Dict], node_results: Dict, global_inputs: Dict = None, nodes: List[Dict] = None) -> Dict[str, Any]:
         """
         Get inputs for a specific node based on edges and previous results
         """
-        return get_node_inputs(node_id, edges, node_results, global_inputs or {})
+        return get_node_inputs(node_id, edges, node_results, global_inputs or {}, nodes)
     
     # Enhanced function to prevent circular references
     def sanitize_result(self, obj, depth=0, seen_objects=None, path=None):
@@ -240,11 +240,12 @@ class UnifiedRunner:
             Execution results for each node
         """
         try:
-            # Initialize execution context with user's API keys
-            self.execution_context = await get_execution_context(
-                user_id=user_id,
-                workflow_id=workflow_data.get('workflow_id')
-            )
+            # Initialize execution context with user's API keys (only if not already set)
+            if not hasattr(self, 'execution_context') or self.execution_context is None:
+                self.execution_context = await create_execution_context(
+                    user_id=user_id,
+                    workflow_id=workflow_data.get('workflow_id')
+                )
             
             logger.info(f"🔑 Execution context initialized: {self.execution_context.get_execution_metadata()}")
             
@@ -264,12 +265,23 @@ class UnifiedRunner:
                     if not node:
                         continue
                     
-                    # Get node inputs from previous results
-                    node_inputs = self.get_node_inputs(node_id, edges, node_results, inputs)
+                    # Get node inputs with node information for data transformation
+                    node_inputs = self.get_node_inputs(
+                        node_id, 
+                        edges, 
+                        node_results, 
+                        inputs or {},
+                        nodes  # Pass nodes for type detection
+                    )
                     
                     # 🔑 BYOK INTEGRATION: Enhance node config with user API keys
                     enhanced_node_data = self.execution_context.enhance_node_config(node.get("data", {}))
                     enhanced_node = {**node, "data": enhanced_node_data}
+                    
+                    # DEBUG: Log the enhancement
+                    original_has_api_key = bool(node.get("data", {}).get("frameworkConfig", {}).get("api_key"))
+                    enhanced_has_api_key = bool(enhanced_node_data.get("frameworkConfig", {}).get("api_key"))
+                    logger.info(f"🔧 Node {node_id} API key injection: {original_has_api_key} -> {enhanced_has_api_key}")
                     
                     # Execute the node
                     result = await self.execute_node(enhanced_node.get("type"), enhanced_node.get("data", {}), node_inputs)
@@ -307,9 +319,9 @@ class UnifiedRunner:
     async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single node with framework validation"""
         try:
-            # NEW: Framework validation before execution
+            # NEW: Framework validation before execution (skip for chat nodes)
             framework = node_data.get("framework")
-            if framework:
+            if framework and node_type != "chat":  # Chat nodes use LLM providers directly
                 # Validate framework/LLM combination if applicable
                 llm_config = node_data.get("frameworkConfig", {})
                 llm_provider = llm_config.get("provider") or node_data.get("llmProvider")
@@ -330,7 +342,13 @@ class UnifiedRunner:
                 "id": node_data.get("id", "single_node")
             }
             
-            result = await node_processor.process_node(node, inputs)
+            # CRITICAL FIX: Pass the execution context to the node processor
+            context = {
+                "execution_context": self.execution_context,
+                "workflow_execution_context": self.execution_context
+            } if hasattr(self, 'execution_context') and self.execution_context else None
+            
+            result = await node_processor.process_node(node, inputs, context)
             # Sanitize result to prevent circular references
             return self.sanitize_result(result)
         except Exception as e:

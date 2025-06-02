@@ -614,7 +614,7 @@ const LogicEditor = ({
       }
       
       // Generate condition based on operator
-      switch (condition.operator) {
+        switch (condition.operator) {
         case 'equals':
           return `${fieldPath} === ${value}`;
         case 'not_equals':
@@ -627,19 +627,19 @@ const LogicEditor = ({
           return `${fieldPath} >= ${value}`;
         case 'less_equal':
           return `${fieldPath} <= ${value}`;
-        case 'contains':
+          case 'contains':
           return `${fieldPath}.includes(${value})`;
         case 'not_contains':
           return `!${fieldPath}.includes(${value})`;
-        case 'starts_with':
+          case 'starts_with':
           return `${fieldPath}.startsWith(${value})`;
-        case 'ends_with':
+          case 'ends_with':
           return `${fieldPath}.endsWith(${value})`;
         case 'is_empty':
           return `!${fieldPath} || ${fieldPath} === ""`;
         case 'is_not_empty':
           return `${fieldPath} && ${fieldPath} !== ""`;
-        default:
+          default:
           return `${fieldPath} === ${value}`;
       }
     });
@@ -671,7 +671,7 @@ const LogicEditor = ({
   };
 
   const removeCondition = (id) => {
-    setConditions(conditions.filter(c => c.id !== id));
+      setConditions(conditions.filter(c => c.id !== id));
   };
 
   const updateCondition = (id, field, value) => {
@@ -768,20 +768,20 @@ const LogicEditor = ({
           Create intelligent decision points in your workflow. Logic nodes evaluate conditions and route your workflow based on AI outputs, data values, or any other criteria.
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
+            <button
+              type="button"
             onClick={() => setShowExamples(!showExamples)}
             className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
           >
             📚 View Examples
-          </button>
-          <button
-            type="button"
+            </button>
+            <button
+              type="button"
             onClick={() => setShowFieldGuide(!showFieldGuide)}
             className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1 rounded"
           >
             📖 Field Guide
-          </button>
+            </button>
         </div>
       </div>
 
@@ -805,23 +805,23 @@ const LogicEditor = ({
                           </code>
                           <p className="text-xs text-gray-600">{example.description}</p>
                           <span className="text-xs text-blue-600 italic">{example.useCase}</span>
-                        </div>
-                        <button
-                          type="button"
+            </div>
+                  <button
+                    type="button"
                           onClick={() => applyExample(example)}
                           className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded ml-2"
-                        >
+                  >
                           Use This
-                        </button>
+                  </button>
                       </div>
                     </div>
-                  ))}
+                ))}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+              </div>
+            )}
 
       {/* Field Guide Panel */}
       {showFieldGuide && (
@@ -843,8 +843,8 @@ const LogicEditor = ({
                       </code>
                     ))}
                   </div>
-                </div>
-                
+          </div>
+
                 <div>
                   <span className="text-xs font-medium text-gray-700">Operators:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
@@ -891,14 +891,14 @@ const LogicEditor = ({
         <div className="border rounded-lg p-4 bg-gray-50">
           <div className="flex justify-between items-center mb-3">
             <h4 className="font-medium">🎯 Visual Condition Builder</h4>
-            <button
-              type="button"
+                        <button
+                          type="button"
               onClick={addCondition}
               className="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded"
             >
               + Add Condition
-            </button>
-          </div>
+                        </button>
+                      </div>
 
           {conditions.length === 0 && (
             <p className="text-sm text-gray-500 text-center py-4">
@@ -919,8 +919,8 @@ const LogicEditor = ({
                 </select>
               )}
               
-              <select
-                value={condition.field}
+                        <select
+                          value={condition.field}
                 onChange={(e) => updateCondition(condition.id, 'field', e.target.value)}
                 className="flex-1 text-xs border rounded px-2 py-1"
               >
@@ -928,45 +928,45 @@ const LogicEditor = ({
                 {availableFields.map(field => (
                   <option key={field.id} value={field.id}>
                     {field.id} ({field.type}) - {field.description}
-                  </option>
-                ))}
-              </select>
+                                  </option>
+                                ))}
+                        </select>
               
-              <select
-                value={condition.operator}
-                onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
+                        <select
+                          value={condition.operator}
+                          onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
                 className="text-xs border rounded px-2 py-1"
               >
                 <option value="">Operator</option>
                 {getOperatorsForField(condition.field).map(op => (
                   <option key={op.value} value={op.value}>
-                    {op.label}
-                  </option>
-                ))}
-              </select>
+                              {op.label}
+                            </option>
+                          ))}
+                        </select>
               
-              <input
+                        <input
                 type="text"
-                value={condition.value}
-                onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
+                          value={condition.value}
+                          onChange={(e) => updateCondition(condition.id, 'value', e.target.value)}
                 placeholder="Value"
                 className="flex-1 text-xs border rounded px-2 py-1"
               />
               
-              <button
-                type="button"
-                onClick={() => removeCondition(condition.id)}
+                        <button
+                          type="button"
+                          onClick={() => removeCondition(condition.id)}
                 className="text-red-500 hover:text-red-700 text-xs px-2"
-              >
+                        >
                 ✕
-              </button>
-            </div>
+                        </button>
+                    </div>
           ))}
 
           {conditions.length > 0 && (
             <div className="mt-3 pt-3 border-t">
-              <button
-                type="button"
+            <button
+              type="button"
                 onClick={() => {
                   const generated = generateConditionFromVisual();
                   handleInputChange({
@@ -976,14 +976,14 @@ const LogicEditor = ({
                 className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-3 py-1 rounded"
               >
                 📝 Generate Condition
-              </button>
+            </button>
               <div className="mt-2 p-2 bg-gray-100 rounded text-xs font-mono">
                 Preview: {generateConditionFromVisual() || 'Add conditions above'}
-              </div>
+          </div>
             </div>
           )}
-        </div>
-
+            </div>
+            
         {/* Available Fields Display */}
         {availableFields.length > 0 && (
           <div className="border rounded-lg p-3 bg-blue-50">
@@ -995,11 +995,11 @@ const LogicEditor = ({
                   <div className="text-gray-600">{field.type}</div>
                   <div className="text-gray-500 italic">{field.description}</div>
                   <code className="text-blue-600">{JSON.stringify(field.sample)}</code>
-                </div>
+                  </div>
               ))}
-            </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* Quick Tips */}
         <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
@@ -1011,8 +1011,8 @@ const LogicEditor = ({
             <li>• Check arrays: <code>red_flags.length == 0</code></li>
             <li>• Combine conditions: <code>(condition1 || condition2) && condition3</code></li>
           </ul>
-        </div>
-      </div>
+            </div>
+          </div>
 
       {/* Test Section */}
       <div className="border-t pt-6">

@@ -96,19 +96,42 @@ class UserAPIKeyManager:
     
     def encrypt_key(self, api_key: str) -> str:
         """Encrypt an API key"""
-        encrypted = self.cipher.encrypt(api_key.encode())
-        return base64.b64encode(encrypted).decode()
+        try:
+            encrypted = self.cipher.encrypt(api_key.encode('utf-8'))
+            return base64.b64encode(encrypted).decode('utf-8')
+        except Exception as e:
+            logger.error(f"Failed to encrypt API key: {str(e)}")
+            raise
     
     def decrypt_key(self, encrypted_key: str) -> str:
         """Decrypt an API key"""
-        encrypted_bytes = base64.b64decode(encrypted_key.encode())
-        decrypted = self.cipher.decrypt(encrypted_bytes)
-        return decrypted.decode()
+        try:
+            # Handle potential padding issues with base64
+            encrypted_key = encrypted_key.strip()
+            
+            # Add padding if needed
+            missing_padding = len(encrypted_key) % 4
+            if missing_padding:
+                encrypted_key += '=' * (4 - missing_padding)
+            
+            encrypted_bytes = base64.b64decode(encrypted_key.encode('utf-8'))
+            decrypted = self.cipher.decrypt(encrypted_bytes)
+            return decrypted.decode('utf-8')
+        except Exception as e:
+            logger.error(f"Failed to decrypt API key: {str(e)}")
+            # Try alternative decoding approach
+            try:
+                # Sometimes the key might be stored without base64 encoding
+                decrypted = self.cipher.decrypt(encrypted_key.encode('utf-8'))
+                return decrypted.decode('utf-8')
+            except:
+                logger.error(f"Alternative decryption also failed for API key")
+                raise Exception(f"Unable to decrypt API key: {str(e)}")
     
     def mask_key(self, api_key: str) -> str:
         """Create a masked version of the API key for display"""
-        if len(api_key) <= 8:
-            return "*" * len(api_key)
+        if not api_key or len(api_key) <= 8:
+            return "*" * max(len(api_key) if api_key else 0, 8)
         
         # Show first 4 and last 4 characters
         return f"{api_key[:4]}{'*' * (len(api_key) - 8)}{api_key[-4:]}"
@@ -135,6 +158,8 @@ class UserAPIKeyManager:
                 return await self._validate_openrouter_key(api_key)
             elif provider == "google":
                 return await self._validate_google_key(api_key)
+            elif provider == "perplexity":
+                return await self._validate_perplexity_key(api_key)
             else:
                 return {"valid": False, "error": f"Validation not implemented for {provider}"}
                 
@@ -282,6 +307,65 @@ class UserAPIKeyManager:
         except Exception as e:
             return {"valid": False, "error": f"Google validation failed: {str(e)}"}
 
+    async def _validate_perplexity_key(self, api_key: str) -> Dict[str, Any]:
+        """Validate Perplexity API key"""
+        try:
+            import aiohttp
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Make a minimal test request to validate the key using current model names
+            payload = {
+                "model": "sonar",  # Use the lightweight model for validation
+                "messages": [{"role": "user", "content": "Test"}],
+                "max_tokens": 1,
+                "temperature": 0
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    "https://api.perplexity.ai/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=15  # Increased timeout
+                ) as response:
+                    response_text = await response.text()
+                    
+                    if response.status == 200:
+                        return {
+                            "valid": True,
+                            "provider": "perplexity",
+                            "models_available": [
+                                "sonar",
+                                "sonar-pro", 
+                                "sonar-reasoning",
+                                "sonar-reasoning-pro",
+                                "sonar-deep-research",
+                                "r1-1776"
+                            ]
+                        }
+                    elif response.status == 401:
+                        return {
+                            "valid": False,
+                            "error": "Invalid API key - please check your Perplexity API key"
+                        }
+                    elif response.status == 429:
+                        return {
+                            "valid": False,
+                            "error": "Rate limit exceeded - API key is valid but rate limited"
+                        }
+                    else:
+                        return {
+                            "valid": False,
+                            "error": f"Perplexity API error: {response.status} - {response_text}"
+                        }
+                        
+        except Exception as e:
+            return {"valid": False, "error": f"Perplexity validation failed: {str(e)}"}
+
 # API Response Models
 class APIKeyResponse(BaseModel):
     """Response model for API key operations"""
@@ -292,7 +376,7 @@ class APIKeyResponse(BaseModel):
 class UserSettingsResponse(BaseModel):
     """Response model for user settings"""
     success: bool
-    settings: Optional[UserSettings] = None
+    settings: Optional[Dict[str, Any]] = None
     message: str = ""
 
 class ValidationResponse(BaseModel):

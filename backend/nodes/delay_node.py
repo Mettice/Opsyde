@@ -57,10 +57,42 @@ async def run_delay_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[s
         }
         
     except Exception as e:
-        logger.error(f"Error in delay node: {str(e)}")
+        logger.error(f"Delay runner error: {str(e)}")
         return {
             "type": "error",
             "error": str(e),
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "node_type": "delay"
+            }
+        }
+
+async def process_delay_node(
+    node_data: Dict[str, Any], 
+    inputs: Dict[str, Any], 
+    context: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    """
+    Process delay node - wrapper function expected by the node processor
+    
+    Args:
+        node_data: Delay node configuration
+        inputs: Input values from connected nodes (passed through)
+        context: Execution context
+        
+    Returns:
+        Dictionary with the delay result
+    """
+    try:
+        # Run the delay
+        result = await run_delay_node(node_data, inputs)
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error processing delay node: {str(e)}")
+        return {
+            "type": "error",
+            "error": f"Delay node processing failed: {str(e)}",
             "metadata": {
                 "timestamp": datetime.now().isoformat(),
                 "node_type": "delay"

@@ -44,7 +44,7 @@ from dotenv import load_dotenv
 import time
 
 # Load environment variables
-load_dotenv()
+load_dotenv(dotenv_path='.env')  # Load from current directory when running from backend
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -342,13 +342,18 @@ async def run_crew_sync_endpoint(
             except:
                 data["inputs"] = {"input": data["inputs"]}
         
+        # Add user_id to the data for API key loading
+        # For now, use 'anonymous' as the default user - this will load user API keys
+        if "user_id" not in data:
+            data["user_id"] = "anonymous"
+        
         logger.info(f"Executing workflow synchronously with {len(data.get('nodes', []))} nodes")
         
         # Collect all results
         results = []
         node_results = {}
         
-        async for item in runner.execute_workflow(data):
+        async for item in runner.execute_workflow(data, user_id=data.get("user_id")):
             # Convert any NodeData objects to dictionaries
             item = convert_nodedata_to_dict(item)
             results.append(item)

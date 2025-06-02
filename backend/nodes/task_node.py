@@ -28,6 +28,9 @@ class TaskNode:
                 expected_output = config.get("expectedOutput", "")
                 is_async = config.get("async", False) or config.get("isAsync", False)
                 dependencies = config.get("dependencies", [])
+                # CRITICAL: Get enhanced frameworkConfig from workflow context
+                enhanced_framework_config = config.get("frameworkConfig", {})
+                logger.info(f"🔧 TaskNode enhanced frameworkConfig from context: {enhanced_framework_config}")
             else:
                 # Handle Node object format
                 config = node.get_config()
@@ -37,6 +40,9 @@ class TaskNode:
                 expected_output = config.expected_output
                 is_async = config.async_execution
                 dependencies = config.dependencies
+                # CRITICAL: Get enhanced frameworkConfig from workflow context
+                enhanced_framework_config = getattr(config, 'frameworkConfig', {}) or {}
+                logger.info(f"🔧 TaskNode enhanced frameworkConfig from Node object: {enhanced_framework_config}")
 
             # Format input data
             formatted_inputs = {}
@@ -91,7 +97,28 @@ class TaskNode:
                             "goal": (data.get("goal") or metadata.get("goal") or "Help the user"),
                             "backstory": (data.get("backstory") or metadata.get("backstory") or ""),
                             "framework": (metadata.get("framework") or data.get("framework") or "crewai"),
-                            "llmModel": (data.get("llm_model") or metadata.get("llm_model") or "gpt-4"),
+                            "llmModel": (
+                                data.get("llm", {}).get("model") or           # New frontend format
+                                data.get("llmModel") or                       # Legacy format
+                                data.get("llm_model") or                      # Alternative format
+                                metadata.get("llm", {}).get("model") or      # Metadata new format
+                                metadata.get("llmModel") or                   # Metadata legacy format
+                                metadata.get("llm_model") or                  # Metadata alternative format
+                                value.get("llm", {}).get("model") or         # Direct value check
+                                value.get("llmModel") or                      # Direct value legacy
+                                "llama-3.1-sonar-small-128k-online"          # Default to Perplexity model
+                            ),
+                            "llmProvider": (
+                                data.get("llm", {}).get("provider") or        # New frontend format
+                                data.get("llmProvider") or                     # Legacy format
+                                data.get("llm_provider") or                    # Alternative format
+                                metadata.get("llm", {}).get("provider") or    # Metadata new format
+                                metadata.get("llmProvider") or                 # Metadata legacy format
+                                metadata.get("llm_provider") or                # Metadata alternative format
+                                value.get("llm", {}).get("provider") or       # Direct value check
+                                value.get("llmProvider") or                    # Direct value legacy
+                                "perplexity"                                   # Default to perplexity
+                            ),
                             "temperature": (data.get("temperature") or metadata.get("temperature") or 0.7),
                             "max_tokens": (data.get("max_tokens") or metadata.get("max_tokens") or 4000),
                             "allowDelegation": (data.get("allow_delegation") or metadata.get("allow_delegation") or False)
@@ -113,7 +140,18 @@ class TaskNode:
                                 "goal": agent_data.get("goal", "Help the user"),
                                 "backstory": agent_data.get("backstory", ""),
                                 "framework": agent_data.get("framework", "crewai"),
-                                "llmModel": agent_data.get("llm_model", "gpt-4"),
+                                "llmModel": (
+                                    agent_data.get("llm", {}).get("model") or     # New frontend format
+                                    agent_data.get("llmModel") or                 # Legacy format
+                                    agent_data.get("llm_model") or                # Alternative format
+                                    "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model
+                                ),
+                                "llmProvider": (
+                                    agent_data.get("llm", {}).get("provider") or  # New frontend format
+                                    agent_data.get("llmProvider") or              # Legacy format
+                                    agent_data.get("llm_provider") or             # Alternative format
+                                    "perplexity"                                  # Default to perplexity
+                                ),
                                 "temperature": agent_data.get("temperature", 0.7),
                                 "max_tokens": agent_data.get("max_tokens", 4000),
                                 "allowDelegation": agent_data.get("allow_delegation", False)
@@ -210,20 +248,35 @@ class TaskNode:
                 if agent_framework == "crewai":
                     # Try to use the crewai runner
                     try:
-                        from backend.frameworks.crewai_runner import EnhancedCrewAIRunner
+                        from frameworks.crewai_runner import EnhancedCrewAIRunner
                         logger.info("Using CrewAI framework for agent task")
                         
                         # Create CrewAI runner instance
                         crewai_runner = EnhancedCrewAIRunner()
                         
-                        # Prepare data for crewai_runner
+                        # Extract LLM provider from multiple possible locations
+                        llm_provider = (
+                            primary_agent.get("llm", {}).get("provider") or  # New frontend format
+                            primary_agent.get("llmProvider") or              # Legacy format
+                            primary_agent.get("llm_provider") or             # Alternative format
+                            "openai"                                          # Default fallback
+                        )
+                        
+                        # Extract LLM model from multiple possible locations
+                        llm_model = (
+                            primary_agent.get("llm", {}).get("model") or     # New frontend format
+                            primary_agent.get("llmModel") or                 # Legacy format
+                            primary_agent.get("llm_model") or                # Alternative format
+                            "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model instead of gpt-4
+                        )
+                        
                         agent_data = {
                             "role": agent_role,
                             "goal": agent_goal,
                             "backstory": primary_agent.get("backstory", ""),
-                            "frameworkConfig": {
-                                "provider": primary_agent.get("llmProvider", primary_agent.get("llm_provider", "openai")),
-                                "model": primary_agent.get("llmModel", "gpt-4"),
+                            "frameworkConfig": enhanced_framework_config if enhanced_framework_config else {
+                                "provider": llm_provider,
+                                "model": llm_model,
                                 "temperature": primary_agent.get("temperature", 0.7),
                                 "max_tokens": primary_agent.get("max_tokens", 4000)
                             },
@@ -231,6 +284,68 @@ class TaskNode:
                             "enableMemory": False,
                             "verbose": True
                         }
+                        
+                        # Check if context has the get_api_key_for_framework method
+                        if hasattr(context, 'get_api_key_for_framework'):
+                            # Get API key from execution context
+                            api_key = context.get_api_key_for_framework('perplexity')
+                            if api_key:
+                                enhanced_framework_config['api_key'] = api_key
+                                enhanced_framework_config['perplexity_api_key'] = api_key
+                                agent_data["frameworkConfig"]["api_key"] = api_key
+                                agent_data["frameworkConfig"]["perplexity_api_key"] = api_key
+                                logger.info(f"🔑 TaskNode: Got API key from execution context for perplexity")
+                            else:
+                                logger.warning(f"⚠️ TaskNode: No API key found in execution context for perplexity")
+                        else:
+                            logger.warning(f"⚠️ TaskNode: Context does not have get_api_key_for_framework method. Context type: {type(context)}")
+                            
+                            # FALLBACK: Try to get API key from the connected agent's frameworkConfig
+                            if formatted_inputs:
+                                for input_key, input_value in formatted_inputs.items():
+                                    if isinstance(input_value, dict) and 'metadata' in input_value:
+                                        agent_metadata = input_value.get('metadata', {})
+                                        if 'agent_result' in agent_metadata:
+                                            agent_result = agent_metadata['agent_result']
+                                            # Check if the agent has frameworkConfig with API key
+                                            if isinstance(agent_result, dict):
+                                                # Try to extract API key from various possible locations
+                                                api_key = None
+                                                
+                                                # Check if there's frameworkConfig in the agent result
+                                                if 'frameworkConfig' in agent_result:
+                                                    fc = agent_result['frameworkConfig']
+                                                    api_key = fc.get('api_key') or fc.get('perplexity_api_key')
+                                                
+                                                # Check top-level keys
+                                                if not api_key:
+                                                    api_key = agent_result.get('api_key') or agent_result.get('perplexity_api_key')
+                                                
+                                                if api_key:
+                                                    enhanced_framework_config['api_key'] = api_key
+                                                    enhanced_framework_config['perplexity_api_key'] = api_key
+                                                    agent_data["frameworkConfig"]["api_key"] = api_key
+                                                    agent_data["frameworkConfig"]["perplexity_api_key"] = api_key
+                                                    logger.info(f"🔑 TaskNode: Got API key from connected agent's result")
+                                                    break
+                        
+                        # FINAL FALLBACK: Check if we can get it from the original context object
+                        if 'api_key' not in enhanced_framework_config and hasattr(context, 'user_api_keys'):
+                            perplexity_key = context.user_api_keys.get('perplexity')
+                            if perplexity_key:
+                                enhanced_framework_config['api_key'] = perplexity_key
+                                enhanced_framework_config['perplexity_api_key'] = perplexity_key
+                                agent_data["frameworkConfig"]["api_key"] = perplexity_key
+                                agent_data["frameworkConfig"]["perplexity_api_key"] = perplexity_key
+                                logger.info(f"🔑 TaskNode: Got API key from context.user_api_keys")
+                        
+                        # CRITICAL FIX: Ensure the API key is in the agent_data frameworkConfig
+                        if 'api_key' in enhanced_framework_config:
+                            agent_data["frameworkConfig"]["api_key"] = enhanced_framework_config["api_key"]
+                        if 'perplexity_api_key' in enhanced_framework_config:
+                            agent_data["frameworkConfig"]["perplexity_api_key"] = enhanced_framework_config["perplexity_api_key"]
+                        
+                        logger.info(f"🔧 TaskNode FINAL agent_data frameworkConfig: {agent_data['frameworkConfig']}")
                         
                         task_data = {
                             "description": user_query,
@@ -254,14 +369,30 @@ class TaskNode:
                 elif agent_framework == "langchain":
                     # Try to use the langchain runner
                     try:
-                        from backend.frameworks.langchain_runner import run_langchain_tool
+                        from frameworks.langchain_runner import run_langchain_tool
                         logger.info("Using LangChain framework for agent task")
+                        
+                        # Extract LLM provider from multiple possible locations
+                        llm_provider = (
+                            primary_agent.get("llm", {}).get("provider") or  # New frontend format
+                            primary_agent.get("llmProvider") or              # Legacy format
+                            primary_agent.get("llm_provider") or             # Alternative format
+                            "openai"                                          # Default fallback
+                        )
+                        
+                        # Extract LLM model from multiple possible locations
+                        llm_model = (
+                            primary_agent.get("llm", {}).get("model") or     # New frontend format
+                            primary_agent.get("llmModel") or                 # Legacy format
+                            primary_agent.get("llm_model") or                # Alternative format
+                            "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model instead of gpt-4
+                        )
                         
                         # Prepare config for LangChain
                         config = {
                             "llm": {
-                                "provider": primary_agent.get("llmProvider", primary_agent.get("llm_provider", "openai")),
-                                "model": primary_agent.get("llmModel", "gpt-4"),
+                                "provider": llm_provider,
+                                "model": llm_model,
                                 "temperature": primary_agent.get("temperature", 0.7),
                                 "max_tokens": primary_agent.get("max_tokens", 4000)
                             },
@@ -291,14 +422,30 @@ class TaskNode:
                 elif agent_framework == "autogen":
                     # Try to use the autogen runner
                     try:
-                        from backend.frameworks.autogen_runner import run_autogen_tool
+                        from frameworks.autogen_runner import run_autogen_tool
                         logger.info("Using AutoGen framework for agent task")
+                        
+                        # Extract LLM provider from multiple possible locations
+                        llm_provider = (
+                            primary_agent.get("llm", {}).get("provider") or  # New frontend format
+                            primary_agent.get("llmProvider") or              # Legacy format
+                            primary_agent.get("llm_provider") or             # Alternative format
+                            "openai"                                          # Default fallback
+                        )
+                        
+                        # Extract LLM model from multiple possible locations
+                        llm_model = (
+                            primary_agent.get("llm", {}).get("model") or     # New frontend format
+                            primary_agent.get("llmModel") or                 # Legacy format
+                            primary_agent.get("llm_model") or                # Alternative format
+                            "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model instead of gpt-4
+                        )
                         
                         # Prepare config for AutoGen
                         config = {
                             "llm": {
-                                "provider": primary_agent.get("llmProvider", primary_agent.get("llm_provider", "openai")),
-                                "model": primary_agent.get("llmModel", "gpt-4"),
+                                "provider": llm_provider,
+                                "model": llm_model,
                                 "temperature": primary_agent.get("temperature", 0.7),
                                 "max_tokens": primary_agent.get("max_tokens", 4000)
                             },
@@ -327,14 +474,30 @@ class TaskNode:
                 elif agent_framework == "llamaindex":
                     # Try to use the llamaindex runner
                     try:
-                        from backend.frameworks.llamaindex_runner import run_llamaindex_tool
+                        from frameworks.llamaindex_runner import run_llamaindex_tool
                         logger.info("Using LlamaIndex framework for agent task")
+                        
+                        # Extract LLM provider from multiple possible locations
+                        llm_provider = (
+                            primary_agent.get("llm", {}).get("provider") or  # New frontend format
+                            primary_agent.get("llmProvider") or              # Legacy format
+                            primary_agent.get("llm_provider") or             # Alternative format
+                            "openai"                                          # Default fallback
+                        )
+                        
+                        # Extract LLM model from multiple possible locations
+                        llm_model = (
+                            primary_agent.get("llm", {}).get("model") or     # New frontend format
+                            primary_agent.get("llmModel") or                 # Legacy format
+                            primary_agent.get("llm_model") or                # Alternative format
+                            "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model instead of gpt-4
+                        )
                         
                         # Prepare config for LlamaIndex
                         config = {
                             "llm": {
-                                "provider": primary_agent.get("llmProvider", primary_agent.get("llm_provider", "openai")),
-                                "model": primary_agent.get("llmModel", "gpt-4"),
+                                "provider": llm_provider,
+                                "model": llm_model,
                                 "temperature": primary_agent.get("temperature", 0.7),
                                 "max_tokens": primary_agent.get("max_tokens", 4000)
                             },
@@ -363,7 +526,7 @@ class TaskNode:
                 elif agent_framework == "huggingface":
                     # Try to use the huggingface runner
                     try:
-                        from backend.frameworks.huggingface_runner import run_huggingface_tool
+                        from frameworks.huggingface_runner import run_huggingface_tool
                         logger.info("Using HuggingFace framework for agent task")
                         
                         # Prepare config for HuggingFace
@@ -396,7 +559,7 @@ class TaskNode:
                 elif agent_framework == "webhook":
                     # Try to use the webhook runner
                     try:
-                        from backend.frameworks.webhook_runner import run_webhook_tool
+                        from frameworks.webhook_runner import run_webhook_tool
                         logger.info("Using Webhook framework for agent task")
                         
                         # Prepare config for Webhook
@@ -698,28 +861,13 @@ async def process_task_node(
     Process task node - standalone function for node processor
     """
     try:
-        from backend.models.data import NodeData
-        from backend.models.workflow import ExecutionContext
+        from models.data import NodeData
         
         # Create TaskNode instance
         task_node = TaskNode()
         
-        # Convert context to ExecutionContext if needed
-        if context and not isinstance(context, ExecutionContext):
-            exec_context = ExecutionContext(
-                execution_id=context.get('execution_id', 'unknown'),
-                workflow_id=context.get('workflow_id', 'unknown'),
-                user_id=context.get('user_id'),
-                metadata=context.get('metadata', {})
-            )
-        else:
-            exec_context = context or ExecutionContext(
-                execution_id='unknown',
-                workflow_id='unknown'
-            )
-        
         # Create a Node object from node_data
-        from backend.models.nodes import Node, NodeType
+        from models.nodes import Node, NodeType
         node = Node(
             id=node_data.get('nodeId', node_data.get('id', 'unknown')),
             type=NodeType.TASK,
@@ -727,8 +875,28 @@ async def process_task_node(
             position=node_data.get('position', {'x': 0, 'y': 0})
         )
         
-        # Process the node
-        result = await task_node.process(node, inputs, exec_context)
+        # CRITICAL FIX: Check if context is a dict and extract the actual WorkflowExecutionContext
+        actual_context = context
+        if isinstance(context, dict):
+            # Look for the actual WorkflowExecutionContext in the dict
+            if 'execution_context' in context:
+                actual_context = context['execution_context']
+                logger.info(f"🔧 TaskNode: Found execution_context in dict")
+            elif 'workflow_execution_context' in context:
+                actual_context = context['workflow_execution_context']
+                logger.info(f"🔧 TaskNode: Found workflow_execution_context in dict")
+            elif 'context' in context:
+                actual_context = context['context']
+                logger.info(f"🔧 TaskNode: Found context in dict")
+            else:
+                # If we can't find the WorkflowExecutionContext, we'll work with what we have
+                logger.warning(f"⚠️ TaskNode: Could not find WorkflowExecutionContext in dict, using dict directly")
+                actual_context = context
+        
+        logger.info(f"🔧 TaskNode: Final context type: {type(actual_context)}")
+        
+        # Process the node with the actual context
+        result = await task_node.process(node, inputs, actual_context)
         
         # Ensure result is wrapped in NodeData
         if isinstance(result, NodeData):

@@ -1,11 +1,12 @@
 # backend/frameworks/ai_integration_runner.py - NEW FILE
 import logging
-from typing import Dict, Any, Optional
 import json
-import aiohttp
+import asyncio
+from typing import Dict, Any, Optional, List
 from datetime import datetime
-from framework_registry import run_framework_tool
-from frameworks.shared_api_research import research_for_output
+
+# Remove circular import - import only when needed
+# from framework_registry import run_framework_tool
 
 logger = logging.getLogger(__name__)
 
@@ -209,14 +210,20 @@ Be specific about endpoints and data mapping. Return only valid JSON.
         else:
             # Generic API integration
             try:
-                # Build a basic framework config from the AI-generated plan
+                # Use LangChain for AI processing
                 framework_config = {
-                    "prompt": json.dumps(plan, indent=2),
-                    "framework": "langchain",
-                    "temperature": 0.3,
-                    "model": "gpt-4"
+                    "chainType": "simple",
+                    "systemMessage": system_message,
+                    "frameworkConfig": {
+                        "provider": "openai",
+                        "model": "gpt-4",
+                        "temperature": 0.7,
+                        "max_tokens": 2000
+                    }
                 }
-
+                
+                # Import locally to avoid circular import
+                from framework_registry import run_framework_tool
                 result = run_framework_tool("langchain", framework_config, data)
 
                 return {

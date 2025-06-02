@@ -10,7 +10,7 @@ import TaskEditor from './editmodal/TaskEditor';
 import ToolEditor from './editmodal/ToolEditor';
 import ChatbotEditor from './editmodal/ChatbotEditor';
 import DelayEditor from './editmodal/DelayEditor';
-import TriggerEditor from './editmodal/TriggerEditor';
+import TriggerEditor from './editmodal/TriggerEditor/TriggerEditor';
 import LogicEditor from './editmodal/LogicEditor';
 import InputEditor from './editmodal/InputEditor';
 import OutputEditor from './editmodal/OutputEditor';
@@ -29,43 +29,61 @@ export const AVAILABLE_LLM_PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic', description: 'Claude models' },
   { value: 'openrouter', label: 'OpenRouter', description: 'Multiple models via API' },
   { value: 'gemini', label: 'Google Gemini', description: 'Google\'s AI models' },
-  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' }
+  { value: 'huggingface', label: 'HuggingFace', description: 'Open source models' },
+  { value: 'perplexity', label: 'Perplexity AI', description: 'Real-time web search models' }
 ];
 
 // LLM Models mapping
 export const LLM_MODELS = {
   openai: [
-    { value: 'gpt-4', label: 'GPT-4', context: '8K', cost: 'High' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo', context: '128K', cost: 'High' },
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo', context: '4K', cost: 'Medium' }
+    { value: 'gpt-4', label: 'GPT-4 (8K context, $0.03/1K tokens)', context: '8K', cost: '$0.03' },
+    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo (128K context, $0.01/1K tokens)', context: '128K', cost: '$0.01' },
+    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (16K context, $0.001/1K tokens)', context: '16K', cost: '$0.001' },
+    { value: 'gpt-4o', label: 'GPT-4o (128K context, $0.005/1K tokens)', context: '128K', cost: '$0.005' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o Mini (128K context, $0.0001/1K tokens)', context: '128K', cost: '$0.0001' }
   ],
   anthropic: [
-    { value: 'claude-3-opus', label: 'Claude 3 Opus', context: '200K', cost: 'High' },
-    { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet', context: '200K', cost: 'Medium' },
-    { value: 'claude-3-haiku', label: 'Claude 3 Haiku', context: '200K', cost: 'Low' }
+    { value: 'claude-3-opus-20240229', label: 'Claude 3 Opus (200K context, $15/1M tokens)', context: '200K', cost: '$15' },
+    { value: 'claude-3-sonnet-20240229', label: 'Claude 3 Sonnet (200K context, $3/1M tokens)', context: '200K', cost: '$3' },
+    { value: 'claude-3-haiku-20240307', label: 'Claude 3 Haiku (200K context, $0.25/1M tokens)', context: '200K', cost: '$0.25' },
+    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet (200K context, $3/1M tokens)', context: '200K', cost: '$3' }
   ],
   openrouter: [
-    { value: 'openai/gpt-4', label: 'GPT-4 (via OpenRouter)', context: '8K', cost: 'High' },
-    { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus (via OpenRouter)', context: '200K', cost: 'High' },
-    { value: 'meta-llama/llama-2-70b-chat', label: 'Llama 2 70B', context: '4K', cost: 'Medium' }
-  ],
-  gemini: [
-    { value: 'gemini-pro', label: 'Gemini Pro', context: '32K', cost: 'Medium' },
-    { value: 'gemini-pro-vision', label: 'Gemini Pro Vision', context: '16K', cost: 'High' }
+    { value: 'openai/gpt-4', label: 'GPT-4 (via OpenRouter)', context: '8K', cost: 'Variable' },
+    { value: 'openai/gpt-4-turbo', label: 'GPT-4 Turbo (via OpenRouter)', context: '128K', cost: 'Variable' },
+    { value: 'anthropic/claude-3-opus', label: 'Claude 3 Opus (via OpenRouter)', context: '200K', cost: 'Variable' },
+    { value: 'anthropic/claude-3-sonnet', label: 'Claude 3 Sonnet (via OpenRouter)', context: '200K', cost: 'Variable' },
+    { value: 'meta-llama/llama-2-70b-chat', label: 'Llama 2 70B Chat', context: '4K', cost: 'Variable' },
+    { value: 'mistralai/mistral-large', label: 'Mistral Large', context: '32K', cost: 'Variable' }
   ],
   huggingface: [
-    { value: 'microsoft/DialoGPT-medium', label: 'DialoGPT Medium', context: '1K', cost: 'Low' },
-    { value: 'microsoft/phi-2', label: 'Phi-2', context: '2K', cost: 'Low' },
-    { value: 'mistralai/Mistral-7B-Instruct-v0.2', label: 'Mistral 7B', context: '8K', cost: 'Low' }
+    { value: 'meta-llama/Llama-2-70b-chat-hf', label: 'Llama 2 70B Chat', context: '4K', cost: 'Free' },
+    { value: 'microsoft/DialoGPT-large', label: 'DialoGPT Large', context: '1K', cost: 'Free' },
+    { value: 'mistralai/Mistral-7B-Instruct-v0.2', label: 'Mistral 7B Instruct', context: '32K', cost: 'Free' },
+    { value: 'google/flan-t5-xxl', label: 'FLAN-T5 XXL', context: '2K', cost: 'Free' }
+  ],
+  perplexity: [
+    { value: 'sonar-pro', label: 'Sonar Pro (Advanced search, 200K context)', context: '200K', cost: 'Variable' },
+    { value: 'sonar', label: 'Sonar (Lightweight search, 128K context)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-deep-research', label: 'Sonar Deep Research (Comprehensive reports, 128K context)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-reasoning-pro', label: 'Sonar Reasoning Pro (Chain of Thought, 128K context)', context: '128K', cost: 'Variable' },
+    { value: 'sonar-reasoning', label: 'Sonar Reasoning (Fast reasoning, 128K context)', context: '128K', cost: 'Variable' },
+    { value: 'r1-1776', label: 'R1-1776 (Offline chat model, 128K context)', context: '128K', cost: 'Variable' }
+  ],
+  google: [
+    { value: 'gemini-pro', label: 'Gemini Pro (32K context, Free tier)', context: '32K', cost: 'Free' },
+    { value: 'gemini-pro-vision', label: 'Gemini Pro Vision (16K context, Free tier)', context: '16K', cost: 'Free' },
+    { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro (1M context, $7/1M tokens)', context: '1M', cost: '$7' },
+    { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash (1M context, $0.35/1M tokens)', context: '1M', cost: '$0.35' }
   ]
 };
 
 // Framework compatibility with LLMs
 export const FRAMEWORK_LLM_COMPATIBILITY = {
-  crewai: ['openai', 'anthropic', 'openrouter', 'gemini'],
-  langchain: ['openai', 'anthropic', 'openrouter', 'huggingface'],
-  autogen: ['openai', 'anthropic', 'openrouter'],
-  llamaindex: ['openai', 'anthropic', 'openrouter', 'huggingface'],
+  crewai: ['openai', 'anthropic', 'openrouter', 'gemini', 'perplexity'],
+  langchain: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity'],
+  autogen: ['openai', 'anthropic', 'openrouter', 'perplexity'],
+  llamaindex: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity'],
   huggingface: [] // Uses models directly, no external LLM needed
 };
 
@@ -308,21 +326,45 @@ const EnhancedEditModal = ({
         }
       }));
     } else if (name === 'llmProvider') {
-      // Map llmProvider to llm.provider
-      setFormData(prev => ({
-        ...prev,
-        llm: {
-          ...prev.llm,
-          provider: type === 'checkbox' ? checked : value
-        },
-        llmProvider: type === 'checkbox' ? checked : value // Keep for backward compatibility
-      }));
+      // Map llmProvider to llm.provider AND frameworkConfig.provider
+      const newProvider = type === 'checkbox' ? checked : value;
+      
+      // CRITICAL FIX: Auto-select first available model when provider changes
+      const availableModels = LLM_MODELS[newProvider] || [];
+      const newModel = availableModels.length > 0 ? availableModels[0].value : '';
+      
+      console.log(`🔍 Provider changed to: ${newProvider}, auto-selecting model: ${newModel}`);
+      
+      setFormData(prev => {
+        const newData = {
+          ...prev,
+          llm: {
+            ...prev.llm,
+            provider: newProvider,
+            model: newModel  // Auto-update model when provider changes
+          },
+          frameworkConfig: {
+            ...prev.frameworkConfig,
+            provider: newProvider,
+            model: newModel  // Also update framework config
+          },
+          llmProvider: newProvider, // Keep for backward compatibility
+          llmModel: newModel // Update legacy field too
+        };
+        console.log(`🔍 New frameworkConfig.provider: ${newData.frameworkConfig.provider}`);
+        console.log(`🔍 New frameworkConfig.model: ${newData.frameworkConfig.model}`);
+        return newData;
+      });
     } else if (name === 'llmModel') {
       // Map llmModel to llm.model
       setFormData(prev => ({
         ...prev,
         llm: {
           ...prev.llm,
+          model: type === 'checkbox' ? checked : value
+        },
+        frameworkConfig: {
+          ...prev.frameworkConfig,
           model: type === 'checkbox' ? checked : value
         },
         llmModel: type === 'checkbox' ? checked : value // Keep for backward compatibility

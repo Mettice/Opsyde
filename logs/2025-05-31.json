@@ -1,0 +1,13 @@
+{"timestamp": "2025-05-31 04:14:19,877", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "Starting unified API research: WhatsApp (data_output)"}
+{"timestamp": "2025-05-31 04:14:19,878", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "\ud83e\udd16 Starting TRUE AI-powered service detection from description: 'send message to whatsapp'"}
+{"timestamp": "2025-05-31 04:14:19,878", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "No user keys found, checking environment variables..."}
+{"timestamp": "2025-05-31 04:14:19,878", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "Environment keys available: []"}
+{"timestamp": "2025-05-31 04:14:19,879", "level": "ERROR", "name": "backend.frameworks.shared_api_research", "message": "No LLM keys available - cannot perform AI research"}
+{"timestamp": "2025-05-31 04:14:19,880", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "Parsing AI response (length: 30)"}
+{"timestamp": "2025-05-31 04:14:19,880", "level": "ERROR", "name": "backend.frameworks.shared_api_research", "message": "Failed to parse AI response: No JSON found in AI response"}
+{"timestamp": "2025-05-31 04:14:19,880", "level": "ERROR", "name": "backend.frameworks.shared_api_research", "message": "Response preview: OpenAI API key not configured...."}
+{"timestamp": "2025-05-31 04:14:19,880", "level": "WARNING", "name": "backend.frameworks.shared_api_research", "message": "\u26a0\ufe0f AI service detection failed: AI research unavailable - no API keys configured"}
+{"timestamp": "2025-05-31 04:14:19,881", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "No specific protocol detected, defaulting to REST"}
+{"timestamp": "2025-05-31 04:14:19,881", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "No user keys found, checking environment variables..."}
+{"timestamp": "2025-05-31 04:14:19,881", "level": "INFO", "name": "backend.frameworks.shared_api_research", "message": "Environment keys available: []"}
+{"timestamp": "2025-05-31 04:14:19,881", "level": "ERROR", "name": "backend.frameworks.shared_api_research", "message": "No LLM keys available - cannot perform AI research"}

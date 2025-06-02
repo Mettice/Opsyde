@@ -1,0 +1,15 @@
+{"timestamp": "2025-06-01 16:20:42,205", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'test_user', 'workflow_id': None, 'available_providers': [], 'available_provider_ids': [], 'has_user_keys': False, 'execution_mode': 'system', 'total_registered_providers': 10}"}
+{"timestamp": "2025-06-01 16:20:42,935", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (agent) executed in 0.72s"}
+{"timestamp": "2025-06-01 16:20:43,506", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (task) executed in 0.56s"}
+{"timestamp": "2025-06-01 16:22:18,808", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'test_user', 'workflow_id': None, 'available_providers': [], 'available_provider_ids': [], 'has_user_keys': False, 'execution_mode': 'system', 'total_registered_providers': 10}"}
+{"timestamp": "2025-06-01 16:22:18,819", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (agent) executed in 0.00s"}
+{"timestamp": "2025-06-01 16:22:18,835", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (task) executed in 0.01s"}
+{"timestamp": "2025-06-01 16:24:19,948", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'test_user', 'workflow_id': None, 'available_providers': [], 'available_provider_ids': [], 'has_user_keys': False, 'execution_mode': 'system', 'total_registered_providers': 10}"}
+{"timestamp": "2025-06-01 16:24:19,953", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (agent) executed in 0.00s"}
+{"timestamp": "2025-06-01 16:24:19,970", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (task) executed in 0.02s"}
+{"timestamp": "2025-06-01 16:26:03,951", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'anonymous', 'workflow_id': None, 'available_providers': [], 'available_provider_ids': [], 'has_user_keys': False, 'execution_mode': 'system', 'total_registered_providers': 10}"}
+{"timestamp": "2025-06-01 16:26:03,956", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (agent) executed in 0.00s"}
+{"timestamp": "2025-06-01 16:26:03,972", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (task) executed in 0.01s"}
+{"timestamp": "2025-06-01 16:30:15,335", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'default', 'workflow_id': None, 'available_providers': [], 'available_provider_ids': [], 'has_user_keys': False, 'execution_mode': 'system', 'total_registered_providers': 10}"}
+{"timestamp": "2025-06-01 16:30:15,340", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (agent) executed in 0.00s"}
+{"timestamp": "2025-06-01 16:30:15,355", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (task) executed in 0.01s"}
