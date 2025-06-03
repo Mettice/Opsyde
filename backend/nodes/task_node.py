@@ -259,7 +259,7 @@ class TaskNode:
                             primary_agent.get("llm", {}).get("provider") or  # New frontend format
                             primary_agent.get("llmProvider") or              # Legacy format
                             primary_agent.get("llm_provider") or             # Alternative format
-                            "openai"                                          # Default fallback
+                            "perplexity"                                      # Default fallback
                         )
                         
                         # Extract LLM model from multiple possible locations
@@ -377,7 +377,7 @@ class TaskNode:
                             primary_agent.get("llm", {}).get("provider") or  # New frontend format
                             primary_agent.get("llmProvider") or              # Legacy format
                             primary_agent.get("llm_provider") or             # Alternative format
-                            "openai"                                          # Default fallback
+                            "perplexity"                                      # Default fallback
                         )
                         
                         # Extract LLM model from multiple possible locations
@@ -430,7 +430,7 @@ class TaskNode:
                             primary_agent.get("llm", {}).get("provider") or  # New frontend format
                             primary_agent.get("llmProvider") or              # Legacy format
                             primary_agent.get("llm_provider") or             # Alternative format
-                            "openai"                                          # Default fallback
+                            "perplexity"                                      # Default fallback
                         )
                         
                         # Extract LLM model from multiple possible locations
@@ -482,7 +482,7 @@ class TaskNode:
                             primary_agent.get("llm", {}).get("provider") or  # New frontend format
                             primary_agent.get("llmProvider") or              # Legacy format
                             primary_agent.get("llm_provider") or             # Alternative format
-                            "openai"                                          # Default fallback
+                            "perplexity"                                      # Default fallback
                         )
                         
                         # Extract LLM model from multiple possible locations
@@ -624,8 +624,15 @@ class TaskNode:
             if connected_agents:
                 result["agents"] = connected_agents
 
-            # Get execution_id from context
-            execution_id = context.execution_id if hasattr(context, 'execution_id') else context.get('execution_id', 'unknown')
+            # CRITICAL FIX: Handle both dict and WorkflowExecutionContext objects
+            if hasattr(context, 'execution_id'):
+                execution_id = context.execution_id
+            elif hasattr(context, 'get') and callable(getattr(context, 'get')):
+                execution_id = context.get('execution_id', 'unknown')
+            elif isinstance(context, dict):
+                execution_id = context.get('execution_id', 'unknown')
+            else:
+                execution_id = 'unknown'
 
             # Add task metadata
             result["metadata"] = {

@@ -69,7 +69,7 @@ class AgentNode:
                     node_data.get("llm", {}).get("provider") or
                     node_data.get("llmProvider") or
                     node_data.get("frameworkConfig", {}).get("provider") or
-                    "openai"
+                    "perplexity"
                 ),
                 "temperature": float(node_data.get("temperature", 0.7)),
                 "max_tokens": max_tokens,
@@ -365,14 +365,14 @@ class AgentNode:
                 agent_config.get("llm", {}).get("provider") or  # New frontend format
                 agent_config.get("llmProvider") or              # Legacy format
                 agent_config.get("llm_provider") or             # Alternative format
-                "openai"                                        # Default fallback
+                "perplexity"                                     # Default fallback
             )
             
             llm_model = (
                 agent_config.get("llm", {}).get("model") or     # New frontend format
                 agent_config.get("llmModel") or                 # Legacy format
                 agent_config.get("llm_model") or                # Alternative format
-                "gpt-4"                                         # Default fallback
+                "llama-3.1-sonar-small-128k-online"             # Default to Perplexity model
             )
             
             # Prepare CrewAI configuration - preserve the enhanced frameworkConfig
@@ -568,9 +568,23 @@ async def process_agent_node(
         logger.info(f"Processing agent node with data: {node_data.get('label', 'Unknown Agent')}")
         
         # Create execution context with required fields
+        workflow_id = 'unknown'
+        execution_id = 'direct-execution'
+        
+        if context:
+            # Get workflow_id, but ensure it's not None
+            context_workflow_id = context.get('workflow_id')
+            if context_workflow_id is not None:
+                workflow_id = context_workflow_id
+                
+            # Get execution_id, but ensure it's not None  
+            context_execution_id = context.get('execution_id')
+            if context_execution_id is not None:
+                execution_id = context_execution_id
+        
         exec_context = ExecutionContext(
-            workflow_id=context.get('workflow_id', 'unknown') if context else 'unknown',
-            execution_id=context.get('execution_id', 'direct-execution') if context else 'direct-execution'
+            workflow_id=workflow_id,
+            execution_id=execution_id
         )
         
         # Create Node object from node_data

@@ -288,6 +288,24 @@ class WorkflowExecutionContext:
             "context_type": "supabase_byok"
         }
 
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert context to dictionary format for compatibility with .get() calls"""
+        return {
+            "user_id": self.user_id,
+            "workflow_id": self.workflow_id,
+            "execution_id": f"exec_{int(self.execution_start_time.timestamp())}",
+            "execution_timestamp": self.execution_start_time.isoformat(),
+            "user_keys": self.user_api_keys,
+            "context_key": self.context_key,
+            "available_providers": list(self.user_api_keys.keys()),
+            "total_api_keys": len(self.user_api_keys)
+        }
+
+    def get(self, key: str, default=None):
+        """Dictionary-style get method for backward compatibility"""
+        context_dict = self.to_dict()
+        return context_dict.get(key, default)
+
     async def cleanup(self):
         """Cleanup resources and log execution summary"""
         try:

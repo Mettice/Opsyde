@@ -106,13 +106,11 @@ class EnhancedCrewAIRunner:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 return ChatGoogleGenerativeAI(model=model, **llm_config)
             except ImportError:
-                logger.warning("Google Generative AI not available, falling back to OpenAI")
-                from langchain_openai import ChatOpenAI
-                return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
+                logger.warning(f"Google Generative AI not available for {provider}, will use fallback execution")
+                return None  # This forces fallback execution with the correct provider
         else:
-            logger.warning(f"Unknown provider {provider}, falling back to OpenAI")
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
+            logger.warning(f"Provider {provider} will use fallback execution")
+            return None  # This forces fallback execution with the correct provider
     
     def _get_token_callbacks(self):
         """Get callbacks for token usage tracking"""

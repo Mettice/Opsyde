@@ -14,6 +14,13 @@ from utils.logging import get_logger
 # NEW: Import enhanced framework registry for validation
 from framework_registry import framework_registry, validate_framework_llm_combination
 
+# Import WorkflowExecutionContext for proper type checking
+try:
+    from core.workflow_execution_context import WorkflowExecutionContext
+except ImportError:
+    # Handle circular import by using string comparison
+    WorkflowExecutionContext = None
+
 logger = get_logger(__name__)
 
 class NodeProcessor:
@@ -88,7 +95,7 @@ class NodeProcessor:
         self, 
         node: Dict[str, Any], 
         inputs: Dict[str, Any], 
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Any] = None
     ) -> NodeData:
         """Process a node with enhanced error handling, validation, and framework compatibility checking"""
         node_id = node.get("id", "unknown")
@@ -114,14 +121,44 @@ class NodeProcessor:
             # Prepare inputs
             wrapped_inputs = {k: self._wrap_as_nodedata(v) for k, v in inputs.items()}
             
-            # Add execution metadata to context
-            execution_context = {
-                **(context or {}),
-                "node_id": node_id,
-                "node_type": node_type,
-                "execution_timestamp": datetime.now().isoformat(),
-                "framework_registry": framework_registry  # NEW: Provide access to framework registry
-            }
+            # DEBUG: Log context information
+            logger.info(f"🔍 Context debug for node {node_id}:")
+            logger.info(f"   - Context type: {type(context)}")
+            logger.info(f"   - Context is None: {context is None}")
+            if context:
+                logger.info(f"   - Context has 'get' method: {hasattr(context, 'get')}")
+                logger.info(f"   - Context class name: {context.__class__.__name__}")
+                logger.info(f"   - Context dir: {[attr for attr in dir(context) if not attr.startswith('_')]}")
+            
+            # Prepare execution context for node handlers
+            # Check if context is a WorkflowExecutionContext by class name and methods
+            if context and (
+                (WorkflowExecutionContext and isinstance(context, WorkflowExecutionContext)) or
+                context.__class__.__name__ == 'WorkflowExecutionContext' or 
+                (hasattr(context, 'get') and hasattr(context, 'enhance_node_config') and hasattr(context, 'get_api_key_for_framework'))
+            ):
+                # It's a WorkflowExecutionContext, pass it directly
+                logger.info(f"✅ Using WorkflowExecutionContext directly for node {node_id}")
+                execution_context = context
+            elif context:
+                # It's some other context object, wrap it
+                logger.info(f"⚠️ Wrapping unknown context type for node {node_id}: {type(context)}")
+                execution_context = {
+                    "workflow_execution_context": context,
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "execution_timestamp": datetime.now().isoformat(),
+                    "framework_registry": framework_registry
+                }
+            else:
+                # No context provided, create basic one
+                logger.info(f"📝 Creating basic context for node {node_id}")
+                execution_context = {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "execution_timestamp": datetime.now().isoformat(),
+                    "framework_registry": framework_registry
+                }
             
             # Execute handler with timing
             start_time = datetime.now()

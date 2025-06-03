@@ -1648,6 +1648,644 @@ Keep it under 500 characters for Telegram efficiency!`,
         tokenOptimized: true,
         smartFiltering: true
       }
+    },
+    // Add this new comprehensive template after the existing templates
+    {
+      name: '🏢 Enterprise Multi-Agent Business Intelligence Platform',
+      description: 'Complete end-to-end business automation testing ALL node types: Triggers → Multiple Agents → Tasks → Tools → Logic → Outputs. Real-world enterprise workflow with market research, competitor analysis, content generation, and multi-channel distribution.',
+      thumbnail: '/img/enterprise-multi-agent-flow.png',
+      nodes: [
+        // 1. TRIGGER NODE - Universal Polling for Market Data
+        {
+          id: 'trigger-market-data',
+          type: 'trigger',
+          position: { x: 100, y: 200 },
+          data: {
+            label: '📊 B2B Market Data Monitor',
+            triggerType: 'universal_polling',
+            serviceName: 'Business Data API',
+            apiEndpoint: 'https://api.crunchbase.com/api/v4/entities/organizations?field_ids=identifier,name,short_description,funding_total,employee_count,categories&query=automation%20software',
+            pollingInterval: 3600, // 1 hour for business data
+            authType: 'api_key',
+            changeDetectionMethod: 'array_length',
+            description: 'Monitors business data APIs for industry trends, competitor analysis, and market intelligence',
+            nodeId: 'trigger-market-data',
+            nodeType: 'trigger',
+            // Alternative B2B APIs you could use:
+            alternativeEndpoints: [
+              'https://api.hunter.io/v2/domain-search?domain=zapier.com', // Email finder for competitor analysis
+              'https://api.builtwith.com/v1/api.json?KEY=YOUR_KEY&LOOKUP=zapier.com', // Technology stack analysis
+              'https://api.similarweb.com/v1/similar-rank/zapier.com/1', // Website traffic analysis
+              'https://api.linkedin.com/v2/companies?q=automation', // LinkedIn company data
+              'https://api.github.com/search/repositories?q=automation+language:javascript', // Open source trends
+              'https://newsapi.org/v2/everything?q=business%20automation&sortBy=publishedAt' // News monitoring
+            ]
+          }
+        },
+
+        // 2. INPUT NODE - Business Context
+        {
+          id: 'input-business-context',
+          type: 'input',
+          position: { x: 100, y: 350 },
+          data: {
+            label: '🎯 Business Context',
+            inputType: 'text',
+            placeholder: 'Enter your business context and goals...',
+            value: 'We are a B2B SaaS company in the AI automation space. Target market: SMBs and enterprises looking to automate workflows. Key competitors: Zapier, Make.com, n8n. Goal: Increase market share by 25% in Q1 2025.',
+            description: 'Business context and strategic goals',
+            nodeId: 'input-business-context',
+            nodeType: 'input'
+          }
+        },
+
+        // 3. AGENT 1 - Market Research Specialist
+        {
+          id: 'agent-market-researcher',
+          type: 'agent',
+          position: { x: 400, y: 150 },
+          data: {
+            label: '🔍 Market Research Specialist',
+            role: 'Senior Market Research Analyst',
+            goal: 'Analyze market trends, competitor landscape, and identify business opportunities',
+            backstory: 'You are a seasoned market research analyst with 10+ years of experience in the SaaS and automation industry. You specialize in competitive intelligence, market sizing, and trend analysis. You have worked with Fortune 500 companies and startups, providing strategic insights that drive business growth.',
+            framework: 'crewai',
+            frameworkConfig: {
+              provider: 'perplexity',
+              model: 'sonar-pro',
+              temperature: 0.7,
+              max_tokens: 3000
+            },
+            llmModel: 'sonar-pro',
+            temperature: 0.7,
+            max_tokens: 3000,
+            allowDelegation: true,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-market-researcher',
+            nodeType: 'agent'
+          }
+        },
+
+        // 4. TASK 1 - Market Analysis
+        {
+          id: 'task-market-analysis',
+          type: 'task',
+          position: { x: 700, y: 100 },
+          data: {
+            label: '📈 Market Analysis',
+            description: 'Conduct comprehensive market analysis based on trigger data and business context',
+            expectedOutput: 'Detailed market analysis report including: 1) Market trends and opportunities, 2) Competitive landscape analysis, 3) Target audience insights, 4) Growth projections, 5) Strategic recommendations with specific metrics and actionable insights',
+            async: false,
+            agentId: 'agent-market-researcher',
+            nodeId: 'task-market-analysis',
+            nodeType: 'task'
+          }
+        },
+
+        // 5. AGENT 2 - Content Strategy Specialist
+        {
+          id: 'agent-content-strategist',
+          type: 'agent',
+          position: { x: 400, y: 300 },
+          data: {
+            label: '✍️ Content Strategy Specialist',
+            role: 'Senior Content Marketing Strategist',
+            goal: 'Create compelling content strategies and marketing materials based on market research',
+            backstory: 'You are a creative content marketing expert with 8+ years of experience in B2B SaaS marketing. You excel at translating market insights into engaging content that drives conversions. You have managed content strategies for companies that achieved 300%+ growth in organic traffic and 150%+ improvement in conversion rates.',
+            framework: 'crewai',
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.8,
+              max_tokens: 3000
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.8,
+            max_tokens: 3000,
+            allowDelegation: false,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-content-strategist',
+            nodeType: 'agent'
+          }
+        },
+
+        // 6. TASK 2 - Content Strategy Development
+        {
+          id: 'task-content-strategy',
+          type: 'task',
+          position: { x: 700, y: 250 },
+          data: {
+            label: '📝 Content Strategy',
+            description: 'Develop comprehensive content strategy based on market analysis',
+            expectedOutput: 'Complete content strategy including: 1) Content themes and messaging, 2) Platform-specific content plans, 3) Content calendar for 30 days, 4) SEO keywords and optimization strategy, 5) Engagement tactics and conversion funnels',
+            async: false,
+            agentId: 'agent-content-strategist',
+            nodeId: 'task-content-strategy',
+            nodeType: 'task'
+          }
+        },
+
+        // 7. TASK 3 - Content Creation
+        {
+          id: 'task-content-creation',
+          type: 'task',
+          position: { x: 700, y: 400 },
+          data: {
+            label: '🎨 Content Creation',
+            description: 'Create actual marketing content based on strategy',
+            expectedOutput: 'Ready-to-publish content package including: 1) Blog post drafts (2-3 articles), 2) Social media posts for LinkedIn, Twitter, Instagram, 3) Email marketing templates, 4) Landing page copy, 5) Ad copy variations for different platforms',
+            async: false,
+            agentId: 'agent-content-strategist',
+            nodeId: 'task-content-creation',
+            nodeType: 'task'
+          }
+        },
+
+        // 8. TOOL 1 - Competitor Analysis Tool
+        {
+          id: 'tool-competitor-analysis',
+          type: 'tool',
+          position: { x: 1000, y: 150 },
+          data: {
+            label: '🔍 Competitor Analysis Tool',
+            description: 'Analyze competitor websites and strategies',
+            toolType: 'api',
+            framework: 'custom',
+            parameters: 'competitor_urls\nanalysis_type\nmetrics',
+            icon: '🕵️',
+            category: 'Research',
+            apiEndpoint: 'https://api.builtwith.com/v1/api.json',
+            nodeId: 'tool-competitor-analysis',
+            nodeType: 'tool'
+          }
+        },
+
+        // 9. AGENT 3 - Business Intelligence Analyst
+        {
+          id: 'agent-bi-analyst',
+          type: 'agent',
+          position: { x: 1300, y: 200 },
+          data: {
+            label: '📊 Business Intelligence Analyst',
+            role: 'Senior Business Intelligence Analyst',
+            goal: 'Synthesize all research and content into actionable business intelligence and strategic recommendations',
+            backstory: 'You are a strategic business intelligence expert with 12+ years of experience in data analysis and strategic planning. You excel at connecting market insights, competitive intelligence, and content performance to create comprehensive business strategies. You have helped companies achieve 200%+ revenue growth through data-driven decision making.',
+            framework: 'crewai',
+            frameworkConfig: {
+              provider: 'anthropic',
+              model: 'claude-3-sonnet-20240229',
+              temperature: 0.6,
+              max_tokens: 4000
+            },
+            llmModel: 'claude-3-sonnet-20240229',
+            temperature: 0.6,
+            max_tokens: 4000,
+            allowDelegation: true,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-bi-analyst',
+            nodeType: 'agent'
+          }
+        },
+
+        // 10. TASK 4 - Business Intelligence Report
+        {
+          id: 'task-bi-report',
+          type: 'task',
+          position: { x: 1600, y: 200 },
+          data: {
+            label: '📋 BI Report Generation',
+            description: 'Create comprehensive business intelligence report combining all analyses',
+            expectedOutput: 'Executive business intelligence report including: 1) Executive summary with key findings, 2) Market opportunity assessment with ROI projections, 3) Competitive positioning strategy, 4) Content marketing roadmap, 5) Implementation timeline with milestones, 6) Success metrics and KPIs, 7) Risk assessment and mitigation strategies',
+            async: false,
+            agentId: 'agent-bi-analyst',
+            nodeId: 'task-bi-report',
+            nodeType: 'task'
+          }
+        },
+
+        // 11. LOGIC NODE - Quality Gate
+        {
+          id: 'logic-quality-gate',
+          type: 'logic',
+          position: { x: 1900, y: 200 },
+          data: {
+            label: '✅ Quality Gate',
+            description: 'Evaluate report quality and determine distribution strategy',
+            condition: 'report_quality_score >= 8 && market_opportunity_score >= 7',
+            nodeId: 'logic-quality-gate',
+            nodeType: 'logic'
+          }
+        },
+
+        // 12. AGENT 4 - Distribution Manager (for high-quality reports)
+        {
+          id: 'agent-distribution-manager',
+          type: 'agent',
+          position: { x: 2200, y: 100 },
+          data: {
+            label: '📤 Distribution Manager',
+            role: 'Marketing Distribution Specialist',
+            goal: 'Optimize and execute multi-channel distribution of high-quality business intelligence',
+            backstory: 'You are a marketing automation expert specializing in multi-channel distribution strategies. You understand how to optimize content for different platforms and audiences to maximize reach and engagement.',
+            framework: 'crewai',
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.5,
+              max_tokens: 2000
+            },
+            llmModel: 'gpt-4',
+            temperature: 0.5,
+            max_tokens: 2000,
+            allowDelegation: false,
+            enableMemory: false,
+            verbose: true,
+            nodeId: 'agent-distribution-manager',
+            nodeType: 'agent'
+          }
+        },
+
+        // 13. TASK 5 - Distribution Optimization
+        {
+          id: 'task-distribution-optimization',
+          type: 'task',
+          position: { x: 2500, y: 100 },
+          data: {
+            label: '🎯 Distribution Optimization',
+            description: 'Optimize content for multi-channel distribution',
+            expectedOutput: 'Platform-optimized content packages for: 1) Email newsletter, 2) LinkedIn article, 3) Twitter thread, 4) Blog post, 5) Slack workspace sharing, 6) PDF report for stakeholders',
+            async: false,
+            agentId: 'agent-distribution-manager',
+            nodeId: 'task-distribution-optimization',
+            nodeType: 'task'
+          }
+        },
+
+        // 14. OUTPUT 1 - Email Distribution
+        {
+          id: 'output-email',
+          type: 'output',
+          position: { x: 2800, y: 50 },
+          data: {
+            label: '📧 Email Distribution',
+            outputType: 'email',
+            description: 'Send business intelligence report via email',
+            emailTo: 'stakeholders@company.com',
+            emailSubject: 'Weekly Business Intelligence Report - Market Analysis & Strategy',
+            emailTemplate: 'executive_report',
+            nodeId: 'output-email',
+            nodeType: 'output'
+          }
+        },
+
+        // 15. OUTPUT 2 - Slack Notification
+        {
+          id: 'output-slack',
+          type: 'output',
+          position: { x: 2800, y: 150 },
+          data: {
+            label: '💬 Slack Notification',
+            outputType: 'webhook',
+            description: 'Send summary to Slack channel',
+            webhookUrl: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK',
+            webhookMethod: 'POST',
+            webhookHeaders: {
+              'Content-Type': 'application/json'
+            },
+            webhookPayload: {
+              'channel': '#business-intelligence',
+              'text': 'New Business Intelligence Report Available: {task_output}',
+              'username': 'BI Bot'
+            },
+            nodeId: 'output-slack',
+            nodeType: 'output'
+          }
+        },
+
+        // 16. TOOL 2 - Analytics Tracker
+        {
+          id: 'tool-analytics',
+          type: 'tool',
+          position: { x: 2200, y: 300 },
+          data: {
+            label: '📊 Analytics Tracker',
+            description: 'Track workflow performance and business metrics',
+            toolType: 'api',
+            framework: 'custom',
+            parameters: 'workflow_id\nmetrics\ntimestamp',
+            icon: '📈',
+            category: 'Analytics',
+            nodeId: 'tool-analytics',
+            nodeType: 'tool'
+          }
+        },
+
+        // 17. OUTPUT 3 - Database Storage (for lower quality reports)
+        {
+          id: 'output-database',
+          type: 'output',
+          position: { x: 2200, y: 400 },
+          data: {
+            label: '🗄️ Database Storage',
+            outputType: 'database',
+            description: 'Store report for review and improvement',
+            databaseTable: 'business_intelligence_reports',
+            databaseFields: {
+              'report_id': '{workflow_id}',
+              'content': '{task_output}',
+              'quality_score': '{quality_score}',
+              'status': 'pending_review',
+              'created_at': '{timestamp}'
+            },
+            nodeId: 'output-database',
+            nodeType: 'output'
+          }
+        },
+
+        // 18. DELAY NODE - Scheduled Follow-up
+        {
+          id: 'delay-followup',
+          type: 'delay',
+          position: { x: 2500, y: 300 },
+          data: {
+            label: '⏰ Follow-up Scheduler',
+            delayType: 'fixed',
+            delayDuration: 86400, // 24 hours
+            description: 'Schedule follow-up analysis in 24 hours',
+            nodeId: 'delay-followup',
+            nodeType: 'delay'
+          }
+        },
+
+        // 19. AGENT 5 - Performance Analyst (for follow-up)
+        {
+          id: 'agent-performance-analyst',
+          type: 'agent',
+          position: { x: 2800, y: 300 },
+          data: {
+            label: '📊 Performance Analyst',
+            role: 'Performance Analytics Specialist',
+            goal: 'Analyze workflow performance and content engagement metrics',
+            backstory: 'You specialize in analyzing the performance of automated workflows and content distribution to optimize future executions.',
+            framework: 'crewai',
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-3.5-turbo',
+              temperature: 0.3,
+              max_tokens: 1500
+            },
+            llmModel: 'gpt-3.5-turbo',
+            temperature: 0.3,
+            max_tokens: 1500,
+            allowDelegation: false,
+            enableMemory: true,
+            verbose: true,
+            nodeId: 'agent-performance-analyst',
+            nodeType: 'agent'
+          }
+        },
+
+        // 20. TASK 6 - Performance Analysis
+        {
+          id: 'task-performance-analysis',
+          type: 'task',
+          position: { x: 3100, y: 300 },
+          data: {
+            label: '📈 Performance Analysis',
+            description: 'Analyze workflow and content performance metrics',
+            expectedOutput: 'Performance analysis report including: 1) Workflow execution metrics, 2) Content engagement statistics, 3) Distribution effectiveness, 4) Optimization recommendations, 5) Next cycle improvements',
+            async: false,
+            agentId: 'agent-performance-analyst',
+            nodeId: 'task-performance-analysis',
+            nodeType: 'task'
+          }
+        }
+      ],
+      edges: [
+        // Primary flow: Trigger → Market Research
+        {
+          id: 'edge-trigger-market',
+          source: 'trigger-market-data',
+          target: 'agent-market-researcher',
+          type: 'animated',
+          animated: true,
+          data: { label: '📊 Market Data' }
+        },
+        // Input → Market Research
+        {
+          id: 'edge-input-market',
+          source: 'input-business-context',
+          target: 'agent-market-researcher',
+          type: 'animated',
+          animated: true,
+          data: { label: '🎯 Business Context' }
+        },
+        // Market Research → Analysis Task
+        {
+          id: 'edge-market-analysis',
+          source: 'agent-market-researcher',
+          target: 'task-market-analysis',
+          type: 'animated',
+          animated: true,
+          data: { label: '🔍 Research' }
+        },
+        // Market Research → Content Strategy
+        {
+          id: 'edge-market-content',
+          source: 'agent-market-researcher',
+          target: 'agent-content-strategist',
+          type: 'animated',
+          animated: true,
+          data: { label: '📊 Market Insights' }
+        },
+        // Content Strategy → Strategy Task
+        {
+          id: 'edge-content-strategy',
+          source: 'agent-content-strategist',
+          target: 'task-content-strategy',
+          type: 'animated',
+          animated: true,
+          data: { label: '✍️ Strategy' }
+        },
+        // Content Strategy → Creation Task
+        {
+          id: 'edge-content-creation',
+          source: 'agent-content-strategist',
+          target: 'task-content-creation',
+          type: 'animated',
+          animated: true,
+          data: { label: '🎨 Content' }
+        },
+        // Analysis Task → Competitor Tool
+        {
+          id: 'edge-analysis-tool',
+          source: 'task-market-analysis',
+          target: 'tool-competitor-analysis',
+          type: 'animated',
+          animated: true,
+          data: { label: '🔍 Analysis Data' }
+        },
+        // Competitor Tool → BI Agent
+        {
+          id: 'edge-tool-bi',
+          source: 'tool-competitor-analysis',
+          target: 'agent-bi-analyst',
+          type: 'animated',
+          animated: true,
+          data: { label: '🕵️ Competitor Intel' }
+        },
+        // Content Tasks → BI Agent
+        {
+          id: 'edge-strategy-bi',
+          source: 'task-content-strategy',
+          target: 'agent-bi-analyst',
+          type: 'animated',
+          animated: true,
+          data: { label: '📝 Strategy' }
+        },
+        {
+          id: 'edge-creation-bi',
+          source: 'task-content-creation',
+          target: 'agent-bi-analyst',
+          type: 'animated',
+          animated: true,
+          data: { label: '🎨 Content' }
+        },
+        // BI Agent → BI Report
+        {
+          id: 'edge-bi-report',
+          source: 'agent-bi-analyst',
+          target: 'task-bi-report',
+          type: 'animated',
+          animated: true,
+          data: { label: '📊 Intelligence' }
+        },
+        // BI Report → Quality Gate
+        {
+          id: 'edge-report-logic',
+          source: 'task-bi-report',
+          target: 'logic-quality-gate',
+          type: 'animated',
+          animated: true,
+          data: { label: '📋 Report' }
+        },
+        // Quality Gate → Distribution (TRUE path)
+        {
+          id: 'edge-logic-distribution',
+          source: 'logic-quality-gate',
+          target: 'agent-distribution-manager',
+          sourceHandle: 'true',
+          type: 'animated',
+          animated: true,
+          data: { label: '✅ High Quality' }
+        },
+        // Distribution → Optimization
+        {
+          id: 'edge-distribution-optimization',
+          source: 'agent-distribution-manager',
+          target: 'task-distribution-optimization',
+          type: 'animated',
+          animated: true,
+          data: { label: '📤 Distribution' }
+        },
+        // Optimization → Email Output
+        {
+          id: 'edge-optimization-email',
+          source: 'task-distribution-optimization',
+          target: 'output-email',
+          type: 'animated',
+          animated: true,
+          data: { label: '📧 Email' }
+        },
+        // Optimization → Slack Output
+        {
+          id: 'edge-optimization-slack',
+          source: 'task-distribution-optimization',
+          target: 'output-slack',
+          type: 'animated',
+          animated: true,
+          data: { label: '💬 Slack' }
+        },
+        // Quality Gate → Database (FALSE path)
+        {
+          id: 'edge-logic-database',
+          source: 'logic-quality-gate',
+          target: 'output-database',
+          sourceHandle: 'false',
+          type: 'animated',
+          animated: true,
+          data: { label: '⚠️ Needs Review' }
+        },
+        // Distribution → Analytics Tool
+        {
+          id: 'edge-distribution-analytics',
+          source: 'task-distribution-optimization',
+          target: 'tool-analytics',
+          type: 'animated',
+          animated: true,
+          data: { label: '📊 Metrics' }
+        },
+        // Analytics → Delay
+        {
+          id: 'edge-analytics-delay',
+          source: 'tool-analytics',
+          target: 'delay-followup',
+          type: 'animated',
+          animated: true,
+          data: { label: '⏰ Schedule' }
+        },
+        // Delay → Performance Agent
+        {
+          id: 'edge-delay-performance',
+          source: 'delay-followup',
+          target: 'agent-performance-analyst',
+          type: 'animated',
+          animated: true,
+          data: { label: '⏰ Follow-up' }
+        },
+        // Performance Agent → Performance Task
+        {
+          id: 'edge-performance-analysis',
+          source: 'agent-performance-analyst',
+          target: 'task-performance-analysis',
+          type: 'animated',
+          animated: true,
+          data: { label: '📊 Analysis' }
+        }
+      ],
+      tags: ['Enterprise', 'Multi-Agent', 'Business Intelligence', 'Automation', 'Complete Workflow', 'All Node Types'],
+      frameworksUsed: ['crewai', 'perplexity', 'openai', 'anthropic'],
+      version: '2.0',
+      author: 'CrewBuilder AI - Enterprise Edition',
+      created: '2024-12-19',
+      complexity: 'Expert',
+      estimatedTime: '8-12 minutes',
+      useCase: 'Complete enterprise business intelligence automation testing all node types: Triggers, Inputs, Multiple Agents, Tasks, Tools, Logic Gates, Outputs, and Delays. Perfect for demonstrating the full power of your automation platform.',
+      metadata: {
+        category: 'Enterprise Automation',
+        industry: ['Technology', 'SaaS', 'Consulting', 'Enterprise'],
+        outputFormat: 'Multi-Channel Business Intelligence',
+        aiCapabilities: ['Market Research', 'Content Strategy', 'Business Intelligence', 'Multi-Channel Distribution', 'Performance Analytics'],
+        businessValue: 'Very High - Complete business intelligence automation with multi-agent collaboration',
+        nodeTypes: ['trigger', 'input', 'agent', 'task', 'tool', 'logic', 'output', 'delay'],
+        agentCount: 5,
+        taskCount: 6,
+        toolCount: 2,
+        outputCount: 3,
+        features: [
+          '🔄 Real-time market data monitoring',
+          '🤖 5 specialized AI agents with different expertise',
+          '📊 Comprehensive business intelligence generation',
+          '🎯 Logic-based quality gates and routing',
+          '📤 Multi-channel content distribution',
+          '⏰ Scheduled follow-up analysis',
+          '📈 Performance tracking and optimization',
+          '🔗 Complete end-to-end automation'
+        ]
+      }
     }
 ];
 

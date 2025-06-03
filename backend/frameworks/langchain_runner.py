@@ -97,12 +97,13 @@ class EnhancedLangChainRunner:
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 return ChatGoogleGenerativeAI(model=model, **llm_config)
             except ImportError:
-                logger.warning("Google Generative AI not available, falling back to OpenAI")
-                return ChatOpenAI(model='gpt-3.5-turbo', **llm_config)
+
+                logger.warning(f"Google Generative AI not available for {provider}, using fallback execution")
+                return None  # This forces fallback execution with the correct provider
         else:
             # Fallback to OpenAI
-            logger.warning(f"Unknown provider {provider}, falling back to OpenAI")
-            return ChatOpenAI(model='gpt-4', temperature=temperature)
+            logger.warning(f"Provider {provider} will use fallback execution")
+            return None  # This forces fallback execution with the correct provider
     
     def get_output_parser(self, parser_type: str):
         """Get output parser based on type"""

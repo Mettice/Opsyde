@@ -1144,9 +1144,41 @@ def _build_template_context(inputs: Dict[str, Any], context: Dict[str, Any] = No
     """
     template_context = {}
     
-    # Add context data
+    # Add context data - handle WorkflowExecutionContext properly
     if context:
-        template_context.update(context)
+        # Check if context is a WorkflowExecutionContext object
+        if hasattr(context, 'to_dict') and callable(context.to_dict):
+            # It's a WorkflowExecutionContext, convert to dict
+            try:
+                context_dict = context.to_dict()
+                template_context.update(context_dict)
+            except Exception as e:
+                logger.warning(f"Failed to convert WorkflowExecutionContext to dict: {e}")
+                # Fallback: extract basic info manually
+                if hasattr(context, 'user_id'):
+                    template_context['user_id'] = context.user_id
+                if hasattr(context, 'workflow_id'):
+                    template_context['workflow_id'] = context.workflow_id
+        elif hasattr(context, '__class__') and context.__class__.__name__ == 'WorkflowExecutionContext':
+            # It's a WorkflowExecutionContext but doesn't have to_dict method
+            logger.warning("WorkflowExecutionContext detected but no to_dict method available")
+            # Extract basic attributes manually
+            try:
+                if hasattr(context, 'user_id'):
+                    template_context['user_id'] = context.user_id
+                if hasattr(context, 'workflow_id'):
+                    template_context['workflow_id'] = context.workflow_id
+                if hasattr(context, 'get_execution_metadata'):
+                    metadata = context.get_execution_metadata()
+                    template_context.update(metadata)
+            except Exception as e:
+                logger.warning(f"Failed to extract WorkflowExecutionContext attributes: {e}")
+        elif isinstance(context, dict):
+            # It's a regular dictionary, safe to update
+            template_context.update(context)
+        else:
+            # Unknown context type, log warning and skip
+            logger.warning(f"Unknown context type: {type(context)}, skipping context update")
     
     # Process inputs and extract meaningful variables
     for input_key, input_value in inputs.items():

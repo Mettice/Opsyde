@@ -32,6 +32,265 @@ import {
   validateClipboardData
 } from '../utils/flowUtils';
 
+// 🦄 MAGICAL NEURAL NETWORK BACKGROUND COMPONENT
+const MagicalCanvasBackground = ({ isExecuting, nodeCount, connectionCount }) => {
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [time, setTime] = useState(0);
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+
+    const animationFrame = () => {
+      setTime(Date.now() * 0.001);
+      requestAnimationFrame(animationFrame);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    animationFrame();
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
+
+  // Generate neural network nodes
+  const neuralNodes = useMemo(() => {
+    const nodes = [];
+    const nodeCountBase = Math.max(15, Math.min(30, nodeCount * 2));
+    
+    for (let i = 0; i < nodeCountBase; i++) {
+      nodes.push({
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: Math.random() * 3 + 1,
+        speed: Math.random() * 0.5 + 0.2,
+        phase: Math.random() * Math.PI * 2,
+        color: `hsl(${200 + Math.random() * 60}, 70%, ${60 + Math.random() * 20}%)`
+      });
+    }
+    return nodes;
+  }, [nodeCount]);
+
+  // Generate floating orbs
+  const floatingOrbs = useMemo(() => {
+    const orbs = [];
+    for (let i = 0; i < 8; i++) {
+      orbs.push({
+        id: i,
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        size: Math.random() * 60 + 40,
+        speed: Math.random() * 0.3 + 0.1,
+        hue: Math.random() * 360,
+        opacity: Math.random() * 0.3 + 0.1
+      });
+    }
+    return orbs;
+  }, []);
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {/* Animated Gradient Background */}
+      <div 
+        className="absolute inset-0"
+        style={{
+          background: `
+            radial-gradient(circle at ${mousePos.x * 0.1}% ${mousePos.y * 0.1}%, 
+              rgba(59, 130, 246, 0.1) 0%, 
+              rgba(147, 51, 234, 0.05) 50%, 
+              transparent 100%),
+            linear-gradient(135deg, 
+              #f8fafc 0%, 
+              #e2e8f0 25%, 
+              #cbd5e1 50%, 
+              #e2e8f0 75%, 
+              #f1f5f9 100%)
+          `,
+          animation: isExecuting ? 'pulse 2s ease-in-out infinite' : 'none'
+        }}
+      />
+
+      {/* Floating Gradient Orbs */}
+      {floatingOrbs.map((orb) => (
+        <div
+          key={`orb-${orb.id}`}
+          className="absolute rounded-full blur-xl"
+          style={{
+            left: `${orb.x + Math.sin(time * orb.speed + orb.id) * 10}%`,
+            top: `${orb.y + Math.cos(time * orb.speed + orb.id) * 8}%`,
+            width: `${orb.size}px`,
+            height: `${orb.size}px`,
+            background: `radial-gradient(circle, 
+              hsla(${orb.hue + time * 20}, 70%, 60%, ${orb.opacity}) 0%, 
+              hsla(${orb.hue + time * 20 + 60}, 70%, 70%, ${orb.opacity * 0.5}) 50%, 
+              transparent 100%)`,
+            transform: `scale(${1 + Math.sin(time * 0.5 + orb.id) * 0.2})`,
+            transition: 'all 0.3s ease'
+          }}
+        />
+      ))}
+
+      {/* Neural Network Constellation */}
+      <svg className="absolute inset-0 w-full h-full">
+        <defs>
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge> 
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+          
+          <linearGradient id="connectionGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(59, 130, 246, 0.3)" />
+            <stop offset="50%" stopColor="rgba(147, 51, 234, 0.2)" />
+            <stop offset="100%" stopColor="rgba(59, 130, 246, 0.1)" />
+          </linearGradient>
+        </defs>
+
+        {/* Neural Network Connections */}
+        {neuralNodes.map((node, i) => 
+          neuralNodes.slice(i + 1).map((otherNode, j) => {
+            const distance = Math.sqrt(
+              Math.pow(node.x - otherNode.x, 2) + 
+              Math.pow(node.y - otherNode.y, 2)
+            );
+            
+            if (distance < 25) {
+              const opacity = Math.max(0, (25 - distance) / 25) * 0.4;
+              const animatedOpacity = opacity * (1 + Math.sin(time * 2 + i + j) * 0.3);
+              
+              return (
+                <line
+                  key={`connection-${i}-${j}`}
+                  x1={`${node.x + Math.sin(time * node.speed + node.phase) * 2}%`}
+                  y1={`${node.y + Math.cos(time * node.speed + node.phase) * 2}%`}
+                  x2={`${otherNode.x + Math.sin(time * otherNode.speed + otherNode.phase) * 2}%`}
+                  y2={`${otherNode.y + Math.cos(time * otherNode.speed + otherNode.phase) * 2}%`}
+                  stroke="url(#connectionGradient)"
+                  strokeWidth={isExecuting ? "2" : "1"}
+                  opacity={animatedOpacity}
+                  filter="url(#glow)"
+                >
+                  {isExecuting && (
+                    <animate
+                      attributeName="opacity"
+                      values={`${animatedOpacity};${animatedOpacity * 1.5};${animatedOpacity}`}
+                      dur="2s"
+                      repeatCount="indefinite"
+                    />
+                  )}
+                </line>
+              );
+            }
+            return null;
+          })
+        )}
+
+        {/* Neural Network Nodes */}
+        {neuralNodes.map((node) => (
+          <circle
+            key={`node-${node.id}`}
+            cx={`${node.x + Math.sin(time * node.speed + node.phase) * 2}%`}
+            cy={`${node.y + Math.cos(time * node.speed + node.phase) * 2}%`}
+            r={node.size}
+            fill={node.color}
+            opacity={0.6 + Math.sin(time * 2 + node.phase) * 0.2}
+            filter="url(#glow)"
+          >
+            {isExecuting && (
+              <animate
+                attributeName="r"
+                values={`${node.size};${node.size * 1.5};${node.size}`}
+                dur="3s"
+                repeatCount="indefinite"
+              />
+            )}
+          </circle>
+        ))}
+
+        {/* Interactive Particles around Mouse */}
+        {Array.from({ length: 5 }).map((_, i) => (
+          <circle
+            key={`mouse-particle-${i}`}
+            cx={mousePos.x + Math.sin(time * 3 + i) * 30}
+            cy={mousePos.y + Math.cos(time * 3 + i) * 30}
+            r={2 + Math.sin(time * 4 + i) * 1}
+            fill={`hsl(${220 + i * 20}, 70%, 60%)`}
+            opacity={0.4}
+            filter="url(#glow)"
+          />
+        ))}
+      </svg>
+
+      {/* Floating Code Snippets */}
+      <div className="absolute inset-0">
+        {['AI', 'ML', 'API', 'LLM', 'GPT', 'CREW'].map((text, i) => (
+          <div
+            key={`code-${i}`}
+            className="absolute text-xs font-mono text-blue-400/20 select-none"
+            style={{
+              left: `${10 + i * 15}%`,
+              top: `${20 + Math.sin(time * 0.3 + i) * 10}%`,
+              transform: `rotate(${Math.sin(time * 0.2 + i) * 5}deg)`,
+              animation: `float 6s ease-in-out infinite ${i * 0.5}s`
+            }}
+          >
+            {text}
+          </div>
+        ))}
+      </div>
+
+      {/* Corner Decorative Elements */}
+      <div className="absolute top-4 right-4 w-16 h-16 opacity-10">
+        <div className="w-full h-full border-2 border-blue-400 rounded-full animate-spin-slow" />
+        <div className="absolute inset-2 border border-purple-400 rounded-full animate-pulse" />
+      </div>
+
+      <div className="absolute bottom-4 left-4 w-12 h-12 opacity-10">
+        <div className="w-full h-full bg-gradient-to-br from-blue-400 to-purple-400 rounded-lg animate-pulse" 
+             style={{ transform: `rotate(${time * 10}deg)` }} />
+      </div>
+
+      {/* Execution Energy Waves */}
+      {isExecuting && (
+        <div className="absolute inset-0">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={`wave-${i}`}
+              className="absolute inset-0 border-2 border-blue-400/20 rounded-full"
+              style={{
+                animation: `ping 2s cubic-bezier(0, 0, 0.2, 1) infinite ${i * 0.5}s`,
+                transform: 'scale(0.5)'
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-10px) rotate(5deg); }
+        }
+        
+        @keyframes spin-slow {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        
+        .animate-spin-slow {
+          animation: spin-slow 8s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+};
+
 // Enhanced edge types with execution state
 const edgeTypes = {
   default: AnimatedEdge,
@@ -89,6 +348,13 @@ const FlowCanvasBase = forwardRef(({
 
   const reactFlowInstance = useReactFlow();
   
+  // Store flow instance globally for fitView access
+  useEffect(() => {
+    if (reactFlowInstance) {
+      window.flowInstance = { current: reactFlowInstance };
+    }
+  }, [reactFlowInstance]);
+
   // Ensure nodes and edges are valid arrays and filter out null/undefined values
   const safeNodes = useMemo(() => {
     return Array.isArray(nodes) ? nodes.filter(node => node && typeof node === 'object' && node.id) : [];
@@ -475,6 +741,61 @@ const FlowCanvasBase = forwardRef(({
     }).filter(Boolean);
   }, [safeEdges, connectionStates]);
 
+  const handleRunWorkflow = useCallback(() => {
+    if (nodes.length === 0) {
+      toast.error('No nodes to execute! Add some nodes first.');
+      return;
+    }
+
+    // Check if there are any disconnected nodes
+    const connectedNodeIds = new Set();
+    edges.forEach(edge => {
+      connectedNodeIds.add(edge.source);
+      connectedNodeIds.add(edge.target);
+    });
+
+    const disconnectedNodes = nodes.filter(node => !connectedNodeIds.has(node.id));
+    if (disconnectedNodes.length > 0 && nodes.length > 1) {
+      toast.error(`Found ${disconnectedNodes.length} disconnected nodes. Please connect all nodes.`);
+      return;
+    }
+
+    // Prepare workflow data
+    const workflowData = {
+      workflow_id: `flow_${Date.now()}`,
+      nodes: nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        data: node.data,
+        position: node.position
+      })),
+      edges: edges.map(edge => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        data: edge.data
+      })),
+      inputs: {}
+    };
+
+    // Show success message and trigger execution
+    toast.success('🚀 Starting workflow execution...');
+    
+    // Here you would typically call your API
+    // For now, we'll simulate the execution
+    console.log('Executing workflow:', workflowData);
+    
+    // You can integrate with your existing API like this:
+    // executeWorkflow(workflowData).then(result => {
+    //   toast.success('✅ Workflow completed successfully!');
+    // }).catch(error => {
+    //   toast.error(`❌ Workflow failed: ${error.message}`);
+    // });
+    
+  }, [nodes, edges]);
+
   return (
     <div 
       ref={ref}
@@ -488,6 +809,13 @@ const FlowCanvasBase = forwardRef(({
       onMouseMove={handleMouseMove}
       onContextMenu={handleContextMenu}
     >
+      {/* 🦄 MAGICAL NEURAL NETWORK BACKGROUND */}
+      <MagicalCanvasBackground 
+        isExecuting={isExecuting}
+        nodeCount={nodes.length}
+        connectionCount={edges.length}
+      />
+
       <ReactFlow
         nodes={enhancedNodes}
         edges={enhancedEdges}
@@ -510,6 +838,7 @@ const FlowCanvasBase = forwardRef(({
           gap={20} 
           size={1} 
           color="#e2e8f0"
+          style={{ opacity: 0.3 }}
         />
         
         <MiniMap 
@@ -518,7 +847,8 @@ const FlowCanvasBase = forwardRef(({
             background: 'rgba(255, 255, 255, 0.9)',
             border: '1px solid #e2e8f0',
             borderRadius: '8px',
-            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(10px)'
           }}
           nodeColor={(node) => {
             const state = nodeStates.get(node.id);
@@ -587,49 +917,6 @@ const FlowCanvasBase = forwardRef(({
         selectedEdges={saveTemplateModal.selectedEdges}
       />
 
-      {/* Template Manager */}
-      <TemplateManager
-        isOpen={templateManager.isOpen}
-        onClose={() => setTemplateManager({ isOpen: false, currentPosition: { x: 100, y: 100 } })}
-        onApplyTemplate={handleApplyTemplate}
-        currentPosition={templateManager.currentPosition}
-      />
-
-      {/* Template Gallery */}
-      {showTemplateGallery && <TemplateGallery />}
-
-      {/* Keyboard Shortcuts Help */}
-      <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3 text-xs">
-        <div className="font-medium text-gray-800 mb-2">Shortcuts:</div>
-        <div className="space-y-1 text-gray-600">
-          <div>Ctrl+C: Copy</div>
-          <div>Ctrl+V: Paste</div>
-          <div>Ctrl+D: Duplicate</div>
-          <div>Delete: Remove</div>
-          <div>Right-click: Menu</div>
-        </div>
-      </div>
-
-      {/* Simple Visual Metrics */}
-      <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg border border-gray-200 shadow-lg p-3 text-xs">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-            <span className="text-gray-600">Nodes: {nodes.length}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            <span className="text-gray-600">Connections: {edges.length}</span>
-          </div>
-          {isExecuting && (
-            <div className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
-              <span className="text-orange-600">Executing</span>
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Template Manager Modal */}
       {templateManager.isOpen && (
         <TemplateManager
@@ -639,6 +926,105 @@ const FlowCanvasBase = forwardRef(({
           position={templateManager.currentPosition}
         />
       )}
+
+      {/* Template Gallery */}
+      {showTemplateGallery && <TemplateGallery />}
+
+      {/* Floating Action Button - Run Workflow */}
+      {nodes.length > 0 && (
+        <button
+          onClick={handleRunWorkflow}
+          className="absolute bottom-4 left-4 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 shadow-lg hover:shadow-xl transition-all duration-200 group"
+          title="Run Workflow"
+        >
+          <span className="text-lg group-hover:scale-110 transition-transform">⚡</span>
+        </button>
+      )}
+
+      {/* Minimal Control Panel - Top Left */}
+      <div className="absolute top-4 left-4">
+        {/* Compact Shortcuts Panel */}
+        <div className="bg-white/90 backdrop-blur-sm rounded-lg border border-white/30 shadow-lg p-3 text-xs max-w-[200px]">
+          <div className="font-medium text-gray-800 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+            <span>Shortcuts</span>
+          </div>
+          <div className="grid grid-cols-2 gap-1 text-gray-600">
+            <div className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘C</kbd>
+              <span className="text-xs">Copy</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘V</kbd>
+              <span className="text-xs">Paste</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘D</kbd>
+              <span className="text-xs">Duplicate</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Del</kbd>
+              <span className="text-xs">Remove</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Minimal Metrics Panel - Bottom Right */}
+      <div className="absolute bottom-4 right-4">
+        <div className="bg-white/90 backdrop-blur-sm rounded-lg border border-white/30 shadow-lg p-3 text-sm min-w-[180px]">
+          <div className="font-medium text-gray-800 mb-2 flex items-center gap-2">
+            <span className="w-1.5 h-1.5 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></span>
+            <span>Canvas</span>
+          </div>
+          
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span className="text-gray-700 text-xs">Nodes</span>
+              </div>
+              <span className="font-mono text-blue-600 font-semibold text-sm">{nodes.length}</span>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                <span className="text-gray-700 text-xs">Connections</span>
+              </div>
+              <span className="font-mono text-green-600 font-semibold text-sm">{edges.length}</span>
+            </div>
+
+            {isExecuting && (
+              <div className="flex items-center justify-between animate-pulse">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
+                  <span className="text-orange-700 text-xs font-medium">Executing</span>
+                </div>
+                <div className="flex gap-0.5">
+                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce"></span>
+                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
+                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                </div>
+              </div>
+            )}
+            
+            {/* Magic Status - Compact */}
+            <div className="pt-1.5 border-t border-gray-200/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-pulse"></span>
+                  <span className="text-gray-700 text-xs">Magic</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="font-mono text-purple-600 font-semibold text-xs">MAX</span>
+                  <span className="text-sm">🦄</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Debug Panel for Development */}
       {process.env.NODE_ENV === 'development' && (
