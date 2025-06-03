@@ -343,10 +343,17 @@ class UnifiedRunner:
             }
             
             # CRITICAL FIX: Pass the execution context to the node processor
-            context = {
-                "execution_context": self.execution_context,
-                "workflow_execution_context": self.execution_context
-            } if hasattr(self, 'execution_context') and self.execution_context else None
+            context = self.execution_context if hasattr(self, 'execution_context') and self.execution_context else None
+            
+            # DEBUG: Log context information before passing to node processor
+            logger.info(f"🔍 Runner context debug for node {node_type}:")
+            logger.info(f"   - self.execution_context exists: {hasattr(self, 'execution_context')}")
+            logger.info(f"   - self.execution_context is not None: {self.execution_context is not None if hasattr(self, 'execution_context') else False}")
+            if context:
+                logger.info(f"   - Context type: {type(context)}")
+                logger.info(f"   - Context class name: {context.__class__.__name__}")
+                logger.info(f"   - Context has 'get' method: {hasattr(context, 'get')}")
+                logger.info(f"   - Context has 'enhance_node_config' method: {hasattr(context, 'enhance_node_config')}")
             
             result = await node_processor.process_node(node, inputs, context)
             # Sanitize result to prevent circular references

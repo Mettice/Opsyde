@@ -19,7 +19,7 @@ class WorkflowConfig(BaseModel):
     settings: Dict[str, Any] = Field(default_factory=dict)
 
 class ExecutionContext(BaseModel):
-    workflow_id: str
+    workflow_id: Optional[str] = None
     execution_id: str
     node_results: Dict[str, Any] = Field(default_factory=dict)
     global_inputs: Dict[str, Any] = Field(default_factory=dict)

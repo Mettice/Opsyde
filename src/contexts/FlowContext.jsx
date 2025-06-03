@@ -119,7 +119,9 @@ export const FlowProvider = ({ children }) => {
   }, [nodes]);
 
   // Apply template function
-  const applyTemplate = useCallback((template) => {
+  const applyTemplate = useCallback((template, options = {}) => {
+    const { fitView = true, onComplete = null } = options;
+    
     // Save current state to history
     historyRef.current.past.push({ nodes, edges });
     historyRef.current.future = [];
@@ -160,6 +162,21 @@ export const FlowProvider = ({ children }) => {
       // Set the new nodes and edges
       setNodes(newNodes);
       setEdges(newEdges);
+      
+      // Auto-fit view after template is loaded
+      if (fitView) {
+        setTimeout(() => {
+          // This will be handled by the FlowCanvas component
+          if (window.flowInstance?.current?.fitView) {
+            window.flowInstance.current.fitView({ padding: 0.1, duration: 800 });
+          }
+        }, 100);
+      }
+      
+      // Call completion callback
+      if (onComplete) {
+        onComplete(newNodes, newEdges);
+      }
     } else {
       // It's a single node template
       const newId = `${template.type}-${Date.now()}`;
@@ -176,8 +193,13 @@ export const FlowProvider = ({ children }) => {
       };
       
       setNodes(prev => [...prev, newNode]);
+      
+      // Call completion callback for single nodes too
+      if (onComplete) {
+        onComplete([newNode], []);
+      }
     }
-  }, [nodes, edges, setNodes, setEdges]);
+  }, [nodes, edges, setNodes, setEdges, enhanceEdgeForAnimation]);
 
   // Context value
   const value = {

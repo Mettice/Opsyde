@@ -356,6 +356,22 @@ async def debug_test_api_polling_simple(
         password = test_data.get('password')
         service_name = test_data.get('serviceName', 'Unknown API')
         
+        logger.info(f"BEFORE parsing - api_endpoint: '{api_endpoint}'")
+        
+        # Fix: Parse API endpoint to remove HTTP method if included
+        if api_endpoint and ' ' in api_endpoint:
+            # Handle cases like "GET https://api.example.com" or "POST https://api.example.com"
+            parts = api_endpoint.split(' ', 1)
+            if len(parts) == 2 and parts[0].upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+                method = parts[0].upper()
+                api_endpoint = parts[1]  # This should reassign the variable
+                logger.info(f"PARSED - method: '{method}', clean endpoint: '{api_endpoint}'")
+            else:
+                logger.info(f"No valid HTTP method found in: '{api_endpoint}'")
+        else:
+            logger.info(f"No space found in endpoint, using as-is: '{api_endpoint}'")
+        
+        logger.info(f"AFTER parsing - api_endpoint: '{api_endpoint}'")
         logger.info(f"Testing endpoint: {api_endpoint}, service: {service_name}, auth: {auth_type}")
         
         if not api_endpoint:
@@ -368,7 +384,15 @@ async def debug_test_api_polling_simple(
         if auth_type == 'api_key' and api_key:
             if 'airtable' in api_endpoint.lower():
                 headers['Authorization'] = f'Bearer {api_key}'
+            elif 'notion' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
+                headers['Notion-Version'] = '2022-06-28'
+            elif 'github' in api_endpoint.lower():
+                headers['Authorization'] = f'token {api_key}'
+            elif 'slack' in api_endpoint.lower():
+                headers['Authorization'] = f'Bearer {api_key}'
             else:
+                # Default patterns
                 headers['Authorization'] = f'Bearer {api_key}'
                 headers['X-API-Key'] = api_key
                 
@@ -509,6 +533,22 @@ async def debug_test_api_polling(
         change_method = test_data.get('changeDetectionMethod', 'array_length')
         service_name = test_data.get('serviceName', 'Unknown API')
         
+        logger.info(f"BEFORE parsing - api_endpoint: '{api_endpoint}'")
+        
+        # Fix: Parse API endpoint to remove HTTP method if included
+        if api_endpoint and ' ' in api_endpoint:
+            # Handle cases like "GET https://api.example.com" or "POST https://api.example.com"
+            parts = api_endpoint.split(' ', 1)
+            if len(parts) == 2 and parts[0].upper() in ['GET', 'POST', 'PUT', 'DELETE', 'PATCH']:
+                method = parts[0].upper()
+                api_endpoint = parts[1]  # This should reassign the variable
+                logger.info(f"PARSED - method: '{method}', clean endpoint: '{api_endpoint}'")
+            else:
+                logger.info(f"No valid HTTP method found in: '{api_endpoint}'")
+        else:
+            logger.info(f"No space found in endpoint, using as-is: '{api_endpoint}'")
+        
+        logger.info(f"AFTER parsing - api_endpoint: '{api_endpoint}'")
         logger.info(f"Testing endpoint: {api_endpoint}, service: {service_name}, auth: {auth_type}")
         
         if not api_endpoint:
@@ -605,11 +645,31 @@ async def debug_test_api_polling(
                             filtered_data = _apply_field_filtering(data, selected_fields, target_fields, exclude_fields, max_records)
                             logger.info(f"Filtered data applied - this is what your agent will receive")
                         
+                        # Get LLM provider from frameworkConfig (standard structure)
+                        framework_config = test_data.get('frameworkConfig', {})
+                        # FIXED: Better provider detection logic
+                        llm_provider = (
+                            framework_config.get('provider') or           # First try frameworkConfig.provider
+                            test_data.get('llm_provider') or              # Try llm_provider field  
+                            test_data.get('llmProvider') or               # Try legacy llmProvider
+                            test_data.get('provider') or                  # Try top-level provider
+                            'perplexity'                                  # DEFAULT TO PERPLEXITY instead of OpenAI
+                        )
+
+                        logger.info(f"🔍 AI Analysis Provider Selection: framework_config={framework_config}, detected_provider={llm_provider}")
+
                         # 🔥 THE KEY FIX: Use AI analysis instead of basic analysis
                         try:
                             logger.info(f"🤖 Starting AI analysis for {service_name}")
-                            analysis = await _ai_analyze_api_response(filtered_data, service_name, change_method, api_endpoint)
-                            logger.info(f"✅ AI analysis completed successfully")
+                            
+                            analysis = await _ai_analyze_api_response(
+                                filtered_data, 
+                                service_name, 
+                                change_method, 
+                                api_endpoint,
+                                llm_provider=llm_provider
+                            )
+                            logger.info(f"✅ AI analysis completed successfully using {llm_provider}")
                         except Exception as ai_error:
                             logger.warning(f"⚠️ AI analysis failed, falling back to basic analysis: {str(ai_error)}")
                             analysis = _basic_api_analysis(filtered_data, change_method)
@@ -667,18 +727,112 @@ async def _ai_analyze_api_response(
     data: Dict[str, Any], 
     service_name: str, 
     change_method: str,
-    api_endpoint: str
+    api_endpoint: str,
+    llm_provider: str = "openai",
+    user_id: str = None
 ) -> Dict[str, Any]:
-    """Use AI to analyze API response and provide intelligent recommendations"""
+    """Simple AI analysis using existing LLM tools"""
     try:
-        # Import AI integration - USE OPENAI INSTEAD OF OPENROUTER
-        from backend.frameworks.openai_runner import run_openai_chat
+        # Build analysis prompt
+        prompt = _build_analysis_prompt(data, service_name, change_method, api_endpoint)
         
-        # Prepare data sample for AI (truncate large responses)
-        data_sample = str(data)[:2000] + "..." if len(str(data)) > 2000 else str(data)
+        # Use the existing run_llm_tool function
+        from tools.llm_tools import run_llm_tool
         
-        # AI prompt for universal analysis
-        prompt = f"""
+        # Configure LLM tool
+        llm_config = {
+            "provider": llm_provider,
+            "model": _get_model_for_provider(llm_provider),
+            "temperature": 0.3,
+            "max_tokens": 1000,
+            "prompt": prompt,
+            "frameworkConfig": {
+                "provider": llm_provider,
+                "model": _get_model_for_provider(llm_provider),
+                "temperature": 0.3,
+                "max_tokens": 1000
+            }
+        }
+        
+        # Execute LLM tool
+        result = await run_llm_tool(llm_config, {"analysis_request": prompt})
+        
+        if result.get("success"):
+            ai_response = result.get("output", "")
+            
+            # Try to extract JSON from AI response
+            try:
+                # Look for JSON in the response
+                if "```json" in ai_response:
+                    json_start = ai_response.find("```json") + 7
+                    json_end = ai_response.find("```", json_start)
+                    json_str = ai_response[json_start:json_end].strip()
+                elif "{" in ai_response and "}" in ai_response:
+                    json_start = ai_response.find("{")
+                    json_end = ai_response.rfind("}") + 1
+                    json_str = ai_response[json_start:json_end]
+                else:
+                    # If no JSON found, create a basic structure
+                    json_str = json.dumps({
+                        "summary": ai_response[:200] + "..." if len(ai_response) > 200 else ai_response,
+                        "key_insights": ["AI analysis completed"],
+                        "recommendations": ["Review the analysis results"],
+                        "confidence": 0.7
+                    })
+                
+                ai_analysis = json.loads(json_str)
+                
+                # Merge with basic analysis
+                basic_analysis = _basic_api_analysis(data, change_method)
+                
+                return {
+                    **basic_analysis,
+                    "ai_analysis": ai_analysis,
+                    "ai_summary": ai_analysis.get("summary", "AI analysis completed"),
+                    "ai_insights": ai_analysis.get("key_insights", []),
+                    "ai_recommendations": ai_analysis.get("recommendations", []),
+                    "confidence_score": ai_analysis.get("confidence", 0.7),
+                    "llm_provider_used": llm_provider
+                }
+                
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse AI JSON response: {str(e)}")
+                # Return basic analysis with AI text
+                basic_result = _basic_api_analysis(data, change_method)
+                basic_result["ai_analysis_text"] = ai_response
+                basic_result["ai_parse_error"] = str(e)
+                basic_result["llm_provider_used"] = llm_provider
+                return basic_result
+        else:
+            raise Exception(f"LLM tool failed: {result.get('error', 'Unknown error')}")
+            
+    except Exception as e:
+        logger.error(f"AI analysis failed with {llm_provider}: {str(e)}")
+        # Fallback to basic analysis
+        basic_result = _basic_api_analysis(data, change_method)
+        basic_result["ai_error"] = str(e)
+        basic_result["llm_provider_used"] = llm_provider
+        return basic_result
+
+def _get_model_for_provider(provider: str) -> str:
+    """Get default model for each provider"""
+    models = {
+        "openai": "gpt-4",
+        "anthropic": "claude-3-sonnet-20240229",
+        "google": "gemini-pro",
+        "gemini": "gemini-pro",
+        "openrouter": "openai/gpt-4",
+        "perplexity": "sonar-pro",
+        "huggingface": "meta-llama/Llama-2-70b-chat-hf"
+    }
+    return models.get(provider, "gpt-4")
+
+def _build_analysis_prompt(data: Dict[str, Any], service_name: str, change_method: str, api_endpoint: str) -> str:
+    """Build the AI analysis prompt"""
+    # Prepare data sample for AI (truncate large responses)
+    data_sample = str(data)[:2000] + "..." if len(str(data)) > 2000 else str(data)
+    
+    return f"""
 You are an API integration expert. Analyze this REAL API response and provide intelligent recommendations.
 
 SERVICE: {service_name}
@@ -734,60 +888,6 @@ IMPORTANT:
 
 Focus on practical recommendations for change detection monitoring and smart filtering based on what's actually in the response.
 """
-        
-        # Get AI analysis using OpenAI instead of OpenRouter
-        messages = [{"role": "user", "content": prompt}]
-        ai_response = await run_openai_chat(
-            messages, 
-            model="gpt-4",
-            temperature=0.3
-        )
-        
-        # Parse AI response
-        try:
-            import json
-            # Extract JSON from AI response
-            if "```json" in ai_response:
-                json_start = ai_response.find("```json") + 7
-                json_end = ai_response.find("```", json_start)
-                json_str = ai_response[json_start:json_end].strip()
-            elif "{" in ai_response and "}" in ai_response:
-                json_start = ai_response.find("{")
-                json_end = ai_response.rfind("}") + 1
-                json_str = ai_response[json_start:json_end]
-            else:
-                raise ValueError("No JSON found in AI response")
-            
-            ai_analysis = json.loads(json_str)
-            
-            # Add basic fallback analysis only if AI analysis is incomplete
-            basic_analysis = _basic_api_analysis(data, change_method)
-            
-            # Merge AI insights with basic analysis (AI takes priority)
-            return {
-                "data_structure": {
-                    **basic_analysis.get("data_structure", {}),
-                    **ai_analysis.get("data_structure", {})
-                },
-                "change_detection_info": ai_analysis.get("change_detection_recommendations", {}),
-                "smart_filtering_config": ai_analysis.get("smart_filtering_config", {}),
-                "ai_insights": ai_analysis.get("service_insights", {}),
-                "ai_raw_response": ai_response
-            }
-            
-        except Exception as e:
-            logger.warning(f"Failed to parse AI analysis: {str(e)}")
-            # Only fallback to basic analysis if AI completely fails
-            basic_result = _basic_api_analysis(data, change_method)
-            basic_result["ai_parsing_error"] = str(e)
-            return basic_result
-            
-    except Exception as e:
-        logger.error(f"AI analysis failed: {str(e)}")
-        # Only fallback to basic analysis if AI completely fails
-        basic_result = _basic_api_analysis(data, change_method)
-        basic_result["ai_analysis_error"] = str(e)
-        return basic_result
 
 def _basic_api_analysis(data: Dict[str, Any], change_method: str) -> Dict[str, Any]:
     """Universal API analysis without AI - works with any data structure"""
@@ -925,7 +1025,8 @@ def _basic_api_analysis(data: Dict[str, Any], change_method: str) -> Dict[str, A
 async def _ai_suggest_fix(status_code: int, error_text: str, api_endpoint: str) -> str:
     """Use AI to suggest fixes for API errors"""
     try:
-        from backend.frameworks.openai_runner import run_openai_chat
+        # FIXED: Use Perplexity instead of OpenAI for better real-time suggestions
+        from backend.frameworks.perplexity_runner import run_perplexity_chat
         
         prompt = f"""
 API request failed. Suggest a fix:
@@ -938,10 +1039,12 @@ Provide a brief, actionable suggestion to fix this API issue.
 """
         
         messages = [{"role": "user", "content": prompt}]
-        suggestion = await run_openai_chat(
+        suggestion = await run_perplexity_chat(
             messages, 
-            model="gpt-3.5-turbo",
-            temperature=0.3
+            model="sonar-pro",
+            temperature=0.3,
+            max_tokens=200,
+            api_key=None  # Will get from environment
         )
         
         return suggestion[:200] + "..." if len(suggestion) > 200 else suggestion

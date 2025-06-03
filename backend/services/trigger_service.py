@@ -1025,6 +1025,14 @@ class TriggerService(BaseService[Dict]):
             if not flow:
                 raise ValueError(f"Trigger {trigger_id} not found")
             
+            # Get the trigger owner for API key access
+            from frameworks.trigger_storage import get_trigger_owner
+            owner = await get_trigger_owner(trigger_id)
+            if not owner:
+                owner = "system"  # Fallback to system if no owner found
+            
+            logger.info(f"[AUTO-EXECUTION] Executing trigger {trigger_id} for owner: {owner}")
+            
             # Import the unified runner to execute the workflow
             from backend.core.runner import UnifiedRunner
             runner = UnifiedRunner()
@@ -1039,11 +1047,11 @@ class TriggerService(BaseService[Dict]):
                 "triggered_at": datetime.now().isoformat()
             }
             
-            logger.info(f"[AUTO-EXECUTION] Executing workflow with {len(workflow_data['nodes'])} nodes")
+            logger.info(f"[AUTO-EXECUTION] Executing workflow with {len(workflow_data['nodes'])} nodes for user {owner}")
             
-            # Execute the workflow and collect results
+            # Execute the workflow with the user_id for BYOK API key access
             results = []
-            async for result in runner.execute_workflow(workflow_data):
+            async for result in runner.execute_workflow(workflow_data, user_id=owner):
                 results.append(result)
                 logger.info(f"[AUTO-EXECUTION] Node result: {result}")
             
@@ -1056,7 +1064,8 @@ class TriggerService(BaseService[Dict]):
                 "execution_type": "automatic",
                 "results": results,
                 "executed_at": datetime.now().isoformat(),
-                "node_count": len(workflow_data['nodes'])
+                "node_count": len(workflow_data['nodes']),
+                "owner": owner
             }
             
         except Exception as e:

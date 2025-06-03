@@ -5,6 +5,7 @@ from datetime import datetime
 import re
 import ast
 import json
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,39 @@ class ExpressionEvaluator:
         """Safely evaluate an expression with given context"""
         try:
             if context:
-                self.context.update(context)
+                # Handle WorkflowExecutionContext properly
+                if hasattr(context, 'to_dict') and callable(context.to_dict):
+                    # It's a WorkflowExecutionContext, convert to dict
+                    try:
+                        context_dict = context.to_dict()
+                        self.context.update(context_dict)
+                    except Exception as e:
+                        logger.warning(f"Failed to convert WorkflowExecutionContext to dict: {e}")
+                        # Fallback: extract basic info manually
+                        if hasattr(context, 'user_id'):
+                            self.context['user_id'] = context.user_id
+                        if hasattr(context, 'workflow_id'):
+                            self.context['workflow_id'] = context.workflow_id
+                elif hasattr(context, '__class__') and context.__class__.__name__ == 'WorkflowExecutionContext':
+                    # It's a WorkflowExecutionContext but doesn't have to_dict method
+                    logger.warning("WorkflowExecutionContext detected but no to_dict method available")
+                    # Extract basic attributes manually
+                    try:
+                        if hasattr(context, 'user_id'):
+                            self.context['user_id'] = context.user_id
+                        if hasattr(context, 'workflow_id'):
+                            self.context['workflow_id'] = context.workflow_id
+                        if hasattr(context, 'get_execution_metadata'):
+                            metadata = context.get_execution_metadata()
+                            self.context.update(metadata)
+                    except Exception as e:
+                        logger.warning(f"Failed to extract WorkflowExecutionContext attributes: {e}")
+                elif isinstance(context, dict):
+                    # It's a regular dictionary, safe to update
+                    self.context.update(context)
+                else:
+                    # Unknown context type, log warning and skip
+                    logger.warning(f"Unknown context type: {type(context)}, skipping context update")
                 
             # Parse expression into AST
             tree = ast.parse(expression, mode='eval')

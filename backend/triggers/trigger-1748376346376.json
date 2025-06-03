@@ -47,9 +47,9 @@
   },
   "created_at": "2025-05-27T22:06:00.399436",
   "owner": "system",
-  "last_triggered": "2025-06-02T15:42:21.807806",
-  "trigger_count": 77,
+  "last_triggered": "2025-06-03T00:05:47.506999",
+  "trigger_count": 82,
   "trigger_type": "schedule",
   "completed": true,
-  "completed_at": "2025-06-02T15:42:21.807806"
+  "completed_at": "2025-06-03T00:05:47.506999"
 }

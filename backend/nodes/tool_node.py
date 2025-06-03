@@ -491,9 +491,23 @@ async def process_tool_node(
     )
     
     # Create execution context
+    workflow_id = 'unknown'
+    execution_id = 'direct-execution'
+    
+    if context:
+        # Get workflow_id, but ensure it's not None
+        context_workflow_id = context.get('workflow_id')
+        if context_workflow_id is not None:
+            workflow_id = context_workflow_id
+            
+        # Get execution_id, but ensure it's not None  
+        context_execution_id = context.get('execution_id')
+        if context_execution_id is not None:
+            execution_id = context_execution_id
+    
     execution_context = ExecutionContext(
-        workflow_id=context.get("workflow_id", "unknown") if context else "unknown",
-        execution_id=context.get("execution_id", "direct-execution") if context else "direct-execution",
+        workflow_id=workflow_id,
+        execution_id=execution_id,
         node_results={},
         global_inputs={},
         memory={},
