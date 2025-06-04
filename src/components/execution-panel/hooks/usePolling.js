@@ -1,8 +1,8 @@
-// components/execution-panel/hooks/usePolling.js
+// components/execution-panel/hooks/usePolling.js - SIMPLIFIED VERSION
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 /**
- * Custom hook for managing polling functionality and real-time updates
+ * Simplified polling hook that avoids infinite loops
  */
 export const usePolling = (
   pollingInterval = 10000,
@@ -10,6 +10,7 @@ export const usePolling = (
   isActive = true,
   fetchData = null
 ) => {
+  // Basic state
   const [isPolling, setIsPolling] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [pollingError, setPollingError] = useState(null);
@@ -20,51 +21,49 @@ export const usePolling = (
     avgResponseTime: 0
   });
   
-  const pollingRef = useRef(null);
-  const lastPollTime = useRef(null);
-  const responseTimeHistory = useRef([]);
+  // Refs to avoid dependencies
+  const intervalRef = useRef(null);
+  const fetchDataRef = useRef(fetchData);
+  const isActiveRef = useRef(isActive);
+  const pollingIntervalRef = useRef(pollingInterval);
 
-  // Handle polling interval changes
-  const handlePollingIntervalChange = useCallback((newInterval) => {
-    if (onPollingIntervalChange) {
-      onPollingIntervalChange(newInterval);
-    }
-  }, [onPollingIntervalChange]);
+  // Update refs when props change
+  useEffect(() => {
+    fetchDataRef.current = fetchData;
+  }, [fetchData]);
 
-  // Start polling
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
+
+  useEffect(() => {
+    pollingIntervalRef.current = pollingInterval;
+  }, [pollingInterval]);
+
+  // Simple start polling
   const startPolling = useCallback(() => {
-    if (pollingRef.current || !fetchData) return;
+    if (intervalRef.current || !fetchDataRef.current) {
+      return;
+    }
 
+    console.log('Starting polling...');
     setIsPolling(true);
     setPollingError(null);
 
     const poll = async () => {
       try {
+        if (!fetchDataRef.current) return;
+        
         const startTime = Date.now();
-        lastPollTime.current = startTime;
-        
-        // Execute the fetch function
-        await fetchData();
-        
-        const endTime = Date.now();
-        const responseTime = endTime - startTime;
-        
-        // Update response time history
-        responseTimeHistory.current.push(responseTime);
-        if (responseTimeHistory.current.length > 10) {
-          responseTimeHistory.current.shift(); // Keep only last 10 response times
-        }
-        
-        // Calculate average response time
-        const avgResponseTime = responseTimeHistory.current.reduce((a, b) => a + b, 0) / 
-                               responseTimeHistory.current.length;
+        await fetchDataRef.current();
+        const responseTime = Date.now() - startTime;
         
         // Update stats
         setPollingStats(prev => ({
           ...prev,
           totalPolls: prev.totalPolls + 1,
           successfulPolls: prev.successfulPolls + 1,
-          avgResponseTime: Math.round(avgResponseTime)
+          avgResponseTime: Math.round((prev.avgResponseTime + responseTime) / 2)
         }));
         
         setLastUpdated(new Date());
@@ -82,56 +81,36 @@ export const usePolling = (
       }
     };
 
-    // Initial poll
-    poll();
-    
-    // Set up interval
-    pollingRef.current = setInterval(poll, pollingInterval);
-  }, [fetchData, pollingInterval]);
+    // Start polling
+    poll(); // Initial call
+    intervalRef.current = setInterval(poll, pollingIntervalRef.current);
+  }, []);
 
-  // Stop polling
+  // Simple stop polling
   const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
+    console.log('Stopping polling...');
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
     setIsPolling(false);
   }, []);
 
-  // Restart polling with new interval
-  const restartPolling = useCallback(() => {
-    stopPolling();
-    if (isActive) {
-      setTimeout(startPolling, 100); // Small delay to ensure cleanup
-    }
-  }, [stopPolling, startPolling, isActive]);
-
   // Manual refresh
   const manualRefresh = useCallback(async () => {
-    if (!fetchData) return;
+    if (!fetchDataRef.current) return;
 
     try {
+      console.log('Manual refresh...');
       const startTime = Date.now();
-      await fetchData();
-      const endTime = Date.now();
-      const responseTime = endTime - startTime;
+      await fetchDataRef.current();
+      const responseTime = Date.now() - startTime;
       
-      // Update response time history
-      responseTimeHistory.current.push(responseTime);
-      if (responseTimeHistory.current.length > 10) {
-        responseTimeHistory.current.shift();
-      }
-      
-      // Calculate average response time
-      const avgResponseTime = responseTimeHistory.current.reduce((a, b) => a + b, 0) / 
-                             responseTimeHistory.current.length;
-      
-      // Update stats
       setPollingStats(prev => ({
         ...prev,
         totalPolls: prev.totalPolls + 1,
         successfulPolls: prev.successfulPolls + 1,
-        avgResponseTime: Math.round(avgResponseTime)
+        avgResponseTime: Math.round((prev.avgResponseTime + responseTime) / 2)
       }));
       
       setLastUpdated(new Date());
@@ -147,27 +126,33 @@ export const usePolling = (
         failedPolls: prev.failedPolls + 1
       }));
     }
-  }, [fetchData]);
+  }, []);
 
-  // Effect to handle polling state changes
+  // Simple effect to start/stop based on isActive
   useEffect(() => {
-    if (isActive && !isPolling) {
+    if (isActive) {
       startPolling();
-    } else if (!isActive && isPolling) {
+    } else {
       stopPolling();
     }
-    
+
+    // Cleanup on unmount
     return () => {
       stopPolling();
     };
-  }, [isActive, startPolling, stopPolling, isPolling]);
+  }, [isActive, startPolling, stopPolling]);
 
-  // Effect to restart polling when interval changes
+  // Effect to restart when interval changes
   useEffect(() => {
     if (isPolling) {
-      restartPolling();
+      stopPolling();
+      setTimeout(() => {
+        if (isActiveRef.current) {
+          startPolling();
+        }
+      }, 100);
     }
-  }, [pollingInterval, restartPolling]);
+  }, [pollingInterval, isPolling, startPolling, stopPolling]);
 
   return {
     isPolling,
@@ -176,8 +161,6 @@ export const usePolling = (
     pollingStats,
     startPolling,
     stopPolling,
-    restartPolling,
-    manualRefresh,
-    handlePollingIntervalChange
+    manualRefresh
   };
 };

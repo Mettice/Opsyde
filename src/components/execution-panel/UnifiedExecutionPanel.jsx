@@ -1,11 +1,11 @@
 // components/execution-panel/UnifiedExecutionPanel.jsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 
 // Import existing hooks
 import { useLogProcessing } from './hooks/useLogProcessing';
 import { useExecutionStats } from './hooks/useExecutionStats';
-import { usePolling } from './hooks/usePolling';
+import { usePolling } from './hooks/usePolling'; // Re-enabled with fixes
 import { useLogExport } from './hooks/useLogExport';
 
 // Import modular components
@@ -28,16 +28,47 @@ export default function UnifiedExecutionPanel({
   executionMode = 'hybrid',
   pollingInterval = 10000,
   onPollingIntervalChange,
-  nodes = []
+  nodes = [],
+  executionId = null,
+  workflowId = null,
+  onDataRefresh = null
 }) {
   // State management
   const [activeTab, setActiveTab] = useState('logs');
   const [viewMode, setViewMode] = useState('structured');
   const [debugMode, setDebugMode] = useState(false);
-  const [pollingActive, setPollingActive] = useState(true);
+  const [pollingActive, setPollingActive] = useState(false); // Start disabled
+  const [pollingData, setPollingData] = useState(null);
   
   // Refs
   const scrollRef = useRef(null);
+
+  // Stable fetchData function
+  const fetchData = useCallback(async () => {
+    if (!pollingActive) return null; // Only fetch when polling is active
+    
+    try {
+      if (onDataRefresh && typeof onDataRefresh === 'function') {
+        const newData = await onDataRefresh();
+        setPollingData(newData);
+        return newData;
+      }
+      
+      // Simple default behavior
+      const timestamp = new Date().toISOString();
+      const defaultData = { 
+        timestamp, 
+        status: 'polling',
+        message: 'Polling active'
+      };
+      setPollingData(defaultData);
+      return defaultData;
+      
+    } catch (error) {
+      console.error('Fetch error:', error);
+      throw error;
+    }
+  }, [onDataRefresh, pollingActive]);
 
   // Custom hooks for data processing
   const {
@@ -67,7 +98,7 @@ export default function UnifiedExecutionPanel({
     getAvailableExports
   } = useLogExport(processedStructuredLogs, parsedTextLogs, nodeStats);
 
-  // Polling hook for real-time updates
+  // Re-enabled polling with the fixed hook
   const {
     isPolling,
     lastUpdated,
@@ -79,8 +110,8 @@ export default function UnifiedExecutionPanel({
   } = usePolling(
     pollingInterval,
     onPollingIntervalChange,
-    pollingActive,
-    null // Fetch function would be provided by parent component
+    pollingActive, // Only poll when explicitly enabled
+    fetchData
   );
 
   // Determine display logs based on view mode
@@ -93,42 +124,33 @@ export default function UnifiedExecutionPanel({
     }
   }, [logs, structuredLogs, isMinimized, viewMode]);
 
-  // Debug logging
+  // Debug logging - simplified
   useEffect(() => {
     if (debugMode) {
       console.log('UnifiedExecutionPanel Debug:', {
-        logs: logs,
         logsLength: logs?.length || 0,
-        logsType: typeof logs,
-        structuredLogs: structuredLogs,
         structuredLogsLength: structuredLogs?.length || 0,
-        structuredLogsType: typeof structuredLogs,
-        viewMode,
         displayLogsLength: displayLogs?.length || 0,
-        parsedTextLogsLength: parsedTextLogs?.length || 0,
-        nodeStats,
-        performanceMetrics
+        viewMode,
+        pollingActive,
+        isPolling
       });
     }
-  }, [logs, structuredLogs, viewMode, displayLogs, parsedTextLogs, debugMode, nodeStats, performanceMetrics]);
+  }, [logs, structuredLogs, displayLogs?.length, viewMode, debugMode, pollingActive, isPolling]);
 
   // Handle polling interval changes
-  const handlePollingIntervalChange = (e) => {
+  const handlePollingIntervalChange = useCallback((e) => {
     const newInterval = Number(e.target.value);
     if (onPollingIntervalChange) {
       onPollingIntervalChange(newInterval);
     }
-  };
+  }, [onPollingIntervalChange]);
 
   // Toggle polling
-  const togglePolling = () => {
-    if (pollingActive) {
-      stopPolling();
-    } else {
-      startPolling();
-    }
+  const togglePolling = useCallback(() => {
     setPollingActive(!pollingActive);
-  };
+    console.log('Polling toggled to:', !pollingActive);
+  }, [pollingActive]);
 
   // Minimized state
   if (isMinimized) {
@@ -150,7 +172,7 @@ export default function UnifiedExecutionPanel({
           <div className={`w-full h-full rounded-full ${
             pollingError ? 'bg-red-500' : 
             isPolling ? 'bg-green-500 animate-pulse' : 
-            'bg-yellow-500'
+            'bg-gray-500'
           }`}></div>
         </div>
       </div>
@@ -172,6 +194,10 @@ export default function UnifiedExecutionPanel({
         onPollingIntervalChange={handlePollingIntervalChange}
         displayLogsLength={displayLogs.length}
         executionMode={executionMode}
+        pollingError={pollingError}
+        pollingStats={pollingStats}
+        lastUpdated={lastUpdated}
+        onManualRefresh={manualRefresh}
       />
       
       {/* Tab Navigation */}
@@ -254,5 +280,8 @@ UnifiedExecutionPanel.propTypes = {
   executionMode: PropTypes.string,
   pollingInterval: PropTypes.number,
   onPollingIntervalChange: PropTypes.func,
-  nodes: PropTypes.array
+  nodes: PropTypes.array,
+  executionId: PropTypes.string,
+  workflowId: PropTypes.string,
+  onDataRefresh: PropTypes.func
 };

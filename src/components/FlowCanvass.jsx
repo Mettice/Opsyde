@@ -6,7 +6,8 @@ import ReactFlow, {
   Panel,
   ReactFlowProvider,
   useReactFlow,
-  useKeyPress
+  useKeyPress,
+  Controls
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { toast } from 'react-hot-toast';

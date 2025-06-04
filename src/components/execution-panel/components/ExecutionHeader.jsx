@@ -12,7 +12,11 @@ const ExecutionHeader = ({
   isPollingActive,
   onTogglePolling,
   displayLogsLength = 0,
-  executionMode = 'hybrid'
+  executionMode = 'hybrid',
+  pollingError = null,
+  pollingStats = null,
+  lastUpdated = null,
+  onManualRefresh = null
 }) => {
   
   const handlePollingIntervalChange = (e) => {
@@ -20,6 +24,28 @@ const ExecutionHeader = ({
     if (onPollingIntervalChange) {
       onPollingIntervalChange(newInterval);
     }
+  };
+
+  const formatLastUpdated = (timestamp) => {
+    if (!timestamp) return '';
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString();
+    } catch (e) {
+      return '';
+    }
+  };
+
+  const getPollingStatusColor = () => {
+    if (pollingError) return 'bg-red-400';
+    if (isPollingActive) return 'bg-green-400';
+    return 'bg-gray-400';
+  };
+
+  const getPollingStatusText = () => {
+    if (pollingError) return 'Error';
+    if (isPollingActive) return 'Live Updates';
+    return 'Updates Paused';
   };
 
   return (
@@ -39,6 +65,17 @@ const ExecutionHeader = ({
         </div>
         
         <div className="relative z-10 flex space-x-2">
+          {/* Manual Refresh Button */}
+          {onManualRefresh && (
+            <button 
+              onClick={onManualRefresh}
+              className="w-8 h-8 bg-white/20 hover:bg-white/30 text-white rounded-lg flex items-center justify-center transition-all duration-200 backdrop-blur-sm border border-white/30"
+              title="Manual refresh"
+            >
+              🔄
+            </button>
+          )}
+          
           {/* Debug Mode Toggle */}
           <button 
             onClick={() => setDebugMode(!debugMode)}
@@ -92,16 +129,33 @@ const ExecutionHeader = ({
         </div>
       </div>
       
-      {/* Polling Configuration */}
+      {/* Enhanced Polling Configuration */}
       <div className="flex items-center justify-between p-3 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-        <div className="flex items-center space-x-2">
-          <div className={`w-2 h-2 rounded-full animate-pulse ${isPollingActive ? 'bg-green-400' : 'bg-gray-400'}`}></div>
+        <div className="flex items-center space-x-3">
+          <div className={`w-2 h-2 rounded-full animate-pulse ${getPollingStatusColor()}`}></div>
           <span className="text-sm font-medium text-gray-700">
-            {isPollingActive ? 'Live Updates' : 'Updates Paused'}
+            {getPollingStatusText()}
           </span>
           {displayLogsLength > 0 && (
             <span className="text-xs text-gray-500">
               ({displayLogsLength} entries)
+            </span>
+          )}
+          
+          {/* Last Updated */}
+          {lastUpdated && (
+            <span className="text-xs text-gray-500">
+              • Last: {formatLastUpdated(lastUpdated)}
+            </span>
+          )}
+          
+          {/* Polling Stats */}
+          {pollingStats && pollingStats.totalPolls > 0 && (
+            <span className="text-xs text-gray-500">
+              • {pollingStats.successfulPolls}/{pollingStats.totalPolls} success
+              {pollingStats.avgResponseTime > 0 && (
+                <span> ({pollingStats.avgResponseTime}ms avg)</span>
+              )}
             </span>
           )}
         </div>
@@ -134,6 +188,19 @@ const ExecutionHeader = ({
           )}
         </div>
       </div>
+      
+      {/* Error Banner */}
+      {pollingError && (
+        <div className="bg-red-50 border-l-4 border-red-400 p-3">
+          <div className="flex items-center">
+            <span className="text-red-400 mr-2">⚠️</span>
+            <div className="text-sm">
+              <span className="font-medium text-red-800">Polling Error: </span>
+              <span className="text-red-700">{pollingError}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };
@@ -149,7 +216,11 @@ ExecutionHeader.propTypes = {
   isPollingActive: PropTypes.bool,
   onTogglePolling: PropTypes.func,
   displayLogsLength: PropTypes.number,
-  executionMode: PropTypes.string
+  executionMode: PropTypes.string,
+  pollingError: PropTypes.string,
+  pollingStats: PropTypes.object,
+  lastUpdated: PropTypes.oneOfType([PropTypes.string, PropTypes.instanceOf(Date)]),
+  onManualRefresh: PropTypes.func
 };
 
 export default ExecutionHeader; 
