@@ -2,12 +2,13 @@ import React, { useCallback, useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import { Handle, Position } from 'reactflow';
 
-const AgentCard = React.memo(({ data, selected, isConnectable }) => {
+const AgentCard = React.memo(({ data, selected, isConnectable, enhancementMode, isCompact, isFocused, isDimmed }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
-  const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
+  const [status, setStatus] = useState('idle');
+  const [showTooltip, setShowTooltip] = useState(false);
 
   // Get framework ID if an object is passed, otherwise use the string value
   const frameworkId = typeof data.framework === 'object' ? data.framework.id || 'openrouter' : data.framework || 'openrouter';
@@ -24,11 +25,9 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
   }, [data.executionState]);
 
   const handleEditClick = useCallback((e) => {
-    // Stop event propagation
     e?.stopPropagation();
     e?.preventDefault();
     
-    // Create and dispatch custom event without passing the original event
     document.dispatchEvent(new CustomEvent('node-edit', { 
       detail: { 
         nodeId: data.nodeId,
@@ -42,11 +41,9 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
   }, [data, frameworkId]);
 
   const handleDeleteClick = useCallback((e) => {
-    // Stop event propagation
     e?.stopPropagation();
     e?.preventDefault();
     
-    // Create and dispatch custom event without passing the original event
     document.dispatchEvent(new CustomEvent('node-delete', { 
       detail: { 
         nodeId: data.nodeId,
@@ -55,368 +52,391 @@ const AgentCard = React.memo(({ data, selected, isConnectable }) => {
     }));
   }, [data?.nodeId, data?.nodeType]);
 
-  // Get status icon and color
-  const getStatusDisplay = () => {
-    switch (status) {
-      case 'processing':
-        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
-      case 'success':
-        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
-      case 'error':
-        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
-      case 'waiting':
-        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
-      default:
-        return { icon: '🤖', color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
-    }
+  // Smart status system with beautiful visual states
+  const getStatusConfig = () => {
+    const configs = {
+      processing: {
+        icon: '⚡',
+        pulse: 'animate-pulse',
+        glow: 'shadow-blue-500/40',
+        gradient: 'from-blue-400/20 to-purple-500/20',
+        border: 'border-blue-400/60',
+        dot: 'bg-gradient-to-r from-blue-400 to-blue-600',
+        overlay: 'bg-gradient-to-br from-blue-500/10 to-purple-600/10'
+      },
+      success: {
+        icon: '✅',
+        pulse: '',
+        glow: 'shadow-green-500/40',
+        gradient: 'from-green-400/20 to-emerald-500/20',
+        border: 'border-green-400/60',
+        dot: 'bg-gradient-to-r from-green-400 to-emerald-500',
+        overlay: 'bg-gradient-to-br from-green-500/10 to-emerald-600/10'
+      },
+      error: {
+        icon: '⚠️',
+        pulse: 'animate-bounce',
+        glow: 'shadow-red-500/40',
+        gradient: 'from-red-400/20 to-pink-500/20',
+        border: 'border-red-400/60',
+        dot: 'bg-gradient-to-r from-red-400 to-pink-500',
+        overlay: 'bg-gradient-to-br from-red-500/10 to-pink-600/10'
+      },
+      waiting: {
+        icon: '⏳',
+        pulse: 'animate-pulse',
+        glow: 'shadow-yellow-500/40',
+        gradient: 'from-yellow-400/20 to-orange-500/20',
+        border: 'border-yellow-400/60',
+        dot: 'bg-gradient-to-r from-yellow-400 to-orange-500',
+        overlay: 'bg-gradient-to-br from-yellow-500/10 to-orange-600/10'
+      },
+      idle: {
+        icon: '🤖',
+        pulse: '',
+        glow: 'shadow-indigo-300/50',
+        gradient: 'from-white/90 to-indigo-50/80',
+        border: 'border-indigo-200/70',
+        dot: 'bg-gradient-to-r from-indigo-400 to-purple-500',
+        overlay: 'bg-gradient-to-br from-indigo-500/5 to-purple-600/5'
+      }
+    };
+    return configs[status] || configs.idle;
   };
 
-  const statusDisplay = getStatusDisplay();
+  const statusConfig = getStatusConfig();
 
-  // Get framework badge color
-  const getFrameworkBadgeColor = () => {
-    switch (frameworkId.toLowerCase()) {
-      case 'openai':
-        return 'bg-green-100 text-green-700 border-green-200';
-      case 'anthropic':
-        return 'bg-orange-100 text-orange-700 border-orange-200';
-      case 'openrouter':
-        return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'crewai':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
+  // Beautiful framework display with stunning colors and glass effects
+  const getFrameworkConfig = () => {
+    const configs = {
+      openai: { 
+        emoji: '🧠', 
+        name: 'OpenAI',
+        colors: {
+          primary: 'from-emerald-400 to-green-600',
+          secondary: 'from-emerald-50/90 to-green-100/80',
+          accent: 'bg-gradient-to-r from-emerald-500 to-green-600',
+          text: 'text-emerald-700',
+          glow: 'shadow-emerald-400/30',
+          border: 'border-emerald-300/50',
+          glass: 'bg-gradient-to-br from-emerald-500/10 to-green-600/10'
+        }
+      },
+      anthropic: { 
+        emoji: '🔮', 
+        name: 'Claude',
+        colors: {
+          primary: 'from-orange-400 to-red-500',
+          secondary: 'from-orange-50/90 to-red-100/80',
+          accent: 'bg-gradient-to-r from-orange-500 to-red-600',
+          text: 'text-orange-700',
+          glow: 'shadow-orange-400/30',
+          border: 'border-orange-300/50',
+          glass: 'bg-gradient-to-br from-orange-500/10 to-red-600/10'
+        }
+      },
+      openrouter: { 
+        emoji: '🚀', 
+        name: 'OpenRouter',
+        colors: {
+          primary: 'from-purple-400 to-indigo-600',
+          secondary: 'from-purple-50/90 to-indigo-100/80',
+          accent: 'bg-gradient-to-r from-purple-500 to-indigo-600',
+          text: 'text-purple-700',
+          glow: 'shadow-purple-400/30',
+          border: 'border-purple-300/50',
+          glass: 'bg-gradient-to-br from-purple-500/10 to-indigo-600/10'
+        }
+      },
+      crewai: { 
+        emoji: '🎯', 
+        name: 'CrewAI',
+        colors: {
+          primary: 'from-blue-400 to-cyan-600',
+          secondary: 'from-blue-50/90 to-cyan-100/80',
+          accent: 'bg-gradient-to-r from-blue-500 to-cyan-600',
+          text: 'text-blue-700',
+          glow: 'shadow-blue-400/30',
+          border: 'border-blue-300/50',
+          glass: 'bg-gradient-to-br from-blue-500/10 to-cyan-600/10'
+        }
+      },
+      perplexity: { 
+        emoji: '🔍', 
+        name: 'Perplexity',
+        colors: {
+          primary: 'from-cyan-400 to-teal-600',
+          secondary: 'from-cyan-50/90 to-teal-100/80',
+          accent: 'bg-gradient-to-r from-cyan-500 to-teal-600',
+          text: 'text-cyan-700',
+          glow: 'shadow-cyan-400/30',
+          border: 'border-cyan-300/50',
+          glass: 'bg-gradient-to-br from-cyan-500/10 to-teal-600/10'
+        }
+      },
+      default: { 
+        emoji: '⚡', 
+        name: 'AI',
+        colors: {
+          primary: 'from-slate-400 to-gray-600',
+          secondary: 'from-slate-50/90 to-gray-100/80',
+          accent: 'bg-gradient-to-r from-slate-500 to-gray-600',
+          text: 'text-slate-700',
+          glow: 'shadow-slate-400/30',
+          border: 'border-slate-300/50',
+          glass: 'bg-gradient-to-br from-slate-500/10 to-gray-600/10'
+        }
+      }
+    };
+    return configs[frameworkId.toLowerCase()] || configs.default;
   };
 
-  // Ensure data is properly structured before rendering
+  const frameworkConfig = getFrameworkConfig();
+
+  // Ensure data is properly structured
   const safeData = {
     ...data,
-    label: data.label || 'Agent',
+    label: data.label || 'AI Agent',
     role: data.role || '',
     goal: data.goal || '',
     backstory: data.backstory || '',
     llmModel: data.llmModel || 'gpt-4',
-    temperature: data.temperature || 0.7,
-    max_tokens: data.max_tokens || 4000,
-    enableMemory: data.enableMemory || false,
-    prompt: data.prompt || '',
-    streamIntermediateSteps: data.streamIntermediateSteps || false,
-    allowDelegation: data.allowDelegation || false,
-    max_iterations: data.max_iterations || 3
+  };
+
+  // Smart content - only show what matters
+  const getDisplayName = () => {
+    return safeData.label || safeData.role || 'AI Agent';
+  };
+
+  const getDisplayRole = () => {
+    if (safeData.role && safeData.role !== safeData.label) {
+      return safeData.role.length > 30 ? safeData.role.substring(0, 30) + '...' : safeData.role;
+    }
+    return safeData.goal && safeData.goal.length > 40 ? safeData.goal.substring(0, 40) + '...' : safeData.goal;
   };
 
   return (
-    <div 
-      className={`
-        relative group w-80 
-        bg-gradient-to-br from-white via-blue-50/30 to-blue-100/20
-        backdrop-blur-sm border-2 rounded-2xl
-        shadow-lg shadow-blue-100/50
-        transition-all duration-300 ease-out
-        hover:shadow-2xl hover:shadow-blue-200/60 hover:scale-[1.02] hover:-translate-y-1
-        ${selected ? 
-          'border-blue-400 shadow-blue-300/60 scale-[1.01]' : 
-          `${statusDisplay.borderColor} hover:border-blue-300`
-        }
-        ${status === 'processing' ? 'animate-pulse' : ''}
-        ${status === 'error' ? 'animate-shake' : ''}
-      `}
-      onClick={(e) => {
-        if (e) {
-          e.stopPropagation();
-          e.preventDefault();
-        }
-      }}
-    >
-      {/* Animated border for processing state */}
+    <>
+      {/* Rotating shadow/glow effect for processing state */}
       {status === 'processing' && (
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 opacity-75 animate-spin-slow -z-10" 
-             style={{ padding: '2px' }}>
-          <div className="w-full h-full rounded-2xl bg-white"></div>
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-gradient-to-r from-purple-500/20 via-blue-500/20 to-indigo-500/20 rounded-3xl blur-xl animate-spin" 
+               style={{ transform: 'scale(1.1)' }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/15 via-purple-500/15 to-blue-500/15 rounded-3xl blur-lg animate-spin" 
+               style={{ transform: 'scale(1.05)', animationDirection: 'reverse', animationDuration: '3s' }} />
         </div>
       )}
 
-      {/* Execution Progress Ring */}
-      {(status === 'processing' || executionProgress > 0) && (
-        <div className="absolute -top-2 -right-2 w-8 h-8">
-          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-gray-200"
-            />
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              strokeDasharray={`${executionProgress * 0.88} 88`}
-              className="text-blue-500 transition-all duration-300"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-blue-600">
-              {Math.round(executionProgress)}%
-            </span>
-          </div>
+      {/* 🔥 PREMIUM GLASSMORPHISM CARD - Our Signature Design */}
+      <div 
+        className={`
+          relative group w-80 h-auto overflow-hidden
+          backdrop-blur-xl bg-white/80 border border-white/40
+          rounded-3xl shadow-2xl ${statusConfig.glow} ${frameworkConfig.colors.glow}
+          transition-all duration-700 ease-out
+          hover:scale-[1.03] hover:shadow-2xl hover:bg-white/90
+          hover:backdrop-blur-2xl hover:-translate-y-1
+          ${selected ? 'ring-2 ring-blue-400/60 ring-offset-2 ring-offset-white/50 shadow-blue-400/40' : ''}
+          ${isFocused ? 'scale-105 ring-2 ring-purple-400/60 shadow-purple-400/40' : ''}
+          ${isDimmed ? 'opacity-50 scale-95' : ''}
+          ${statusConfig.pulse}
+        `}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseLeave={() => setShowTooltip(false)}
+      >
+        {/* Beautiful Animated Background Gradients */}
+        <div className={`absolute inset-0 ${frameworkConfig.colors.glass} rounded-3xl`} />
+        <div className={`absolute inset-0 ${statusConfig.overlay} rounded-3xl`} />
+        
+        {/* Floating Glass Orbs for Premium Effect */}
+        <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-sm opacity-60" />
+        <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-gradient-to-tr from-white/30 to-transparent rounded-full blur-sm opacity-40" />
+        
+        {/* Status indicator dot with beautiful gradient */}
+        <div className="absolute top-4 right-4 z-10">
+          <div className={`w-4 h-4 rounded-full ${statusConfig.dot} ${statusConfig.pulse} shadow-lg border border-white/50`} />
         </div>
-      )}
 
-      {/* Target Handle */}
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="target"
-        className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ top: -8 }}
-        isConnectable={isConnectable}
-      />
-
-      {/* Header Section */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
-              flex items-center justify-center text-2xl
-              shadow-inner border ${statusDisplay.borderColor}
-              ${status === 'processing' ? 'animate-bounce' : ''}
-            `}>
-              {statusDisplay.icon}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-800 leading-tight">
-                {safeData.label}
-              </h3>
+        {/* Main content with glassmorphism container */}
+        <div className="relative p-6 space-y-4">
+          {/* Header: Framework Icon + Status with premium styling */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Premium Framework Icon */}
               <div className={`
-                inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium border
-                ${getFrameworkBadgeColor()}
+                w-14 h-14 rounded-2xl ${frameworkConfig.colors.secondary} 
+                ${frameworkConfig.colors.border} border-2
+                flex items-center justify-center text-2xl
+                shadow-lg backdrop-blur-sm
+                group-hover:scale-110 transition-transform duration-300
+                relative overflow-hidden
+                ${status === 'processing' ? 'animate-spin' : ''}
               `}>
-                {frameworkId}
+                {/* Icon background glow */}
+                <div className={`absolute inset-0 ${frameworkConfig.colors.accent} opacity-10 rounded-2xl`} />
+                <span className="relative z-10">{frameworkConfig.emoji}</span>
               </div>
-            </div>
-          </div>
-          
-          {/* Status indicator */}
-          <div className={`
-            px-2 py-1 rounded-full text-xs font-medium
-            ${statusDisplay.color} ${statusDisplay.bgColor}
-          `}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </div>
-        </div>
-
-        {/* Key Information */}
-        <div className="space-y-2 text-sm">
-          {safeData.role && (
-            <div className="flex items-start gap-2">
-              <span className="font-medium text-gray-600 min-w-[45px]">Role:</span>
-              <span className="text-gray-800 flex-1">{safeData.role}</span>
-            </div>
-          )}
-          {safeData.goal && (
-            <div className="flex items-start gap-2">
-              <span className="font-medium text-gray-600 min-w-[45px]">Goal:</span>
-              <span className="text-gray-800 flex-1 line-clamp-2">{safeData.goal}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      {status === 'processing' && (
-        <div className="px-4 pb-3">
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Performance Metrics */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-gray-600">
-              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-600">
-              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
-            </span>
-            {/* Token usage display */}
-            {data.tokenUsage && (
-              <span className="flex items-center gap-1 text-purple-600" title="Tokens used">
-                🔤 {data.tokenUsage.tokens || 0}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {safeData.enableMemory && (
-              <span className="flex items-center gap-1 text-purple-600">
-                🧠 Memory
-              </span>
-            )}
-            {/* CrewAI 0.1.21 features indicator */}
-            {frameworkId === 'crewai' && (
-              <span className="flex items-center gap-1 text-blue-600" title="CrewAI 0.1.21 Enhanced">
-                ✨ Enhanced
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Intermediate Steps Toggle - New 0.1.21 Feature */}
-      {frameworkId === 'crewai' && (
-        <div className="px-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/50">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-medium text-gray-700">Stream Thoughts:</span>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={safeData.streamIntermediateSteps || false}
-                  onChange={(e) => {
-                    if (data.onChange) {
-                      data.onChange({
-                        ...data,
-                        streamIntermediateSteps: e.target.checked
-                      });
-                    }
-                  }}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-              </label>
-            </div>
-            <div className="text-xs text-gray-500">
-              Show agent reasoning steps during execution
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Configuration Details */}
-      <div className="px-4 pb-4">
-        <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/50">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <span className="font-medium text-gray-600">Model:</span>
-              <div className="text-gray-800 font-mono">{safeData.llmModel}</div>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Temp:</span>
-              <div className="text-gray-800">{safeData.temperature}</div>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Tokens:</span>
-              <div className="text-gray-800">{safeData.max_tokens}</div>
-            </div>
-            <div>
-              <span className="font-medium text-gray-600">Memory:</span>
-              <div className={safeData.enableMemory ? 'text-green-600' : 'text-gray-400'}>
-                {safeData.enableMemory ? 'On' : 'Off'}
-              </div>
-            </div>
-            {/* CrewAI specific features */}
-            {frameworkId === 'crewai' && (
-              <>
-                <div>
-                  <span className="font-medium text-gray-600">Delegation:</span>
-                  <div className={safeData.allowDelegation ? 'text-green-600' : 'text-gray-400'}>
-                    {safeData.allowDelegation ? 'On' : 'Off'}
-                  </div>
+              
+              {/* Status Icon with premium effect */}
+              <div className="relative">
+                <div className={`
+                  w-12 h-12 rounded-xl bg-white/60 backdrop-blur-sm
+                  flex items-center justify-center text-xl
+                  shadow-lg border border-white/40
+                  ${statusConfig.pulse}
+                `}>
+                  {statusConfig.icon}
                 </div>
-                <div>
-                  <span className="font-medium text-gray-600">Max Iter:</span>
-                  <div className="text-gray-800">{safeData.max_iterations || 3}</div>
+              </div>
+            </div>
+            
+            {/* Action buttons - beautiful glass effect */}
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-500">
+              <button
+                onClick={handleEditClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-white/90 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Edit Agent"
+              >
+                <span className="text-lg">✏️</span>
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-red-100/80 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Delete Agent"
+              >
+                <span className="text-lg">🗑️</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Smart Content Hierarchy with beautiful typography */}
+          <div className="space-y-3">
+            {/* Primary: Agent Name with gradient text */}
+            <h3 className={`
+              font-bold text-xl leading-tight
+              bg-gradient-to-r ${frameworkConfig.colors.primary} bg-clip-text text-transparent
+              group-hover:scale-105 transition-transform duration-300
+            `}>
+              {getDisplayName()}
+            </h3>
+            
+            {/* Secondary: Role/Purpose with subtle styling */}
+            {getDisplayRole() && (
+              <p className="text-sm text-gray-700 leading-relaxed opacity-90 font-medium">
+                {getDisplayRole()}
+              </p>
+            )}
+          </div>
+
+          {/* Footer: Framework Badge with premium styling */}
+          <div className="flex items-center justify-between pt-3 border-t border-white/30">
+            <div className={`
+              px-4 py-2 rounded-full ${frameworkConfig.colors.secondary}
+              ${frameworkConfig.colors.text} text-sm font-bold
+              shadow-lg backdrop-blur-sm border border-white/40
+              ${frameworkConfig.colors.accent} bg-clip-text text-transparent
+              hover:scale-105 transition-transform duration-300
+            `}>
+              {frameworkConfig.name}
+            </div>
+            
+            {/* Model info with glass effect */}
+            {safeData.llmModel && (
+              <div className="px-3 py-1 rounded-lg bg-white/50 backdrop-blur-sm border border-white/40 shadow-md">
+                <div className="text-xs text-gray-600 font-mono font-semibold">
+                  {safeData.llmModel.replace('gpt-', 'GPT-').replace('claude-', 'Claude-')}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Execution progress bar with beautiful styling */}
+          {status === 'processing' && executionProgress > 0 && (
+            <div className="space-y-2 pt-2">
+              <div className="w-full bg-white/40 backdrop-blur-sm rounded-full h-2 shadow-inner border border-white/30">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-500 ${frameworkConfig.colors.accent} shadow-lg`}
+                  style={{ width: `${executionProgress}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-600 text-center font-medium bg-white/40 backdrop-blur-sm rounded-lg py-1 px-2">
+                {executionProgress}% • {executionTime}s
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Connection handles with beautiful styling */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-xl rounded-full"
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-purple-400 to-pink-500 border-2 border-white shadow-xl rounded-full"
+        />
+      </div>
+
+      {/* Rich Tooltip with premium glassmorphism */}
+      {showTooltip && safeData.goal && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 z-50 w-80 p-5 
+                       bg-gray-900/95 backdrop-blur-2xl text-white rounded-2xl shadow-2xl 
+                       border border-gray-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Tooltip content with beautiful styling */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-blue-400 text-lg">{frameworkConfig.emoji}</span>
+              <div className="font-bold text-blue-300">Agent Details</div>
+            </div>
+            
+            <div className="text-sm leading-relaxed">{safeData.goal}</div>
+            
+            {safeData.backstory && (
+              <>
+                <div className="font-semibold text-purple-300 pt-2 flex items-center gap-2">
+                  <span>🎭</span>Background
+                </div>
+                <div className="text-sm leading-relaxed opacity-90">
+                  {safeData.backstory.length > 120 ? safeData.backstory.substring(0, 120) + '...' : safeData.backstory}
                 </div>
               </>
             )}
+            
+            <div className="flex justify-between pt-3 border-t border-gray-700 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <span>🚀</span>Framework: {frameworkConfig.name}
+              </span>
+              <span className="flex items-center gap-1">
+                <span>🧠</span>Model: {safeData.llmModel}
+              </span>
+            </div>
           </div>
           
-          {/* Token usage details */}
-          {data.tokenUsage && (
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <div className="text-xs font-medium text-gray-700 mb-1">Token Usage:</div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-gray-600">Used:</span>
-                  <span className="ml-1 font-mono">{data.tokenUsage.tokens}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Cost:</span>
-                  <span className="ml-1 font-mono">${data.tokenUsage.cost?.toFixed(4) || '0.0000'}</span>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Tooltip arrow */}
+          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 
+                         bg-gray-900 rotate-45 border-l border-t border-gray-700/50"></div>
         </div>
-      </div>
-
-      {/* Action Buttons */}
-      <div className="px-4 pb-4">
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={handleEditClick}
-            className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Edit
-          </button>
-          
-          <button 
-            type="button"
-            onClick={handleDeleteClick}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      {/* Source Handle */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="output"
-        className="w-4 h-4 bg-gradient-to-r from-blue-600 to-blue-800 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ bottom: -8 }}
-        isConnectable={isConnectable}
-      />
-
-      {/* Glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 rounded-2xl bg-blue-400/20 -z-10 blur-xl" />
       )}
-    </div>
+    </>
   );
 });
 
 AgentCard.propTypes = {
-  data: PropTypes.shape({
-    nodeId: PropTypes.string.isRequired,
-    label: PropTypes.string,
-    framework: PropTypes.oneOfType([
-      PropTypes.string,
-      PropTypes.object
-    ]),
-    nodeType: PropTypes.string,
-    role: PropTypes.string,
-    goal: PropTypes.string,
-    backstory: PropTypes.string,
-    llmModel: PropTypes.string,
-    temperature: PropTypes.number,
-    max_tokens: PropTypes.number,
-    enableMemory: PropTypes.bool,
-    prompt: PropTypes.string,
-    executionState: PropTypes.object,
-    tokenUsage: PropTypes.object,
-    onChange: PropTypes.func
-  }).isRequired,
+  data: PropTypes.object.isRequired,
   selected: PropTypes.bool,
-  isConnectable: PropTypes.bool
+  isConnectable: PropTypes.bool,
+  enhancementMode: PropTypes.string,
+  isCompact: PropTypes.bool,
+  isFocused: PropTypes.bool,
+  isDimmed: PropTypes.bool,
 };
 
 AgentCard.displayName = 'AgentCard';

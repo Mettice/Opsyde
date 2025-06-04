@@ -32,6 +32,8 @@ class Workflow(BaseModel):
     edges: List[Edge]
     config: WorkflowConfig
     inputs: Dict[str, Any] = Field(default_factory=dict)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
     
     def get_node_by_id(self, node_id: str) -> Optional[Node]:
         return next((node for node in self.nodes if node.id == node_id), None)

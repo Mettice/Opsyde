@@ -11,6 +11,7 @@ from datetime import datetime
 import asyncio
 import os
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 
 # UPDATED: Import the new Supabase service
 from services.user_settings_service import user_settings_service
@@ -18,8 +19,8 @@ from core.provider_registry import provider_registry
 
 logger = logging.getLogger(__name__)
 
-class WorkflowExecutionContext:
-    """Enhanced workflow execution context with Supabase BYOK support"""
+class WorkflowExecutionContext(Mapping):
+    """Enhanced workflow execution context with Supabase BYOK support and proper mapping interface"""
     
     def __init__(self, user_id: Optional[str] = None, workflow_id: Optional[str] = None):
         self.user_id = user_id or "anonymous"  # Default to anonymous for unauthenticated users
@@ -32,6 +33,37 @@ class WorkflowExecutionContext:
         self.user_settings_service = user_settings_service
         
         logger.info(f"🔄 Initializing workflow execution context for user: {self.user_id}")
+
+    # Implement Mapping interface
+    def __getitem__(self, key: str) -> Any:
+        """Dictionary-style access"""
+        context_dict = self.to_dict()
+        return context_dict[key]
+    
+    def __iter__(self):
+        """Iterator for mapping interface"""
+        context_dict = self.to_dict()
+        return iter(context_dict)
+    
+    def __len__(self) -> int:
+        """Length for mapping interface"""
+        context_dict = self.to_dict()
+        return len(context_dict)
+    
+    def keys(self):
+        """Dictionary-style keys method"""
+        context_dict = self.to_dict()
+        return context_dict.keys()
+    
+    def values(self):
+        """Dictionary-style values method"""
+        context_dict = self.to_dict()
+        return context_dict.values()
+    
+    def items(self):
+        """Dictionary-style items method"""
+        context_dict = self.to_dict()
+        return context_dict.items()
 
     async def initialize(self):
         """Initialize the execution context with user API keys from Supabase"""

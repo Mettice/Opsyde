@@ -11,6 +11,31 @@ const DelayNode = React.lazy(() => import('../components/DelayNode'));
 const TriggerNode = React.lazy(() => import('../components/TriggerNode'));
 const LogicNode = React.lazy(() => import('../components/LogicNode'));
 
+// Enhanced wrapper component for visual enhancements
+const withEnhancedDisplay = (Component, displayName) => {
+  const EnhancedComponent = (props) => {
+    // Get enhancement context from props or global state
+    const enhancementMode = props.enhancementMode || null;
+    const isCompact = props.isCompact || false;
+    const isFocused = props.isFocused || false;
+    const isDimmed = props.isDimmed || false;
+
+    // Pass enhancement props to the component
+    return (
+      <Component
+        {...props}
+        enhancementMode={enhancementMode}
+        isCompact={isCompact}
+        isFocused={isFocused}
+        isDimmed={isDimmed}
+      />
+    );
+  };
+
+  EnhancedComponent.displayName = `Enhanced${displayName}`;
+  return EnhancedComponent;
+};
+
 // Wrap lazy components with Suspense and fallback
 const withSuspense = (Component, name) => (props) => (
   <React.Suspense fallback={
@@ -25,17 +50,23 @@ const withSuspense = (Component, name) => (props) => (
   </React.Suspense>
 );
 
+// Enhanced wrapper for lazy components
+const withSuspenseAndEnhancement = (Component, name) => {
+  const SuspenseComponent = withSuspense(Component, name);
+  return withEnhancedDisplay(SuspenseComponent, name);
+};
+
 export const nodeTypes = {
-  agent: AgentCard,
-  task: TaskNode,
-  tool: withSuspense(ToolNode, 'Tool'),
-  chatbot: withSuspense(ChatNode, 'Chat'),
-  chat: withSuspense(ChatNode, 'Chat'),
-  delay: withSuspense(DelayNode, 'Delay'),
-  trigger: withSuspense(TriggerNode, 'Trigger'),
-  logic: withSuspense(LogicNode, 'Logic'),
-  input: InputNode,
-  output: OutputNode
+  agent: withEnhancedDisplay(AgentCard, 'AgentCard'),
+  task: withEnhancedDisplay(TaskNode, 'TaskNode'),
+  tool: withSuspenseAndEnhancement(ToolNode, 'Tool'),
+  chatbot: withSuspenseAndEnhancement(ChatNode, 'Chat'),
+  chat: withSuspenseAndEnhancement(ChatNode, 'Chat'),
+  delay: withSuspenseAndEnhancement(DelayNode, 'Delay'),
+  trigger: withSuspenseAndEnhancement(TriggerNode, 'Trigger'),
+  logic: withSuspenseAndEnhancement(LogicNode, 'Logic'),
+  input: withEnhancedDisplay(InputNode, 'Input'),
+  output: withEnhancedDisplay(OutputNode, 'Output')
 }; 
 
 

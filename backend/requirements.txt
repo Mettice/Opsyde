@@ -46,7 +46,7 @@ pytesseract
 pillow
 pypdf
 pdfplumber
-pydantic 
+
 markdown2 
 jinja2 
 pillow 
@@ -91,4 +91,3 @@ httpx
 black
 isort
 flake8
-mypy

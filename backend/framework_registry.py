@@ -52,6 +52,15 @@ FRAMEWORK_METADATA = {
         "required_fields": ["modelName"],
         "optional_fields": ["temperature", "maxTokens"]
     },
+    "openrouter": {
+        "name": "OpenRouter",
+        "requires_llm": False,  # OpenRouter IS the LLM provider
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["model"],
+        "optional_fields": ["temperature", "maxTokens", "systemMessage"]
+    },
     "universal_api": {
         "name": "Universal API",
         "requires_llm": False,
@@ -175,8 +184,14 @@ def validate_framework_llm_combination(framework: str, llm_provider: str) -> Dic
     """Validate if framework supports the LLM provider"""
     framework_meta = get_framework_requirements(framework)
     
+    # If framework is not found, check if it's actually an LLM provider being used as a framework
     if not framework_meta:
-        return {"valid": False, "error": f"Unknown framework: {framework}"}
+        llm_meta = get_llm_requirements(framework)
+        if llm_meta:
+            # It's an LLM provider being used directly as a framework (like OpenRouter)
+            return {"valid": True, "note": f"{framework} is being used as both framework and LLM provider"}
+        else:
+            return {"valid": False, "error": f"Unknown framework: {framework}"}
     
     # Check if framework requires LLM
     if framework_meta.get("requires_llm", False):
@@ -253,6 +268,16 @@ class EnhancedFrameworkRegistry:
             logger.warning(f"❌ HuggingFace runner not available: {e}")
         except Exception as e:
             logger.error(f"❌ HuggingFace runner failed with unexpected error: {e}")
+        
+        try:
+            logger.info("🔧 Attempting to import OpenRouter runner...")
+            from frameworks.openrouter_runner import run_openrouter_tool
+            self.register("openrouter", run_openrouter_tool)
+            logger.info("✅ OpenRouter runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ OpenRouter runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ OpenRouter runner failed with unexpected error: {e}")
         
         try:
             logger.info("🔧 Attempting to import Universal API runner...")
@@ -432,6 +457,9 @@ class EnhancedFrameworkRegistry:
                     availability[framework] = True
                 elif framework == "huggingface":
                     import transformers
+                    availability[framework] = True
+                elif framework == "openrouter":
+                    # OpenRouter is always available as it's built-in
                     availability[framework] = True
                 elif framework == "universal_api":
                     # Universal API is always available as it's built-in

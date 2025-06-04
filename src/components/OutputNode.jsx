@@ -17,13 +17,35 @@ const safeAccess = (obj, path, defaultValue = null) => {
   return result !== undefined ? result : defaultValue;
 };
 
-const OutputNode = memo(({ data, isConnectable, selected }) => {
+const OutputNode = memo(({ 
+  data, 
+  isConnectable, 
+  selected,
+  // Visual enhancement props
+  isCompact = false,
+  isDimmed = false,
+  isHighlighted = false,
+  enhancementMode = 'default',
+  onHover,
+  onUnhover
+}) => {
   // State for hiding API endpoint/details
   const [hideApiEndpoint, setHideApiEndpoint] = useState(true);
   const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  
+  // Safe data access
+  const safeData = {
+    label: data?.label || 'Output Node',
+    outputType: data?.outputType || 'webhook',
+    description: data?.description || 'Sends data to external services',
+    webhookUrl: data?.webhookUrl || '',
+    nodeId: data?.nodeId || '',
+    nodeType: data?.nodeType || 'output'
+  };
   
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -35,52 +57,88 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
     }
   }, [data.executionState]);
 
-  const outputType = data.outputType || 'webhook';
-  
-  // Get appropriate icon and label for output type
-  const getOutputTypeDisplay = (type) => {
-    switch (type) {
-      case 'smart_email':
-        return { icon: '🤖📧', label: 'Smart Email', description: 'AI-powered email formatting' };
-      case 'smart_api':
-        return { icon: '🤖🔗', label: 'AI Integration', description: 'AI-powered API integration' };
-      case 'webhook':
-        return { icon: '🔗', label: 'Webhook', description: 'HTTP webhook' };
-      case 'email':
-        return { icon: '📧', label: 'Email', description: 'Direct email' };
-      case 'discord':
-        return { icon: '💬', label: 'Discord', description: 'Discord webhook' };
-      case 'sheets':
-        return { icon: '📊', label: 'Google Sheets', description: 'Spreadsheet integration' };
-      default:
-        return { icon: '📤', label: 'Output', description: type };
-    }
-  };
-
-  // Get output type icon for status display - moved before getStatusDisplay
-  const getOutputTypeIcon = () => {
-    const typeDisplay = getOutputTypeDisplay(outputType);
-    return typeDisplay.icon;
-  };
-
-  // Get status icon and color
-  const getStatusDisplay = () => {
+  // Get status configuration with glassmorphism styling
+  const getStatusConfig = () => {
     switch (status) {
       case 'processing':
-        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+        return {
+          icon: '⚡',
+          color: 'text-blue-500',
+          bgColor: 'bg-blue-500/10',
+          borderColor: 'border-blue-300/30',
+          textColor: 'text-blue-700',
+          gradient: 'from-blue-400 to-blue-600',
+          glowColor: 'shadow-blue-300/40',
+          pulse: 'animate-pulse'
+        };
       case 'success':
-        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+        return {
+          icon: '✅',
+          color: 'text-emerald-500',
+          bgColor: 'bg-emerald-500/10',
+          borderColor: 'border-emerald-300/30',
+          textColor: 'text-emerald-700',
+          gradient: 'from-emerald-400 to-emerald-600',
+          glowColor: 'shadow-emerald-300/40',
+          pulse: ''
+        };
       case 'error':
-        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
+        return {
+          icon: '❌',
+          color: 'text-red-500',
+          bgColor: 'bg-red-500/10',
+          borderColor: 'border-red-300/30',
+          textColor: 'text-red-700',
+          gradient: 'from-red-400 to-red-600',
+          glowColor: 'shadow-red-300/40',
+          pulse: ''
+        };
       case 'waiting':
-        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+        return {
+          icon: '⏳',
+          color: 'text-amber-500',
+          bgColor: 'bg-amber-500/10',
+          borderColor: 'border-amber-300/30',
+          textColor: 'text-amber-700',
+          gradient: 'from-amber-400 to-amber-600',
+          glowColor: 'shadow-amber-300/40',
+          pulse: 'animate-pulse'
+        };
       default:
-        return { icon: getOutputTypeIcon(), color: 'text-blue-600', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+        return {
+          icon: '📤',
+          color: 'text-emerald-500',
+          bgColor: 'bg-emerald-500/10',
+          borderColor: 'border-emerald-300/30',
+          textColor: 'text-emerald-700',
+          gradient: 'from-emerald-400 to-emerald-600',
+          glowColor: 'shadow-emerald-300/40',
+          pulse: ''
+        };
     }
   };
 
-  const statusDisplay = getStatusDisplay();
-  const typeDisplay = getOutputTypeDisplay(outputType);
+  // Get output type configuration
+  const getOutputTypeConfig = () => {
+    const outputType = safeData.outputType;
+    const configs = {
+      webhook: { name: 'Webhook', colors: { primary: 'from-emerald-600 to-teal-600', secondary: 'bg-emerald-50/80', accent: 'bg-emerald-500', text: 'text-emerald-700', border: 'border-emerald-200/40' }},
+      email: { name: 'Email', colors: { primary: 'from-blue-600 to-indigo-600', secondary: 'bg-blue-50/80', accent: 'bg-blue-500', text: 'text-blue-700', border: 'border-blue-200/40' }},
+      discord: { name: 'Discord', colors: { primary: 'from-purple-600 to-violet-600', secondary: 'bg-purple-50/80', accent: 'bg-purple-500', text: 'text-purple-700', border: 'border-purple-200/40' }},
+      sheets: { name: 'Sheets', colors: { primary: 'from-green-600 to-emerald-600', secondary: 'bg-green-50/80', accent: 'bg-green-500', text: 'text-green-700', border: 'border-green-200/40' }},
+      smart_email: { name: 'Smart Email', colors: { primary: 'from-cyan-600 to-blue-600', secondary: 'bg-cyan-50/80', accent: 'bg-cyan-500', text: 'text-cyan-700', border: 'border-cyan-200/40' }},
+      smart_api: { name: 'AI API', colors: { primary: 'from-violet-600 to-purple-600', secondary: 'bg-violet-50/80', accent: 'bg-violet-500', text: 'text-violet-700', border: 'border-violet-200/40' }}
+    };
+    
+    return configs[outputType] || configs.webhook;
+  };
+
+  const statusConfig = getStatusConfig();
+  const outputConfig = getOutputTypeConfig();
+  
+  // Mouse event handlers
+  const handleMouseEnter = () => setShowTooltip(true);
+  const handleMouseLeave = () => setShowTooltip(false);
   
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
@@ -119,244 +177,249 @@ const OutputNode = memo(({ data, isConnectable, selected }) => {
     setHideApiEndpoint(prev => !prev);
   }, []);
 
+  // Helper functions
+  const getDisplayName = () => {
+    return safeData.label || safeData.outputType || 'Output Node';
+  };
+
+  const getOutputDescription = () => {
+    const types = {
+      webhook: 'Sends data via HTTP webhook',
+      email: 'Delivers content via email',
+      discord: 'Posts messages to Discord channels',
+      sheets: 'Updates Google Sheets with data',
+      smart_email: 'AI-powered email composition',
+      smart_api: 'Intelligent API integration'
+    };
+    return types[safeData.outputType] || safeData.description;
+  };
+
+  const getOutputTypeIcon = () => {
+    const icons = {
+      webhook: '🔗',
+      email: '📧',
+      discord: '💬',
+      sheets: '📊',
+      smart_email: '🤖📧',
+      smart_api: '🤖🔗'
+    };
+    return icons[safeData.outputType] || '📤';
+  };
+
   return (
-    <div 
-      className={`
-        relative group w-80
-        bg-gradient-to-br from-white via-blue-50/30 to-blue-100/20
-        backdrop-blur-sm border-2 rounded-2xl
-        shadow-lg shadow-blue-100/50
-        transition-all duration-300 ease-out
-        hover:shadow-2xl hover:shadow-blue-200/60 hover:scale-[1.02] hover:-translate-y-1
-        ${selected ? 
-          'border-blue-400 shadow-blue-300/60 scale-[1.01]' : 
-          `${statusDisplay.borderColor} hover:border-blue-300`
-        }
-        ${status === 'processing' ? 'animate-pulse' : ''}
-        ${status === 'error' ? 'animate-shake' : ''}
-      `}
-    >
-      {/* Animated border for processing state */}
+    <>
+      {/* Rotating shadow/glow effect for processing state */}
       {status === 'processing' && (
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-400 via-purple-400 to-blue-400 opacity-75 animate-spin-slow -z-10" 
-             style={{ padding: '2px' }}>
-          <div className="w-full h-full rounded-2xl bg-white"></div>
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-green-500/20 to-teal-500/20 rounded-3xl blur-xl animate-spin" 
+               style={{ transform: 'scale(1.1)' }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-500/15 via-emerald-500/15 to-green-500/15 rounded-3xl blur-lg animate-spin" 
+               style={{ transform: 'scale(1.05)', animationDirection: 'reverse', animationDuration: '3s' }} />
         </div>
       )}
 
-      {/* Execution Progress Ring */}
-      {(status === 'processing' || executionProgress > 0) && (
-        <div className="absolute -top-2 -right-2 w-8 h-8">
-          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-gray-200"
-            />
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              strokeDasharray={`${executionProgress * 0.88} 88`}
-              className="text-blue-500 transition-all duration-300"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-blue-600">
-              {Math.round(executionProgress)}%
-            </span>
-          </div>
+      <div 
+        className={`
+          relative group w-80 h-auto overflow-hidden
+          backdrop-blur-xl bg-white/80 border border-white/40
+          rounded-3xl shadow-2xl ${statusConfig.glowColor}
+          transition-all duration-700 ease-out
+          hover:scale-[1.03] hover:shadow-2xl hover:bg-white/90
+          hover:backdrop-blur-2xl hover:-translate-y-1
+          ${selected ? 'ring-2 ring-blue-400/60 ring-offset-2 ring-offset-white/50 shadow-blue-400/40' : ''}
+          ${isDimmed ? 'opacity-50 scale-95' : ''}
+          ${isHighlighted ? 'ring-2 ring-yellow-400/60 ring-offset-2 ring-offset-white/50 shadow-yellow-400/40' : ''}
+          ${statusConfig.pulse}
+        `}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Floating Glass Orbs Background */}
+        <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+          <div className="absolute -top-4 -right-4 w-24 h-24 bg-gradient-to-br from-emerald-200/30 to-teal-300/20 rounded-full blur-xl animate-float" />
+          <div className="absolute -bottom-6 -left-6 w-32 h-32 bg-gradient-to-tr from-green-200/20 to-emerald-300/30 rounded-full blur-2xl animate-float-delayed" />
+          <div className="absolute top-1/2 right-1/4 w-16 h-16 bg-gradient-to-br from-teal-300/20 to-emerald-200/25 rounded-full blur-lg animate-float-slow" />
         </div>
-      )}
 
-      <Handle
-        type="target"
-        position={Position.Top}
-        className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ top: -8 }}
-        isConnectable={isConnectable}
-      />
-      
-      {/* Header Section */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
-              flex items-center justify-center text-2xl
-              shadow-inner border ${statusDisplay.borderColor}
-              ${status === 'processing' ? 'animate-bounce' : ''}
-            `}>
-              {statusDisplay.icon}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-800 leading-tight">
-                {data.label || 'Output'}
-              </h3>
-              <div className="text-xs text-gray-500 mt-1">
-                {typeDisplay.label}
+        {/* Animated Gradient Background */}
+        <div className={`
+          absolute inset-0 rounded-2xl opacity-30
+          bg-gradient-to-br from-emerald-100/50 via-teal-50/30 to-green-100/40
+          group-hover:opacity-50 transition-opacity duration-700
+        `} />
+
+        {/* Status Indicator Dot */}
+        <div className={`
+          absolute top-3 right-3 w-4 h-4 rounded-full ${statusConfig.color.replace('text-', 'bg-')}
+          ${statusConfig.pulse} shadow-lg backdrop-blur-sm border-2 border-white/40
+          z-20
+        `} />
+
+        {/* Connection Handle */}
+        <Handle
+          type="target"
+          position={Position.Top}
+          className={`
+            w-5 h-5 rounded-full shadow-xl border-3 border-white/60 backdrop-blur-sm
+            bg-gradient-to-r ${outputConfig.colors.primary}
+            hover:scale-125 transition-all duration-300
+            hover:shadow-emerald-300/60
+          `}
+          style={{ top: -10 }}
+          isConnectable={isConnectable}
+        />
+        
+        {/* Main Content with Glass Effect */}
+        <div className="relative z-10 p-5">
+          {/* Header Section */}
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`
+                relative w-14 h-14 rounded-2xl ${outputConfig.colors.secondary} 
+                ${outputConfig.colors.border} border-2
+                flex items-center justify-center text-2xl
+                shadow-lg backdrop-blur-sm
+                group-hover:scale-110 transition-transform duration-300
+                overflow-hidden
+                ${status === 'processing' ? 'animate-spin' : ''}
+              `}>
+                {/* Icon background glow */}
+                <div className={`absolute inset-0 ${outputConfig.colors.accent} opacity-10 rounded-2xl`} />
+                <span className="relative z-10">{getOutputTypeIcon()}</span>
+              </div>
+              
+              {/* Status Icon */}
+              <div className="relative">
+                <div className={`
+                  w-12 h-12 rounded-xl bg-white/60 backdrop-blur-sm
+                  flex items-center justify-center text-xl
+                  shadow-lg border border-white/40
+                  ${statusConfig.pulse}
+                `}>
+                  {statusConfig.icon}
+                </div>
               </div>
             </div>
+            
+            {/* Action buttons */}
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-500">
+              <button
+                onClick={handleEditClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-white/90 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Edit Output"
+              >
+                <span className="text-lg">✏️</span>
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-red-100/80 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Delete Output"
+              >
+                <span className="text-lg">🗑️</span>
+              </button>
+            </div>
           </div>
-          
-          {/* Status indicator */}
-          <div className={`
-            px-2 py-1 rounded-full text-xs font-medium
-            ${statusDisplay.color} ${statusDisplay.bgColor}
-          `}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+
+          {/* Content Section */}
+          <div className="space-y-3">
+            {/* Primary: Output Name */}
+            <h3 className={`
+              font-bold text-xl leading-tight
+              bg-gradient-to-r ${outputConfig.colors.primary} bg-clip-text text-transparent
+              group-hover:scale-105 transition-transform duration-300
+            `}>
+              {getDisplayName()}
+            </h3>
+            
+            {/* Secondary: Description */}
+            <p className="text-sm text-gray-700 leading-relaxed opacity-90 font-medium">
+              {getOutputDescription()}
+            </p>
+          </div>
+
+          {/* Footer: Output Type Badge + Performance */}
+          <div className="flex items-center justify-between pt-3 border-t border-white/30">
+            <div className={`
+              px-4 py-2 rounded-full ${outputConfig.colors.secondary}
+              ${outputConfig.colors.text} text-sm font-bold
+              shadow-lg backdrop-blur-sm border border-white/40
+              hover:scale-105 transition-transform duration-300
+            `}>
+              {outputConfig.name}
+            </div>
+            
+            {/* Performance metrics */}
+            <div className="flex items-center gap-3 text-xs text-gray-600">
+              <span className="flex items-center gap-1">
+                ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
+              </span>
+              <span className="flex items-center gap-1">
+                💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* AI-Powered badge for smart outputs */}
-        {outputType.startsWith('smart_') && (
-          <div className="mb-3">
-            <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium border bg-purple-100 text-purple-700 border-purple-200">
-              🤖 AI-Powered
-            </span>
+        {/* Rich Tooltip */}
+        {showTooltip && (
+          <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 z-50 w-80 p-5 
+                         bg-gray-900/95 backdrop-blur-2xl text-white rounded-2xl shadow-2xl 
+                         border border-gray-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-emerald-400 text-lg">{getOutputTypeIcon()}</span>
+                <div className="font-bold text-emerald-300">Output Details</div>
+              </div>
+              
+              <div className="text-sm leading-relaxed opacity-90">
+                {getOutputDescription()}
+              </div>
+              
+              {/* Configuration Info */}
+              <div>
+                <div className="font-semibold text-blue-300 pt-2 flex items-center gap-2">
+                  <span>⚙️</span>Configuration
+                </div>
+                <div className="text-sm opacity-80 mt-1 space-y-1">
+                  <div>Type: {outputConfig.name}</div>
+                  {safeData.webhookUrl && (
+                    <div>Endpoint: {safeData.webhookUrl.substring(0, 50)}...</div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Performance */}
+              <div>
+                <div className="font-semibold text-green-300 pt-2 flex items-center gap-2">
+                  <span>📊</span>Performance
+                </div>
+                <div className="text-sm opacity-80 mt-1 grid grid-cols-2 gap-2">
+                  <div>Time: {executionTime > 0 ? `${executionTime.toFixed(1)}s` : 'Not run'}</div>
+                  <div>Cost: ${cost > 0 ? cost.toFixed(3) : '0.000'}</div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
-
-        <div className="mb-3">
-          <div className="flex items-start gap-2">
-            <span className="font-medium text-gray-600 min-w-[70px]">Type:</span>
-            <span className="text-gray-800 flex-1 text-sm">{typeDisplay.description}</span>
-          </div>
-        </div>
       </div>
-
-      {/* Progress Bar */}
-      {status === 'processing' && (
-        <div className="px-4 pb-3">
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Performance Metrics */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-gray-600">
-              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-600">
-              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
-            </span>
-          </div>
-        </div>
-      </div>
-      
-      {/* Configuration section */}
-      {/* Smart output configuration display */}
-      {outputType.startsWith('smart_') && (
-        <div className="px-4 pb-3">
-          <div className="bg-purple-50/60 backdrop-blur-sm rounded-xl border border-purple-200/50 p-3">
-            <div className="text-xs font-medium text-purple-800 mb-2">AI Configuration:</div>
-            {data.ai_description && (
-              <div className="text-xs text-purple-700 mb-1">
-                <strong>Task:</strong> {data.ai_description.substring(0, 50)}...
-              </div>
-            )}
-            {data.service_type && (
-              <div className="text-xs text-purple-700 mb-1">
-                <strong>Type:</strong> {data.service_type}
-              </div>
-            )}
-            {outputType === 'smart_email' && data.recipient_email && (
-              <div className="text-xs text-purple-700">
-                <strong>Recipient:</strong> {data.recipient_email}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* Traditional configuration displays */}
-      {outputType === 'webhook' && data.webhook && (
-        <div className="px-4 pb-3">
-          <button
-            onClick={toggleApiVisibility}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors duration-200"
-          >
-            {hideApiEndpoint ? '👁️ Show Webhook URL' : '🔒 Hide Webhook URL'}
-          </button>
-          
-          {!hideApiEndpoint && (
-            <div className="mt-2 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/50">
-              <div className="text-xs font-mono text-gray-800 break-all">
-                {data.webhook}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-      
-      {outputType === 'email' && (
-        <div className="px-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 p-3">
-            <div className="text-xs font-medium text-gray-700 mb-1">Email Configuration:</div>
-            <div className="text-xs text-gray-600">Email: {data.email || 'Not set'}</div>
-          </div>
-        </div>
-      )}
-      
-      {outputType === 'discord' && (
-        <div className="px-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 p-3">
-            <div className="text-xs font-medium text-gray-700 mb-1">Discord Configuration:</div>
-            <div className="text-xs text-gray-600">Webhook configured: {data.webhook ? 'Yes' : 'No'}</div>
-          </div>
-        </div>
-      )}
-      
-      {outputType === 'sheets' && (
-        <div className="px-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 p-3">
-            <div className="text-xs font-medium text-gray-700 mb-1">Sheets Configuration:</div>
-            <div className="text-xs text-gray-600">Sheet ID: {data.sheetId || 'Not set'}</div>
-          </div>
-        </div>
-      )}
-      
-      {/* Don't render results here - they should only appear in the execution panel */}
-      
-      {/* Action buttons */}
-      <div className="px-4 pb-4">
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={handleEditClick}
-            className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Edit
-          </button>
-          
-          <button 
-            type="button"
-            onClick={handleDeleteClick}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      {/* Glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 rounded-2xl bg-blue-400/20 -z-10 blur-xl" />
-      )}
-    </div>
+    </>
   );
 });
 
 OutputNode.propTypes = {
   data: PropTypes.object.isRequired,
   isConnectable: PropTypes.bool,
-  selected: PropTypes.bool
+  selected: PropTypes.bool,
+  isCompact: PropTypes.bool,
+  isDimmed: PropTypes.bool,
+  isHighlighted: PropTypes.bool,
+  enhancementMode: PropTypes.string,
+  onHover: PropTypes.func,
+  onUnhover: PropTypes.func
 };
 
 OutputNode.displayName = 'OutputNode';

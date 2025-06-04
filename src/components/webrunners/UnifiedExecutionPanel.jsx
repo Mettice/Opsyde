@@ -64,6 +64,7 @@ export default function UnifiedExecutionPanel({
   isMinimized, 
   onToggleMinimize, 
   onClose,
+  onClearLogs,
   executionMode = 'hybrid',
   pollingInterval = 10000,
   onPollingIntervalChange,
@@ -195,6 +196,15 @@ export default function UnifiedExecutionPanel({
         </div>
         
           <div className="flex gap-2">
+          {onClearLogs && (
+            <button 
+              onClick={onClearLogs}
+              className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-all"
+              title="Clear logs"
+            >
+              🗑️
+            </button>
+          )}
           <button 
             onClick={() => setDebugMode(!debugMode)}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${

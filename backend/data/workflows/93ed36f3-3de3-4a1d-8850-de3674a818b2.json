@@ -1,0 +1,18 @@
+{
+  "id": "93ed36f3-3de3-4a1d-8850-de3674a818b2",
+  "nodes": [],
+  "edges": [],
+  "config": {
+    "name": "Test Workflow",
+    "description": "A test workflow",
+    "version": "1.0",
+    "owner": "test_user",
+    "tags": [
+      "test"
+    ],
+    "settings": {}
+  },
+  "inputs": {},
+  "created_at": "2025-06-04T05:02:01.619963",
+  "updated_at": "2025-06-04T05:02:01.619963"
+}

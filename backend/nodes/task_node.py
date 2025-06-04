@@ -78,55 +78,77 @@ class TaskNode:
             # Check for connected agents - look in actual inputs from connected nodes
             connected_agents = []
             
-            # Look for agent results in the inputs
-            for key, value in formatted_inputs.items():
-                if isinstance(value, dict):
-                    # Check if this is an agent result
-                    if (value.get('type') == 'agent_result' or 
-                        'agent_name' in value or 
-                        'role' in value or
-                        key.startswith('agent-') or
-                        key.startswith('input_from_agent-')):
-                        
-                        # Extract agent info from the result or metadata
-                        metadata = value.get('metadata', {})
-                        data = value.get('data', {})
-                        
-                        agent_info = {
-                            "role": (data.get("role") or metadata.get("role") or "Assistant"),
-                            "goal": (data.get("goal") or metadata.get("goal") or "Help the user"),
-                            "backstory": (data.get("backstory") or metadata.get("backstory") or ""),
-                            "framework": (metadata.get("framework") or data.get("framework") or "crewai"),
-                            "llmModel": (
-                                data.get("llm", {}).get("model") or           # New frontend format
-                                data.get("llmModel") or                       # Legacy format
-                                data.get("llm_model") or                      # Alternative format
-                                metadata.get("llm", {}).get("model") or      # Metadata new format
-                                metadata.get("llmModel") or                   # Metadata legacy format
-                                metadata.get("llm_model") or                  # Metadata alternative format
-                                value.get("llm", {}).get("model") or         # Direct value check
-                                value.get("llmModel") or                      # Direct value legacy
-                                "llama-3.1-sonar-small-128k-online"          # Default to Perplexity model
-                            ),
-                            "llmProvider": (
-                                data.get("llm", {}).get("provider") or        # New frontend format
-                                data.get("llmProvider") or                     # Legacy format
-                                data.get("llm_provider") or                    # Alternative format
-                                metadata.get("llm", {}).get("provider") or    # Metadata new format
-                                metadata.get("llmProvider") or                 # Metadata legacy format
-                                metadata.get("llm_provider") or                # Metadata alternative format
-                                value.get("llm", {}).get("provider") or       # Direct value check
-                                value.get("llmProvider") or                    # Direct value legacy
-                                "perplexity"                                   # Default to perplexity
-                            ),
-                            "temperature": (data.get("temperature") or metadata.get("temperature") or 0.7),
-                            "max_tokens": (data.get("max_tokens") or metadata.get("max_tokens") or 4000),
-                            "allowDelegation": (data.get("allow_delegation") or metadata.get("allow_delegation") or False)
-                        }
-                        connected_agents.append(agent_info)
-                        logger.info(f"Found connected agent: {agent_info['role']} (framework: {agent_info['framework']})")
+            # ENHANCED AGENT DETECTION: Check multiple possible locations for agent data
             
-            # If no agents found in formatted inputs, check the original inputs
+            # 1. Look for direct 'agent' key in inputs (common case)
+            if 'agent' in formatted_inputs:
+                agent_value = formatted_inputs['agent']
+                if isinstance(agent_value, dict):
+                    agent_info = {
+                        "role": agent_value.get("role", "Assistant"),
+                        "goal": agent_value.get("goal", "Help the user"),
+                        "backstory": agent_value.get("backstory", ""),
+                        "framework": agent_value.get("framework", "openai"),
+                        "llmModel": agent_value.get("llmModel", "gpt-4"),
+                        "llmProvider": agent_value.get("llmProvider", "openai"),
+                        "temperature": agent_value.get("temperature", 0.7),
+                        "max_tokens": agent_value.get("max_tokens", 4000),
+                        "allowDelegation": agent_value.get("allowDelegation", False)
+                    }
+                    connected_agents.append(agent_info)
+                    logger.info(f"Found direct agent in inputs: {agent_info['role']} (framework: {agent_info['framework']})")
+            
+            # 2. Look for agent results in the inputs
+            if not connected_agents:
+                for key, value in formatted_inputs.items():
+                    if isinstance(value, dict):
+                        # Check if this is an agent result
+                        if (value.get('type') == 'agent_result' or 
+                            'agent_name' in value or 
+                            'role' in value or
+                            key.startswith('agent-') or
+                            key.startswith('input_from_agent-')):
+                            
+                            # Extract agent info from the result or metadata
+                            metadata = value.get('metadata', {})
+                            data = value.get('data', {})
+                            
+                            agent_info = {
+                                "role": (data.get("role") or metadata.get("role") or value.get("role") or "Assistant"),
+                                "goal": (data.get("goal") or metadata.get("goal") or value.get("goal") or "Help the user"),
+                                "backstory": (data.get("backstory") or metadata.get("backstory") or value.get("backstory") or ""),
+                                "framework": (metadata.get("framework") or data.get("framework") or value.get("framework") or "openai"),
+                                "llmModel": (
+                                    data.get("llm", {}).get("model") or           # New frontend format
+                                    data.get("llmModel") or                       # Legacy format
+                                    data.get("llm_model") or                      # Alternative format
+                                    metadata.get("llm", {}).get("model") or      # Metadata new format
+                                    metadata.get("llmModel") or                   # Metadata legacy format
+                                    metadata.get("llm_model") or                  # Metadata alternative format
+                                    value.get("llm", {}).get("model") or         # Direct value check
+                                    value.get("llmModel") or                      # Direct value legacy
+                                    "gpt-4"                                       # Default model
+                                ),
+                                "llmProvider": (
+                                    data.get("llm", {}).get("provider") or        # New frontend format
+                                    data.get("llmProvider") or                     # Legacy format
+                                    data.get("llm_provider") or                    # Alternative format
+                                    metadata.get("llm", {}).get("provider") or    # Metadata new format
+                                    metadata.get("llmProvider") or                 # Metadata legacy format
+                                    metadata.get("llm_provider") or                # Metadata alternative format
+                                    value.get("llm", {}).get("provider") or       # Direct value check
+                                    value.get("llmProvider") or                    # Direct value legacy
+                                    "openai"                                       # Default provider
+                                ),
+                                "temperature": (data.get("temperature") or metadata.get("temperature") or value.get("temperature") or 0.7),
+                                "max_tokens": (data.get("max_tokens") or metadata.get("max_tokens") or value.get("max_tokens") or 4000),
+                                "allowDelegation": (data.get("allow_delegation") or metadata.get("allow_delegation") or value.get("allowDelegation") or False)
+                            }
+                            connected_agents.append(agent_info)
+                            logger.info(f"Found connected agent: {agent_info['role']} (framework: {agent_info['framework']})")
+                            break  # Found one, that's enough
+            
+            # 3. If no agents found in formatted inputs, check the original inputs
             if not connected_agents:
                 for key, value in inputs.items():
                     if hasattr(value, 'value') and isinstance(value.value, dict):
@@ -139,18 +161,18 @@ class TaskNode:
                                 "role": agent_data.get("role", "Assistant"),
                                 "goal": agent_data.get("goal", "Help the user"),
                                 "backstory": agent_data.get("backstory", ""),
-                                "framework": agent_data.get("framework", "crewai"),
+                                "framework": agent_data.get("framework", "openai"),
                                 "llmModel": (
                                     agent_data.get("llm", {}).get("model") or     # New frontend format
                                     agent_data.get("llmModel") or                 # Legacy format
                                     agent_data.get("llm_model") or                # Alternative format
-                                    "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model
+                                    "gpt-4"                                       # Default model
                                 ),
                                 "llmProvider": (
                                     agent_data.get("llm", {}).get("provider") or  # New frontend format
                                     agent_data.get("llmProvider") or              # Legacy format
                                     agent_data.get("llm_provider") or             # Alternative format
-                                    "perplexity"                                  # Default to perplexity
+                                    "openai"                                      # Default provider
                                 ),
                                 "temperature": agent_data.get("temperature", 0.7),
                                 "max_tokens": agent_data.get("max_tokens", 4000),
@@ -158,25 +180,73 @@ class TaskNode:
                             }
                             connected_agents.append(agent_info)
                             logger.info(f"Found connected agent in NodeData: {agent_info['role']}")
+                            break  # Found one, that's enough
             
+            # Handle the case based on whether we found agents or not
             if not connected_agents:
                 logger.warning(f"No agents connected to task: {task_name}")
                 # Check if this is a data processing task that doesn't need an agent
-                if formatted_inputs:
+                # OR if we have any meaningful input data to process
+                has_meaningful_inputs = False
+                
+                # Check for any meaningful input data
+                for key, value in formatted_inputs.items():
+                    if isinstance(value, dict):
+                        # Check for various types of meaningful data
+                        if (value.get('type') in ['text', 'file', 'url', 'tool_result', 'agent_result'] or
+                            'value' in value or 'data' in value or 'result' in value):
+                            has_meaningful_inputs = True
+                            break
+                    elif isinstance(value, str) and value.strip():
+                        has_meaningful_inputs = True
+                        break
+                    elif value is not None:
+                        has_meaningful_inputs = True
+                        break
+                
+                if has_meaningful_inputs:
                     logger.info(f"Task {task_name} will process data without agent")
                     # Process the task as a data transformation/processing task
                     agent_response = await self._process_data_task(task_name, description, formatted_inputs, expected_output)
+                    
+                    # Create task result for data processing
+                    result = {
+                        "type": "task_result",
+                        "task_name": task_name,
+                        "description": description,
+                        "expected_output": expected_output,
+                        "is_async": is_async,
+                        "inputs": formatted_inputs,
+                        "status": "completed",
+                        "timestamp": datetime.now().isoformat(),
+                        "result": agent_response,
+                        "query": description or "Data processing task"
+                    }
+                    
+                    logger.info(f"✅ Task {task_name} completed data processing successfully")
+                    return result
                 else:
+                    # Only return error if we have no agents AND no meaningful input data
+                    logger.error(f"Task {task_name} has no connected agents and no meaningful input data")
                     return {
                         "success": False,
                         "type": "error",
-                        "error": "Task requires at least one connected agent or input data to process"
+                        "error": "Task requires at least one connected agent or meaningful input data to process"
                     }
-
-            # Extract the primary agent (first in the list)
-            primary_agent = connected_agents[0]
-            agent_role = primary_agent.get("role", "Assistant")
-            agent_goal = primary_agent.get("goal", "Help the user")
+            else:
+                # We have connected agents - proceed with agent-based processing
+                # Extract the primary agent (first in the list)
+                primary_agent = connected_agents[0]
+                agent_role = primary_agent.get("role", "Assistant")
+                agent_goal = primary_agent.get("goal", "Help the user")
+            
+            # Initialize enhanced framework config
+            enhanced_framework_config = {
+                "provider": primary_agent.get("llmProvider", "openai"),
+                "model": primary_agent.get("llmModel", "gpt-4"),
+                "temperature": primary_agent.get("temperature", 0.7),
+                "max_tokens": primary_agent.get("max_tokens", 4000)
+            }
             
             # Find the user query and check for files in the inputs
             user_query = None
@@ -589,6 +659,39 @@ class TaskNode:
                         logger.error(f"Webhook execution error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
                     
+                elif agent_framework == "openrouter":
+                    # Try to use the openrouter runner
+                    try:
+                        from frameworks.openrouter_runner import run_openrouter_tool
+                        logger.info("Using OpenRouter framework for agent task")
+                        
+                        # Prepare config for OpenRouter
+                        config = {
+                            "model": primary_agent.get("llmModel", "openai/gpt-4"),
+                            "temperature": primary_agent.get("temperature", 0.7),
+                            "max_tokens": primary_agent.get("max_tokens", 4000),
+                            "agent": {
+                                "role": agent_role,
+                                "goal": agent_goal,
+                                "backstory": primary_agent.get("backstory", "")
+                            }
+                        }
+                        
+                        inputs_data = {
+                            "query": user_query,
+                            "context": formatted_inputs
+                        }
+                        
+                        # Run the OpenRouter agent
+                        result = await run_openrouter_tool(config, inputs_data)
+                        agent_response = result.get("output", "No response from OpenRouter agent")
+                    except ImportError as e:
+                        logger.error(f"OpenRouter runner import error: {str(e)}")
+                        agent_response = await self._execute_agent_query(primary_agent, user_query)
+                    except Exception as e:
+                        logger.error(f"OpenRouter execution error: {str(e)}")
+                        agent_response = await self._execute_agent_query(primary_agent, user_query)
+                    
                 elif agent_framework == "openai":
                     # Try to use direct OpenAI API
                     agent_response = await self._execute_openai_query(primary_agent, user_query)
@@ -675,6 +778,8 @@ class TaskNode:
                 return await self._execute_openai_query(agent_config, query)
             elif framework == "anthropic":
                 return await self._execute_anthropic_query(agent_config, query)
+            elif framework == "openrouter":
+                return await self._execute_openrouter_query(agent_config, query)
             else:
                 return f"Agent framework '{framework}' not supported. Query was: {query}"
                 
@@ -769,6 +874,36 @@ class TaskNode:
         except Exception as e:
             logger.error(f"Anthropic error: {str(e)}")
             return f"Error with Anthropic: {str(e)}"
+
+    async def _execute_openrouter_query(self, agent_config: Dict[str, Any], query: str) -> str:
+        """Execute a query using OpenRouter"""
+        try:
+            from frameworks.openrouter_runner import run_openrouter_tool
+            
+            # Prepare config for OpenRouter
+            config = {
+                "model": agent_config.get("llmModel", "openai/gpt-4"),
+                "temperature": agent_config.get("temperature", 0.7),
+                "max_tokens": agent_config.get("max_tokens", 4000),
+                "agent": {
+                    "role": agent_config.get("role", "Assistant"),
+                    "goal": agent_config.get("goal", "Help the user"),
+                    "backstory": agent_config.get("backstory", "")
+                }
+            }
+            
+            inputs_data = {
+                "query": query,
+                "context": {}
+            }
+            
+            # Run the OpenRouter agent
+            result = await run_openrouter_tool(config, inputs_data)
+            return result.get("output", "No response from OpenRouter agent")
+            
+        except Exception as e:
+            logger.error(f"OpenRouter error: {str(e)}")
+            return f"Error with OpenRouter: {str(e)}"
 
     def validate_config(self, config: Dict[str, Any]) -> bool:
         """Validate task configuration"""
