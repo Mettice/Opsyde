@@ -894,81 +894,47 @@ const FlowCanvasBase = forwardRef(({
       </ReactFlow>
       
       {/* Context Menu */}
-      <ContextMenu
-        isVisible={contextMenu.isVisible}
-        position={contextMenu.position}
-        onClose={closeContextMenu}
-        onDuplicate={() => handleContextDuplicate(contextMenu.selectedNodes)}
-        onCopy={() => handleContextCopy(contextMenu.selectedNodes)}
-        onPaste={handleContextPaste}
-        onSaveAsTemplate={() => handleSaveAsTemplate(contextMenu.selectedNodes)}
-        onDelete={() => handleContextDelete(contextMenu.selectedNodes)}
-        selectedNodes={contextMenu.selectedNodes}
-        canPaste={canPaste}
-        nodeType={contextMenu.nodeType}
-      />
-
+      {contextMenu.isVisible && (
+        <ContextMenu 
+          position={contextMenu.position}
+          selectedNodes={contextMenu.selectedNodes}
+          nodeType={contextMenu.nodeType}
+          onClose={handleContextMenuClose}
+          onEdit={handleContextEdit}
+          onDelete={handleContextDelete}
+          onCopy={handleContextCopy}
+          onDuplicate={handleContextDuplicate}
+          onSaveTemplate={handleContextSaveTemplate}
+        />
+      )}
+      
       {/* Save Template Modal */}
-      <SaveTemplateModal
-        isOpen={saveTemplateModal.isOpen}
-        onClose={() => setSaveTemplateModal({ isOpen: false, selectedNodes: [], selectedEdges: [] })}
-        onSave={handleSaveTemplate}
-        selectedNodes={saveTemplateModal.selectedNodes}
-        selectedEdges={saveTemplateModal.selectedEdges}
-      />
-
+      {saveTemplateModal.isOpen && (
+        <SaveTemplateModal
+          isOpen={saveTemplateModal.isOpen}
+          onClose={() => setSaveTemplateModal(prev => ({ ...prev, isOpen: false }))}
+          selectedNodes={saveTemplateModal.selectedNodes}
+          selectedEdges={saveTemplateModal.selectedEdges}
+        />
+      )}
+      
       {/* Template Manager Modal */}
       {templateManager.isOpen && (
         <TemplateManager
           isOpen={templateManager.isOpen}
-          onClose={() => setTemplateManager({ isOpen: false, currentPosition: { x: 100, y: 100 } })}
-          onApplyTemplate={handleApplyTemplate}
+          onClose={() => setTemplateManager(prev => ({ ...prev, isOpen: false }))}
+          onSelect={handleTemplateSelect}
           position={templateManager.currentPosition}
         />
       )}
 
       {/* Template Gallery */}
-      {showTemplateGallery && <TemplateGallery />}
-
-      {/* Floating Action Button - Run Workflow */}
-      {nodes.length > 0 && (
-        <button
-          onClick={handleRunWorkflow}
-          className="absolute bottom-4 left-4 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-3 shadow-lg hover:shadow-xl transition-all duration-200 group"
-          title="Run Workflow"
-        >
-          <span className="text-lg group-hover:scale-110 transition-transform">⚡</span>
-        </button>
+      {showTemplateGallery && (
+        <TemplateGallery 
+          isVisible={showTemplateGallery}
+          onClose={() => toggleTemplateGallery(false)}
+        />
       )}
-
-      {/* Minimal Control Panel - Top Left */}
-      <div className="absolute top-4 left-4">
-        {/* Compact Shortcuts Panel */}
-        <div className="bg-white/90 backdrop-blur-sm rounded-lg border border-white/30 shadow-lg p-3 text-xs max-w-[200px]">
-          <div className="font-medium text-gray-800 mb-2 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-            <span>Shortcuts</span>
-          </div>
-          <div className="grid grid-cols-2 gap-1 text-gray-600">
-            <div className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘C</kbd>
-              <span className="text-xs">Copy</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘V</kbd>
-              <span className="text-xs">Paste</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">⌘D</kbd>
-              <span className="text-xs">Duplicate</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <kbd className="px-1 py-0.5 bg-gray-100 rounded text-xs">Del</kbd>
-              <span className="text-xs">Remove</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Minimal Metrics Panel - Bottom Right */}
       <div className="absolute bottom-4 right-4">
@@ -984,7 +950,7 @@ const FlowCanvasBase = forwardRef(({
                 <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
                 <span className="text-gray-700 text-xs">Nodes</span>
               </div>
-              <span className="font-mono text-blue-600 font-semibold text-sm">{nodes.length}</span>
+              <span className="font-mono text-blue-600 font-semibold text-sm">{safeNodes.length}</span>
             </div>
             
             <div className="flex items-center justify-between">
@@ -992,69 +958,22 @@ const FlowCanvasBase = forwardRef(({
                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
                 <span className="text-gray-700 text-xs">Connections</span>
               </div>
-              <span className="font-mono text-green-600 font-semibold text-sm">{edges.length}</span>
+              <span className="font-mono text-green-600 font-semibold text-sm">{safeEdges.length}</span>
             </div>
 
+            {/* Execution Status Indicator */}
             {isExecuting && (
-              <div className="flex items-center justify-between animate-pulse">
+              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-gray-200">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
-                  <span className="text-orange-700 text-xs font-medium">Executing</span>
+                  <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
+                  <span className="text-gray-700 text-xs">Status</span>
                 </div>
-                <div className="flex gap-0.5">
-                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce"></span>
-                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                  <span className="w-1 h-1 bg-orange-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
-                </div>
+                <span className="text-orange-600 font-semibold text-sm">Running</span>
               </div>
             )}
-            
-            {/* Magic Status - Compact */}
-            <div className="pt-1.5 border-t border-gray-200/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-pulse"></span>
-                  <span className="text-gray-700 text-xs">Magic</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="font-mono text-purple-600 font-semibold text-xs">MAX</span>
-                  <span className="text-sm">🦄</span>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
-
-      {/* Debug Panel for Development */}
-      {process.env.NODE_ENV === 'development' && (
-        <Panel position="bottom-right">
-          <div className="bg-black/80 text-white p-2 rounded text-xs space-y-1">
-            <div>Toast Available: {toast ? '✅' : '❌'}</div>
-            <div>Can Paste: {canPaste ? '✅' : '❌'}</div>
-            <div>Selected: {safeNodes.filter(n => n.selected).length} nodes</div>
-            <div>Clipboard: {navigator.clipboard ? 'API' : 'Fallback'}</div>
-            <button
-              onClick={async () => {
-                try {
-                  // Try to request clipboard permissions
-                  if (navigator.permissions) {
-                    const permission = await navigator.permissions.query({ name: 'clipboard-read' });
-                    console.log('Clipboard permission:', permission.state);
-                    safeToast.info(`Clipboard permission: ${permission.state}`);
-                  }
-                } catch (error) {
-                  console.log('Permission check failed:', error);
-                  safeToast.info('Clipboard permission check not supported');
-                }
-              }}
-              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded mt-1"
-            >
-              Check Clipboard Permission
-            </button>
-          </div>
-        </Panel>
-      )}
     </div>
   );
 });
