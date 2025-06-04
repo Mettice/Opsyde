@@ -2,26 +2,6 @@ import React, { useState, useCallback, memo, useEffect, useMemo } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 
-// Base styles defined outside component
-const baseStyles = {
-  container: "bg-white border-2 rounded-lg shadow-md p-4 w-72",
-  selectedBorder: "border-green-500",
-  defaultBorder: "border-green-200",
-  header: "text-sm font-bold text-gray-800 mb-2 flex items-center",
-  description: "text-xs text-gray-600 mb-3",
-  codeContainer: "bg-gray-50 p-2 rounded border border-gray-100 mb-3",
-  codeLabel: "text-xs font-medium text-gray-700 mb-1",
-  codeBlock: "text-xs font-mono bg-gray-100 p-1 rounded block overflow-x-auto whitespace-pre-wrap",
-  buttonContainer: "flex mt-3 space-x-2",
-  editButton: "text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded",
-  deleteButton: "text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded",
-  handle: {
-    base: "w-3 h-3 transition-all",
-    input: "bg-green-500 hover:bg-green-400 hover:w-4 hover:h-4",
-    output: "bg-green-600 hover:bg-green-500 hover:w-4 hover:h-4"
-  }
-};
-
 // Memoized result renderer component
 const ResultDisplay = memo(({ result }) => {
   if (!result) return null;
@@ -47,12 +27,41 @@ export const ToolType = {
 };
 
 // Use React.memo to prevent unnecessary re-renders
-const ToolNode = memo(({ data, isConnectable, selected }) => {
+const ToolNode = memo(({ 
+  data, 
+  isConnectable, 
+  selected,
+  // Visual enhancement props
+  isCompact = false,
+  isDimmed = false,
+  isHighlighted = false,
+  enhancementMode = 'default',
+  onHover,
+  onUnhover
+}) => {
   const [hideApiEndpoint, setHideApiEndpoint] = useState(true);
   const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  
+  // Safe data access
+  const safeData = {
+    label: data?.label || 'Unnamed Tool',
+    description: data?.description || '',
+    toolType: data?.toolType || 'API',
+    framework: data?.framework || '',
+    frameworkConfig: data?.frameworkConfig || {},
+    apiEndpoint: data?.apiEndpoint || '',
+    expectedOutput: data?.expectedOutput || '',
+    condition: data?.condition || '',
+    async: data?.async || false,
+    origin: data?.origin || 'default',
+    result: data?.result,
+    nodeId: data?.nodeId || '',
+    nodeType: data?.nodeType || 'tool'
+  };
   
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -64,25 +73,130 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     }
   }, [data.executionState]);
 
-  // Get status icon and color
-  const getStatusDisplay = () => {
+  // Enhanced status configuration with glassmorphism styling
+  const getStatusConfig = () => {
     switch (status) {
       case 'processing':
-        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+        return {
+          icon: '⚡',
+          dot: 'bg-gradient-to-r from-blue-400 to-blue-600',
+          overlay: 'bg-gradient-to-br from-blue-400/20 to-purple-400/20',
+          glow: 'shadow-blue-400/40',
+          pulse: 'animate-pulse'
+        };
       case 'success':
-        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+        return {
+          icon: '✅',
+          dot: 'bg-gradient-to-r from-green-400 to-green-600',
+          overlay: 'bg-gradient-to-br from-green-400/20 to-emerald-400/20',
+          glow: 'shadow-green-400/40',
+          pulse: ''
+        };
       case 'error':
-        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
+        return {
+          icon: '❌',
+          dot: 'bg-gradient-to-r from-red-400 to-red-600',
+          overlay: 'bg-gradient-to-br from-red-400/20 to-pink-400/20',
+          glow: 'shadow-red-400/40',
+          pulse: 'animate-pulse'
+        };
       case 'waiting':
-        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+        return {
+          icon: '⏳',
+          dot: 'bg-gradient-to-r from-yellow-400 to-orange-500',
+          overlay: 'bg-gradient-to-br from-yellow-400/20 to-orange-400/20',
+          glow: 'shadow-yellow-400/40',
+          pulse: 'animate-pulse'
+        };
       default:
-        return { icon: '🔧', color: 'text-green-600', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+        return {
+          icon: '🔧',
+          dot: 'bg-gradient-to-r from-orange-400 to-orange-600',
+          overlay: 'bg-gradient-to-br from-orange-400/10 to-amber-400/10',
+          glow: 'shadow-orange-400/30',
+          pulse: ''
+        };
     }
   };
 
-  const statusDisplay = getStatusDisplay();
+  const statusConfig = getStatusConfig();
 
-  // Origin badge colors
+  // Enhanced tool type configuration with premium colors
+  const getToolTypeConfig = () => {
+    const toolType = safeData.toolType.toLowerCase();
+    
+    switch (toolType) {
+      case 'llm':
+        return {
+          name: 'LLM Tool',
+          colors: {
+            primary: 'from-purple-600 to-indigo-600',
+            secondary: 'bg-gradient-to-br from-purple-50 to-indigo-100',
+            accent: 'bg-gradient-to-r from-purple-400 to-indigo-500',
+            text: 'text-purple-700',
+            border: 'border-purple-300',
+            glass: 'bg-gradient-to-br from-purple-400/5 to-indigo-400/10',
+            glow: 'shadow-purple-200/60'
+          }
+        };
+      case 'api':
+        return {
+          name: 'API Tool',
+          colors: {
+            primary: 'from-orange-600 to-red-600',
+            secondary: 'bg-gradient-to-br from-orange-50 to-red-100',
+            accent: 'bg-gradient-to-r from-orange-400 to-red-500',
+            text: 'text-orange-700',
+            border: 'border-orange-300',
+            glass: 'bg-gradient-to-br from-orange-400/5 to-red-400/10',
+            glow: 'shadow-orange-200/60'
+          }
+        };
+      case 'webhook':
+        return {
+          name: 'Webhook Tool',
+          colors: {
+            primary: 'from-green-600 to-emerald-600',
+            secondary: 'bg-gradient-to-br from-green-50 to-emerald-100',
+            accent: 'bg-gradient-to-r from-green-400 to-emerald-500',
+            text: 'text-green-700',
+            border: 'border-green-300',
+            glass: 'bg-gradient-to-br from-green-400/5 to-emerald-400/10',
+            glow: 'shadow-green-200/60'
+          }
+        };
+      case 'custom':
+        return {
+          name: 'Custom Tool',
+          colors: {
+            primary: 'from-blue-600 to-cyan-600',
+            secondary: 'bg-gradient-to-br from-blue-50 to-cyan-100',
+            accent: 'bg-gradient-to-r from-blue-400 to-cyan-500',
+            text: 'text-blue-700',
+            border: 'border-blue-300',
+            glass: 'bg-gradient-to-br from-blue-400/5 to-cyan-400/10',
+            glow: 'shadow-blue-200/60'
+          }
+        };
+      default:
+        return {
+          name: 'Tool',
+          colors: {
+            primary: 'from-gray-600 to-slate-600',
+            secondary: 'bg-gradient-to-br from-gray-50 to-slate-100',
+            accent: 'bg-gradient-to-r from-gray-400 to-slate-500',
+            text: 'text-gray-700',
+            border: 'border-gray-300',
+            glass: 'bg-gradient-to-br from-gray-400/5 to-slate-400/10',
+            glow: 'shadow-gray-200/60'
+          }
+        };
+    }
+  };
+
+  const toolTypeConfig = getToolTypeConfig();
+
+  // Origin badge styles
   const originBadgeStyles = useMemo(() => ({
     make: { bg: "bg-indigo-100", text: "text-indigo-700", icon: "🧩", border: "border-indigo-200" },
     zapier: { bg: "bg-amber-100", text: "text-amber-700", icon: "⚡", border: "border-amber-200" },
@@ -101,12 +215,12 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-edit', { 
       detail: { 
-        nodeId: data.nodeId,
+        nodeId: safeData.nodeId,
         nodeType: 'tool'
       } 
     });
     document.dispatchEvent(event);
-  }, [data.nodeId]);
+  }, [safeData.nodeId]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -116,12 +230,16 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-delete', { 
       detail: { 
-        nodeId: data.nodeId,
+        nodeId: safeData.nodeId,
         nodeType: 'tool'
       } 
     });
     document.dispatchEvent(event);
-  }, [data.nodeId]);
+  }, [safeData.nodeId]);
+
+  // Mouse event handlers for tooltip
+  const handleMouseEnter = () => setShowTooltip(true);
+  const handleMouseLeave = () => setShowTooltip(false);
 
   // Toggle API endpoint visibility
   const toggleApiVisibility = useCallback((e) => {
@@ -129,31 +247,14 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     setHideApiEndpoint(prev => !prev);
   }, []);
 
-  // Memoize origin badge content
-  const originBadgeContent = useMemo(() => {
-    const origin = data.origin || 'default';
-    const style = originBadgeStyles[origin];
-    return (
-      <div className={`inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
-        <span className="mr-1">{style.icon}</span>
-        {origin === 'make' ? 'Make' :
-         origin === 'zapier' ? 'Zapier' :
-         origin === 'n8n' ? 'n8n' :
-         origin === 'marketplace' ? 'Marketplace' :
-         origin === 'ai' ? 'AI-Suggested' :
-         origin}
-      </div>
-    );
-  }, [data.origin, originBadgeStyles]);
-
-  // Get the display endpoint (frameworkConfig.url or apiEndpoint)
+  // Get display endpoint
   const displayEndpoint = useMemo(() => {
-    return data.frameworkConfig?.url || data.apiEndpoint || '';
-  }, [data.frameworkConfig?.url, data.apiEndpoint]);
+    return safeData.frameworkConfig?.url || safeData.apiEndpoint || '';
+  }, [safeData.frameworkConfig?.url, safeData.apiEndpoint]);
 
   // Get tool configuration summary
   const configSummary = useMemo(() => {
-    const config = data.frameworkConfig || {};
+    const config = safeData.frameworkConfig || {};
     const parts = [];
     
     if (config.method) parts.push(`${config.method}`);
@@ -162,244 +263,282 @@ const ToolNode = memo(({ data, isConnectable, selected }) => {
     if (config.max_tokens) parts.push(`Max: ${config.max_tokens}`);
     
     return parts.join(' • ');
-  }, [data.frameworkConfig]);
+  }, [safeData.frameworkConfig]);
+
+  // Get display name
+  const getDisplayName = () => {
+    return safeData.label || 'Unnamed Tool';
+  };
+
+  // Get tool description
+  const getToolDescription = () => {
+    return safeData.description || 'Tool for automation and processing';
+  };
 
   return (
-    <div 
-      className={`
-        relative group w-80
-        bg-gradient-to-br from-white via-green-50/30 to-green-100/20
-        backdrop-blur-sm border-2 rounded-2xl
-        shadow-lg shadow-green-100/50
-        transition-all duration-300 ease-out
-        hover:shadow-2xl hover:shadow-green-200/60 hover:scale-[1.02] hover:-translate-y-1
-        ${selected ? 
-          'border-green-400 shadow-green-300/60 scale-[1.01]' : 
-          `${statusDisplay.borderColor} hover:border-green-300`
-        }
-        ${status === 'processing' ? 'animate-pulse' : ''}
-        ${status === 'error' ? 'animate-shake' : ''}
-      `}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Animated border for processing state */}
+    <>
+      {/* Rotating shadow/glow effect for processing state */}
       {status === 'processing' && (
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-green-400 via-blue-400 to-green-400 opacity-75 animate-spin-slow -z-10" 
-             style={{ padding: '2px' }}>
-          <div className="w-full h-full rounded-2xl bg-white"></div>
+        <div className="absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-gradient-to-r from-orange-500/20 via-yellow-500/20 to-red-500/20 rounded-3xl blur-xl animate-spin" 
+               style={{ transform: 'scale(1.1)' }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-red-500/15 via-orange-500/15 to-yellow-500/15 rounded-3xl blur-lg animate-spin" 
+               style={{ transform: 'scale(1.05)', animationDirection: 'reverse', animationDuration: '3s' }} />
         </div>
       )}
 
-      {/* Execution Progress Ring */}
-      {(status === 'processing' || executionProgress > 0) && (
-        <div className="absolute -top-2 -right-2 w-8 h-8">
-          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-gray-200"
-            />
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              strokeDasharray={`${executionProgress * 0.88} 88`}
-              className="text-green-500 transition-all duration-300"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-green-600">
-              {Math.round(executionProgress)}%
-            </span>
-          </div>
+      {/* Main container with glassmorphism and enhanced styling */}
+      <div 
+        className={`
+          relative group w-72 h-auto overflow-hidden
+          backdrop-blur-xl bg-white/80 border border-white/40
+          rounded-3xl shadow-2xl ${statusConfig.glow} ${toolTypeConfig.colors.glow}
+          transition-all duration-700 ease-out
+          hover:scale-[1.03] hover:shadow-2xl hover:bg-white/90
+          hover:backdrop-blur-2xl hover:-translate-y-1
+          ${selected ? 'ring-2 ring-blue-400/60 ring-offset-2 ring-offset-white/50 shadow-blue-400/40' : ''}
+          ${isHighlighted ? 'scale-105 ring-2 ring-purple-400/60 shadow-purple-400/40' : ''}
+          ${isDimmed ? 'opacity-50 scale-95' : ''}
+          ${statusConfig.pulse}
+        `}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Beautiful Animated Background Gradients */}
+        <div className={`absolute inset-0 ${toolTypeConfig.colors.glass} rounded-3xl`} />
+        <div className={`absolute inset-0 ${statusConfig.overlay} rounded-3xl`} />
+        
+        {/* Floating Glass Orbs for Premium Effect */}
+        <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-sm opacity-60" />
+        <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-gradient-to-tr from-white/30 to-transparent rounded-full blur-sm opacity-40" />
+        
+        {/* Status indicator dot with beautiful gradient */}
+        <div className="absolute top-4 right-4 z-10">
+          <div className={`w-4 h-4 rounded-full ${statusConfig.dot} ${statusConfig.pulse} shadow-lg border border-white/50`} />
         </div>
-      )}
 
-      {/* Input handle */}
-      <Handle 
-        type="target" 
-        position={Position.Top} 
-        isConnectable={isConnectable} 
-        className="w-4 h-4 bg-gradient-to-r from-green-400 to-green-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ top: -8 }}
-      />
-      
-      {/* Header Section */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
-              flex items-center justify-center text-2xl
-              shadow-inner border ${statusDisplay.borderColor}
-              ${status === 'processing' ? 'animate-bounce' : ''}
-            `}>
-              {statusDisplay.icon}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-800 leading-tight">
-                {data.label || 'Unnamed Tool'}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-gray-500">
-                  {data.toolType || 'API'} Tool
-                </span>
-                {data.framework && (
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded border">
-                    {data.framework}
-                  </span>
-                )}
+        {/* Main content with glassmorphism container */}
+        <div className="relative p-6 space-y-4">
+          {/* Header: Tool Icon + Status Icon with premium styling */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Premium Tool Type Icon */}
+              <div className={`
+                w-14 h-14 rounded-2xl ${toolTypeConfig.colors.secondary} 
+                ${toolTypeConfig.colors.border} border-2
+                flex items-center justify-center text-2xl
+                shadow-lg backdrop-blur-sm
+                group-hover:scale-110 transition-transform duration-300
+                relative overflow-hidden
+              `}>
+                {/* Icon background glow */}
+                <div className={`absolute inset-0 ${toolTypeConfig.colors.accent} opacity-10 rounded-2xl`} />
+                <span className="relative z-10">🔧</span>
               </div>
+              
+              {/* Status Icon with premium effect */}
+              <div className="relative">
+                <div className={`
+                  w-12 h-12 rounded-xl bg-white/60 backdrop-blur-sm
+                  flex items-center justify-center text-xl
+                  shadow-lg border border-white/40
+                  ${statusConfig.pulse}
+                `}>
+                  {statusConfig.icon}
+                </div>
+              </div>
+            </div>
+            
+            {/* Action buttons - beautiful glass effect */}
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-500">
+              <button
+                onClick={handleEditClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-white/90 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Edit Tool"
+              >
+                <span className="text-lg">✏️</span>
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-red-100/80 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Delete Tool"
+              >
+                <span className="text-lg">🗑️</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Smart Content Hierarchy with beautiful typography */}
+          <div className="space-y-3">
+            {/* Primary: Tool Name with gradient text */}
+            <h3 className={`
+              font-bold text-xl leading-tight
+              bg-gradient-to-r ${toolTypeConfig.colors.primary} bg-clip-text text-transparent
+              group-hover:scale-105 transition-transform duration-300
+            `}>
+              {getDisplayName()}
+            </h3>
+            
+            {/* Secondary: Tool Description with subtle styling */}
+            <p className="text-sm text-gray-700 leading-relaxed opacity-90 font-medium">
+              {getToolDescription()}
+            </p>
+
+            {/* Origin badge */}
+            {safeData.origin && safeData.origin !== 'default' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-600">Origin:</span>
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-sm ${originBadgeStyles[safeData.origin]?.bg} ${originBadgeStyles[safeData.origin]?.text} ${originBadgeStyles[safeData.origin]?.border}`}>
+                  <span className="mr-1">{originBadgeStyles[safeData.origin]?.icon}</span>
+                  {safeData.origin}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Configuration Summary */}
+          {configSummary && (
+            <div className="bg-white/40 backdrop-blur-sm rounded-lg p-3 border border-white/30">
+              <div className="text-xs font-medium text-gray-700 mb-1">Configuration:</div>
+              <div className="text-xs text-gray-600">{configSummary}</div>
+            </div>
+          )}
+
+          {/* API Endpoint Toggle */}
+          {displayEndpoint && (
+            <div className="space-y-2">
+              <button
+                onClick={toggleApiVisibility}
+                className="w-full bg-white/50 backdrop-blur-sm rounded-lg p-2 border border-white/30 
+                          hover:bg-white/60 transition-all duration-200 text-xs font-medium text-gray-700
+                          flex items-center justify-center gap-2"
+              >
+                {hideApiEndpoint ? '👁️ Show Endpoint' : '🔒 Hide Endpoint'}
+              </button>
+              {!hideApiEndpoint && (
+                <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/30">
+                  <div className="text-xs font-mono text-gray-800 break-all">
+                    {displayEndpoint}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Footer: Tool Type Badge + Status */}
+          <div className="flex items-center justify-between pt-3 border-t border-white/30">
+            <div className={`
+              px-4 py-2 rounded-full ${toolTypeConfig.colors.secondary}
+              ${toolTypeConfig.colors.text} text-sm font-bold
+              shadow-lg backdrop-blur-sm border border-white/40
+              hover:scale-105 transition-transform duration-300
+            `}>
+              {toolTypeConfig.name}
+            </div>
+            
+            {/* Async indicator with glass effect */}
+            {safeData.async && (
+              <div className="px-3 py-1 rounded-lg bg-purple-50/80 backdrop-blur-sm border border-purple-200/40 shadow-md">
+                <div className="text-xs text-purple-600 font-medium flex items-center gap-1">
+                  <span>🔄</span>Async
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Execution progress bar with beautiful styling */}
+          {status === 'processing' && executionProgress > 0 && (
+            <div className="space-y-2 pt-2">
+              <div className="w-full bg-white/40 backdrop-blur-sm rounded-full h-2 shadow-inner border border-white/30">
+                <div 
+                  className={`h-2 rounded-full transition-all duration-500 ${toolTypeConfig.colors.accent} shadow-lg`}
+                  style={{ width: `${executionProgress}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-600 text-center font-medium bg-white/40 backdrop-blur-sm rounded-lg py-1 px-2">
+                {executionProgress}% • {executionTime}s • ${cost.toFixed(3)}
+              </div>
+            </div>
+          )}
+
+          {/* Result display */}
+          {safeData.result && (
+            <ResultDisplay result={safeData.result} />
+          )}
+        </div>
+
+        {/* Connection handles with beautiful styling */}
+        <Handle 
+          type="target" 
+          position={Position.Top} 
+          isConnectable={isConnectable} 
+          className="w-4 h-4 bg-gradient-to-r from-orange-400 to-red-500 border-2 border-white shadow-xl rounded-full"
+        />
+        <Handle 
+          type="source" 
+          position={Position.Bottom} 
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-orange-600 to-red-600 border-2 border-white shadow-xl rounded-full"
+        />
+      </div>
+
+      {/* Rich Tooltip with premium glassmorphism */}
+      {showTooltip && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 z-50 w-80 p-5 
+                       bg-gray-900/95 backdrop-blur-2xl text-white rounded-2xl shadow-2xl 
+                       border border-gray-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Tooltip content with beautiful styling */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-400 text-lg">🔧</span>
+              <div className="font-bold text-orange-300">Tool Details</div>
+            </div>
+            
+            {/* Tool Description */}
+            <div className="text-sm leading-relaxed opacity-90">
+              {getToolDescription()}
+            </div>
+            
+            {/* Expected Output */}
+            {safeData.expectedOutput && (
+              <div>
+                <div className="font-semibold text-green-300 pt-2 flex items-center gap-2">
+                  <span>📤</span>Expected Output
+                </div>
+                <div className="text-sm leading-relaxed opacity-90">{safeData.expectedOutput}</div>
+              </div>
+            )}
+            
+            {/* Framework Info */}
+            {safeData.framework && (
+              <div>
+                <div className="font-semibold text-blue-300 pt-2 flex items-center gap-2">
+                  <span>⚙️</span>Framework
+                </div>
+                <div className="text-sm leading-relaxed opacity-90">{safeData.framework}</div>
+              </div>
+            )}
+            
+            <div className="flex justify-between pt-3 border-t border-gray-700 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <span>🔧</span>Type: {toolTypeConfig.name}
+              </span>
+              <span className="flex items-center gap-1">
+                <span>⚡</span>Status: {status}
+              </span>
             </div>
           </div>
           
-          {/* Status indicator */}
-          <div className={`
-            px-2 py-1 rounded-full text-xs font-medium
-            ${statusDisplay.color} ${statusDisplay.bgColor}
-          `}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </div>
-        </div>
-
-        {/* Origin badge */}
-        {data.origin && (
-          <div className="mb-3">
-            {originBadgeContent}
-          </div>
-        )}
-        
-        {/* Key Information */}
-        {data.description && (
-          <div className="mb-3">
-            <div className="flex items-start gap-2">
-              <span className="font-medium text-gray-600 min-w-[60px]">Purpose:</span>
-              <span className="text-gray-800 flex-1 text-sm">{data.description}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Progress Bar */}
-      {status === 'processing' && (
-        <div className="px-4 pb-3">
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-green-400 to-green-600 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
+          {/* Tooltip arrow */}
+          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 
+                         bg-gray-900 rotate-45 border-l border-t border-gray-700/50"></div>
         </div>
       )}
-
-      {/* Performance Metrics */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-gray-600">
-              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-600">
-              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
-            </span>
-          </div>
-          {data.async && (
-            <span className="flex items-center gap-1 text-purple-600">
-              🔄 Async
-            </span>
-          )}
-        </div>
-      </div>
-      
-      {/* Configuration summary */}
-      {configSummary && (
-        <div className="px-4 pb-3">
-          <div className="bg-blue-50 p-2 rounded-lg border border-blue-200">
-            <span className="text-xs font-medium text-blue-700">Config:</span>
-            <span className="text-xs text-blue-600 ml-1">{configSummary}</span>
-          </div>
-        </div>
-      )}
-      
-      {/* API Endpoint */}
-      {displayEndpoint && (
-        <div className="px-4 pb-3">
-          <button
-            onClick={toggleApiVisibility}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors duration-200"
-          >
-            {hideApiEndpoint ? '👁️ Show Endpoint' : '🔒 Hide Endpoint'}
-          </button>
-          {!hideApiEndpoint && (
-            <div className="mt-2 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/50">
-              <div className="text-xs font-mono text-gray-800 break-all">
-                {displayEndpoint}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Expected Output */}
-      {data.expectedOutput && (
-        <div className="px-4 pb-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/50">
-            <div className="text-xs font-medium text-gray-700 mb-1">Expected Output:</div>
-            <div className="text-xs text-gray-600 italic">
-              {data.expectedOutput}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Condition */}
-      {data.condition && (
-        <div className="px-4 pb-3">
-          <div className="bg-orange-50 p-3 rounded-lg border border-orange-200">
-            <div className="text-xs font-medium text-orange-700 mb-1">Condition:</div>
-            <div className="text-xs text-orange-600">{data.condition}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Result display */}
-      {data.result && (
-        <div className="px-4 pb-3">
-          <ResultDisplay result={data.result} />
-        </div>
-      )}
-      
-      {/* Action buttons */}
-      <div className="px-4 pb-4">
-        <div className="flex gap-2">
-          <button 
-            onClick={handleEditClick}
-            className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Edit
-          </button>
-          <button 
-            onClick={handleDeleteClick}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-
-      {/* Output handle */}
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
-        isConnectable={isConnectable}
-        className="w-4 h-4 bg-gradient-to-r from-green-600 to-green-800 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ bottom: -8 }}
-      />
-
-      {/* Glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 rounded-2xl bg-green-400/20 -z-10 blur-xl" />
-      )}
-    </div>
+    </>
   );
 });
 
@@ -426,6 +565,12 @@ ToolNode.propTypes = {
   }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,
+  isCompact: PropTypes.bool,
+  isDimmed: PropTypes.bool,
+  isHighlighted: PropTypes.bool,
+  enhancementMode: PropTypes.string,
+  onHover: PropTypes.func,
+  onUnhover: PropTypes.func
 };
 
 export default ToolNode;

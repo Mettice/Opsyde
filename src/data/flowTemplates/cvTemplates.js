@@ -1,3 +1,46 @@
+// Utility function to convert smoothstep edges to animated edges with data
+const convertToAnimatedEdges = (edges) => {
+  return edges.map(edge => {
+    if (edge.type === 'smoothstep' || !edge.type) {
+      const dataType = getDataTypeFromConnection(edge.source, edge.target);
+      const label = getLabelFromConnection(edge.source, edge.target, dataType);
+      
+      return {
+        ...edge,
+        type: 'animated',
+        data: edge.data || {
+          label: label,
+          dataType: dataType
+        }
+      };
+    }
+    return edge;
+  });
+};
+
+// Helper function to determine data type based on connection
+const getDataTypeFromConnection = (sourceId, targetId) => {
+  if (sourceId.includes('trigger')) return 'trigger_data';
+  if (sourceId.includes('agent') && targetId.includes('task')) return 'agent_output';
+  if (sourceId.includes('task') && targetId.includes('tool')) return 'task_result';
+  if (sourceId.includes('tool') && targetId.includes('task')) return 'tool_data';
+  if (targetId.includes('output')) return 'final_output';
+  return 'workflow_data';
+};
+
+// Helper function to generate appropriate labels
+const getLabelFromConnection = (sourceId, targetId, dataType) => {
+  const labels = {
+    'trigger_data': '🔄 Trigger Data',
+    'agent_output': '🤖 Agent Response',
+    'task_result': '✅ Task Complete',
+    'tool_data': '🔧 Tool Output', 
+    'final_output': '📤 Final Result',
+    'workflow_data': '📊 Data Flow'
+  };
+  return labels[dataType] || '📊 Data Flow';
+};
+
 export const flowTemplates = [
     {
       name: 'Smart CV Parser & Scorer',
@@ -153,5 +196,8 @@ export const flowTemplates = [
         author: "NodAi",
         created: "2025-04-15"
       }
-  ];
+  ].map(template => ({
+    ...template,
+    edges: convertToAnimatedEdges(template.edges)
+  }));
   

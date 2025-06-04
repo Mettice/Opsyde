@@ -3,8 +3,20 @@ import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
 import registry from '../data/tool_registry.json';
 
-const TaskNode = React.memo(({ data, isConnectable, selected }) => {
+const TaskNode = React.memo(({ 
+  data, 
+  isConnectable, 
+  selected,
+  // Visual enhancement props
+  enhancementMode = 'default',
+  isCompact = false,
+  isFocused = false,
+  isDimmed = false,
+  onHover,
+  onUnhover
+}) => {
   const [showDependencies, setShowDependencies] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
   const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
@@ -12,6 +24,19 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
   
   const framework = data.framework || 'crewai';
   const frameworkConfig = registry.frameworks[framework]?.config || {};
+
+  // Safe data access to prevent errors
+  const safeData = {
+    label: data.label || '',
+    description: data.description || '',
+    expectedOutput: data.expectedOutput || '',
+    agentId: data.agentId || '',
+    async: data.async || false,
+    priority: data.priority || 'medium',
+    context: data.context || [],
+    tools: data.tools || [],
+    nodeId: data.nodeId || data.id || ''
+  };
 
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -23,36 +48,126 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     }
   }, [data.executionState]);
 
-  // Get status icon and color
-  const getStatusDisplay = () => {
-    switch (status) {
-      case 'processing':
-        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
-      case 'success':
-        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
-      case 'error':
-        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
-      case 'waiting':
-        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
-      default:
-        return { icon: '📋', color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
-    }
+  // Beautiful task-specific colors and status system
+  const getStatusConfig = () => {
+    const configs = {
+      processing: {
+        icon: '⚡',
+        pulse: 'animate-pulse',
+        glow: 'shadow-amber-500/40',
+        gradient: 'from-amber-400/20 to-yellow-500/20',
+        border: 'border-amber-400/60',
+        dot: 'bg-gradient-to-r from-amber-400 to-yellow-600',
+        overlay: 'bg-gradient-to-br from-amber-500/10 to-yellow-600/10'
+      },
+      success: {
+        icon: '✅',
+        pulse: '',
+        glow: 'shadow-green-500/40',
+        gradient: 'from-green-400/20 to-emerald-500/20',
+        border: 'border-green-400/60',
+        dot: 'bg-gradient-to-r from-green-400 to-emerald-500',
+        overlay: 'bg-gradient-to-br from-green-500/10 to-emerald-600/10'
+      },
+      error: {
+        icon: '⚠️',
+        pulse: 'animate-bounce',
+        glow: 'shadow-red-500/40',
+        gradient: 'from-red-400/20 to-pink-500/20',
+        border: 'border-red-400/60',
+        dot: 'bg-gradient-to-r from-red-400 to-pink-500',
+        overlay: 'bg-gradient-to-br from-red-500/10 to-pink-600/10'
+      },
+      waiting: {
+        icon: '⏳',
+        pulse: 'animate-pulse',
+        glow: 'shadow-orange-500/40',
+        gradient: 'from-orange-400/20 to-amber-500/20',
+        border: 'border-orange-400/60',
+        dot: 'bg-gradient-to-r from-orange-400 to-amber-500',
+        overlay: 'bg-gradient-to-br from-orange-500/10 to-amber-600/10'
+      },
+      idle: {
+        icon: '📋',
+        pulse: '',
+        glow: 'shadow-amber-300/50',
+        gradient: 'from-white/90 to-amber-50/80',
+        border: 'border-amber-200/70',
+        dot: 'bg-gradient-to-r from-amber-400 to-yellow-500',
+        overlay: 'bg-gradient-to-br from-amber-500/5 to-yellow-600/5'
+      }
+    };
+    return configs[status] || configs.idle;
   };
 
-  const statusDisplay = getStatusDisplay();
+  const statusConfig = getStatusConfig();
 
-  // Get priority color
-  const getPriorityColor = () => {
-    switch (data.priority?.toLowerCase()) {
-      case 'high':
-        return 'bg-red-100 text-red-700 border-red-200';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'low':
-        return 'bg-green-100 text-green-700 border-green-200';
-      default:
-        return 'bg-gray-100 text-gray-700 border-gray-200';
+  // Beautiful task priority specific colors
+  const getPriorityConfig = () => {
+    const priority = data.priority?.toLowerCase() || 'medium';
+    const configs = {
+      high: {
+        name: 'High Priority',
+        colors: {
+          primary: 'from-red-400 to-pink-600',
+          secondary: 'from-red-50/90 to-pink-100/80',
+          accent: 'bg-gradient-to-r from-red-500 to-pink-600',
+          text: 'text-red-700',
+          glow: 'shadow-red-400/30',
+          border: 'border-red-300/50',
+          glass: 'bg-gradient-to-br from-red-500/10 to-pink-600/10'
+        }
+      },
+      medium: {
+        name: 'Medium Priority',
+        colors: {
+          primary: 'from-amber-400 to-orange-600',
+          secondary: 'from-amber-50/90 to-orange-100/80',
+          accent: 'bg-gradient-to-r from-amber-500 to-orange-600',
+          text: 'text-amber-700',
+          glow: 'shadow-amber-400/30',
+          border: 'border-amber-300/50',
+          glass: 'bg-gradient-to-br from-amber-500/10 to-orange-600/10'
+        }
+      },
+      low: {
+        name: 'Low Priority',
+        colors: {
+          primary: 'from-green-400 to-emerald-600',
+          secondary: 'from-green-50/90 to-emerald-100/80',
+          accent: 'bg-gradient-to-r from-green-500 to-emerald-600',
+          text: 'text-green-700',
+          glow: 'shadow-green-400/30',
+          border: 'border-green-300/50',
+          glass: 'bg-gradient-to-br from-green-500/10 to-emerald-600/10'
+        }
+      }
+    };
+    return configs[priority] || configs.medium;
+  };
+
+  const priorityConfig = getPriorityConfig();
+
+  const getDisplayName = () => {
+    return safeData.label || safeData.description || `Task ${data.nodeId || ''}`;
+  };
+
+  const getTaskType = () => {
+    if (safeData.async) return 'Async Task';
+    if (safeData.context && safeData.context.length > 0) return 'Context Task';
+    if (safeData.tools && safeData.tools.length > 0) return 'Tool Task';
+    return 'Standard Task';
+  };
+
+  // Function to get truncated expected output (first line only)
+  const getTruncatedOutput = () => {
+    if (!safeData.expectedOutput) return 'No expected output defined';
+    
+    const firstLine = safeData.expectedOutput.split('\n')[0];
+    if (firstLine.length > 40) {
+      return firstLine.substring(0, 37) + '...';
     }
+    return firstLine;
   };
 
   const handleEditClick = useCallback((e) => {
@@ -61,11 +176,6 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
       e.preventDefault();
     }
     
-    console.log('========== TaskNode Edit Button Clicked ==========');
-    console.log('Node ID:', data.nodeId);
-    console.log('Node Type:', data.nodeType || 'task');
-    console.dir(data);
-    
     const editEvent = new CustomEvent('node-edit', {
       detail: {
         nodeId: data.nodeId,
@@ -73,11 +183,7 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
         data
       }
     });
-    
-    console.log('Dispatching event with detail:', editEvent.detail);
     document.dispatchEvent(editEvent);
-    
-    console.log('Edit event dispatched for node:', data.nodeId);
   }, [data]);
 
   const handleDeleteClick = useCallback((e) => {
@@ -95,260 +201,289 @@ const TaskNode = React.memo(({ data, isConnectable, selected }) => {
     document.dispatchEvent(event);
   }, [data]);
 
+  const handleMouseEnter = useCallback(() => {
+    setShowTooltip(true);
+    if (onHover) onHover();
+  }, [onHover]);
+
+  const handleMouseLeave = useCallback(() => {
+    setShowTooltip(false);
+    if (onUnhover) onUnhover();
+  }, [onUnhover]);
+
+  // Compact node sizing to match InputNode
+  const getNodeSize = () => {
+    if (isCompact) {
+      return { width: '240px', height: 'auto' };
+    }
+    return { width: '320px', height: 'auto' }; // Removed fixed height
+  };
+
+  const getEnhancementStyles = () => {
+    const base = 'transition-all duration-300';
+    switch (enhancementMode) {
+      case 'glow':
+        return `${base} shadow-2xl shadow-blue-500/30`;
+      case 'pulse':
+        return `${base} animate-pulse`;
+      case 'bounce':
+        return `${base} animate-bounce`;
+      default:
+        return base;
+    }
+  };
+
   const formatDependencyLabel = (dependency) => {
-    if (!dependency) return '';
-    if (typeof dependency === 'string') return dependency;
-    if (dependency.label) return dependency.label;
-    if (dependency.name) return dependency.name;
-    return dependency.type || 'Unknown';
+    return dependency.includes('-') ? dependency.split('-').pop() : dependency;
   };
 
   return (
-    <div 
-      className={`
-        relative group w-80
-        bg-gradient-to-br from-white via-yellow-50/30 to-yellow-100/20
-        backdrop-blur-sm border-2 rounded-2xl
-        shadow-lg shadow-yellow-100/50
-        transition-all duration-300 ease-out
-        hover:shadow-2xl hover:shadow-yellow-200/60 hover:scale-[1.02] hover:-translate-y-1
-        ${selected ? 
-          'border-yellow-400 shadow-yellow-300/60 scale-[1.01]' : 
-          `${statusDisplay.borderColor} hover:border-yellow-300`
-        }
-        ${status === 'processing' ? 'animate-pulse' : ''}
-        ${status === 'error' ? 'animate-shake' : ''}
-      `}
-    >
-      {/* Animated border for processing state */}
-      {status === 'processing' && (
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 opacity-75 animate-spin-slow -z-10" 
-             style={{ padding: '2px' }}>
-          <div className="w-full h-full rounded-2xl bg-white"></div>
+    <>
+      {/* COMPACT TASK CARD - Matching InputNode Size */}
+      <div 
+        className={`
+          relative group cursor-pointer
+          bg-gradient-to-br from-white/90 to-gray-50/80 backdrop-blur-xl
+          border-2 ${statusConfig.border} rounded-3xl
+          shadow-xl ${statusConfig.glow}
+          transition-all duration-500 ease-out
+          hover:shadow-2xl hover:scale-105 hover:-translate-y-2
+          ${selected ? 'ring-4 ring-blue-400/50 scale-105' : ''}
+          ${isDimmed ? 'opacity-50 scale-95' : ''}
+          ${isFocused ? 'ring-4 ring-purple-400/50 shadow-purple-400/30' : ''}
+          ${status === 'processing' ? 'animate-spin' : ''}
+        `}
+        style={{ 
+          width: getNodeSize().width, 
+          height: getNodeSize().height
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {/* Beautiful Animated Background Gradients */}
+        <div className={`absolute inset-0 ${priorityConfig.colors.glass} rounded-3xl`} />
+        <div className={`absolute inset-0 ${statusConfig.overlay} rounded-3xl`} />
+        
+        {/* Floating Glass Orbs for Premium Effect */}
+        <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-sm opacity-60" />
+        <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-gradient-to-tr from-white/30 to-transparent rounded-full blur-sm opacity-40" />
+        
+        {/* Status indicator dot with beautiful gradient */}
+        <div className="absolute top-4 right-4 z-10">
+          <div className={`w-4 h-4 rounded-full ${statusConfig.dot} ${statusConfig.pulse} shadow-lg border border-white/50`} />
         </div>
-      )}
 
-      {/* Execution Progress Ring */}
-      {(status === 'processing' || executionProgress > 0) && (
-        <div className="absolute -top-2 -right-2 w-8 h-8">
-          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-gray-200"
-            />
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              strokeDasharray={`${executionProgress * 0.88} 88`}
-              className="text-yellow-500 transition-all duration-300"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-yellow-600">
-              {Math.round(executionProgress)}%
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Target handle at top - regular input */}
-      <Handle 
-        type="target" 
-        position={Position.Top} 
-        id="input"
-        isConnectable={isConnectable} 
-        className="w-4 h-4 bg-gradient-to-r from-yellow-400 to-yellow-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ top: -8 }}
-      />
-      
-      {/* Special agent handle on the left - for agent connections */}
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        id="agent"
-        isConnectable={isConnectable} 
-        className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ left: -8, top: 40 }}
-      />
-      
-      {/* Header Section */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
-              flex items-center justify-center text-2xl
-              shadow-inner border ${statusDisplay.borderColor}
-              ${status === 'processing' ? 'animate-bounce' : ''}
-            `}>
-              {statusDisplay.icon}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-800 leading-tight">
-                {data.label || 'Task'}
-              </h3>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="text-xs text-gray-500">
-                  {data.type || 'Sequential'} Task
-                </span>
-                <div className={`inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-medium border ${getPriorityColor()}`}>
-                  {data.priority || 'Medium'}
-                </div>
+        {/* COMPACT Main content */}
+        <div className="relative p-4 space-y-3">
+          {/* Compact Header: Task Icon + Actions */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {/* Smaller Task Icon */}
+              <div className={`
+                w-12 h-12 rounded-xl ${priorityConfig.colors.secondary} 
+                ${priorityConfig.colors.border} border-2
+                flex items-center justify-center text-xl
+                shadow-lg backdrop-blur-sm
+                group-hover:scale-110 transition-transform duration-300
+                relative overflow-hidden
+                ${status === 'processing' ? 'animate-spin' : ''}
+              `}>
+                <div className={`absolute inset-0 ${priorityConfig.colors.accent} opacity-10 rounded-xl`} />
+                <span className="relative z-10">{statusConfig.icon}</span>
               </div>
             </div>
-          </div>
-          
-          {/* Status indicator */}
-          <div className={`
-            px-2 py-1 rounded-full text-xs font-medium
-            ${statusDisplay.color} ${statusDisplay.bgColor}
-          `}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </div>
-        </div>
-
-        {/* Key Information */}
-        <div className="space-y-2 text-sm">
-          {data.description && (
-            <div className="flex items-start gap-2">
-              <span className="font-medium text-gray-600 min-w-[70px]">Description:</span>
-              <span className="text-gray-800 flex-1">{data.description}</span>
+            
+            {/* Compact Action buttons */}
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all duration-500">
+              <button
+                onClick={handleEditClick}
+                className="w-8 h-8 rounded-lg bg-white/70 hover:bg-white/90 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Edit Task"
+              >
+                <span className="text-sm">✏️</span>
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="w-8 h-8 rounded-lg bg-white/70 hover:bg-red-100/80 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Delete Task"
+              >
+                <span className="text-sm">🗑️</span>
+              </button>
             </div>
-          )}
-          {data.expectedOutput && (
-            <div className="flex items-start gap-2">
-              <span className="font-medium text-gray-600 min-w-[70px]">Expected:</span>
-              <span className="text-gray-800 flex-1 line-clamp-2">{data.expectedOutput}</span>
+          </div>
+
+          {/* Compact Content */}
+          <div className="space-y-2">
+            {/* Task Name - Smaller */}
+            <h3 className={`
+              font-bold text-lg leading-tight
+              bg-gradient-to-r ${priorityConfig.colors.primary} bg-clip-text text-transparent
+              group-hover:scale-105 transition-transform duration-300
+            `}>
+              {getDisplayName()}
+            </h3>
+            
+            {/* Task Type - Smaller */}
+            <p className="text-xs text-gray-700 leading-relaxed opacity-90 font-medium">
+              {getTaskType()}
+            </p>
+
+            {/* Compact Expected Output - Only show if present */}
+            {safeData.expectedOutput && (
+              <div className="text-xs text-gray-600 bg-white/40 backdrop-blur-sm rounded-lg p-2 border border-white/30">
+                <span className="font-medium text-gray-700">Output: </span>
+                <span className="opacity-80">{getTruncatedOutput()}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Compact Footer */}
+          <div className="flex items-center justify-between pt-2 border-t border-white/30">
+            <div className={`
+              px-3 py-1 rounded-full ${priorityConfig.colors.secondary}
+              ${priorityConfig.colors.text} text-xs font-bold
+              shadow-lg backdrop-blur-sm border border-white/40
+              hover:scale-105 transition-transform duration-300
+            `}>
+              {priorityConfig.name}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      {status === 'processing' && (
-        <div className="px-4 pb-3">
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Performance Metrics */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-gray-600">
-              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-600">
-              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
-            </span>
-          </div>
-          {data.async && (
-            <span className="flex items-center gap-1 text-purple-600">
-              🔄 Async
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Dependencies Section */}
-      <div className="px-4 pb-3">
-        <button
-          onClick={() => setShowDependencies(!showDependencies)}
-          className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-2 transition-colors duration-200"
-        >
-          {showDependencies ? '🔼 Hide Dependencies' : '🔽 Show Dependencies'}
-        </button>
-        
-        {showDependencies && data.dependencies && data.dependencies.length > 0 && (
-          <div className="mt-2 bg-white/60 backdrop-blur-sm rounded-lg p-3 border border-white/50">
-            <div className="text-xs font-medium text-gray-700 mb-2">Dependencies:</div>
-            <div className="space-y-1">
-              {data.dependencies.map((dep, index) => (
-                <div key={index} className="flex items-center justify-between text-xs bg-gray-50 p-2 rounded border">
-                  <span className="font-medium text-gray-800 truncate" title={formatDependencyLabel(dep)}>
-                    {formatDependencyLabel(dep)}
-                  </span>
-                  {dep.type && (
-                    <span className="text-gray-500 ml-2">({dep.type})</span>
-                  )}
+            
+            {/* Agent Assignment - Compact */}
+            {safeData.agentId && (
+              <div className="px-2 py-1 rounded-lg bg-white/50 backdrop-blur-sm border border-white/40 shadow-md">
+                <div className="text-xs text-gray-600 font-medium">
+                  Agent: {safeData.agentId.substring(0, 8)}...
                 </div>
-              ))}
+              </div>
+            )}
+          </div>
+
+          {/* Compact Execution progress bar */}
+          {status === 'processing' && executionProgress > 0 && (
+            <div className="space-y-1 pt-1">
+              <div className="w-full bg-white/40 backdrop-blur-sm rounded-full h-1.5 shadow-inner border border-white/30">
+                <div 
+                  className={`h-1.5 rounded-full transition-all duration-500 ${priorityConfig.colors.accent} shadow-lg`}
+                  style={{ width: `${executionProgress}%` }}
+                />
+              </div>
+              <div className="text-xs text-gray-600 text-center font-medium bg-white/40 backdrop-blur-sm rounded-lg py-1 px-2">
+                {executionProgress}% • {executionTime}s
+              </div>
             </div>
+          )}
+        </div>
+
+        {/* Connection handles with beautiful styling */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-xl rounded-full"
+        />
+        <Handle
+          type="source"
+          position={Position.Right}
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-purple-400 to-pink-500 border-2 border-white shadow-xl rounded-full"
+        />
+
+        {/* Rotating shadow/glow effect for processing state */}
+        {status === 'processing' && (
+          <div className="absolute inset-0 -z-10">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-cyan-500/20 rounded-3xl blur-xl animate-spin" 
+                 style={{ transform: 'scale(1.1)' }} />
+            <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/15 via-blue-500/15 to-purple-500/15 rounded-3xl blur-lg animate-spin" 
+                 style={{ transform: 'scale(1.05)', animationDirection: 'reverse', animationDuration: '3s' }} />
           </div>
         )}
       </div>
 
-      {/* Action Buttons */}
-      <div className="px-4 pb-4">
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={handleEditClick}
-            onMouseDown={(e) => { if (e) e.stopPropagation(); }}
-            onPointerDown={(e) => { if (e) e.stopPropagation(); }}
-            onTouchStart={(e) => { if (e) e.stopPropagation(); }}
-            className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-            aria-label="Edit task"
-          >
-            Edit
-          </button>
-          
-          <button 
-            type="button"
-            onClick={handleDeleteClick}
-            onMouseDown={(e) => { if (e) e.stopPropagation(); }}
-            onPointerDown={(e) => { if (e) e.stopPropagation(); }}
-            onTouchStart={(e) => { if (e) e.stopPropagation(); }}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-            aria-label="Delete task"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-      
-      {/* Source handle at bottom */}
-      <Handle 
-        type="source" 
-        position={Position.Bottom} 
-        id="output"
-        isConnectable={isConnectable}
-        className="w-4 h-4 bg-gradient-to-r from-yellow-600 to-yellow-800 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ bottom: -8 }}
-      />
+      {/* Rich Tooltip with premium glassmorphism - DETAILED INFO ON HOVER */}
+      {showTooltip && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 z-50 w-80 p-5 
+                       bg-gray-900/95 backdrop-blur-2xl text-white rounded-2xl shadow-2xl 
+                       border border-gray-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Tooltip content with beautiful styling */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-400 text-lg">📋</span>
+              <div className="font-bold text-amber-300">Task Details</div>
+            </div>
+            
+            {/* Full Expected Output in tooltip */}
+            {safeData.expectedOutput && (
+              <div>
+                <div className="font-semibold text-blue-300 pt-2 flex items-center gap-2">
+                  <span>🎯</span>Expected Output
+                </div>
+                <div className="text-sm leading-relaxed opacity-90 max-h-32 overflow-y-auto">
+                  {safeData.expectedOutput}
+                </div>
+              </div>
+            )}
 
-      {/* Glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 rounded-2xl bg-yellow-400/20 -z-10 blur-xl" />
+            {/* Description */}
+            {safeData.description && (
+              <div>
+                <div className="font-semibold text-green-300 pt-2 flex items-center gap-2">
+                  <span>📝</span>Description
+                </div>
+                <div className="text-sm leading-relaxed opacity-90">
+                  {safeData.description}
+                </div>
+              </div>
+            )}
+
+            {/* Agent Assignment */}
+            {safeData.agentId && (
+              <div>
+                <div className="font-semibold text-purple-300 pt-2 flex items-center gap-2">
+                  <span>🤖</span>Assigned Agent
+                </div>
+                <div className="text-sm leading-relaxed opacity-90">
+                  {safeData.agentId}
+                </div>
+              </div>
+            )}
+
+            {/* Task Properties */}
+            <div>
+              <div className="font-semibold text-cyan-300 pt-2 flex items-center gap-2">
+                <span>⚙️</span>Properties
+              </div>
+              <div className="text-sm leading-relaxed opacity-90 space-y-1">
+                <div>Type: {getTaskType()}</div>
+                <div>Priority: {priorityConfig.name}</div>
+                <div>Async: {safeData.async ? 'Yes' : 'No'}</div>
+                {safeData.tools && safeData.tools.length > 0 && (
+                  <div>Tools: {safeData.tools.length}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
-    </div>
+    </>
   );
 });
 
+TaskNode.displayName = 'TaskNode';
+
 TaskNode.propTypes = {
-  data: PropTypes.shape({
-    nodeId: PropTypes.string,
-    label: PropTypes.string,
-    description: PropTypes.string,
-    expectedOutput: PropTypes.string,
-    async: PropTypes.bool,
-    type: PropTypes.string,
-    priority: PropTypes.string,
-    dependencies: PropTypes.array,
-    framework: PropTypes.string,
-    nodeType: PropTypes.string,
-    executionState: PropTypes.object
-  }).isRequired,
+  data: PropTypes.object.isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,
+  enhancementMode: PropTypes.oneOf(['default', 'glow', 'pulse', 'bounce']),
+  isCompact: PropTypes.bool,
+  isFocused: PropTypes.bool,
+  isDimmed: PropTypes.bool,
+  onHover: PropTypes.func,
+  onUnhover: PropTypes.func
 };
-
-TaskNode.displayName = 'TaskNode';
 
 export default TaskNode;

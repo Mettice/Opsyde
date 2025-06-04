@@ -36,12 +36,34 @@ const originBadgeColors = {
   }
 };
 
-const LogicNode = React.memo(({ data, isConnectable, selected }) => {
+const LogicNode = React.memo(({ 
+  data, 
+  isConnectable, 
+  selected,
+  // Visual enhancement props
+  isCompact = false,
+  isDimmed = false,
+  isHighlighted = false,
+  enhancementMode = 'default',
+  onHover,
+  onUnhover
+}) => {
   const [previewResult, setPreviewResult] = useState(null);
   const [status, setStatus] = useState('idle'); // idle, processing, success, error, waiting
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
+  const [showTooltip, setShowTooltip] = useState(false);
+  
+  // Safe data access
+  const safeData = {
+    label: data?.label || 'Logic Node',
+    description: data?.description || 'Evaluates a condition and routes flow',
+    condition: data?.condition || 'inputs.value > 0',
+    testInput: data?.testInput || '{"value": 10}',
+    nodeId: data?.nodeId || '',
+    nodeType: data?.nodeType || 'logic'
+  };
   
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -53,23 +75,67 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     }
   }, [data.executionState]);
 
-  // Get status icon and color
-  const getStatusDisplay = () => {
+  // Enhanced status configuration with glassmorphism styling
+  const getStatusConfig = () => {
     switch (status) {
       case 'processing':
-        return { icon: '⚡', color: 'text-blue-500', bgColor: 'bg-blue-50', borderColor: 'border-blue-200' };
+        return {
+          icon: '⚡',
+          dot: 'bg-gradient-to-r from-blue-400 to-blue-600',
+          overlay: 'bg-gradient-to-br from-blue-400/20 to-purple-400/20',
+          glow: 'shadow-blue-400/40',
+          pulse: 'animate-pulse'
+        };
       case 'success':
-        return { icon: '✅', color: 'text-green-500', bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+        return {
+          icon: '✅',
+          dot: 'bg-gradient-to-r from-green-400 to-green-600',
+          overlay: 'bg-gradient-to-br from-green-400/20 to-emerald-400/20',
+          glow: 'shadow-green-400/40',
+          pulse: ''
+        };
       case 'error':
-        return { icon: '❌', color: 'text-red-500', bgColor: 'bg-red-50', borderColor: 'border-red-200' };
+        return {
+          icon: '❌',
+          dot: 'bg-gradient-to-r from-red-400 to-red-600',
+          overlay: 'bg-gradient-to-br from-red-400/20 to-pink-400/20',
+          glow: 'shadow-red-400/40',
+          pulse: 'animate-pulse'
+        };
       case 'waiting':
-        return { icon: '⏳', color: 'text-yellow-500', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+        return {
+          icon: '⏳',
+          dot: 'bg-gradient-to-r from-yellow-400 to-orange-500',
+          overlay: 'bg-gradient-to-br from-yellow-400/20 to-orange-400/20',
+          glow: 'shadow-yellow-400/40',
+          pulse: 'animate-pulse'
+        };
       default:
-        return { icon: '⚖️', color: 'text-yellow-600', bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+        return {
+          icon: '⚖️',
+          dot: 'bg-gradient-to-r from-yellow-400 to-amber-600',
+          overlay: 'bg-gradient-to-br from-yellow-400/10 to-amber-400/10',
+          glow: 'shadow-yellow-400/30',
+          pulse: ''
+        };
     }
   };
 
-  const statusDisplay = getStatusDisplay();
+  const statusConfig = getStatusConfig();
+
+  // Logic node specific configuration with premium colors
+  const logicConfig = {
+    name: 'Logic Gate',
+    colors: {
+      primary: 'from-yellow-600 to-amber-600',
+      secondary: 'bg-gradient-to-br from-yellow-50 to-amber-100',
+      accent: 'bg-gradient-to-r from-yellow-400 to-amber-500',
+      text: 'text-yellow-700',
+      border: 'border-yellow-300',
+      glass: 'bg-gradient-to-br from-yellow-400/5 to-amber-400/10',
+      glow: 'shadow-yellow-200/60'
+    }
+  };
 
   // Create stable event handlers with useCallback
   const handleEditClick = useCallback((e) => {
@@ -80,12 +146,12 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-edit', { 
       detail: { 
-        nodeId: data.nodeId,
-        nodeType: data.nodeType || 'logic'
+        nodeId: safeData.nodeId,
+        nodeType: safeData.nodeType
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [safeData.nodeId, safeData.nodeType]);
 
   const handleDeleteClick = useCallback((e) => {
     if (e) {
@@ -95,20 +161,24 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
     
     const event = new CustomEvent('node-delete', { 
       detail: { 
-        nodeId: data.nodeId,
-        nodeType: data.nodeType || 'logic'
+        nodeId: safeData.nodeId,
+        nodeType: safeData.nodeType
       } 
     });
     document.dispatchEvent(event);
-  }, [data?.nodeId, data?.nodeType]);
+  }, [safeData.nodeId, safeData.nodeType]);
+
+  // Mouse event handlers for tooltip
+  const handleMouseEnter = () => setShowTooltip(true);
+  const handleMouseLeave = () => setShowTooltip(false);
 
   // Memoize test condition function
   const testCondition = useCallback(() => {
-    if (!data.condition) return;
+    if (!safeData.condition) return;
     
     try {
-      const testInput = data.testInput ? JSON.parse(data.testInput) : { value: 10 };
-      const result = new Function('inputs', `return ${data.condition}`)(testInput);
+      const testInput = safeData.testInput ? JSON.parse(safeData.testInput) : { value: 10 };
+      const result = new Function('inputs', `return ${safeData.condition}`)(testInput);
       setPreviewResult({
         success: true,
         result: result,
@@ -120,240 +190,245 @@ const LogicNode = React.memo(({ data, isConnectable, selected }) => {
         error: error.message
       });
     }
-  }, [data.condition, data.testInput]);
+  }, [safeData.condition, safeData.testInput]);
 
   // Call testCondition when the component mounts or when condition changes
   useEffect(() => {
     testCondition();
   }, [testCondition]);
 
+  // Get display name
+  const getDisplayName = () => {
+    return safeData.label || 'Logic Node';
+  };
+
+  // Get logic description
+  const getLogicDescription = () => {
+    return safeData.description || 'Evaluates conditions and routes workflow flow';
+  };
+
   return (
-    <div 
-      className={`
-        relative group w-80
-        bg-gradient-to-br from-white via-yellow-50/30 to-yellow-100/20
-        backdrop-blur-sm border-2 rounded-2xl
-        shadow-lg shadow-yellow-100/50
-        transition-all duration-300 ease-out
-        hover:shadow-2xl hover:shadow-yellow-200/60 hover:scale-[1.02] hover:-translate-y-1
-        ${selected ? 
-          'border-yellow-400 shadow-yellow-300/60 scale-[1.01]' : 
-          `${statusDisplay.borderColor} hover:border-yellow-300`
-        }
-        ${status === 'processing' ? 'animate-pulse' : ''}
-        ${status === 'error' ? 'animate-shake' : ''}
-      `}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* Animated border for processing state */}
-      {status === 'processing' && (
-        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-yellow-400 via-orange-400 to-yellow-400 opacity-75 animate-spin-slow -z-10" 
-             style={{ padding: '2px' }}>
-          <div className="w-full h-full rounded-2xl bg-white"></div>
+    <>
+      {/* 🔥 PREMIUM GLASSMORPHISM LOGIC CARD - Matching Design System */}
+      <div 
+        className={`
+          relative group w-72 h-auto overflow-hidden
+          backdrop-blur-xl bg-white/80 border border-white/40
+          rounded-3xl shadow-2xl ${statusConfig.glow} ${logicConfig.colors.glow}
+          transition-all duration-700 ease-out
+          hover:scale-[1.03] hover:shadow-2xl hover:bg-white/90
+          hover:backdrop-blur-2xl hover:-translate-y-1
+          ${selected ? 'ring-2 ring-yellow-400/60 ring-offset-2 ring-offset-white/50 shadow-yellow-400/40' : ''}
+          ${isHighlighted ? 'scale-105 ring-2 ring-purple-400/60 shadow-purple-400/40' : ''}
+          ${isDimmed ? 'opacity-50 scale-95' : ''}
+          ${statusConfig.pulse}
+        `}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Beautiful Animated Background Gradients */}
+        <div className={`absolute inset-0 ${logicConfig.colors.glass} rounded-3xl`} />
+        <div className={`absolute inset-0 ${statusConfig.overlay} rounded-3xl`} />
+        
+        {/* Floating Glass Orbs for Premium Effect */}
+        <div className="absolute -top-4 -right-4 w-8 h-8 bg-gradient-to-br from-white/40 to-transparent rounded-full blur-sm opacity-60" />
+        <div className="absolute -bottom-2 -left-2 w-6 h-6 bg-gradient-to-tr from-white/30 to-transparent rounded-full blur-sm opacity-40" />
+        
+        {/* Status indicator dot with beautiful gradient */}
+        <div className="absolute top-4 right-4 z-10">
+          <div className={`w-4 h-4 rounded-full ${statusConfig.dot} ${statusConfig.pulse} shadow-lg border border-white/50`} />
         </div>
-      )}
 
-      {/* Execution Progress Ring */}
-      {(status === 'processing' || executionProgress > 0) && (
-        <div className="absolute -top-2 -right-2 w-8 h-8">
-          <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 32 32">
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              className="text-gray-200"
-            />
-            <circle
-              cx="16" cy="16" r="14"
-              fill="none" stroke="currentColor" strokeWidth="2"
-              strokeDasharray={`${executionProgress * 0.88} 88`}
-              className="text-yellow-500 transition-all duration-300"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs font-bold text-yellow-600">
-              {Math.round(executionProgress)}%
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Header Section */}
-      <div className="p-4 pb-3">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className={`
-              w-12 h-12 rounded-xl ${statusDisplay.bgColor} 
-              flex items-center justify-center text-2xl
-              shadow-inner border ${statusDisplay.borderColor}
-              ${status === 'processing' ? 'animate-bounce' : ''}
-            `}>
-              {statusDisplay.icon}
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-lg text-gray-800 leading-tight">
-                {data.label || "Logic Node"}
-              </h3>
-              <div className="text-xs text-gray-500 mt-1">
-                Conditional Logic
+        {/* Main content with glassmorphism container */}
+        <div className="relative p-6 space-y-4">
+          {/* Header: Logic Icon + Status Icon with premium styling */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              {/* Premium Logic Type Icon */}
+              <div className={`
+                w-14 h-14 rounded-2xl ${logicConfig.colors.secondary} 
+                ${logicConfig.colors.border} border-2
+                flex items-center justify-center text-2xl
+                shadow-lg backdrop-blur-sm
+                group-hover:scale-110 transition-transform duration-300
+                relative overflow-hidden
+              `}>
+                {/* Icon background glow */}
+                <div className={`absolute inset-0 ${logicConfig.colors.accent} opacity-10 rounded-2xl`} />
+                <span className="relative z-10">⚖️</span>
+              </div>
+              
+              {/* Status Icon with premium effect */}
+              <div className="relative">
+                <div className={`
+                  w-12 h-12 rounded-xl bg-white/60 backdrop-blur-sm
+                  flex items-center justify-center text-xl
+                  shadow-lg border border-white/40
+                  ${statusConfig.pulse}
+                `}>
+                  {statusConfig.icon}
+                </div>
               </div>
             </div>
-          </div>
-          
-          {/* Status indicator */}
-          <div className={`
-            px-2 py-1 rounded-full text-xs font-medium
-            ${statusDisplay.color} ${statusDisplay.bgColor}
-          `}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </div>
-        </div>
-
-        <div className="mb-3">
-          <div className="flex items-start gap-2">
-            <span className="font-medium text-gray-600 min-w-[70px]">Purpose:</span>
-            <span className="text-gray-800 flex-1 text-sm">
-              {data.description || "Evaluates a condition and routes flow"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress Bar */}
-      {status === 'processing' && (
-        <div className="px-4 pb-3">
-          <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-            <div 
-              className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 rounded-full transition-all duration-500 ease-out"
-              style={{ width: `${executionProgress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Performance Metrics */}
-      <div className="px-4 pb-3">
-        <div className="flex items-center justify-between text-xs">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-gray-600">
-              ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
-            </span>
-            <span className="flex items-center gap-1 text-gray-600">
-              💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
-            </span>
-          </div>
-          {previewResult && previewResult.success && (
-            <span className={`flex items-center gap-1 ${previewResult.result ? 'text-green-600' : 'text-red-600'}`}>
-              {previewResult.result ? '✅ True' : '❌ False'}
-            </span>
-          )}
-        </div>
-      </div>
-      
-      {/* Condition Display */}
-      <div className="px-4 pb-3">
-        <div className="bg-white/60 backdrop-blur-sm rounded-xl border border-white/50 p-3">
-          <div className="text-xs font-medium text-gray-700 mb-2">Condition:</div>
-          <code className="text-sm font-mono bg-yellow-100 p-2 rounded block overflow-x-auto whitespace-pre-wrap text-gray-800">
-            {data.condition || "inputs.value > 0"}
-          </code>
-        </div>
-      </div>
-      
-      {/* Preview Result */}
-      {previewResult && (
-        <div className="px-4 pb-3">
-          <div className={`
-            p-3 rounded-xl border
-            ${previewResult.success 
-              ? previewResult.result 
-                ? 'bg-green-50 border-green-200' 
-                : 'bg-red-50 border-red-200'
-              : 'bg-gray-50 border-gray-200'
-            }
-          `}>
-            <div className="text-xs font-medium mb-1">
-              {previewResult.success ? 'Preview Result:' : 'Error:'}
+            
+            {/* Action buttons - beautiful glass effect */}
+            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-500">
+              <button
+                onClick={handleEditClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-white/90 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Edit Logic"
+              >
+                <span className="text-lg">✏️</span>
+              </button>
+              <button
+                onClick={handleDeleteClick}
+                className="w-10 h-10 rounded-xl bg-white/70 hover:bg-red-100/80 backdrop-blur-sm 
+                          flex items-center justify-center transition-all duration-300 
+                          hover:scale-110 shadow-lg border border-white/40 hover:shadow-xl"
+                title="Delete Logic"
+              >
+                <span className="text-lg">🗑️</span>
+              </button>
             </div>
-            <div className={`text-sm ${
-              previewResult.success 
-                ? previewResult.result 
-                  ? 'text-green-700' 
-                  : 'text-red-700'
-                : 'text-gray-700'
-            }`}>
-              {previewResult.success 
-                ? `Condition evaluates to: ${previewResult.result ? 'True' : 'False'}`
-                : previewResult.error
-              }
+          </div>
+
+          {/* Smart Content Hierarchy with beautiful typography */}
+          <div className="space-y-3">
+            {/* Primary: Logic Name with gradient text */}
+            <h3 className={`
+              font-bold text-xl leading-tight
+              bg-gradient-to-r ${logicConfig.colors.primary} bg-clip-text text-transparent
+              group-hover:scale-105 transition-transform duration-300
+            `}>
+              {getDisplayName()}
+            </h3>
+            
+            {/* Secondary: Logic Description with subtle styling */}
+            <p className="text-sm text-gray-700 leading-relaxed opacity-90 font-medium">
+              {getLogicDescription()}
+            </p>
+          </div>
+
+          {/* Footer: Logic Type Badge + Performance */}
+          <div className="flex items-center justify-between pt-3 border-t border-white/30">
+            <div className={`
+              px-4 py-2 rounded-full ${logicConfig.colors.secondary}
+              ${logicConfig.colors.text} text-sm font-bold
+              shadow-lg backdrop-blur-sm border border-white/40
+              hover:scale-105 transition-transform duration-300
+            `}>
+              {logicConfig.name}
+            </div>
+            
+            {/* Performance metrics with glass effect */}
+            <div className="flex items-center gap-3 text-xs text-gray-600">
+              <span className="flex items-center gap-1">
+                ⚡ {executionTime > 0 ? `${executionTime.toFixed(1)}s` : '--'}
+              </span>
+              <span className="flex items-center gap-1">
+                💰 ${cost > 0 ? cost.toFixed(3) : '0.000'}
+              </span>
             </div>
           </div>
         </div>
-      )}
-      
-      {/* Action buttons */}
-      <div className="px-4 pb-4">
-        <div className="flex gap-2">
-          <button 
-            type="button"
-            onClick={handleEditClick}
-            className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Edit
-          </button>
-          
-          <button 
-            type="button"
-            onClick={handleDeleteClick}
-            className="flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-xs font-medium px-3 py-2 rounded-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-      
-      {/* Input handle */}
-      <Handle 
-        type="target" 
-        position={Position.Left} 
-        isConnectable={isConnectable}
-        className="w-4 h-4 bg-gradient-to-r from-gray-400 to-gray-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ left: -8 }}
-        id="input"
-      />
-      
-      {/* True output handle */}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        isConnectable={isConnectable}
-        className="w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ right: -8, top: '35%' }}
-        id="true"
-      >
-        <div className="absolute -right-16 -top-1 text-xs text-green-600 whitespace-nowrap font-medium">
-          True →
-        </div>
-      </Handle>
-      
-      {/* False output handle */}
-      <Handle 
-        type="source" 
-        position={Position.Right} 
-        isConnectable={isConnectable}
-        className="w-4 h-4 bg-gradient-to-r from-red-500 to-red-600 border-2 border-white shadow-lg hover:scale-125 transition-transform duration-200"
-        style={{ right: -8, top: '65%' }}
-        id="false"
-      >
-        <div className="absolute -right-16 -top-1 text-xs text-red-600 whitespace-nowrap font-medium">
-          False →
-        </div>
-      </Handle>
 
-      {/* Glow effect for selected state */}
-      {selected && (
-        <div className="absolute inset-0 rounded-2xl bg-yellow-400/20 -z-10 blur-xl" />
+        {/* Connection handles with beautiful styling and labels */}
+        {/* Input handle */}
+        <Handle 
+          type="target" 
+          position={Position.Left} 
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-gray-400 to-gray-600 border-2 border-white shadow-xl rounded-full"
+          id="input"
+        />
+        
+        {/* True output handle */}
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 border-2 border-white shadow-xl rounded-full"
+          style={{ top: '35%' }}
+          id="true"
+        >
+          <div className="absolute -right-14 -top-1 text-xs text-green-600 whitespace-nowrap font-medium bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg border border-green-200/40">
+            True →
+          </div>
+        </Handle>
+        
+        {/* False output handle */}
+        <Handle 
+          type="source" 
+          position={Position.Right} 
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-red-500 to-red-600 border-2 border-white shadow-xl rounded-full"
+          style={{ top: '65%' }}
+          id="false"
+        >
+          <div className="absolute -right-14 -top-1 text-xs text-red-600 whitespace-nowrap font-medium bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg border border-red-200/40">
+            False →
+          </div>
+        </Handle>
+      </div>
+
+      {/* Rich Tooltip with premium glassmorphism */}
+      {showTooltip && (
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-4 z-50 w-80 p-5 
+                       bg-gray-900/95 backdrop-blur-2xl text-white rounded-2xl shadow-2xl 
+                       border border-gray-700/50 animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Tooltip content with beautiful styling */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="text-yellow-400 text-lg">⚖️</span>
+              <div className="font-bold text-yellow-300">Logic Details</div>
+            </div>
+            
+            {/* Logic Description */}
+            <div className="text-sm leading-relaxed opacity-90">
+              {getLogicDescription()}
+            </div>
+            
+            {/* Condition Info */}
+            <div>
+              <div className="font-semibold text-blue-300 pt-2 flex items-center gap-2">
+                <span>🧮</span>Condition
+              </div>
+              <div className="text-sm leading-relaxed opacity-90 font-mono bg-gray-800/50 p-2 rounded mt-1">
+                {safeData.condition}
+              </div>
+            </div>
+            
+            {/* Preview Result */}
+            {previewResult && previewResult.success && (
+              <div>
+                <div className="font-semibold text-green-300 pt-2 flex items-center gap-2">
+                  <span>🔍</span>Preview Result
+                </div>
+                <div className={`text-sm leading-relaxed opacity-90 ${previewResult.result ? 'text-green-300' : 'text-red-300'}`}>
+                  Evaluates to: {previewResult.result ? 'True' : 'False'}
+                </div>
+              </div>
+            )}
+            
+            <div className="flex justify-between pt-3 border-t border-gray-700 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <span>⚖️</span>Type: Logic Gate
+              </span>
+              <span className="flex items-center gap-1">
+                <span>⚡</span>Status: {status}
+              </span>
+            </div>
+          </div>
+          
+          {/* Tooltip arrow */}
+          <div className="absolute -top-2 left-1/2 transform -translate-x-1/2 w-4 h-4 
+                         bg-gray-900 rotate-45 border-l border-t border-gray-700/50"></div>
+        </div>
       )}
-    </div>
+    </>
   );
 });
 
@@ -362,7 +437,13 @@ LogicNode.displayName = 'LogicNode';
 LogicNode.propTypes = {
   data: PropTypes.object.isRequired,
   isConnectable: PropTypes.bool,
-  selected: PropTypes.bool
+  selected: PropTypes.bool,
+  isCompact: PropTypes.bool,
+  isDimmed: PropTypes.bool,
+  isHighlighted: PropTypes.bool,
+  enhancementMode: PropTypes.string,
+  onHover: PropTypes.func,
+  onUnhover: PropTypes.func
 };
 
 export default LogicNode;

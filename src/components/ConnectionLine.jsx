@@ -1,47 +1,84 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 
-// Animated particle component
-const FlowingParticle = ({ path, duration, delay, color, size = 3 }) => {
+// Enhanced animated particle component with glassmorphism effects
+const FlowingParticle = ({ path, duration, delay, color, size = 4, isActive = true }) => {
   const [position, setPosition] = useState(0);
 
   useEffect(() => {
+    if (!isActive || !path) return;
+
     const startTime = Date.now() + delay;
+    let animationId;
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       if (elapsed >= 0) {
         const progress = ((elapsed % duration) / duration);
         setPosition(progress);
       }
-      requestAnimationFrame(animate);
+      animationId = requestAnimationFrame(animate);
     };
-    animate();
-  }, [duration, delay]);
 
-  if (!path) return null;
+    animate();
+    return () => {
+      if (animationId) cancelAnimationFrame(animationId);
+    };
+  }, [duration, delay, isActive, path]);
+
+  if (!isActive || !path) return null;
 
   const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   pathElement.setAttribute('d', path);
-  const pathLength = pathElement.getTotalLength?.() || 0;
-  const point = pathElement.getPointAtLength?.(position * pathLength) || { x: 0, y: 0 };
+  
+  let point = { x: 0, y: 0 };
+  try {
+    const pathLength = pathElement.getTotalLength?.() || 0;
+    point = pathElement.getPointAtLength?.(position * pathLength) || { x: 0, y: 0 };
+  } catch (error) {
+    return null;
+  }
 
   return (
-    <circle
-      cx={point.x}
-      cy={point.y}
-      r={size}
-      fill={color}
-      className="animate-pulse"
-      style={{
-        filter: 'drop-shadow(0 0 3px currentColor)',
-        opacity: 0.8
-      }}
-    />
+    <g>
+      {/* Outer glow */}
+      <circle
+        cx={point.x}
+        cy={point.y}
+        r={size + 3}
+        fill={color}
+        opacity="0.3"
+        className="animate-pulse"
+        style={{
+          filter: `blur(3px)`
+        }}
+      />
+      {/* Main particle */}
+      <circle
+        cx={point.x}
+        cy={point.y}
+        r={size}
+        fill={color}
+        className="animate-pulse"
+        style={{
+          filter: `drop-shadow(0 0 8px ${color})`,
+          opacity: 0.9
+        }}
+      />
+      {/* Inner highlight */}
+      <circle
+        cx={point.x}
+        cy={point.y}
+        r={size - 1}
+        fill="white"
+        opacity="0.6"
+      />
+    </g>
   );
 };
 
-// Connection label component
-const ConnectionLabel = ({ path, label, isActive }) => {
+// Enhanced connection label with glassmorphism
+const ConnectionLabel = ({ path, label, isActive, dataType }) => {
   if (!path || !label) return null;
 
   const pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -49,231 +86,176 @@ const ConnectionLabel = ({ path, label, isActive }) => {
   const pathLength = pathElement.getTotalLength?.() || 0;
   const midPoint = pathElement.getPointAtLength?.(pathLength * 0.5) || { x: 0, y: 0 };
 
+  const getLabelColor = () => {
+    if (isActive) return '#3b82f6';
+    switch (dataType) {
+      case 'success': return '#22c55e';
+      case 'error': return '#ef4444';
+      case 'processing': return '#f59e0b';
+      default: return '#6b7280';
+    }
+  };
+
+  const labelColor = getLabelColor();
+
   return (
     <g>
+      {/* Background blur effect */}
       <rect
-        x={midPoint.x - 25}
-        y={midPoint.y - 8}
-        width={50}
-        height={16}
-        rx={8}
+        x={midPoint.x - 35}
+        y={midPoint.y - 12}
+        width={70}
+        height={24}
+        rx={12}
         fill="white"
-        stroke={isActive ? '#3b82f6' : '#9ca3af'}
-        strokeWidth={1}
-        className={`transition-all duration-300 ${isActive ? 'drop-shadow-md' : ''}`}
+        opacity="0.1"
+        style={{ filter: 'blur(8px)' }}
       />
+      {/* Main label background */}
+      <rect
+        x={midPoint.x - 35}
+        y={midPoint.y - 12}
+        width={70}
+        height={24}
+        rx={12}
+        fill="rgba(255, 255, 255, 0.9)"
+        stroke={labelColor}
+        strokeWidth={isActive ? 2 : 1}
+        style={{
+          filter: `drop-shadow(0 4px 12px rgba(0,0,0,0.15))`,
+          backdropFilter: 'blur(10px)'
+        }}
+        className={isActive ? 'animate-pulse' : ''}
+      />
+      {/* Label text */}
       <text
         x={midPoint.x}
-        y={midPoint.y + 3}
+        y={midPoint.y + 4}
         textAnchor="middle"
-        className={`text-xs font-medium fill-current ${
-          isActive ? 'text-blue-600' : 'text-gray-600'
-        }`}
+        className="text-xs font-bold"
+        fill={labelColor}
+        style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))' }}
       >
         {label}
       </text>
+      {/* Active indicator dot */}
+      {isActive && (
+        <circle
+          cx={midPoint.x + 25}
+          cy={midPoint.y - 8}
+          r={3}
+          fill={labelColor}
+          className="animate-pulse"
+        />
+      )}
     </g>
   );
 };
 
-// Update the getConnectionStyle function to handle all connection types and states
+// Enhanced connection style system
 const getConnectionStyle = (sourceType, targetType, sourceHandle, connectionState = 'idle', dataType = null) => {
-  // Get base connection type styling
+  // Premium glassmorphism connection styles
   const getBaseStyle = () => {
-    // Special styling for logic node connections
+    // Logic node connections with premium styling
     if (sourceType === 'logic') {
       if (sourceHandle === 'true') {
         return {
           type: 'success',
-          gradient: { start: '#22c55e', end: '#16a34a' },
-          stroke: '#22c55e',
-          strokeWidth: 3,
+          gradient: { start: '#10b981', end: '#059669', mid: '#34d399' },
+          stroke: '#10b981',
+          strokeWidth: 6,
           dashArray: null,
           particles: true,
-          particleColor: '#22c55e'
+          particleColor: '#10b981',
+          glow: true,
+          premium: true
         };
       } else if (sourceHandle === 'false') {
         return {
           type: 'error',
-          gradient: { start: '#ef4444', end: '#dc2626' },
-          stroke: '#ef4444',
-          strokeWidth: 3,
+          gradient: { start: '#f43f5e', end: '#e11d48', mid: '#fb7185' },
+          stroke: '#f43f5e',
+          strokeWidth: 6,
           dashArray: null,
           particles: true,
-          particleColor: '#ef4444'
+          particleColor: '#f43f5e',
+          glow: true,
+          premium: true
         };
       }
     }
 
-    // Error connections
-    if (connectionState === 'error') {
-      return {
-        type: 'error',
-        gradient: { start: '#ef4444', end: '#dc2626' },
-        stroke: '#ef4444',
-        strokeWidth: 2,
-        dashArray: '3,3',
-        particles: false,
-        particleColor: '#ef4444'
-      };
-    }
+    // State-based styling with enhanced effects
+    switch (connectionState) {
+      case 'error':
+        return {
+          type: 'error',
+          gradient: { start: '#f43f5e', end: '#e11d48', mid: '#fb7185' },
+          stroke: '#f43f5e',
+          strokeWidth: 5,
+          dashArray: '6,4',
+          particles: false,
+          particleColor: '#f43f5e',
+          glow: true,
+          premium: true
+        };
 
-    // Success connections
-    if (connectionState === 'success') {
-      return {
-        type: 'success',
-        gradient: { start: '#22c55e', end: '#16a34a' },
-        stroke: '#22c55e',
-        strokeWidth: 3,
-        dashArray: null,
-        particles: true,
-        particleColor: '#22c55e'
-      };
-    }
+      case 'success':
+        return {
+          type: 'success',
+          gradient: { start: '#10b981', end: '#059669', mid: '#34d399' },
+          stroke: '#10b981',
+          strokeWidth: 6,
+          dashArray: null,
+          particles: true,
+          particleColor: '#10b981',
+          glow: true,
+          premium: true
+        };
 
-    // Active/processing connections
-    if (connectionState === 'active' || connectionState === 'processing') {
-      return {
-        type: 'active',
-        gradient: { start: '#3b82f6', end: '#1d4ed8' },
-        stroke: '#3b82f6',
-        strokeWidth: 4,
-        dashArray: null,
-        particles: true,
-        particleColor: '#3b82f6',
-        pulse: true
-      };
-    }
+      case 'active':
+      case 'processing':
+        return {
+          type: 'active',
+          gradient: { start: '#3b82f6', end: '#1d4ed8', mid: '#60a5fa' },
+          stroke: '#3b82f6',
+          strokeWidth: 7,
+          dashArray: null,
+          particles: true,
+          particleColor: '#3b82f6',
+          pulse: true,
+          glow: true,
+          premium: true
+        };
 
-    // Data type specific styling
-    if (dataType) {
-      switch (dataType) {
-        case 'file':
-          return {
-            type: 'data',
-            gradient: { start: '#8b5cf6', end: '#7c3aed' },
-            stroke: '#8b5cf6',
-            strokeWidth: 2,
-            dashArray: null,
-            particles: false,
-            particleColor: '#8b5cf6'
-          };
-        case 'text':
-          return {
-            type: 'data',
-            gradient: { start: '#06b6d4', end: '#0891b2' },
-            stroke: '#06b6d4',
-            strokeWidth: 2,
-            dashArray: null,
-            particles: false,
-            particleColor: '#06b6d4'
-          };
-        case 'api':
-          return {
-            type: 'data',
-            gradient: { start: '#f59e0b', end: '#d97706' },
-            stroke: '#f59e0b',
-            strokeWidth: 2,
-            dashArray: null,
-            particles: false,
-            particleColor: '#f59e0b'
-          };
-      }
-    }
-
-    // Default style for when we're just starting a connection
-    if (!targetType) {
-      return {
-        type: 'preview',
-        gradient: { start: '#4299e1', end: '#9f7aea' },
-        stroke: '#4299e1',
-        strokeWidth: 2,
-        dashArray: '5,5',
-        particles: false,
-        particleColor: '#4299e1'
-      };
-    }
-
-    // Normalize types
-    const normalizedSourceType = sourceType?.replace('Node', '').toLowerCase();
-    const normalizedTargetType = targetType?.replace('Node', '').toLowerCase();
-    
-    // Define valid connections
-    const validConnections = [
-      { source: 'tool', target: 'agent' },
-      { source: 'agent', target: 'task' },
-      { source: 'task', target: 'task' },
-      { source: 'trigger', target: 'agent' },
-      { source: 'trigger', target: 'task' },
-      { source: 'trigger', target: 'tool' },
-      { source: 'trigger', target: 'chatbot' },
-      { source: 'trigger', target: 'logic' },
-      { source: 'logic', target: 'agent' },
-      { source: 'logic', target: 'task' },
-      { source: 'logic', target: 'tool' },
-      { source: 'logic', target: 'chatbot' },
-      { source: 'logic', target: 'logic' },
-      { source: 'chatbot', target: 'agent' },
-      { source: 'chatbot', target: 'task' },
-      { source: 'agent', target: 'chatbot' },
-      { source: 'task', target: 'chatbot' },
-      { source: 'tool', target: 'chatbot' },
-      { source: 'delay', target: 'agent' },
-      { source: 'delay', target: 'task' },
-      { source: 'delay', target: 'tool' },
-      { source: 'delay', target: 'chatbot' },
-      { source: 'delay', target: 'logic' },
-      { source: 'input', target: 'agent' },
-      { source: 'input', target: 'task' },
-      { source: 'input', target: 'tool' },
-      { source: 'agent', target: 'output' },
-      { source: 'task', target: 'output' },
-      { source: 'tool', target: 'output' }
-    ];
-    
-    // Check if the connection is valid
-    const isValid = validConnections.some(
-      conn => conn.source === normalizedSourceType && conn.target === normalizedTargetType
-    );
-    
-    // Return appropriate style based on validity
-    if (isValid) {
-      return {
-        type: 'valid',
-        gradient: { start: '#4299e1', end: '#9f7aea' },
-        stroke: '#4299e1',
-        strokeWidth: 2,
-        dashArray: null,
-        particles: false,
-        particleColor: '#4299e1'
-      };
-    } else {
-      return {
-        type: 'invalid',
-        gradient: { start: '#f56565', end: '#e53e3e' },
-        stroke: '#f56565',
-        strokeWidth: 2,
-        dashArray: '3,3',
-        particles: false,
-        particleColor: '#f56565'
-      };
+      default:
+        // Enhanced default style
+        return {
+          type: 'default',
+          gradient: { start: '#6366f1', end: '#4f46e5', mid: '#818cf8' },
+          stroke: '#6366f1',
+          strokeWidth: 5,
+          dashArray: null,
+          particles: false,
+          particleColor: '#6366f1',
+          glow: false,
+          premium: true
+        };
     }
   };
 
   return getBaseStyle();
 };
 
-// Smart path calculation with bezier curves and obstacle avoidance
+// Enhanced smart path calculation
 const calculateSmartPath = (fromX, fromY, toX, toY, fromPosition, toPosition, obstacles = []) => {
   const dx = toX - fromX;
   const dy = toY - fromY;
   const distance = Math.sqrt(dx * dx + dy * dy);
   
-  // Calculate control points based on positions and distance
+  // Enhanced control point calculation for smoother curves
   let cp1x, cp1y, cp2x, cp2y;
-  
-  // Determine control point offset based on connection direction
-  const offset = Math.min(distance * 0.4, 150);
+  const offset = Math.min(distance * 0.5, 200); // Increased for more dramatic curves
   
   switch (fromPosition) {
     case 'right':
@@ -315,24 +297,11 @@ const calculateSmartPath = (fromX, fromY, toX, toY, fromPosition, toPosition, ob
       break;
   }
   
-  // Simple obstacle avoidance - adjust control points if they intersect with obstacles
-  obstacles.forEach(obstacle => {
-    const { x, y, width, height } = obstacle;
-    
-    // Check if control points are inside obstacles and adjust
-    if (cp1x >= x && cp1x <= x + width && cp1y >= y && cp1y <= y + height) {
-      cp1y += height + 20;
-    }
-    if (cp2x >= x && cp2x <= x + width && cp2y >= y && cp2y <= y + height) {
-      cp2y += height + 20;
-    }
-  });
-  
   return `M${fromX},${fromY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${toX},${toY}`;
 };
 
 /**
- * Enhanced ConnectionLine component with animations and smart routing
+ * Premium ConnectionLine component with glassmorphism effects
  */
 const ConnectionLine = ({
   fromX,
@@ -354,18 +323,19 @@ const ConnectionLine = ({
   showParticles = true,
   showLabel = true
 }) => {
-  // Ensure we have valid values
+  // Ensure valid values
   const validatedFromX = isNaN(fromX) ? 0 : fromX;
   const validatedFromY = isNaN(fromY) ? 0 : fromY;
   const validatedToX = isNaN(toX) ? validatedFromX + 50 : toX;
   const validatedToY = isNaN(toY) ? validatedFromY + 50 : toY;
 
-  // Get connection style based on node types and state
+  // Get enhanced connection style
   const connectionStyle = getConnectionStyle(sourceType, targetType, sourceHandle, connectionState, dataType);
   const connectionLineId = `connection-line-${validatedFromX}-${validatedFromY}-${validatedToX}-${validatedToY}`;
   const gradientId = `gradient-${connectionLineId}`;
+  const glowId = `glow-${connectionLineId}`;
 
-  // Calculate smart path with bezier curves
+  // Calculate smart path
   const path = calculateSmartPath(
     validatedFromX, 
     validatedFromY, 
@@ -376,17 +346,17 @@ const ConnectionLine = ({
     obstacles
   );
 
-  // Determine if connection is active
   const isActive = connectionState === 'active' || connectionState === 'processing';
-  const isError = connectionState === 'error';
-  const isSuccess = connectionState === 'success';
 
   return (
     <g key={connectionLineId}>
       <defs>
-        {/* Main gradient */}
+        {/* Enhanced gradient with mid-point */}
         <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor={connectionStyle.gradient.start} />
+          {connectionStyle.gradient.mid && (
+            <stop offset="50%" stopColor={connectionStyle.gradient.mid} />
+          )}
           <stop offset="100%" stopColor={connectionStyle.gradient.end} />
         </linearGradient>
         
@@ -398,6 +368,11 @@ const ConnectionLine = ({
                 values={`${connectionStyle.gradient.start};${connectionStyle.gradient.end};${connectionStyle.gradient.start}`}
                 dur="2s" repeatCount="indefinite" />
             </stop>
+            <stop offset="50%" stopColor={connectionStyle.gradient.mid || connectionStyle.gradient.start}>
+              <animate attributeName="stop-color" 
+                values={`${connectionStyle.gradient.mid || connectionStyle.gradient.start};${connectionStyle.gradient.start};${connectionStyle.gradient.mid || connectionStyle.gradient.start}`}
+                dur="2s" repeatCount="indefinite" />
+            </stop>
             <stop offset="100%" stopColor={connectionStyle.gradient.end}>
               <animate attributeName="stop-color" 
                 values={`${connectionStyle.gradient.end};${connectionStyle.gradient.start};${connectionStyle.gradient.end}`}
@@ -406,41 +381,69 @@ const ConnectionLine = ({
           </linearGradient>
         )}
 
-        {/* Glow filter for active connections */}
-        <filter id={`glow-${connectionLineId}`}>
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+        {/* Enhanced glow filter */}
+        <filter id={glowId} x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
           <feMerge> 
             <feMergeNode in="coloredBlur"/>
             <feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
 
-        {/* Arrow marker */}
+        {/* Premium arrow marker */}
         <marker
           id={`arrow-${connectionLineId}`}
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="3"
-          markerWidth="6"
-          markerHeight="6"
+          viewBox="0 0 12 12"
+          refX="11"
+          refY="6"
+          markerWidth="8"
+          markerHeight="8"
           orient="auto"
           markerUnits="strokeWidth"
         >
-          <path d="M0,0 L0,6 L9,3 z" fill={connectionStyle.stroke} />
+          <path 
+            d="M2,2 L2,10 L10,6 z" 
+            fill={connectionStyle.stroke}
+            style={{
+              filter: `drop-shadow(0 0 4px ${connectionStyle.stroke})`
+            }}
+          />
         </marker>
       </defs>
 
-      {/* Background glow for active connections */}
-      {isActive && (
-        <path
-          fill="none"
-          stroke={connectionStyle.stroke}
-          strokeWidth={connectionStyle.strokeWidth + 4}
-          d={path}
-          opacity="0.3"
-          filter={`url(#glow-${connectionLineId})`}
-          className="animate-pulse"
-        />
+      {/* Background glow for premium effect */}
+      {connectionStyle.glow && (
+        <>
+          {/* Outer glow layer */}
+          <path
+            fill="none"
+            stroke={connectionStyle.stroke}
+            strokeWidth={connectionStyle.strokeWidth + 12}
+            d={path}
+            opacity="0.15"
+            filter={`url(#${glowId})`}
+            className={connectionStyle.pulse ? 'animate-pulse' : ''}
+          />
+          {/* Middle glow layer */}
+          <path
+            fill="none"
+            stroke={connectionStyle.stroke}
+            strokeWidth={connectionStyle.strokeWidth + 8}
+            d={path}
+            opacity="0.25"
+            filter={`url(#${glowId})`}
+            className={connectionStyle.pulse ? 'animate-pulse' : ''}
+          />
+          {/* Inner glow layer */}
+          <path
+            fill="none"
+            stroke={connectionStyle.stroke}
+            strokeWidth={connectionStyle.strokeWidth + 4}
+            d={path}
+            opacity="0.35"
+            className={connectionStyle.pulse ? 'animate-pulse' : ''}
+          />
+        </>
       )}
 
       {/* Main connection path */}
@@ -450,15 +453,20 @@ const ConnectionLine = ({
         stroke={isActive ? `url(#${gradientId}-animated)` : `url(#${gradientId})`}
         strokeWidth={connectionStyle.strokeWidth}
         d={path}
-        style={connectionLineStyle}
+        style={{
+          ...connectionLineStyle,
+          filter: connectionStyle.glow ? `drop-shadow(0 0 8px ${connectionStyle.stroke})` : 'none'
+        }}
         strokeDasharray={connectionStyle.dashArray}
         markerEnd={`url(#arrow-${connectionLineId})`}
         className={`transition-all duration-300 ${
           connectionStyle.pulse ? 'animate-pulse' : ''
         }`}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
 
-      {/* Flowing particles for active connections */}
+      {/* Enhanced flowing particles */}
       {showParticles && connectionStyle.particles && isActive && (
         <>
           <FlowingParticle 
@@ -466,51 +474,111 @@ const ConnectionLine = ({
             duration={2000} 
             delay={0} 
             color={connectionStyle.particleColor}
-            size={3}
+            size={4}
+            isActive={true}
           />
           <FlowingParticle 
             path={path} 
             duration={2000} 
-            delay={500} 
+            delay={400} 
+            color={connectionStyle.particleColor}
+            size={3}
+            isActive={true}
+          />
+          <FlowingParticle 
+            path={path} 
+            duration={2000} 
+            delay={800} 
+            color={connectionStyle.particleColor}
+            size={4}
+            isActive={true}
+          />
+          <FlowingParticle 
+            path={path} 
+            duration={2000} 
+            delay={1200} 
             color={connectionStyle.particleColor}
             size={2}
+            isActive={true}
           />
           <FlowingParticle 
             path={path} 
             duration={2000} 
-            delay={1000} 
+            delay={1600} 
             color={connectionStyle.particleColor}
             size={3}
+            isActive={true}
           />
         </>
       )}
 
-      {/* Connection label */}
+      {/* Enhanced connection label */}
       {showLabel && label && (
         <ConnectionLabel 
           path={path} 
           label={label} 
           isActive={isActive}
+          dataType={connectionState}
         />
       )}
 
-      {/* Start point indicator */}
-      <circle 
-        cx={validatedFromX} 
-        cy={validatedFromY} 
-        r={isActive ? 4 : 3}
-        fill={connectionStyle.stroke}
-        className={isActive ? 'animate-pulse' : ''}
-      />
+      {/* Enhanced start point indicator */}
+      <g>
+        <circle 
+          cx={validatedFromX} 
+          cy={validatedFromY} 
+          r={6}
+          fill={connectionStyle.stroke}
+          opacity="0.3"
+          style={{ filter: 'blur(2px)' }}
+        />
+        <circle 
+          cx={validatedFromX} 
+          cy={validatedFromY} 
+          r={isActive ? 5 : 4}
+          fill={connectionStyle.stroke}
+          style={{
+            filter: `drop-shadow(0 0 6px ${connectionStyle.stroke})`
+          }}
+          className={isActive ? 'animate-pulse' : ''}
+        />
+        <circle 
+          cx={validatedFromX} 
+          cy={validatedFromY} 
+          r={2}
+          fill="white"
+          opacity="0.8"
+        />
+      </g>
 
-      {/* End point indicator */}
-      <circle 
-        cx={validatedToX} 
-        cy={validatedToY} 
-        r={isActive ? 4 : 3}
-        fill={connectionStyle.gradient.end}
-        className={isActive ? 'animate-pulse' : ''}
-      />
+      {/* Enhanced end point indicator */}
+      <g>
+        <circle 
+          cx={validatedToX} 
+          cy={validatedToY} 
+          r={6}
+          fill={connectionStyle.gradient.end}
+          opacity="0.3"
+          style={{ filter: 'blur(2px)' }}
+        />
+        <circle 
+          cx={validatedToX} 
+          cy={validatedToY} 
+          r={isActive ? 5 : 4}
+          fill={connectionStyle.gradient.end}
+          style={{
+            filter: `drop-shadow(0 0 6px ${connectionStyle.gradient.end})`
+          }}
+          className={isActive ? 'animate-pulse' : ''}
+        />
+        <circle 
+          cx={validatedToX} 
+          cy={validatedToY} 
+          r={2}
+          fill="white"
+          opacity="0.8"
+        />
+      </g>
     </g>
   );
 };

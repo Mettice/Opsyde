@@ -1,5 +1,48 @@
 // templates/autoEmailReplyTemplate.js
 
+// Utility function to convert smoothstep edges to animated edges with data
+const convertToAnimatedEdges = (edges) => {
+  return edges.map(edge => {
+    if (edge.type === 'smoothstep' || !edge.type) {
+      const dataType = getDataTypeFromConnection(edge.source, edge.target);
+      const label = getLabelFromConnection(edge.source, edge.target, dataType);
+      
+      return {
+        ...edge,
+        type: 'animated',
+        data: edge.data || {
+          label: label,
+          dataType: dataType
+        }
+      };
+    }
+    return edge;
+  });
+};
+
+// Helper function to determine data type based on connection
+const getDataTypeFromConnection = (sourceId, targetId) => {
+  if (sourceId.includes('trigger')) return 'trigger_data';
+  if (sourceId.includes('agent') && targetId.includes('task')) return 'agent_output';
+  if (sourceId.includes('task') && targetId.includes('tool')) return 'task_result';
+  if (sourceId.includes('tool') && targetId.includes('task')) return 'tool_data';
+  if (targetId.includes('output')) return 'final_output';
+  return 'workflow_data';
+};
+
+// Helper function to generate appropriate labels
+const getLabelFromConnection = (sourceId, targetId, dataType) => {
+  const labels = {
+    'trigger_data': '🔄 Trigger Data',
+    'agent_output': '🤖 Agent Response',
+    'task_result': '✅ Task Complete',
+    'tool_data': '🔧 Tool Output', 
+    'final_output': '📤 Final Result',
+    'workflow_data': '📊 Data Flow'
+  };
+  return labels[dataType] || '📊 Data Flow';
+};
+
 export const autoEmailReplyTemplate = {
     name: "Auto Email Reply Bot",
     description: "Classifies and replies to incoming emails based on intent.",
@@ -63,11 +106,11 @@ export const autoEmailReplyTemplate = {
         }
       }
     ],
-    edges: [
+    edges: convertToAnimatedEdges([
       { id: "edge-1", source: "agent-inbox-parser", target: "task-classify-intent", type: "smoothstep" },
       { id: "edge-2", source: "task-classify-intent", target: "task-generate-reply", type: "smoothstep" },
       { id: "edge-3", source: "task-generate-reply", target: "tool-email-sender", type: "smoothstep" }
-    ],
+    ]),
     tags: ["Email", "Automation", "Support", "Sales"],
     version: "1.0",
     author: "NodAi",

@@ -109,7 +109,7 @@ const getConnectionStyle = (data = {}) => {
     case 'processing':
       return {
         stroke: '#3b82f6',
-        strokeWidth: 3,
+        strokeWidth: 6,
         animated: true,
         particles: true,
         glow: true
@@ -117,24 +117,24 @@ const getConnectionStyle = (data = {}) => {
     case 'success':
       return {
         stroke: '#22c55e',
-        strokeWidth: 2,
+        strokeWidth: 5,
         animated: false,
         particles: false,
-        glow: false
+        glow: true
       };
     case 'error':
       return {
         stroke: '#ef4444',
-        strokeWidth: 2,
+        strokeWidth: 5,
         animated: false,
         particles: false,
-        glow: false,
-        dashArray: '5,5'
+        glow: true,
+        dashArray: '8,4'
       };
     default:
       return {
         stroke: '#9ca3af',
-        strokeWidth: 2,
+        strokeWidth: 4,
         animated: false,
         particles: false,
         glow: false
@@ -211,14 +211,26 @@ const AnimatedEdge = ({
 
       {/* Glow effect for active connections */}
       {connectionStyle.glow && (
-        <path
-          d={edgePath}
-          stroke={connectionStyle.stroke}
-          strokeWidth={connectionStyle.strokeWidth + 4}
-          fill="none"
-          opacity="0.3"
-          className="animate-pulse"
-        />
+        <>
+          {/* Outer glow layer */}
+          <path
+            d={edgePath}
+            stroke={connectionStyle.stroke}
+            strokeWidth={connectionStyle.strokeWidth + 8}
+            fill="none"
+            opacity="0.2"
+            className="animate-pulse"
+          />
+          {/* Middle glow layer */}
+          <path
+            d={edgePath}
+            stroke={connectionStyle.stroke}
+            strokeWidth={connectionStyle.strokeWidth + 4}
+            fill="none"
+            opacity="0.4"
+            className="animate-pulse"
+          />
+        </>
       )}
 
       {/* Main connection path */}
