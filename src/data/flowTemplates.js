@@ -2,9 +2,323 @@
 import { autoEmailReplyTemplate } from './flowTemplates/autoEmailReplyTemplate';
 import { flowTemplates as crmQualifierTemplates } from './flowTemplates/crm_qualifier_bot';
 import { flowTemplates as cvTemplates } from './flowTemplates/cvTemplates';
+import { legalAiAssistantTemplate } from './flowTemplates/legalAiAssistant';
+import cryptoTradingTemplates from './flowTemplates/cryptoTradingTemplates';
 
 // Define base templates
 const baseTemplates = [
+    // 🏴‍☠️ HOLIDAYPIRATES DEMO TEMPLATE - Exact match for their first mission
+    {
+      name: '🏴‍☠️ HolidayPirates Deal Research Agent',
+      description: 'AI-powered travel deal discovery and trend analysis system - matches HolidayPirates first mission requirements exactly',
+      thumbnail: '/img/holidaypirates-demo.png',
+      nodes: [
+        {
+          id: 'input-travel-focus',
+          type: 'input',
+          position: { x: 50, y: 50 },
+          data: {
+            label: '📍 Travel Focus',
+            inputType: 'text',
+            placeholder: 'European city breaks and Mediterranean destinations',
+            value: 'European city breaks and Mediterranean beach destinations for budget-conscious travelers',
+            description: 'Define target travel focus and audience',
+            nodeId: 'input-travel-focus',
+            nodeType: 'input'
+          }
+        },
+        {
+          id: 'agent-trend-analyst',
+          type: 'agent',
+          position: { x: 300, y: 50 },
+          data: {
+            label: '📊 Travel Trend Analyst',
+            role: 'Senior Travel Market Researcher',
+            goal: 'Identify emerging travel trends and seasonal patterns that indicate high-value deal opportunities',
+            backstory: 'Expert in travel market analysis with deep understanding of seasonal booking patterns, destination popularity cycles, and consumer travel behavior. Specializes in identifying trends before they become mainstream.',
+            framework: 'crewai',
+            tools: ['search', 'calculator'],
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.3,
+              api_key: '[BYOK: OpenAI]'
+            },
+            verbose: true,
+            nodeId: 'agent-trend-analyst',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-analyze-trends',
+          type: 'task',
+          position: { x: 550, y: 50 },
+          data: {
+            label: '🔍 Trend Analysis',
+            description: 'Analyze current travel trends and identify high-opportunity destinations and timing patterns for deal discovery',
+            expectedOutput: 'Comprehensive trend analysis report with top 5 trending destinations, optimal booking windows, and seasonal opportunity insights',
+            async: false,
+            agentId: 'agent-trend-analyst',
+            nodeId: 'task-analyze-trends',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'agent-deal-crawler',
+          type: 'agent',
+          position: { x: 300, y: 200 },
+          data: {
+            label: '🕷️ Deal Discovery Crawler',
+            role: 'Web Scraping Specialist',
+            goal: 'Crawl travel websites to collect fresh deal data and pricing information',
+            backstory: 'Expert web scraping specialist with experience in dynamic content extraction from travel booking sites. Skilled at handling anti-bot measures and extracting structured data from complex travel platforms.',
+            framework: 'langchain',
+            tools: ['search', 'url_reader', 'python'],
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.1,
+              api_key: '[BYOK: OpenAI]',
+              chainType: 'agent'
+            },
+            verbose: true,
+            nodeId: 'agent-deal-crawler',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-crawl-deals',
+          type: 'task',
+          position: { x: 550, y: 200 },
+          data: {
+            label: '💰 Deal Discovery',
+            description: 'Based on trend analysis, crawl major travel booking sites to discover current deals and pricing for identified opportunities',
+            expectedOutput: 'Structured dataset of current travel deals including prices, availability, destinations, and booking details',
+            async: false,
+            agentId: 'agent-deal-crawler',
+            context: ['task-analyze-trends'],
+            nodeId: 'task-crawl-deals',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'agent-data-formatter',
+          type: 'agent',
+          position: { x: 300, y: 350 },
+          data: {
+            label: '📋 Data Processing Specialist',
+            role: 'Travel Data Engineer',
+            goal: 'Process, enrich, and format travel deal data for CMS integration and Google Sheets export',
+            backstory: 'Data engineering specialist with expertise in travel industry data structures. Experienced in normalizing deal data, calculating savings percentages, and formatting content for automated publishing workflows.',
+            framework: 'langchain',
+            tools: ['python', 'calculator'],
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.2,
+              api_key: '[BYOK: OpenAI]',
+              chainType: 'agent'
+            },
+            verbose: true,
+            nodeId: 'agent-data-formatter',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-process-data',
+          type: 'task',
+          position: { x: 550, y: 350 },
+          data: {
+            label: '⚙️ Data Processing',
+            description: 'Process and normalize the collected deal data, calculate savings percentages, and prepare structured data for export',
+            expectedOutput: 'Clean, normalized dataset with calculated metrics ready for Google Sheets and CMS integration',
+            async: false,
+            agentId: 'agent-data-formatter',
+            context: ['task-crawl-deals'],
+            nodeId: 'task-process-data',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'agent-content-optimizer',
+          type: 'agent',
+          position: { x: 300, y: 500 },
+          data: {
+            label: '✍️ Deal Content Creator',
+            role: 'Travel Content Specialist',
+            goal: 'Create compelling deal descriptions and content ready for publication',
+            backstory: 'Content specialist with expertise in travel marketing copy. Skilled at creating engaging deal descriptions that highlight value propositions and drive bookings while maintaining SEO optimization.',
+            framework: 'crewai',
+            tools: ['search'],
+            frameworkConfig: {
+              provider: 'openai',
+              model: 'gpt-4',
+              temperature: 0.7,
+              api_key: '[BYOK: OpenAI]'
+            },
+            verbose: true,
+            nodeId: 'agent-content-optimizer',
+            nodeType: 'agent'
+          }
+        },
+        {
+          id: 'task-create-content',
+          type: 'task',
+          position: { x: 550, y: 500 },
+          data: {
+            label: '📝 Content Creation',
+            description: 'Generate compelling deal descriptions and marketing copy optimized for HolidayPirates audience',
+            expectedOutput: 'Publication-ready deal content with headlines, descriptions, and key selling points formatted for immediate use',
+            async: false,
+            agentId: 'agent-content-optimizer',
+            context: ['task-process-data'],
+            nodeId: 'task-create-content',
+            nodeType: 'task'
+          }
+        },
+        {
+          id: 'output-google-sheets',
+          type: 'output',
+          position: { x: 800, y: 300 },
+          data: {
+            label: '📊 Google Sheets Export',
+            outputType: 'structured',
+            description: 'Export formatted deal data to Google Sheets',
+            format: 'Deal Name | Destination | Original Price | Deal Price | Savings % | Travel Dates | Booking Deadline | Description',
+            nodeId: 'output-google-sheets',
+            nodeType: 'output'
+          }
+        },
+        {
+          id: 'output-cms-contentful',
+          type: 'output',
+          position: { x: 800, y: 450 },
+          data: {
+            label: '🌐 CMS Integration',
+            outputType: 'cms',
+            description: 'Feed content to Contentful CMS for publication',
+            contentType: 'travel_deal',
+            fields: ['title', 'description', 'price', 'destination', 'dates', 'images'],
+            nodeId: 'output-cms-contentful',
+            nodeType: 'output'
+          }
+        }
+      ],
+      edges: [
+        {
+          id: 'edge-input-trend-analyst',
+          source: 'input-travel-focus',
+          target: 'agent-trend-analyst',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Travel Focus', dataType: 'text', state: 'idle' }
+        },
+        {
+          id: 'edge-trend-analyst-task',
+          source: 'agent-trend-analyst',
+          target: 'task-analyze-trends',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Agent Ready', dataType: 'agent', state: 'idle' }
+        },
+        {
+          id: 'edge-trends-crawler',
+          source: 'task-analyze-trends',
+          target: 'agent-deal-crawler',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Trend Insights', dataType: 'context', state: 'idle' }
+        },
+        {
+          id: 'edge-crawler-task',
+          source: 'agent-deal-crawler',
+          target: 'task-crawl-deals',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Agent Ready', dataType: 'agent', state: 'idle' }
+        },
+        {
+          id: 'edge-deals-formatter',
+          source: 'task-crawl-deals',
+          target: 'agent-data-formatter',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Raw Deal Data', dataType: 'context', state: 'idle' }
+        },
+        {
+          id: 'edge-formatter-task',
+          source: 'agent-data-formatter',
+          target: 'task-process-data',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Agent Ready', dataType: 'agent', state: 'idle' }
+        },
+        {
+          id: 'edge-data-content',
+          source: 'task-process-data',
+          target: 'agent-content-optimizer',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Processed Data', dataType: 'context', state: 'idle' }
+        },
+        {
+          id: 'edge-content-task',
+          source: 'agent-content-optimizer',
+          target: 'task-create-content',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Agent Ready', dataType: 'agent', state: 'idle' }
+        },
+        {
+          id: 'edge-content-sheets',
+          source: 'task-create-content',
+          target: 'output-google-sheets',
+          type: 'animated',
+          animated: true,
+          data: { label: 'Formatted Content', dataType: 'output', state: 'idle' }
+        },
+        {
+          id: 'edge-content-cms',
+          source: 'task-create-content',
+          target: 'output-cms-contentful',
+          type: 'animated',
+          animated: true,
+          data: { label: 'CMS Content', dataType: 'output', state: 'idle' }
+        }
+      ],
+      tags: ['HolidayPirates', 'Travel', 'Deal Discovery', 'Web Scraping', 'AI Agents', 'Google Sheets', 'CMS', 'Content Creation', 'Demo'],
+      frameworksUsed: ['crewai', 'langchain'],
+      version: '1.0',
+      author: 'CrewBuilder AI for HolidayPirates',
+      created: '2024-12-19',
+      complexity: 'Advanced',
+      estimatedTime: '2-3 minutes',
+      useCase: 'Perfect demonstration of HolidayPirates first mission: AI-powered deal research agent that identifies travel trends, crawls websites for deals, and formats results for Google Sheets/CMS integration.',
+      metadata: {
+        category: 'Travel & E-commerce',
+        industry: ['Travel', 'Tourism', 'E-commerce'],
+        outputFormat: 'Google Sheets + CMS Integration',
+        aiCapabilities: ['Trend Analysis', 'Web Scraping', 'Data Processing', 'Content Creation'],
+        businessValue: 'High - Automated deal discovery and content creation pipeline',
+        demo: {
+          duration: '3 minutes',
+          highlights: [
+            'Real-time trend analysis',
+            'Automated web scraping simulation',
+            'Data processing and formatting',
+            'Google Sheets integration demo',
+            'Publication-ready content generation'
+          ],
+          sampleResults: {
+            trendsIdentified: 5,
+            dealsDiscovered: 12,
+            averageSavings: '42%',
+            contentPieces: 12,
+            processingTime: '2.3 minutes'
+          }
+        }
+      }
+    },
     // NEW: Simple API Key Test Template
     {
       name: '🔑 API Key Test - Simple Agent + Task',
@@ -2376,6 +2690,8 @@ export const flowTemplates = [
   autoEmailReplyTemplate,
   ...crmQualifierTemplates,
   ...cvTemplates,
+  legalAiAssistantTemplate,
+  ...cryptoTradingTemplates,
   {
     id: "intelligent-incremental-processing",
     name: "🧠 Intelligent Incremental Data Processing",

@@ -362,7 +362,15 @@ const FlowCanvasBase = forwardRef(({
   }, [nodes]);
 
   const safeEdges = useMemo(() => {
-    return Array.isArray(edges) ? edges.filter(edge => edge && typeof edge === 'object' && edge.id) : [];
+    const validEdgeTypes = ['default', 'animated'];
+    return Array.isArray(edges) ? edges.filter(edge => edge && typeof edge === 'object' && edge.id).map(edge => {
+      // Ensure edge has a valid type
+      if (!edge.type || !validEdgeTypes.includes(edge.type)) {
+        console.warn(`Invalid edge type '${edge.type}' for edge ${edge.id}, using 'default'`);
+        return { ...edge, type: 'default' };
+      }
+      return edge;
+    }) : [];
   }, [edges]);
   
   // Context menu state
@@ -541,6 +549,22 @@ const FlowCanvasBase = forwardRef(({
     closeContextMenu();
   }, [handleDeleteNodes, closeContextMenu]);
 
+  // Missing context menu handlers
+  const handleContextMenuClose = useCallback(() => {
+    closeContextMenu();
+  }, [closeContextMenu]);
+
+  const handleContextEdit = useCallback((selectedNodes) => {
+    if (selectedNodes.length === 1) {
+      // Trigger edit for the selected node
+      const node = selectedNodes[0];
+      if (onNodeClick) {
+        onNodeClick(null, node);
+      }
+    }
+    closeContextMenu();
+  }, [onNodeClick, closeContextMenu]);
+
   // Handle keyboard shortcuts
   useEffect(() => {
     const selectedNodes = safeNodes.filter(node => node && node.selected);
@@ -667,6 +691,11 @@ const FlowCanvasBase = forwardRef(({
     
     closeContextMenu();
   }, [safeEdges, closeContextMenu]);
+
+  // Context menu template handler - moved here to fix initialization order
+  const handleContextSaveTemplate = useCallback((selectedNodes) => {
+    handleSaveAsTemplate(selectedNodes);
+  }, [handleSaveAsTemplate]);
 
   const handleSaveTemplate = useCallback(async (selectedNodes, selectedEdges, name, description) => {
     try {
@@ -897,6 +926,7 @@ const FlowCanvasBase = forwardRef(({
       {/* Context Menu */}
       {contextMenu.isVisible && (
         <ContextMenu 
+          isVisible={contextMenu.isVisible}
           position={contextMenu.position}
           selectedNodes={contextMenu.selectedNodes}
           nodeType={contextMenu.nodeType}

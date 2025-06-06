@@ -458,26 +458,73 @@ class TaskNode:
                             "llama-3.1-sonar-small-128k-online"              # Default to Perplexity model instead of gpt-4
                         )
                         
-                        # Prepare config for LangChain
+                        # 🔧 CRITICAL FIX: Ensure enhanced_framework_config has the API key for LangChain
+                        # This is the same API key injection logic used for CrewAI
+                        
+                        # Check if context has the get_api_key_for_framework method
+                        if hasattr(context, 'get_api_key_for_framework'):
+                            # Get API key from execution context
+                            api_key = context.get_api_key_for_framework('perplexity')
+                            if api_key:
+                                enhanced_framework_config['api_key'] = api_key
+                                enhanced_framework_config['perplexity_api_key'] = api_key
+                                logger.info(f"🔑 TaskNode LangChain: Got API key from execution context for perplexity")
+                            else:
+                                logger.warning(f"⚠️ TaskNode LangChain: No API key found in execution context for perplexity")
+                        else:
+                            logger.warning(f"⚠️ TaskNode LangChain: Context does not have get_api_key_for_framework method. Context type: {type(context)}")
+                            
+                            # FALLBACK: Try to get API key from the connected agent's frameworkConfig
+                            if formatted_inputs:
+                                for input_key, input_value in formatted_inputs.items():
+                                    if isinstance(input_value, dict) and 'metadata' in input_value:
+                                        agent_metadata = input_value.get('metadata', {})
+                                        if 'agent_result' in agent_metadata:
+                                            agent_result = agent_metadata['agent_result']
+                                            # Check if the agent has frameworkConfig with API key
+                                            if isinstance(agent_result, dict):
+                                                # Try to extract API key from various possible locations
+                                                api_key = None
+                                                
+                                                # Check if there's frameworkConfig in the agent result
+                                                if 'frameworkConfig' in agent_result:
+                                                    fc = agent_result['frameworkConfig']
+                                                    api_key = fc.get('api_key') or fc.get('perplexity_api_key')
+                                                
+                                                # Check top-level keys
+                                                if not api_key:
+                                                    api_key = agent_result.get('api_key') or agent_result.get('perplexity_api_key')
+                                                
+                                                if api_key:
+                                                    enhanced_framework_config['api_key'] = api_key
+                                                    enhanced_framework_config['perplexity_api_key'] = api_key
+                                                    logger.info(f"🔑 TaskNode LangChain: Got API key from connected agent's result")
+                                                    break
+                        
+                        # FINAL FALLBACK: Check if we can get it from the original context object
+                        if 'api_key' not in enhanced_framework_config and hasattr(context, 'user_api_keys'):
+                            perplexity_key = context.user_api_keys.get('perplexity')
+                            if perplexity_key:
+                                enhanced_framework_config['api_key'] = perplexity_key
+                                enhanced_framework_config['perplexity_api_key'] = perplexity_key
+                                logger.info(f"🔑 TaskNode LangChain: Got API key from context.user_api_keys")
+                        
                         config = {
-                            "llm": {
-                                "provider": llm_provider,
-                                "model": llm_model,
-                                "temperature": primary_agent.get("temperature", 0.7),
-                                "max_tokens": primary_agent.get("max_tokens", 4000)
-                            },
-                            "agent": {
-                                "role": agent_role,
-                                "goal": agent_goal,
-                                "backstory": primary_agent.get("backstory", "")
-                            },
-                            "chain_type": "simple_chain"
+                            "frameworkConfig": enhanced_framework_config,  # Now contains the BYOK API key!
+                            "systemMessage": f"You are {agent_role}. Your goal: {agent_goal}. Backstory: {primary_agent.get('backstory', '')}",
+                            "chainType": "simple",
+                            "verbose": True,
+                            "tools": primary_agent.get("tools", [])
                         }
                         
                         inputs_data = {
+                            "input": user_query,
+                            "message": user_query,
                             "query": user_query,
                             "context": formatted_inputs
                         }
+                        
+                        logger.info(f"🔧 TaskNode LangChain config frameworkConfig: {config['frameworkConfig']}")
                         
                         # Run the LangChain agent
                         result = await run_langchain_tool(config, inputs_data)

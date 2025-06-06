@@ -411,16 +411,38 @@ class AgentNode:
         try:
             from frameworks.langchain_runner import run_langchain_tool
             
+            # 🔧 CRITICAL FIX: Use proper frameworkConfig from agent_config instead of basic config
+            framework_config = agent_config.get("frameworkConfig", {})
+            
+            # Extract provider and model from frameworkConfig first, then fallback
+            provider = (
+                framework_config.get("provider") or
+                agent_config.get("llmProvider") or
+                "openai"
+            )
+            
+            model = (
+                framework_config.get("model") or
+                agent_config.get("llmModel") or
+                "gpt-3.5-turbo"
+            )
+            
             config = {
-                "chain_type": "simple_chain",
-                "provider": agent_config.get("llmProvider", "openai"),
-                "model": agent_config["llmModel"],
-                "temperature": agent_config["temperature"],
-                "max_tokens": agent_config["max_tokens"],
-                "prompt": f"You are {agent_config['role']}. {agent_config['goal']}\n\nUser query: {query}"
+                "frameworkConfig": {
+                    "provider": provider,
+                    "model": model,
+                    "temperature": framework_config.get("temperature") or agent_config.get("temperature", 0.7),
+                    "max_tokens": framework_config.get("max_tokens") or agent_config.get("max_tokens", 4000),
+                    "api_key": framework_config.get("api_key", ""),  # Include BYOK API key
+                    "chainType": "simple"
+                },
+                "systemMessage": f"You are {agent_config['role']}. {agent_config['goal']}",
+                "tools": agent_config.get("tools", [])
             }
             
-            result = await run_langchain_tool(config, inputs)
+            logger.info(f"🔧 AgentNode LangChain config frameworkConfig: {config['frameworkConfig']}")
+            
+            result = await run_langchain_tool(config, {"input": query, **inputs})
             return result.get("output", "No response from LangChain agent")
             
         except ImportError:

@@ -21,13 +21,14 @@ async def test_chat():
     inputs = {'user_input': {'text_input': 'Hello'}}
     
     print("Testing chat node with mock framework...")
-    result = await process_chat_node(node_data, inputs)
+    context = {"execution_id": "test-debug", "workflow_id": "debug-workflow"}
+    result = await process_chat_node(node_data, inputs, context)
     print('Result:', result)
     
     # Test with OpenAI framework (should fail gracefully without API key)
     print("\nTesting chat node with OpenAI framework...")
     node_data['framework'] = 'openai'
-    result2 = await process_chat_node(node_data, inputs)
+    result2 = await process_chat_node(node_data, inputs, context)
     print('Result:', result2)
 
 if __name__ == "__main__":

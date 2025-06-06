@@ -1,0 +1,65 @@
+{
+  "test_summary": {
+    "total_tests": 3,
+    "successful_tests": 3,
+    "failed_tests": 0,
+    "success_rate": 100.0,
+    "total_execution_time": 11.501463,
+    "test_date": "2025-06-05T19:14:45.503134"
+  },
+  "provider_stats": {
+    "hf-inference": {
+      "count": 3,
+      "total_time": 11.090692
+    }
+  },
+  "detailed_results": [
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 4.486008,
+      "output_length": 38
+    },
+    {
+      "task": "zero-shot-classification",
+      "model": "facebook/bart-large-mnli",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 6.399974,
+      "output_length": 245
+    },
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 0.20471,
+      "output_length": 38
+    }
+  ],
+  "verified_models": {
+    "text-classification": {
+      "primary": "cardiffnlp/twitter-roberta-base-sentiment",
+      "fallback": "distilbert-base-uncased-finetuned-sst-2-english",
+      "provider": "hf-inference"
+    },
+    "zero-shot-classification": {
+      "primary": "facebook/bart-large-mnli",
+      "fallback": "typeform/distilbert-base-uncased-mnli",
+      "provider": "hf-inference"
+    }
+  },
+  "available_providers": {
+    "hf-inference": {
+      "name": "HuggingFace Inference API",
+      "base_url": "https://api-inference.huggingface.co",
+      "requires_api_key": true,
+      "supported_tasks": [
+        "text-classification",
+        "zero-shot-classification"
+      ]
+    }
+  }
+}

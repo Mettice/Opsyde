@@ -161,6 +161,71 @@ const AgentCard = React.memo(({ data, selected, isConnectable, enhancementMode, 
           glass: 'bg-gradient-to-br from-blue-500/10 to-cyan-600/10'
         }
       },
+      langchain: { 
+        emoji: '🦜', 
+        name: 'LangChain',
+        colors: {
+          primary: 'from-purple-400 to-violet-600',
+          secondary: 'from-purple-50/90 to-violet-100/80',
+          accent: 'bg-gradient-to-r from-purple-500 to-violet-600',
+          text: 'text-purple-700',
+          glow: 'shadow-purple-400/30',
+          border: 'border-purple-300/50',
+          glass: 'bg-gradient-to-br from-purple-500/10 to-violet-600/10'
+        }
+      },
+      huggingface: { 
+        emoji: '🤗', 
+        name: 'HuggingFace',
+        colors: {
+          primary: 'from-yellow-400 to-orange-500',
+          secondary: 'from-yellow-50/90 to-orange-100/80',
+          accent: 'bg-gradient-to-r from-yellow-500 to-orange-600',
+          text: 'text-yellow-700',
+          glow: 'shadow-yellow-400/30',
+          border: 'border-yellow-300/50',
+          glass: 'bg-gradient-to-br from-yellow-500/10 to-orange-600/10'
+        }
+      },
+      autogen: { 
+        emoji: '🤝', 
+        name: 'AutoGen',
+        colors: {
+          primary: 'from-orange-400 to-red-500',
+          secondary: 'from-orange-50/90 to-red-100/80',
+          accent: 'bg-gradient-to-r from-orange-500 to-red-600',
+          text: 'text-orange-700',
+          glow: 'shadow-orange-400/30',
+          border: 'border-orange-300/50',
+          glass: 'bg-gradient-to-br from-orange-500/10 to-red-600/10'
+        }
+      },
+      llamaindex: { 
+        emoji: '📚', 
+        name: 'LlamaIndex',
+        colors: {
+          primary: 'from-indigo-400 to-blue-600',
+          secondary: 'from-indigo-50/90 to-blue-100/80',
+          accent: 'bg-gradient-to-r from-indigo-500 to-blue-600',
+          text: 'text-indigo-700',
+          glow: 'shadow-indigo-400/30',
+          border: 'border-indigo-300/50',
+          glass: 'bg-gradient-to-br from-indigo-500/10 to-blue-600/10'
+        }
+      },
+      webhook: { 
+        emoji: '🔗', 
+        name: 'Webhook',
+        colors: {
+          primary: 'from-gray-400 to-slate-600',
+          secondary: 'from-gray-50/90 to-slate-100/80',
+          accent: 'bg-gradient-to-r from-gray-500 to-slate-600',
+          text: 'text-gray-700',
+          glow: 'shadow-gray-400/30',
+          border: 'border-gray-300/50',
+          glass: 'bg-gradient-to-br from-gray-500/10 to-slate-600/10'
+        }
+      },
       perplexity: { 
         emoji: '🔍', 
         name: 'Perplexity',
@@ -172,6 +237,19 @@ const AgentCard = React.memo(({ data, selected, isConnectable, enhancementMode, 
           glow: 'shadow-cyan-400/30',
           border: 'border-cyan-300/50',
           glass: 'bg-gradient-to-br from-cyan-500/10 to-teal-600/10'
+        }
+      },
+      gemini: { 
+        emoji: '💎', 
+        name: 'Gemini',
+        colors: {
+          primary: 'from-purple-400 to-pink-600',
+          secondary: 'from-purple-50/90 to-pink-100/80',
+          accent: 'bg-gradient-to-r from-purple-500 to-pink-600',
+          text: 'text-purple-700',
+          glow: 'shadow-purple-400/30',
+          border: 'border-purple-300/50',
+          glass: 'bg-gradient-to-br from-purple-500/10 to-pink-600/10'
         }
       },
       default: { 

@@ -164,12 +164,31 @@ class WorkflowValidationResponse(BaseModel):
     warnings: Optional[List[str]] = None
 
 class WorkflowExportResponse(BaseModel):
+    export_type: str = "basic"
     workflow_id: str
     name: str
     version: str
-    nodes: List[Dict[str, Any]]
-    edges: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    exported_at: datetime = Field(default_factory=datetime.now)
+    
+    # Basic workflow data (always present)
+    nodes: Optional[List[Dict[str, Any]]] = None
+    edges: Optional[List[Dict[str, Any]]] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    
+    # Enterprise export data (optional)
+    deployment: Optional[Dict[str, Any]] = None
+    security: Optional[Dict[str, Any]] = None
+    roi_projection: Optional[Dict[str, Any]] = None
+    infrastructure: Optional[Dict[str, Any]] = None
+    professional_services: Optional[Dict[str, Any]] = None
+    
+    # Additional export formats (optional)
+    docker_config: Optional[str] = None
+    k8s_manifests: Optional[str] = None
+    
+    class Config:
+        # Allow extra fields for future export types
+        extra = "allow"
 
 class TriggerType(str, Enum):
     WEBHOOK = "webhook"

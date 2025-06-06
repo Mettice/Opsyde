@@ -1,0 +1,151 @@
+{
+  "test_summary": {
+    "total_tests": 7,
+    "successful_tests": 2,
+    "failed_tests": 5,
+    "success_rate": 28.57142857142857,
+    "total_execution_time": 3.635343,
+    "test_date": "2025-06-05T19:07:55.889133"
+  },
+  "provider_stats": {
+    "hf-inference": {
+      "count": 2,
+      "total_time": 0.583756
+    }
+  },
+  "detailed_results": [
+    {
+      "task": "summarization",
+      "model": "facebook/bart-large-cnn",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "InferenceClient.summarization() got an unexpected keyword argument 'max_length'"
+    },
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "404 Client Error: Not Found for url: https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest (Request ID: Root=1-6841ceed-4e97d5b82e2162e60b053097;cd5309dd-1489-40be-9c69-674e579ccf0d)"
+    },
+    {
+      "task": "question-answering",
+      "model": "deepset/roberta-base-squad2",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 0.0,
+      "output_length": 18
+    },
+    {
+      "task": "feature-extraction",
+      "model": "sentence-transformers/all-MiniLM-L6-v2",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "404 Client Error: Not Found for url: https://router.huggingface.co/hf-inference/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2 (Request ID: Root=1-6841ceee-67d8f3395202b3e661522366;4313ba40-9d1c-4907-8dcc-e64ba0234ad8)"
+    },
+    {
+      "task": "zero-shot-classification",
+      "model": "facebook/bart-large-mnli",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 0.583756,
+      "output_length": 245
+    },
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "404 Client Error: Not Found for url: https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest (Request ID: Root=1-6841ceee-4dca9a485f8f92871acade24;aa9fb3ad-ea30-47f6-9256-766d573e0009)"
+    },
+    {
+      "task": "text-generation",
+      "model": "meta-llama/Llama-2-7b-chat-hf",
+      "provider": "together-ai",
+      "success": false,
+      "error": "Together AI API error: {\n  \"id\": \"nwvoWt8-4yUbBN-94b144f79e829f01\",\n  \"error\": {\n    \"message\": \"Invalid API key provided. You can find your API key at https://api.together.xyz/settings/api-keys.\",\n    \"type\": \"invalid_request_error\",\n    \"param\": null,\n    \"code\": \"invalid_api_key\"\n  }\n}"
+    }
+  ],
+  "verified_models": {
+    "summarization": {
+      "primary": "facebook/bart-large-cnn",
+      "fallback": "sshleifer/distilbart-cnn-12-6",
+      "provider": "hf-inference"
+    },
+    "text-classification": {
+      "primary": "cardiffnlp/twitter-roberta-base-sentiment-latest",
+      "fallback": "cardiffnlp/twitter-roberta-base-sentiment",
+      "provider": "hf-inference"
+    },
+    "question-answering": {
+      "primary": "deepset/roberta-base-squad2",
+      "fallback": "distilbert-base-cased-distilled-squad",
+      "provider": "hf-inference"
+    },
+    "text-generation": {
+      "primary": "meta-llama/Llama-2-7b-chat-hf",
+      "fallback": "mistralai/Mistral-7B-Instruct-v0.1",
+      "provider": "together-ai"
+    },
+    "feature-extraction": {
+      "primary": "sentence-transformers/all-MiniLM-L6-v2",
+      "fallback": "sentence-transformers/paraphrase-MiniLM-L6-v2",
+      "provider": "hf-inference"
+    },
+    "zero-shot-classification": {
+      "primary": "facebook/bart-large-mnli",
+      "fallback": "typeform/distilbert-base-uncased-mnli",
+      "provider": "hf-inference"
+    }
+  },
+  "available_providers": {
+    "hf-inference": {
+      "endpoint": "https://api-inference.huggingface.co/models/{model}",
+      "models": {
+        "summarization": [
+          "facebook/bart-large-cnn",
+          "sshleifer/distilbart-cnn-12-6"
+        ],
+        "text-classification": [
+          "cardiffnlp/twitter-roberta-base-sentiment-latest"
+        ],
+        "question-answering": [
+          "deepset/roberta-base-squad2"
+        ],
+        "feature-extraction": [
+          "sentence-transformers/all-MiniLM-L6-v2"
+        ],
+        "zero-shot-classification": [
+          "facebook/bart-large-mnli"
+        ]
+      }
+    },
+    "together-ai": {
+      "endpoint": "https://api.together.xyz/v1/chat/completions",
+      "models": {
+        "text-generation": [
+          "meta-llama/Llama-2-7b-chat-hf",
+          "mistralai/Mistral-7B-Instruct-v0.1"
+        ]
+      }
+    },
+    "sambanova": {
+      "endpoint": "https://api.sambanova.ai/v1/chat/completions",
+      "models": {
+        "text-generation": [
+          "Meta-Llama-3.1-8B-Instruct",
+          "Meta-Llama-3.1-70B-Instruct"
+        ]
+      }
+    },
+    "replicate": {
+      "endpoint": "https://api.replicate.com/v1/predictions",
+      "models": {
+        "text-generation": [
+          "meta/llama-2-7b-chat",
+          "mistralai/mistral-7b-instruct-v0.1"
+        ]
+      }
+    }
+  }
+}

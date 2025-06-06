@@ -212,7 +212,7 @@ const FlowEnhancementSuite = ({
       className={`flow-enhancement-suite relative ${className}`}
       style={{ background: themeStyles.background }}
     >
-      {/* Smart Layout Integration */}
+image.png      {/* Smart Layout Integration */}
       {showFlowEnhancements && enhancementMode === 'smart' && (
         <SmartFlowLayout
           nodes={visibleNodes}

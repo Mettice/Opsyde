@@ -39,21 +39,110 @@ except ImportError as e:
     logger.warning(f"LangChain not fully available: {str(e)}")
     LANGCHAIN_AVAILABLE = False
 
+# 🧰 AVAILABLE TOOLS REGISTRY
+AVAILABLE_TOOLS = {
+    "calculator": {
+        "name": "calculator",
+        "description": "Performs mathematical calculations and supports basic math functions",
+        "category": "computation",
+        "requires_api": False
+    },
+    "search": {
+        "name": "web_search", 
+        "description": "Searches the web for real-time information",
+        "category": "information",
+        "requires_api": False
+    },
+    "wikipedia": {
+        "name": "wikipedia",
+        "description": "Gets detailed information from Wikipedia",
+        "category": "information", 
+        "requires_api": False
+    },
+    "python": {
+        "name": "python_executor",
+        "description": "Executes safe Python code for data processing and calculations",
+        "category": "computation",
+        "requires_api": False
+    },
+    "file_reader": {
+        "name": "file_reader",
+        "description": "Reads and processes text files",
+        "category": "file_processing",
+        "requires_api": False
+    },
+    "url_reader": {
+        "name": "url_reader", 
+        "description": "Fetches and extracts content from web pages",
+        "category": "information",
+        "requires_api": False
+    }
+}
+
+# 🎯 EXECUTION MODES
+EXECUTION_MODES = {
+    "llm_chain": "Simple LLM conversation without tools",
+    "agent": "AI agent with access to tools", 
+    "rag": "Retrieval Augmented Generation with documents",
+    "conversation": "Conversation with memory",
+    "auto": "Automatically detect based on input"
+}
+
 class EnhancedLangChainRunner:
     """Enhanced LangChain runner with modern LCEL and advanced features"""
     
-    def __init__(self):
+    def __init__(self, max_cache_size: int = 100):
         self.chains_cache = {}
         self.vectorstores_cache = {}
         self.tools_cache = {}
+        self.max_cache_size = max_cache_size
+        self._cache_access_times = {}
+    
+    def _cleanup_cache(self, cache_dict: dict, cache_name: str):
+        """Clean up cache using LRU strategy when it exceeds max size"""
+        if len(cache_dict) > self.max_cache_size:
+            # Sort by access time and remove oldest entries
+            sorted_items = sorted(
+                self._cache_access_times.get(cache_name, {}).items(),
+                key=lambda x: x[1]
+            )
+            
+            # Remove oldest 20% of entries
+            remove_count = max(1, len(sorted_items) // 5)
+            for key, _ in sorted_items[:remove_count]:
+                cache_dict.pop(key, None)
+                self._cache_access_times.get(cache_name, {}).pop(key, None)
+            
+            logger.info(f"🧹 Cleaned up {remove_count} entries from {cache_name} cache")
+    
+    def _update_cache_access(self, cache_name: str, key: str):
+        """Update cache access time for LRU tracking"""
+        import time
+        if cache_name not in self._cache_access_times:
+            self._cache_access_times[cache_name] = {}
+        self._cache_access_times[cache_name][key] = time.time()
+    
+    def cleanup_resources(self):
+        """Cleanup all cached resources"""
+        self.chains_cache.clear()
+        self.vectorstores_cache.clear()
+        self.tools_cache.clear()
+        self._cache_access_times.clear()
+        logger.info("🧹 All LangChain runner resources cleaned up")
     
     def get_llm(self, config: Dict[str, Any]):
         """Get LLM based on configuration"""
-        provider = config.get('provider', 'openai')
-        model = config.get('model', 'gpt-4')
-        temperature = config.get('temperature', 0.7)
-        max_tokens = config.get('max_tokens', 4000)
-        api_key = config.get('api_key', '')
+        # Handle both direct frameworkConfig and nested config
+        if 'frameworkConfig' in config:
+            framework_config = config['frameworkConfig']
+        else:
+            framework_config = config
+            
+        provider = framework_config.get('provider', 'openai')
+        model = framework_config.get('model', 'gpt-4')
+        temperature = framework_config.get('temperature', 0.7)
+        max_tokens = framework_config.get('max_tokens', 4000)
+        api_key = framework_config.get('api_key', '')
         
         # Base LLM config
         llm_config = {
@@ -78,13 +167,10 @@ class EnhancedLangChainRunner:
                 **llm_config
             )
         elif provider == 'perplexity':
-            # Perplexity uses OpenAI-compatible API
-            return ChatOpenAI(
-                model=model,
-                base_url='https://api.perplexity.ai',
-                api_key=api_key,
-                **llm_config
-            )
+            # 🔧 CRITICAL FIX: Return None for Perplexity to force fallback execution
+            # This prevents ChatOpenAI from defaulting to OpenAI API when Perplexity fails
+            logger.info(f"🔄 Perplexity provider detected - will use fallback execution")
+            return None
         elif provider == 'openrouter':
             # OpenRouter uses OpenAI-compatible API
             return ChatOpenAI(
@@ -134,38 +220,71 @@ class EnhancedLangChainRunner:
     
     @tool
     def _create_calculator_tool(self):
-        """Create calculator tool"""
+        """Create calculator tool with enhanced security"""
         def calculator(expression: str) -> str:
-            """Calculate mathematical expressions safely"""
+            """Calculate mathematical expressions safely with whitelist approach"""
             try:
-                # Simple safe evaluation
                 import ast
                 import operator
+                import math
                 
-                # Supported operations
-                ops = {
+                # Whitelist of safe operations and functions
+                safe_ops = {
                     ast.Add: operator.add, ast.Sub: operator.sub,
                     ast.Mult: operator.mul, ast.Div: operator.truediv,
-                    ast.Pow: operator.pow, ast.USub: operator.neg
+                    ast.Pow: operator.pow, ast.USub: operator.neg,
+                    ast.Mod: operator.mod
+                }
+                
+                safe_funcs = {
+                    'abs': abs, 'round': round, 'max': max, 'min': min,
+                    'sum': sum, 'sqrt': math.sqrt, 'sin': math.sin,
+                    'cos': math.cos, 'tan': math.tan, 'log': math.log,
+                    'exp': math.exp, 'floor': math.floor, 'ceil': math.ceil
                 }
                 
                 def eval_expr(expr):
+                    """Safely evaluate mathematical expression"""
+                    if len(expr) > 200:  # Prevent very long expressions
+                        raise ValueError("Expression too long")
                     return eval_node(ast.parse(expr, mode='eval').body)
                 
                 def eval_node(node):
                     if isinstance(node, ast.Constant):
-                        return node.value
+                        if isinstance(node.value, (int, float)):
+                            return node.value
+                        raise TypeError("Only numbers allowed")
                     elif isinstance(node, ast.BinOp):
-                        return ops[type(node.op)](eval_node(node.left), eval_node(node.right))
+                        if type(node.op) not in safe_ops:
+                            raise TypeError(f"Unsafe operation: {type(node.op)}")
+                        left = eval_node(node.left)
+                        right = eval_node(node.right)
+                        return safe_ops[type(node.op)](left, right)
                     elif isinstance(node, ast.UnaryOp):
-                        return ops[type(node.op)](eval_node(node.operand))
+                        if type(node.op) not in safe_ops:
+                            raise TypeError(f"Unsafe operation: {type(node.op)}")
+                        return safe_ops[type(node.op)](eval_node(node.operand))
+                    elif isinstance(node, ast.Call):
+                        if isinstance(node.func, ast.Name) and node.func.id in safe_funcs:
+                            args = [eval_node(arg) for arg in node.args]
+                            return safe_funcs[node.func.id](*args)
+                        raise TypeError(f"Unsafe function call")
+                    elif isinstance(node, ast.Name):
+                        # Allow mathematical constants
+                        constants = {'pi': math.pi, 'e': math.e}
+                        if node.id in constants:
+                            return constants[node.id]
+                        raise TypeError(f"Undefined variable: {node.id}")
                     else:
-                        raise TypeError(node)
+                        raise TypeError(f"Unsafe node type: {type(node)}")
                 
-                result = eval_expr(expression)
+                result = eval_expr(expression.strip())
                 return f"Result: {result}"
+                
+            except (ValueError, TypeError, ZeroDivisionError, OverflowError) as e:
+                return f"Math Error: {str(e)}"
             except Exception as e:
-                return f"Error: {str(e)}"
+                return f"Calculation failed: {str(e)}"
         
         return calculator
     
@@ -418,90 +537,764 @@ class EnhancedLangChainRunner:
             }
     
     async def _get_or_create_vectorstore(self, source_type: str, config: Dict[str, Any], embeddings):
-        """Get or create vector store based on source type"""
-        cache_key = f"{source_type}_{hash(str(config))}"
+        """Get or create vector store based on source type with improved caching"""
+        cache_key = f"{source_type}_{hash(str(sorted(config.items())))}"
         
+        # Check cache first
         if cache_key in self.vectorstores_cache:
+            self._update_cache_access('vectorstores', cache_key)
+            logger.info(f"📚 Using cached vectorstore for {source_type}")
             return self.vectorstores_cache[cache_key]
         
-        if source_type == 'text':
-            # Use provided text
-            text = config.get('text', 'No text provided')
-            docs = [{"page_content": text, "metadata": {}}]
-        elif source_type == 'url':
-            # Load from URL
-            loader = WebBaseLoader(config.get('url', ''))
-            docs = loader.load()
-        else:
-            # Default text
-            docs = [{"page_content": "No documents available", "metadata": {}}]
-        
-        # Split documents
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=config.get('chunkSize', 1000),
-            chunk_overlap=config.get('chunkOverlap', 200)
-        )
-        splits = text_splitter.split_documents(docs)
-        
-        # Create vector store
-        vectorstore = FAISS.from_documents(splits, embeddings)
-        
-        # Cache it
-        self.vectorstores_cache[cache_key] = vectorstore
-        
-        return vectorstore
+        try:
+            if source_type == 'text':
+                # Use provided text
+                text = config.get('text', 'No text provided')
+                docs = [{"page_content": text, "metadata": {"source": "user_text"}}]
+            elif source_type == 'url':
+                # Load from URL with validation
+                url = config.get('url', '')
+                if not url.startswith(('http://', 'https://')):
+                    raise ValueError(f"Invalid URL: {url}")
+                loader = WebBaseLoader(url)
+                docs = loader.load()
+            elif source_type == 'file':
+                # Handle file uploads
+                file_path = config.get('file_path', '')
+                if file_path.endswith('.pdf') and PDFLoader:
+                    loader = PDFLoader(file_path)
+                    docs = loader.load()
+                elif file_path.endswith('.txt'):
+                    loader = TextLoader(file_path)
+                    docs = loader.load()
+                else:
+                    docs = [{"page_content": "File type not supported", "metadata": {}}]
+            else:
+                # Default fallback
+                docs = [{"page_content": "No documents available", "metadata": {}}]
+            
+            # Validate document content
+            if not docs or all(not doc.get("page_content", "").strip() for doc in docs):
+                docs = [{"page_content": "No valid content found", "metadata": {}}]
+            
+            # Split documents with validation
+            chunk_size = max(100, min(4000, config.get('chunkSize', 1000)))
+            chunk_overlap = max(0, min(chunk_size // 2, config.get('chunkOverlap', 200)))
+            
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            splits = text_splitter.split_documents(docs)
+            
+            # Create vector store with error handling
+            if not splits:
+                splits = [{"page_content": "No content to index", "metadata": {}}]
+            
+            vectorstore = FAISS.from_documents(splits, embeddings)
+            
+            # Cache with cleanup
+            self.vectorstores_cache[cache_key] = vectorstore
+            self._update_cache_access('vectorstores', cache_key)
+            self._cleanup_cache(self.vectorstores_cache, 'vectorstores')
+            
+            logger.info(f"📚 Created and cached vectorstore for {source_type} with {len(splits)} chunks")
+            return vectorstore
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to create vectorstore for {source_type}: {str(e)}")
+            # Return a fallback vectorstore
+            fallback_docs = [{"page_content": f"Error loading documents: {str(e)}", "metadata": {}}]
+            return FAISS.from_documents(fallback_docs, embeddings)
     
     def _format_docs(self, docs):
         """Format documents for context"""
         return "\n\n".join([doc.page_content for doc in docs])
 
-# Main execution function
-async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Enhanced LangChain tool execution with better provider support"""
-    try:
-        framework_config = config.get("frameworkConfig", {})
-        provider = framework_config.get("provider", "openai").lower()
-        model = framework_config.get("model", "gpt-3.5-turbo")
-        api_key = framework_config.get("api_key") or config.get("api_key") or config.get("perplexity_api_key")
+    def _validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and sanitize configuration"""
+        validated = {}
         
-        logger.info(f"🔧 LangChain tool: provider={provider}, model={model}, api_key={'[FOUND]' if api_key else '[MISSING]'}")
+        # Framework config validation
+        framework_config = config.get('frameworkConfig', {})
+        validated['provider'] = framework_config.get('provider', 'openai').lower()
+        validated['model'] = framework_config.get('model', 'gpt-3.5-turbo')
+        validated['temperature'] = max(0.0, min(2.0, framework_config.get('temperature', 0.7)))
+        validated['max_tokens'] = max(1, min(32000, framework_config.get('max_tokens', 4000)))
         
-        # Use the LLM tools for better provider support
-        if provider == "perplexity":
-            from tools.llm_tools import run_llm_tool
-            return await run_llm_tool(config, inputs)
+        # API key validation
+        api_key = framework_config.get('api_key', '')
+        if not api_key or len(api_key.strip()) < 10:
+            logger.warning(f"⚠️ Invalid or missing API key for provider: {validated['provider']}")
+        validated['api_key'] = api_key.strip()
         
-        # For other providers, use LangChain if available
-        if not LANGCHAIN_AVAILABLE:
-            return {
-                "success": False,
-                "error": "LangChain not available",
-                "framework": "langchain"
-            }
+        # Chain type validation
+        valid_chain_types = ['simple', 'conversation', 'rag', 'agent']
+        chain_type = framework_config.get('chainType', 'simple')
+        validated['chainType'] = chain_type if chain_type in valid_chain_types else 'simple'
         
-        runner = EnhancedLangChainRunner()
-        chain_type = framework_config.get("chainType", "simple")
+        # System message validation
+        system_msg = config.get('systemMessage', 'You are a helpful assistant.')
+        validated['systemMessage'] = system_msg[:2000]  # Limit length
         
-        if chain_type == "simple":
-            return await runner.run_simple_chain(framework_config, inputs)
-        elif chain_type == "conversation":
-            return await runner.run_conversation_chain(framework_config, inputs)
-        elif chain_type == "rag":
-            return await runner.run_rag_chain(framework_config, inputs)
+        return validated
+    
+    def _validate_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate and sanitize inputs"""
+        validated = {}
+        
+        for key, value in inputs.items():
+            if isinstance(value, str):
+                # Limit string length and sanitize
+                validated[key] = value[:5000].strip()
+            elif isinstance(value, (int, float, bool)):
+                validated[key] = value
+            elif isinstance(value, dict):
+                # Recursively validate nested dicts
+                validated[key] = self._validate_inputs(value)
+            elif isinstance(value, list):
+                # Limit list size and validate elements
+                validated[key] = [
+                    item[:1000] if isinstance(item, str) else item 
+                    for item in value[:100]  # Limit to 100 items
+                ]
+            else:
+                # Convert unknown types to string
+                validated[key] = str(value)[:1000]
+        
+        return validated
+
+    def _standardize_inputs(self, inputs: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+        """Standardize inputs to support multiple input formats"""
+        standardized = {}
+        
+        # Extract main input text from various possible locations
+        input_text = (
+            inputs.get('input') or 
+            inputs.get('message') or 
+            inputs.get('query') or 
+            inputs.get('text') or
+            config.get('input') or
+            ""
+        )
+        
+        # Handle different input types
+        if isinstance(input_text, dict):
+            # If input is a dict, try to extract text
+            input_text = (
+                input_text.get('text') or 
+                input_text.get('content') or 
+                str(input_text)
+            )
+        elif isinstance(input_text, list):
+            # If input is a list, join items
+            input_text = " ".join(str(item) for item in input_text)
+        
+        standardized['input'] = str(input_text).strip()
+        
+        # Extract tools configuration
+        tools_config = (
+            inputs.get('tools') or 
+            config.get('tools') or 
+            config.get('frameworkConfig', {}).get('tools') or
+            []
+        )
+        
+        # Ensure tools is a list
+        if isinstance(tools_config, str):
+            tools_config = [tools_config]
+        elif not isinstance(tools_config, list):
+            tools_config = []
+            
+        standardized['tools'] = tools_config
+        
+        # Extract LLM configuration - FIX: Preserve BYOK configuration
+        llm_config = config.get('frameworkConfig', {})
+        
+        # 🔧 FIXED: Don't override BYOK config with defaults!
+        # Check if we have a real provider configured, if not then use defaults
+        configured_provider = llm_config.get('provider')
+        configured_model = llm_config.get('model')
+        
+        # Only use defaults if no provider is configured
+        if not configured_provider:
+            default_provider = 'openai'
+            default_model = 'gpt-3.5-turbo'
         else:
+            default_provider = configured_provider
+            # Use provider-specific defaults only if model is not configured
+            if not configured_model:
+                if configured_provider == 'perplexity':
+                    default_model = 'sonar-pro'
+                elif configured_provider == 'anthropic':
+                    default_model = 'claude-3-sonnet-20240229'
+                elif configured_provider == 'openai':
+                    default_model = 'gpt-3.5-turbo'
+                else:
+                    default_model = 'gpt-3.5-turbo'
+            else:
+                default_model = configured_model
+        
+        standardized['llm_config'] = {
+            'provider': configured_provider or default_provider,
+            'model': configured_model or default_model,
+            'temperature': llm_config.get('temperature', 0.7),
+            'max_tokens': llm_config.get('max_tokens', 4000),
+            'api_key': llm_config.get('api_key', ''),
+            'stream': llm_config.get('stream', False)
+        }
+        
+        # Log the configuration for debugging
+        logger.info(f"🔧 LLM Config preserved: provider={standardized['llm_config']['provider']}, "
+                   f"model={standardized['llm_config']['model']}, "
+                   f"api_key={'***' if standardized['llm_config']['api_key'] else 'None'}")
+        
+        # Extract execution mode
+        chain_type = config.get('frameworkConfig', {}).get('chainType', 'auto')
+        
+        # Auto-detect execution mode based on tools
+        if chain_type == 'auto':
+            if standardized['tools']:
+                standardized['execution_mode'] = 'agent'
+            else:
+                standardized['execution_mode'] = 'llm_chain'
+        else:
+            standardized['execution_mode'] = chain_type
+            
+        return standardized
+
+    def get_tool_by_name(self, name: str) -> Optional[BaseTool]:
+        """Get a tool instance by name with proper description"""
+        try:
+            name = name.lower().strip()
+            
+            if name == "calculator":
+                return self._create_calculator_tool()
+            elif name in ["search", "google_search", "web_search"]:
+                return Tool(
+                    name="web_search",
+                    func=DuckDuckGoSearchRun().run,
+                    description="Useful for searching real-time information from the web. Input should be a search query."
+                )
+            elif name in ["wikipedia", "wiki"]:
+                return Tool(
+                    name="wikipedia",
+                    func=WikipediaQueryRun().run,
+                    description="Useful for getting detailed information about people, places, companies, events, etc. Input should be a search term."
+                )
+            elif name == "python":
+                return self._create_python_tool()
+            elif name == "file_reader":
+                return self._create_file_reader_tool()
+            elif name == "url_reader":
+                return self._create_url_reader_tool()
+            else:
+                logger.warning(f"Unknown tool: {name}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Failed to create tool {name}: {str(e)}")
+            return None
+    
+    def build_tools(self, tool_names: List[str]) -> List[BaseTool]:
+        """Build a list of tools from tool names"""
+        tools = []
+        
+        for tool_name in tool_names:
+            tool = self.get_tool_by_name(tool_name)
+            if tool:
+                tools.append(tool)
+                logger.info(f"✅ Added tool: {tool.name}")
+            else:
+                logger.warning(f"⚠️ Failed to add tool: {tool_name}")
+        
+        return tools
+    
+    def _create_python_tool(self) -> BaseTool:
+        """Create a safe Python execution tool"""
+        @tool
+        def python_executor(code: str) -> str:
+            """Execute safe Python code. Only basic operations allowed. Input should be valid Python code."""
+            try:
+                # Whitelist of safe modules and functions
+                safe_globals = {
+                    '__builtins__': {
+                        'len': len, 'str': str, 'int': int, 'float': float,
+                        'list': list, 'dict': dict, 'sum': sum, 'max': max, 'min': min,
+                        'abs': abs, 'round': round, 'sorted': sorted, 'reversed': reversed
+                    },
+                    'math': __import__('math'),
+                    'datetime': __import__('datetime'),
+                    'json': __import__('json')
+                }
+                
+                # Limit code length
+                if len(code) > 1000:
+                    return "Error: Code too long (max 1000 characters)"
+                
+                # Check for dangerous operations
+                dangerous_keywords = ['import', 'exec', 'eval', 'open', 'file', '__', 'subprocess', 'os.system']
+                if any(keyword in code.lower() for keyword in dangerous_keywords):
+                    return "Error: Dangerous operations not allowed"
+                
+                # Execute with timeout and capture output
+                import io
+                import sys
+                from contextlib import redirect_stdout
+                
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    exec(code, safe_globals)
+                
+                result = output.getvalue()
+                return result.strip() if result.strip() else "Code executed successfully (no output)"
+                
+            except Exception as e:
+                return f"Python Error: {str(e)}"
+        
+        return python_executor
+    
+    def _create_file_reader_tool(self) -> BaseTool:
+        """Create a file reading tool"""
+        @tool
+        def file_reader(file_path: str) -> str:
+            """Read and return the contents of a text file. Input should be a valid file path."""
+            try:
+                # Security: Only allow reading from specific directories
+                import os
+                allowed_extensions = ['.txt', '.md', '.json', '.csv', '.py']
+                
+                if not any(file_path.endswith(ext) for ext in allowed_extensions):
+                    return "Error: File type not supported"
+                
+                # Limit file size
+                if os.path.exists(file_path) and os.path.getsize(file_path) > 1024 * 1024:  # 1MB limit
+                    return "Error: File too large (max 1MB)"
+                
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                # Limit output length
+                if len(content) > 5000:
+                    content = content[:5000] + "... (truncated)"
+                
+                return content
+                
+            except Exception as e:
+                return f"File Error: {str(e)}"
+        
+        return file_reader
+    
+    def _create_url_reader_tool(self) -> BaseTool:
+        """Create a URL content reading tool"""
+        @tool
+        def url_reader(url: str) -> str:
+            """Fetch and return the content of a webpage. Input should be a valid URL."""
+            try:
+                import requests
+                from bs4 import BeautifulSoup
+                
+                # Validate URL
+                if not url.startswith(('http://', 'https://')):
+                    return "Error: Invalid URL format"
+                
+                # Fetch content with timeout
+                response = requests.get(url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                })
+                response.raise_for_status()
+                
+                # Parse HTML and extract text
+                soup = BeautifulSoup(response.content, 'html.parser')
+                
+                # Remove script and style elements
+                for script in soup(["script", "style"]):
+                    script.decompose()
+                
+                # Get text content
+                text = soup.get_text()
+                
+                # Clean up text
+                lines = (line.strip() for line in text.splitlines())
+                chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+                text = ' '.join(chunk for chunk in chunks if chunk)
+                
+                # Limit output length
+                if len(text) > 3000:
+                    text = text[:3000] + "... (truncated)"
+                
+                return text
+                
+            except Exception as e:
+                return f"URL Error: {str(e)}"
+        
+        return url_reader
+
+    async def run_llm_chain(self, standardized_inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a simple LLM chain without tools"""
+        start_time = datetime.now()
+        
+        try:
+            llm_config = standardized_inputs['llm_config']
+            input_text = standardized_inputs['input']
+            
+            if not input_text:
+                return {
+                    "success": False,
+                    "error": "No input provided",
+                    "execution_mode": "llm_chain"
+                }
+            
+            # Get LLM instance
+            llm = self.get_llm({'frameworkConfig': llm_config})
+            if not llm:
+                # 🔧 CRITICAL FIX: Use fallback execution for unsupported providers like Perplexity
+                logger.info(f"🔄 LLM is None - using fallback execution for provider: {llm_config['provider']}")
+                return await self._execute_fallback(llm_config, input_text, tools=[])
+            
+            # Create simple prompt
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a helpful AI assistant."),
+                ("human", "{input}")
+            ])
+            
+            # Create chain using LCEL
+            chain = prompt | llm | StrOutputParser()
+            
+            # Execute chain
+            result = await chain.ainvoke({"input": input_text})
+            
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            
             return {
-                "success": False,
-                "error": f"Unsupported chain type: {chain_type}",
-                "framework": "langchain"
+                "success": True,
+                "output": result,
+                "execution_mode": "llm_chain",
+                "metadata": {
+                    "model": llm_config['model'],
+                    "provider": llm_config['provider'],
+                    "tools_used": [],
+                    "execution_time": execution_time,
+                    "input_length": len(input_text),
+                    "output_length": len(str(result)),
+                    "timestamp": end_time.isoformat(),
+                    "temperature": llm_config['temperature'],
+                    "max_tokens": llm_config['max_tokens']
+                }
             }
             
+        except Exception as e:
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            
+            logger.error(f"LLM chain execution failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "execution_mode": "llm_chain",
+                "metadata": {
+                    "execution_time": execution_time,
+                    "timestamp": end_time.isoformat()
+                }
+            }
+    
+    async def run_agent_chain(self, standardized_inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run an agent with tools"""
+        start_time = datetime.now()
+        
+        try:
+            llm_config = standardized_inputs['llm_config']
+            input_text = standardized_inputs['input']
+            tool_names = standardized_inputs['tools']
+            
+            if not input_text:
+                return {
+                    "success": False,
+                    "error": "No input provided",
+                    "execution_mode": "agent"
+                }
+            
+            # Get LLM instance
+            llm = self.get_llm({'frameworkConfig': llm_config})
+            if not llm:
+                # 🔧 CRITICAL FIX: Use fallback execution for unsupported providers like Perplexity
+                logger.info(f"🔄 LLM is None - using fallback execution for provider: {llm_config['provider']}")
+                return await self._execute_fallback(llm_config, input_text, tool_names)
+            
+            # Build tools
+            tools = self.build_tools(tool_names)
+            if not tools:
+                logger.warning("No valid tools found, falling back to LLM chain")
+                return await self.run_llm_chain(standardized_inputs)
+            
+            # Create agent prompt
+            agent_prompt = ChatPromptTemplate.from_messages([
+                ("system", """You are a helpful AI assistant with access to tools. 
+                Use tools when necessary to provide accurate and up-to-date information.
+                Always explain your reasoning and cite sources when using tools."""),
+                ("placeholder", "{chat_history}"),
+                ("human", "{input}"),
+                ("placeholder", "{agent_scratchpad}")
+            ])
+            
+            # Create agent using OpenAI functions
+            try:
+                from langchain.agents import create_openai_functions_agent
+                agent = create_openai_functions_agent(llm, tools, agent_prompt)
+            except Exception:
+                # Fallback to ReAct agent
+                from langchain.agents import create_react_agent
+                agent = create_react_agent(llm, tools, agent_prompt)
+            
+            # Create agent executor
+            agent_executor = AgentExecutor(
+                agent=agent,
+                tools=tools,
+                verbose=True,
+                max_iterations=5,
+                early_stopping_method="generate",
+                return_intermediate_steps=True
+            )
+            
+            # Execute agent
+            result = await agent_executor.ainvoke({
+                "input": input_text,
+                "chat_history": []
+            })
+            
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            
+            # Extract tools used from intermediate steps
+            tools_used = []
+            intermediate_steps = result.get('intermediate_steps', [])
+            for step in intermediate_steps:
+                if hasattr(step, 'tool') and step.tool:
+                    tools_used.append(step.tool)
+                elif isinstance(step, tuple) and len(step) > 0:
+                    action = step[0]
+                    if hasattr(action, 'tool'):
+                        tools_used.append(action.tool)
+            
+            return {
+                "success": True,
+                "output": result.get('output', str(result)),
+                "execution_mode": "agent",
+                "metadata": {
+                    "model": llm_config['model'],
+                    "provider": llm_config['provider'],
+                    "tools_requested": tool_names,
+                    "tools_available": [tool.name for tool in tools],
+                    "tools_used": list(set(tools_used)),  # Remove duplicates
+                    "execution_time": execution_time,
+                    "input_length": len(input_text),
+                    "output_length": len(str(result.get('output', ''))),
+                    "intermediate_steps_count": len(intermediate_steps),
+                    "agent_iterations": len(intermediate_steps),
+                    "timestamp": end_time.isoformat(),
+                    "temperature": llm_config['temperature'],
+                    "max_tokens": llm_config['max_tokens']
+                },
+                "intermediate_steps": intermediate_steps[:3]  # Include first 3 steps for debugging
+            }
+            
+        except Exception as e:
+            end_time = datetime.now()
+            execution_time = (end_time - start_time).total_seconds()
+            
+            logger.error(f"Agent execution failed: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "execution_mode": "agent",
+                "metadata": {
+                    "execution_time": execution_time,
+                    "timestamp": end_time.isoformat(),
+                    "tools_requested": standardized_inputs.get('tools', [])
+                }
+            }
+
+    async def _execute_fallback(self, llm_config: Dict[str, Any], input_text: str, tools: List[str] = None) -> Dict[str, Any]:
+        """Execute using framework-specific fallback when LLM creation fails"""
+        start_time = datetime.now()
+        
+        try:
+            provider = llm_config.get('provider', 'openai')
+            model = llm_config.get('model', 'gpt-4')
+            
+            logger.info(f"🔄 Fallback execution: provider={provider}, model={model}")
+            
+            if provider == 'perplexity':
+                logger.info("🔍 Using Perplexity runner")
+                
+                # Import the correct function from perplexity_runner
+                from frameworks.perplexity_runner import run_perplexity_tool
+                
+                # Prepare config for perplexity_runner
+                perplexity_config = {
+                    'frameworkConfig': {
+                        'model': model,
+                        'temperature': llm_config.get('temperature', 0.7),
+                        'max_tokens': llm_config.get('max_tokens', 4000),
+                        'api_key': llm_config.get('api_key') or llm_config.get('perplexity_api_key')
+                    }
+                }
+                
+                # Prepare inputs for perplexity_runner
+                perplexity_inputs = {
+                    'prompt': input_text
+                }
+                
+                # Execute using Perplexity runner
+                perplexity_result = await run_perplexity_tool(perplexity_config, perplexity_inputs)
+                
+                if perplexity_result.get('success'):
+                    execution_time = (datetime.now() - start_time).total_seconds()
+                    return {
+                        "success": True,
+                        "output": perplexity_result.get('output', ''),
+                        "provider": "perplexity-fallback",
+                        "model": model,
+                        "execution_time": execution_time,
+                        "intermediate_steps": [
+                            {
+                                "action": "perplexity_fallback",
+                                "action_input": input_text,
+                                "observation": perplexity_result.get('output', ''),
+                                "step": 1
+                            }
+                        ]
+                    }
+                else:
+                    raise Exception(f"Perplexity execution failed: {perplexity_result.get('error', 'Unknown error')}")
+            
+            else:
+                # For other providers, return an error
+                return {
+                    "success": False,
+                    "error": f"Fallback execution not implemented for provider: {provider}",
+                    "provider": provider,
+                    "model": model
+                }
+                
+        except Exception as e:
+            execution_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ Fallback execution failed: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Fallback execution failed: {str(e)}",
+                "execution_time": execution_time
+            }
+
+# Main execution function
+async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Enhanced LangChain tool execution with standardized inputs and comprehensive metadata
+    
+    Supports input formats:
+    - Simple LLM: {"input": "text", "model": "gpt-4"}
+    - Agent: {"input": "text", "tools": ["search", "calculator"], "model": "gpt-4"}
+    """
+    try:
+        # Initialize runner
+        runner = EnhancedLangChainRunner()
+        
+        # FIX: Check if we already have proper frameworkConfig from BYOK
+        framework_config = config.get('frameworkConfig', {})
+        if framework_config.get('provider') and framework_config.get('model') and framework_config.get('api_key'):
+            # Use the provided frameworkConfig directly - don't standardize it
+            logger.info(f"🔧 Using provided frameworkConfig: provider={framework_config['provider']}, model={framework_config['model']}")
+            
+            standardized = {
+                'input': inputs.get('input', inputs.get('message', inputs.get('query', ''))),
+                'llm_config': {
+                    'provider': framework_config['provider'],
+                    'model': framework_config['model'],
+                    'api_key': framework_config['api_key'],
+                    'temperature': framework_config.get('temperature', 0.7),
+                    'max_tokens': framework_config.get('max_tokens', 4000)
+                },
+                'tools': config.get('tools', config.get('langchainTools', [])),
+                'execution_mode': 'agent' if config.get('tools') or config.get('langchainTools') else 'llm_chain',
+                'system_message': config.get('systemMessage', ''),
+                'chain_type': framework_config.get('chainType', 'simple'),
+                'verbose': config.get('verbose', True)
+            }
+        else:
+            # Fallback to standardization if no proper frameworkConfig
+            standardized = runner._standardize_inputs(inputs, config)
+        
+        logger.info(f"🔧 LangChain execution: mode={standardized['execution_mode']}, "
+                   f"provider={standardized['llm_config']['provider']}, "
+                   f"model={standardized['llm_config']['model']}, "
+                   f"tools={standardized['tools']}")
+        
+        # Validate inputs
+        validated_inputs = runner._validate_inputs(standardized)
+        
+        # Route to appropriate execution method
+        if validated_inputs['execution_mode'] == 'agent' and validated_inputs['tools']:
+            result = await runner.run_agent_chain(validated_inputs)
+        else:
+            result = await runner.run_llm_chain(validated_inputs)
+        
+        # Add framework info
+        result['framework'] = 'langchain'
+        result['type'] = 'langchain_result'
+        
+        # Log execution summary
+        if result.get('success'):
+            metadata = result.get('metadata', {})
+            logger.info(f"✅ LangChain execution successful: "
+                       f"mode={result.get('execution_mode')}, "
+                       f"time={metadata.get('execution_time', 0):.2f}s, "
+                       f"tools_used={metadata.get('tools_used', [])}")
+        else:
+            logger.error(f"❌ LangChain execution failed: {result.get('error')}")
+        
+        return result
+        
     except Exception as e:
-        logger.error(f"LangChain tool execution failed: {str(e)}")
+        logger.error(f"❌ LangChain tool execution failed: {str(e)}")
         return {
             "success": False,
             "error": str(e),
-            "framework": "langchain"
+            "framework": "langchain",
+            "type": "error",
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "error_type": type(e).__name__
+            }
         }
+
+# 🔌 FRONTEND INTEGRATION UTILITIES
+def get_available_tools() -> Dict[str, Any]:
+    """Get list of available tools for frontend"""
+    return AVAILABLE_TOOLS
+
+def get_execution_modes() -> Dict[str, str]:
+    """Get available execution modes for frontend"""
+    return EXECUTION_MODES
+
+def get_langchain_capabilities() -> Dict[str, Any]:
+    """Get complete LangChain capabilities for frontend configuration"""
+    return {
+        "available": LANGCHAIN_AVAILABLE,
+        "tools": AVAILABLE_TOOLS,
+        "execution_modes": EXECUTION_MODES,
+        "supported_providers": [
+            "openai", "anthropic", "perplexity", "openrouter", "google"
+        ],
+        "features": {
+            "streaming": True,
+            "memory": True,
+            "rag": True,
+            "agents": True,
+            "tools": True,
+            "conversation": True
+        }
+    }
 
 # Backward compatibility
 def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 

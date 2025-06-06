@@ -126,6 +126,19 @@ const ToolNode = memo(({
     const toolType = safeData.toolType.toLowerCase();
     
     switch (toolType) {
+      case 'huggingface':
+        return {
+          name: 'HuggingFace AI',
+          colors: {
+            primary: 'from-orange-600 to-yellow-600',
+            secondary: 'bg-gradient-to-br from-orange-50 to-yellow-100',
+            accent: 'bg-gradient-to-r from-orange-400 to-yellow-500',
+            text: 'text-orange-700',
+            border: 'border-orange-300',
+            glass: 'bg-gradient-to-br from-orange-400/5 to-yellow-400/10',
+            glow: 'shadow-orange-200/60'
+          }
+        };
       case 'llm':
         return {
           name: 'LLM Tool',
@@ -140,16 +153,17 @@ const ToolNode = memo(({
           }
         };
       case 'api':
+      case 'universal_api':
         return {
           name: 'API Tool',
           colors: {
-            primary: 'from-orange-600 to-red-600',
-            secondary: 'bg-gradient-to-br from-orange-50 to-red-100',
-            accent: 'bg-gradient-to-r from-orange-400 to-red-500',
-            text: 'text-orange-700',
-            border: 'border-orange-300',
-            glass: 'bg-gradient-to-br from-orange-400/5 to-red-400/10',
-            glow: 'shadow-orange-200/60'
+            primary: 'from-blue-600 to-cyan-600',
+            secondary: 'bg-gradient-to-br from-blue-50 to-cyan-100',
+            accent: 'bg-gradient-to-r from-blue-400 to-cyan-500',
+            text: 'text-blue-700',
+            border: 'border-blue-300',
+            glass: 'bg-gradient-to-br from-blue-400/5 to-cyan-400/10',
+            glow: 'shadow-blue-200/60'
           }
         };
       case 'webhook':
@@ -169,13 +183,13 @@ const ToolNode = memo(({
         return {
           name: 'Custom Tool',
           colors: {
-            primary: 'from-blue-600 to-cyan-600',
-            secondary: 'bg-gradient-to-br from-blue-50 to-cyan-100',
-            accent: 'bg-gradient-to-r from-blue-400 to-cyan-500',
-            text: 'text-blue-700',
-            border: 'border-blue-300',
-            glass: 'bg-gradient-to-br from-blue-400/5 to-cyan-400/10',
-            glow: 'shadow-blue-200/60'
+            primary: 'from-gray-600 to-slate-600',
+            secondary: 'bg-gradient-to-br from-gray-50 to-slate-100',
+            accent: 'bg-gradient-to-r from-gray-400 to-slate-500',
+            text: 'text-gray-700',
+            border: 'border-gray-300',
+            glass: 'bg-gradient-to-br from-gray-400/5 to-slate-400/10',
+            glow: 'shadow-gray-200/60'
           }
         };
       default:
@@ -272,7 +286,40 @@ const ToolNode = memo(({
 
   // Get tool description
   const getToolDescription = () => {
-    return safeData.description || 'Tool for automation and processing';
+    if (safeData.toolType === 'huggingface') {
+      const task = safeData.hfTask || 'AI Task';
+      const model = safeData.hfModel || 'AI Model';
+      return `${task.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} using ${model.split('/').pop()}`;
+    }
+    
+    if (safeData.description) {
+      return safeData.description.length > 60 
+        ? safeData.description.substring(0, 60) + '...' 
+        : safeData.description;
+    }
+    
+    return 'No description available';
+  };
+
+  // Get tool icon
+  const getTriggerIcon = () => {
+    if (safeData.toolType === 'huggingface') {
+      return '🤗';
+    }
+    
+    switch (safeData.toolType.toLowerCase()) {
+      case 'llm':
+        return '🤖';
+      case 'api':
+      case 'universal_api':
+        return '🌐';
+      case 'webhook':
+        return '🔗';
+      case 'custom':
+        return '⚙️';
+      default:
+        return '🔧';
+    }
   };
 
   return (
@@ -333,7 +380,7 @@ const ToolNode = memo(({
               `}>
                 {/* Icon background glow */}
                 <div className={`absolute inset-0 ${toolTypeConfig.colors.accent} opacity-10 rounded-2xl`} />
-                <span className="relative z-10">🔧</span>
+                <span className="relative z-10">{getTriggerIcon()}</span>
               </div>
               
               {/* Status Icon with premium effect */}
