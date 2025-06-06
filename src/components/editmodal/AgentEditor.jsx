@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
+import EnhancedFrameworkSelector from '../toolTemplates/EnhancedFrameworkSelector';
 
 // Framework and LLM constants
 const AVAILABLE_FRAMEWORKS = [
@@ -101,6 +102,12 @@ const EnhancedAgentEditor = ({
   const [autogenLoading, setAutogenLoading] = useState(true);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState('');
   const [selectedConversationTemplate, setSelectedConversationTemplate] = useState('');
+
+  // 🎯 Enhanced Framework Selection State
+  const [useEnhancedMode, setUseEnhancedMode] = useState(false);
+  const [enhancedFramework, setEnhancedFramework] = useState('');
+  const [enhancedProvider, setEnhancedProvider] = useState('');
+  const [enhancedModel, setEnhancedModel] = useState('');
 
   // 🔑 Load API Keys from BYOK Manager
   useEffect(() => {
@@ -266,24 +273,44 @@ const EnhancedAgentEditor = ({
     if (selectedProvider && availableApiKeys.length > 0) {
       const apiKey = availableApiKeys.find(key => key.provider === selectedProvider);
       if (apiKey && apiKey.validation_status === 'valid') {
-        // Auto-populate the framework config with the API key
-        const updatedFrameworkConfig = {
-          ...formData.frameworkConfig,
-          api_key: `[BYOK:${selectedProvider}]`, // Placeholder - backend will inject real key
-          provider: selectedProvider
-        };
-        
+        // Auto-inject API key placeholder for BYOK
         handleInputChange({
           target: {
-            name: 'frameworkConfig',
-            value: updatedFrameworkConfig
+            name: 'llmApiKey',
+            value: `[BYOK:${apiKey.provider}]`
           }
         });
-        
-        console.log(`🔑 Auto-injected API key for ${selectedProvider}`);
       }
     }
   }, [formData.llm?.provider, formData.llmProvider, availableApiKeys]);
+
+  // Handle enhanced mode changes
+  useEffect(() => {
+    if (useEnhancedMode && enhancedFramework && enhancedProvider && enhancedModel) {
+      // Update formData with enhanced selections
+      handleInputChange({
+        target: { name: 'framework', value: enhancedFramework }
+      });
+      
+      // Update LLM configuration
+      const llmConfig = {
+        provider: enhancedProvider,
+        model: enhancedModel
+      };
+      
+      handleInputChange({
+        target: { name: 'llm', value: llmConfig }
+      });
+      
+      handleInputChange({
+        target: { name: 'llmProvider', value: enhancedProvider }
+      });
+      
+      handleInputChange({
+        target: { name: 'llmModel', value: enhancedModel }
+      });
+    }
+  }, [enhancedFramework, enhancedProvider, enhancedModel, useEnhancedMode]);
   
   // Get available LLMs based on selected framework AND available API keys
   const getAvailableLLMs = () => {
@@ -372,38 +399,95 @@ const EnhancedAgentEditor = ({
 
   const renderFrameworkSelector = () => (
     <div className="mb-6">
-      <label className="block text-sm font-medium text-gray-700 mb-3">
-        AI Framework *
-        <HelpTooltip type="agent" field="framework" />
-      </label>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {AVAILABLE_FRAMEWORKS.map(framework => (
-          <label 
-            key={framework.value} 
-            className={`flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-gray-50 ${
-              formData.framework === framework.value 
-                ? 'border-blue-500 bg-blue-50 shadow-sm' 
-                : 'border-gray-200'
-            }`}
-          >
-            <div className="flex items-center">
-              <input
-                type="radio"
-                name="framework"
-                value={framework.value}
-                checked={formData.framework === framework.value}
-                onChange={handleFrameworkChange}
-                className="mr-3"
-                required
+      {/* Enhanced Framework Selection Mode Toggle */}
+      <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-800">Framework Selection Mode</h3>
+            <p className="text-sm text-gray-600">Choose between simple or enhanced framework configuration</p>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className={`text-sm ${!useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+              Simple
+            </span>
+            <button
+              type="button"
+              onClick={() => setUseEnhancedMode(!useEnhancedMode)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                useEnhancedMode ? 'bg-purple-600' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  useEnhancedMode ? 'translate-x-6' : 'translate-x-1'
+                }`}
               />
-              <div>
-                <div className="font-medium text-gray-900">{framework.label}</div>
-                <div className="text-xs text-gray-500 mt-1">{framework.description}</div>
-              </div>
-            </div>
-          </label>
-        ))}
+            </button>
+            <span className={`text-sm ${useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+              Enhanced ✨
+            </span>
+          </div>
+        </div>
+        
+        <div className="text-xs text-gray-500">
+          {useEnhancedMode 
+            ? '✨ Enhanced mode: Native support detection, BYOK integration, and compatibility matrix'
+            : '⚡ Simple mode: Quick framework selection'
+          }
+        </div>
       </div>
+
+      {/* Enhanced Framework Selector */}
+      {useEnhancedMode ? (
+        <div className="mb-6">
+          <EnhancedFrameworkSelector
+            selectedFramework={enhancedFramework}
+            setSelectedFramework={setEnhancedFramework}
+            selectedProvider={enhancedProvider}
+            setSelectedProvider={setEnhancedProvider}
+            selectedModel={enhancedModel}
+            setSelectedModel={setEnhancedModel}
+            showOnlyNativeSupport={false}
+            className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm"
+          />
+        </div>
+      ) : (
+        /* Traditional Framework Selection */
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-3">
+            AI Framework *
+            <HelpTooltip type="agent" field="framework" />
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {AVAILABLE_FRAMEWORKS.map(framework => (
+              <label 
+                key={framework.value} 
+                className={`flex flex-col p-4 border rounded-lg cursor-pointer transition-all hover:bg-gray-50 ${
+                  formData.framework === framework.value 
+                    ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                    : 'border-gray-200'
+                }`}
+              >
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    name="framework"
+                    value={framework.value}
+                    checked={formData.framework === framework.value}
+                    onChange={handleFrameworkChange}
+                    className="mr-3"
+                    required
+                  />
+                  <div>
+                    <div className="font-medium text-gray-900">{framework.label}</div>
+                    <div className="text-xs text-gray-500 mt-1">{framework.description}</div>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 
