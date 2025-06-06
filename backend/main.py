@@ -31,6 +31,7 @@ from api.routers.trigger_router import router as trigger_router, root_router as 
 from api.routers.output_router import router as output_router
 from api.routers.user_settings import router as user_settings_router
 from api.routers.export_router import router as export_router
+from api.routers.framework_models import router as framework_models_router
 
 # Models
 from backend.models.data import NodeData
@@ -253,6 +254,7 @@ app.include_router(trigger_root_router)
 app.include_router(output_router, prefix="/api/outputs")
 app.include_router(user_settings_router, prefix="/api/user-settings")
 app.include_router(export_router)
+app.include_router(framework_models_router)
 
 # Error handlers
 @app.exception_handler(CrewFlowError)

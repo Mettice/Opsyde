@@ -9,6 +9,7 @@ import Dashboard from './pages/Dashboard';
 import APIKeyManager from './components/APIKeyManager';
 import WorkflowDashboard from './components/WorkflowDashboard';
 import NavHeader from './components/profile/NavHeader';
+import FrameworkModelDemo from './components/demo/FrameworkModelDemo';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
 import HelpPanel from './components/HelpPanel';
@@ -103,6 +104,16 @@ function App() {
             <ProtectedRoute>
               <WorkflowDashboard />
             </ProtectedRoute>
+          } />
+          <Route path="/framework-models" element={
+            <AppLayout>
+              <FrameworkModelDemo />
+            </AppLayout>
+          } />
+          <Route path="/demo" element={
+            <AppLayout>
+              <FrameworkModelDemo />
+            </AppLayout>
           } />
         </Routes>
       </AuthProvider>

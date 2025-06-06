@@ -4,6 +4,7 @@ import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import { ToolType, FRAMEWORK_OPTIONS } from '../EditModall';
 import { toast } from 'react-hot-toast';
+import EnhancedFrameworkSelector from '../toolTemplates/EnhancedFrameworkSelector';
 
 // Modern Universal API Builder Component
 const UniversalApiBuilder = ({ 
@@ -1409,6 +1410,27 @@ const ToolEditor = ({
   const [isResearching, setIsResearching] = useState(false);
   const [researchResult, setResearchResult] = useState(null);
 
+  // 🎯 Enhanced Framework Selection State
+  const [useEnhancedMode, setUseEnhancedMode] = useState(false);
+  const [enhancedFramework, setEnhancedFramework] = useState('');
+  const [enhancedProvider, setEnhancedProvider] = useState('');
+  const [enhancedModel, setEnhancedModel] = useState('');
+
+  // Existing state
+  const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
+
+  // Find parent agent for inheritance
+  const parentAgent = connectedNodes.find(
+    node => node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
+  );
+  const isInheritingFromAgent = formData.inherits_from && parentAgent;
+
+  useEffect(() => {
+    if (formData.frameworkConfig) {
+      setLocalFrameworkConfig(formData.frameworkConfig);
+    }
+  }, [formData.framework]);
+
   // 🔑 Load API Keys from BYOK Manager (matching AgentEditor pattern)
   useEffect(() => {
     const loadApiKeys = async () => {
@@ -1435,6 +1457,36 @@ const ToolEditor = ({
 
     loadApiKeys();
   }, []); // Only run once on mount
+
+  // Handle enhanced mode changes
+  useEffect(() => {
+    if (useEnhancedMode && enhancedFramework && enhancedProvider && enhancedModel) {
+      // Update formData with enhanced selections
+      handleInputChange({
+        target: { name: 'framework', value: enhancedFramework }
+      });
+      handleInputChange({
+        target: { name: 'provider', value: enhancedProvider }
+      });
+      handleInputChange({
+        target: { name: 'model', value: enhancedModel }
+      });
+      
+      // Update framework config
+      const enhancedConfig = {
+        ...localFrameworkConfig,
+        framework: enhancedFramework,
+        provider: enhancedProvider,
+        model: enhancedModel,
+        enhanced_mode: true
+      };
+      
+      setLocalFrameworkConfig(enhancedConfig);
+      handleInputChange({
+        target: { name: 'frameworkConfig', value: enhancedConfig }
+      });
+    }
+  }, [enhancedFramework, enhancedProvider, enhancedModel, useEnhancedMode]);
 
   // Get available frameworks based on API keys (matching AgentEditor pattern)
   const getAvailableFrameworks = () => {
@@ -1478,21 +1530,6 @@ const ToolEditor = ({
 
     return frameworks;
   };
-
-  // Existing state
-  const [localFrameworkConfig, setLocalFrameworkConfig] = useState(formData.frameworkConfig || {});
-
-  // Find parent agent for inheritance
-  const parentAgent = connectedNodes.find(
-    node => node.id === formData.inherits_from && (node.type === 'agent' || node.nodeType === 'agent')
-  );
-  const isInheritingFromAgent = formData.inherits_from && parentAgent;
-
-  useEffect(() => {
-    if (formData.frameworkConfig) {
-      setLocalFrameworkConfig(formData.frameworkConfig);
-    }
-  }, [formData.framework]);
 
   const handleToolTypeChange = (e) => {
     const newToolType = e.target.value;
@@ -1963,30 +2000,84 @@ ${authGuidance.additional_setup ? `⚠️ Additional setup: ${authGuidance.addit
     // Traditional framework configuration
     return (
       <>
-        {/* Framework Selection */}
-        <div className="mb-4">
-          <label className="block text-gray-700 mb-1 font-medium">
-            Framework
-          </label>
-          <select
-            name="framework"
-            value={formData.framework || ''}
-            onChange={handleFrameworkChangeLocal}
-            className="w-full p-3 border rounded-lg"
-          >
-            <option value="">Select Framework...</option>
-            {getAvailableFrameworks()
-              .filter(f => f.type !== 'ai_models' && f.type !== 'api' && f.type !== 'ai_agents')
-              .map((framework) => (
-              <option key={framework.id} value={framework.id}>
-                {framework.name}
-              </option>
-            ))}
-          </select>
+        {/* Enhanced Framework Selection Mode Toggle */}
+        <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800">Framework Selection Mode</h3>
+              <p className="text-sm text-gray-600">Choose between simple or enhanced framework configuration</p>
+            </div>
+            <div className="flex items-center space-x-3">
+              <span className={`text-sm ${!useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                Simple
+              </span>
+              <button
+                type="button"
+                onClick={() => setUseEnhancedMode(!useEnhancedMode)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                  useEnhancedMode ? 'bg-purple-600' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    useEnhancedMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className={`text-sm ${useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                Enhanced ✨
+              </span>
+            </div>
+          </div>
+          
+          <div className="text-xs text-gray-500">
+            {useEnhancedMode 
+              ? '✨ Enhanced mode: Native support detection, BYOK integration, and compatibility matrix'
+              : '⚡ Simple mode: Quick framework selection'
+            }
+          </div>
         </div>
 
+        {/* Enhanced Framework Selector */}
+        {useEnhancedMode ? (
+          <div className="mb-6">
+            <EnhancedFrameworkSelector
+              selectedFramework={enhancedFramework}
+              setSelectedFramework={setEnhancedFramework}
+              selectedProvider={enhancedProvider}
+              setSelectedProvider={setEnhancedProvider}
+              selectedModel={enhancedModel}
+              setSelectedModel={setEnhancedModel}
+              showOnlyNativeSupport={false}
+              className="bg-white p-6 rounded-lg border border-gray-200 shadow-sm"
+            />
+          </div>
+        ) : (
+          /* Traditional Framework Selection */
+          <div className="mb-4">
+            <label className="block text-gray-700 mb-1 font-medium">
+              Framework
+            </label>
+            <select
+              name="framework"
+              value={formData.framework || ''}
+              onChange={handleFrameworkChangeLocal}
+              className="w-full p-3 border rounded-lg"
+            >
+              <option value="">Select Framework...</option>
+              {getAvailableFrameworks()
+                .filter(f => f.type !== 'ai_models' && f.type !== 'api' && f.type !== 'ai_agents')
+                .map((framework) => (
+                <option key={framework.id} value={framework.id}>
+                  {framework.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Rest of traditional configuration */}
-        {formData.framework && renderFrameworkConfig()}
+        {(formData.framework || (useEnhancedMode && enhancedFramework)) && renderFrameworkConfig()}
       </>
     );
   };
