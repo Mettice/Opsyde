@@ -134,4 +134,8 @@ class Executor:
         if not processor:
             raise ValueError(f"Unsupported node type: {context.node_type}")
             
-        return await processor(context.inputs, context.config)
+        # Pass context for chat nodes that need it
+        if context.node_type == NodeType.CHAT:
+            return await processor(context.config, context.inputs, context)
+        else:
+            return await processor(context.inputs, context.config)

@@ -291,11 +291,12 @@ async def validate_workflow_enhanced(
 @router.post("/{workflow_id}/export", response_model=APIResponse[WorkflowExportResponse])
 async def export_workflow(
     workflow_id: str,
+    export_type: str = "enterprise_package",
     workflow_service: WorkflowService = Depends(get_workflow_service)
 ):
-    """Export workflow definition"""
+    """Export workflow definition with specified export type"""
     try:
-        export_data = await workflow_service.export_workflow(workflow_id)
+        export_data = await workflow_service.export_workflow(workflow_id, export_type)
         response = WorkflowExportResponse(**export_data)
         return APIResponse.success_response(response)
     except Exception as e:

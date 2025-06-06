@@ -43,7 +43,14 @@ async def test_chat_with_workflow_inputs():
     print(f"📋 Input keys: {list(inputs.keys())}")
     
     try:
-        result = await process_chat_node(node_data, inputs)
+        # Add context for testing
+        context = {
+            "execution_id": "test-execution-123",
+            "workflow_id": "test-workflow-456",
+            "timestamp": "2024-01-01T00:00:00"
+        }
+        
+        result = await process_chat_node(node_data, inputs, context)
         print(f"✅ Result type: {result.get('type', 'unknown')}")
         print(f"📄 Result: {result}")
     except Exception as e:

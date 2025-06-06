@@ -1,0 +1,209 @@
+{
+  "timestamp": "2025-06-05T14:02:58.347288",
+  "summary": {
+    "total_tests": 10,
+    "passed_tests": 4,
+    "success_rate": 40.0,
+    "execution_time": 34.640854835510254,
+    "status": "\ud83d\udd34 POOR - Major Issues"
+  },
+  "detailed_results": [
+    {
+      "category": "\ud83d\udcc4 Document Summarization",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "type": "long_text",
+            "success": true,
+            "time": 11.086091041564941,
+            "summary_length": 265
+          },
+          {
+            "type": "short_text",
+            "success": true,
+            "time": 7.463258981704712,
+            "summary_length": 103
+          }
+        ],
+        "success_rate": "2/2"
+      },
+      "timestamp": "2025-06-05T14:02:42.252783"
+    },
+    {
+      "category": "\ud83d\ude0a Sentiment Analysis",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "text": "CrewBuilder makes workflow automation incredibly easy and intuitive!",
+            "success": false
+          },
+          {
+            "text": "I'm frustrated with the complexity of setting up these AI workflows.",
+            "success": false
+          },
+          {
+            "text": "The platform is okay, nothing particularly impressive.",
+            "success": false
+          },
+          {
+            "text": "This is the best automation tool I've ever used in my career!",
+            "success": false
+          },
+          {
+            "text": "I hate how complicated this system is to configure.",
+            "success": false
+          }
+        ],
+        "success_rate": "0/5",
+        "avg_confidence": "0.000"
+      },
+      "timestamp": "2025-06-05T14:02:44.407997"
+    },
+    {
+      "category": "\u2753 Question Answering",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "question": "What is CrewBuilder?",
+            "answer": "a workflow automation platform",
+            "time": 3.7831499576568604,
+            "success": true
+          },
+          {
+            "question": "What features does CrewBuilder provide?",
+            "answer": "multiple AI framework integration, and real-time execution monitoring",
+            "time": 0.2766110897064209,
+            "success": true
+          },
+          {
+            "question": "How does CrewBuilder help users?",
+            "answer": "create AI-powered workflows",
+            "time": 0.2317507266998291,
+            "success": true
+          }
+        ],
+        "success_rate": "3/3",
+        "avg_response_time": "1.431s"
+      },
+      "timestamp": "2025-06-05T14:02:48.701510"
+    },
+    {
+      "category": "\ud83d\udcdd Text Generation",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "prompt": "CrewBuilder revolutionizes workflow automation by",
+            "success": false
+          },
+          {
+            "prompt": "The future of AI-powered business processes includes",
+            "success": false
+          },
+          {
+            "prompt": "Organizations using CrewBuilder report that",
+            "success": false
+          }
+        ],
+        "success_rate": "0/3"
+      },
+      "timestamp": "2025-06-05T14:02:49.357116"
+    },
+    {
+      "category": "\ud83d\udd17 Feature Extraction",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "text": "CrewBuilder workflow automation platform",
+            "success": false
+          },
+          {
+            "text": "AI-powered business process optimization",
+            "success": false
+          },
+          {
+            "text": "Drag-and-drop interface for AI workflows",
+            "success": false
+          },
+          {
+            "text": "Real-time monitoring and error handling",
+            "success": false
+          }
+        ],
+        "success_rate": "0/4"
+      },
+      "timestamp": "2025-06-05T14:02:54.336016"
+    },
+    {
+      "category": "\ud83c\udfaf Zero-Shot Classification",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "text": "I love using CrewBuilder for my automation workflows",
+            "success": false
+          },
+          {
+            "text": "The platform needs better documentation",
+            "success": false
+          }
+        ],
+        "success_rate": "0/2"
+      },
+      "timestamp": "2025-06-05T14:02:54.337018"
+    },
+    {
+      "category": "\u26a1 Performance Benchmarks",
+      "result": {
+        "success": false,
+        "results": {}
+      },
+      "timestamp": "2025-06-05T14:02:57.101165"
+    },
+    {
+      "category": "\ud83d\udd04 Fallback Mechanisms",
+      "result": {
+        "success": true,
+        "message": "Fallback mechanism working correctly"
+      },
+      "timestamp": "2025-06-05T14:02:57.101165"
+    },
+    {
+      "category": "\ud83d\udcca Batch Processing",
+      "result": {
+        "success": false,
+        "processed": 3,
+        "successful": 0,
+        "total_time": "0.921s"
+      },
+      "timestamp": "2025-06-05T14:02:58.022823"
+    },
+    {
+      "category": "\ud83d\udee1\ufe0f Error Handling",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "test": "Invalid task type",
+            "handled": true
+          },
+          {
+            "test": "Empty input",
+            "handled": true
+          },
+          {
+            "test": "Malformed config",
+            "handled": true
+          }
+        ],
+        "error_handling_rate": "3/3"
+      },
+      "timestamp": "2025-06-05T14:02:58.344288"
+    }
+  ],
+  "recommendations": "Significant debugging required before deployment"
+}

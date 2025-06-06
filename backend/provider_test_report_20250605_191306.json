@@ -1,0 +1,104 @@
+{
+  "test_summary": {
+    "total_tests": 6,
+    "successful_tests": 3,
+    "failed_tests": 3,
+    "success_rate": 50.0,
+    "total_execution_time": 36.214152,
+    "test_date": "2025-06-05T19:12:29.996382"
+  },
+  "provider_stats": {
+    "hf-inference": {
+      "count": 3,
+      "total_time": 4.757032000000001
+    }
+  },
+  "detailed_results": [
+    {
+      "task": "summarization",
+      "model": "sshleifer/distilbart-cnn-12-6",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "500 Server Error: Internal Server Error for url: https://router.huggingface.co/hf-inference/models/sshleifer/distilbart-cnn-12-6 (Request ID: Root=1-6841cfff-4b257d527975396821e3d617;65b81c6c-47df-4da5-a8ae-db627f94463e)\n\n500 Internal Server Error"
+    },
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 3.890851,
+      "output_length": 27
+    },
+    {
+      "task": "question-answering",
+      "model": "deepset/roberta-base-squad2",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "(Request ID: Root=1-6841d014-41ba6c1415c64798068bc6e8;b6b93795-1b8a-4ba8-84ee-f2bb89ec471a)\n\nBad request:\ninputs must be a dict, but a `<class 'NoneType'>` was provided instead."
+    },
+    {
+      "task": "feature-extraction",
+      "model": "sentence-transformers/paraphrase-MiniLM-L6-v2",
+      "provider": "hf-inference",
+      "success": false,
+      "error": "404 Client Error: Not Found for url: https://router.huggingface.co/hf-inference/pipeline/feature-extraction/sentence-transformers/paraphrase-MiniLM-L6-v2 (Request ID: Root=1-6841d020-4d40da233def0e3213db9c35;91a52ae3-c4e9-411c-8d27-29ed4bf1917c)"
+    },
+    {
+      "task": "zero-shot-classification",
+      "model": "facebook/bart-large-mnli",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 0.613904,
+      "output_length": 245
+    },
+    {
+      "task": "text-classification",
+      "model": "cardiffnlp/twitter-roberta-base-sentiment",
+      "provider": "hf-inference",
+      "success": true,
+      "execution_time": 0.252277,
+      "output_length": 27
+    }
+  ],
+  "verified_models": {
+    "summarization": {
+      "primary": "sshleifer/distilbart-cnn-12-6",
+      "fallback": "facebook/bart-large-cnn",
+      "provider": "hf-inference"
+    },
+    "text-classification": {
+      "primary": "cardiffnlp/twitter-roberta-base-sentiment",
+      "fallback": "distilbert-base-uncased-finetuned-sst-2-english",
+      "provider": "hf-inference"
+    },
+    "question-answering": {
+      "primary": "deepset/roberta-base-squad2",
+      "fallback": "distilbert-base-cased-distilled-squad",
+      "provider": "hf-inference"
+    },
+    "feature-extraction": {
+      "primary": "sentence-transformers/paraphrase-MiniLM-L6-v2",
+      "fallback": "sentence-transformers/all-mpnet-base-v2",
+      "provider": "hf-inference"
+    },
+    "zero-shot-classification": {
+      "primary": "facebook/bart-large-mnli",
+      "fallback": "typeform/distilbert-base-uncased-mnli",
+      "provider": "hf-inference"
+    }
+  },
+  "available_providers": {
+    "hf-inference": {
+      "name": "HuggingFace Inference API",
+      "base_url": "https://api-inference.huggingface.co",
+      "requires_api_key": true,
+      "supported_tasks": [
+        "summarization",
+        "text-classification",
+        "question-answering",
+        "feature-extraction",
+        "zero-shot-classification"
+      ]
+    }
+  }
+}

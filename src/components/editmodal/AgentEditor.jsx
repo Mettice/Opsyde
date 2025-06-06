@@ -77,6 +77,31 @@ const EnhancedAgentEditor = ({
   const [loadingApiKeys, setLoadingApiKeys] = useState(true);
   const [apiKeyError, setApiKeyError] = useState(null);
 
+  // 🦜 LangChain State Management
+  const [langchainTools, setLangchainTools] = useState([]);
+  const [langchainModes, setLangchainModes] = useState({});
+  const [langchainLoading, setLangchainLoading] = useState(true);
+
+  // 🤗 HuggingFace State Management
+  const [hfTasks, setHfTasks] = useState([]);
+  const [hfModels, setHfModels] = useState({});
+  const [hfLoading, setHfLoading] = useState(true);
+  const [selectedHfTask, setSelectedHfTask] = useState(formData.taskType || '');
+
+  // 📚 LlamaIndex State Management
+  const [llamaIndexCapabilities, setLlamaIndexCapabilities] = useState({});
+  const [llamaIndexLoading, setLlamaIndexLoading] = useState(true);
+  const [selectedIndexType, setSelectedIndexType] = useState(formData.indexType || 'vector');
+  const [selectedDocSource, setSelectedDocSource] = useState(formData.documentsSource || 'text');
+
+  // 🤝 AutoGen State Management
+  const [autogenCapabilities, setAutogenCapabilities] = useState({});
+  const [autogenAgentTemplates, setAutogenAgentTemplates] = useState([]);
+  const [autogenConversationTemplates, setAutogenConversationTemplates] = useState([]);
+  const [autogenLoading, setAutogenLoading] = useState(true);
+  const [selectedAgentTemplate, setSelectedAgentTemplate] = useState('');
+  const [selectedConversationTemplate, setSelectedConversationTemplate] = useState('');
+
   // 🔑 Load API Keys from BYOK Manager
   useEffect(() => {
     const loadApiKeys = async () => {
@@ -100,6 +125,139 @@ const EnhancedAgentEditor = ({
     };
 
     loadApiKeys();
+  }, []);
+
+  // 🦜 Load LangChain capabilities
+  useEffect(() => {
+    const loadLangChainCapabilities = async () => {
+      try {
+        setLangchainLoading(true);
+        const response = await fetch('http://localhost:8000/api/tools/langchain/capabilities');
+        
+        if (response.ok) {
+          const data = await response.json();
+          setLangchainTools(Object.values(data.tools || {}));
+          setLangchainModes(data.execution_modes || {});
+        }
+      } catch (error) {
+        console.error('Failed to load LangChain capabilities:', error);
+      } finally {
+        setLangchainLoading(false);
+      }
+    };
+    
+    loadLangChainCapabilities();
+  }, []);
+
+  // 🤗 Load HuggingFace capabilities
+  useEffect(() => {
+    const loadHuggingFaceCapabilities = async () => {
+      try {
+        setHfLoading(true);
+        // ✅ Fix: Use the same working debug endpoint as ToolEditor
+        const response = await fetch('http://localhost:8000/api/tools/huggingface/debug');
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Extract tasks from the debug response format
+          if (data.status === "success" && data.tasks) {
+            setHfTasks(data.tasks || []);
+          } else {
+            // Fallback: Use hardcoded verified tasks if debug doesn't have them
+            const fallbackTasks = ["summarization", "text-classification", "question-answering", "zero-shot-classification"];
+            setHfTasks(fallbackTasks);
+          }
+          
+          // Load models for current task if selected
+          if (selectedHfTask) {
+            loadModelsForTask(selectedHfTask);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load HuggingFace capabilities:', error);
+        // Fallback: Use hardcoded verified tasks
+        setHfTasks(["summarization", "text-classification", "question-answering", "zero-shot-classification"]);
+      } finally {
+        setHfLoading(false);
+      }
+    };
+    
+    const loadModelsForTask = async (task) => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/tools/huggingface/models/${task}`);
+        if (response.ok) {
+          const data = await response.json();
+          setHfModels(prev => ({
+            ...prev,
+            [task]: data.models || {}
+          }));
+        }
+      } catch (error) {
+        console.error(`Failed to load models for task ${task}:`, error);
+      }
+    };
+    
+    loadHuggingFaceCapabilities();
+  }, [selectedHfTask]);
+
+  // 📚 Load LlamaIndex capabilities
+  useEffect(() => {
+    const loadLlamaIndexCapabilities = async () => {
+      try {
+        setLlamaIndexLoading(true);
+        
+        // Load capabilities
+        const capabilityResponse = await fetch('http://localhost:8000/api/tools/llamaindex/capabilities');
+        if (capabilityResponse.ok) {
+          const capabilityData = await capabilityResponse.json();
+          setLlamaIndexCapabilities(capabilityData);
+        }
+      } catch (error) {
+        console.error('Failed to load LlamaIndex capabilities:', error);
+      } finally {
+        setLlamaIndexLoading(false);
+      }
+    };
+    
+    loadLlamaIndexCapabilities();
+  }, []);
+
+  // 🤝 Load AutoGen capabilities
+  useEffect(() => {
+    const loadAutogenCapabilities = async () => {
+      try {
+        setAutogenLoading(true);
+        
+        // Load capabilities
+        const [capabilityResponse, agentTemplatesResponse, conversationTemplatesResponse] = await Promise.all([
+          fetch('http://localhost:8000/api/tools/autogen/capabilities'),
+          fetch('http://localhost:8000/api/tools/autogen/agent-templates'),
+          fetch('http://localhost:8000/api/tools/autogen/conversation-templates')
+        ]);
+        
+        if (capabilityResponse.ok) {
+          const capabilityData = await capabilityResponse.json();
+          setAutogenCapabilities(capabilityData);
+        }
+        
+        if (agentTemplatesResponse.ok) {
+          const agentData = await agentTemplatesResponse.json();
+          setAutogenAgentTemplates(agentData.agent_templates || []);
+        }
+        
+        if (conversationTemplatesResponse.ok) {
+          const conversationData = await conversationTemplatesResponse.json();
+          setAutogenConversationTemplates(conversationData.conversation_templates || []);
+        }
+      } catch (error) {
+        console.error('Failed to load AutoGen capabilities:', error);
+      } finally {
+        setAutogenLoading(false);
+      }
+    };
+    
+    loadAutogenCapabilities();
   }, []);
 
   // 🔑 Auto-inject API key when provider is selected
@@ -540,185 +698,607 @@ const EnhancedAgentEditor = ({
     </div>
   );
 
-  const renderLangChainFields = () => (
-    <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
-      <h4 className="text-sm font-medium text-purple-800 mb-4">🔗 LangChain Agent Configuration</h4>
+  const renderLangChainFields = () => {
+    const selectedTools = formData.langchainTools || [];
+    const selectedMode = formData.chainType || 'auto';
+    
+    const handleToolSelection = (toolId) => {
+      const newTools = selectedTools.includes(toolId)
+        ? selectedTools.filter(t => t !== toolId)
+        : [...selectedTools, toolId];
       
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            System Message *
-            <HelpTooltip type="agent" field="systemMessage" />
-          </label>
-          <textarea
-            name="systemMessage"
-            value={formData.systemMessage || ''}
-            onChange={handleLocalInputChange}
-            rows="3"
-            placeholder="You are a helpful AI assistant specialized in..."
-            className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
-            required
-          />
-        </div>
+      handleInputChange({
+        target: { name: 'langchainTools', value: newTools }
+      });
+    };
+    
+    return (
+      <div className="mb-6 p-4 bg-purple-50 rounded-lg border border-purple-200">
+        <h4 className="text-sm font-medium text-purple-800 mb-4">🦜 LangChain Agent Configuration</h4>
+        
+        {langchainLoading ? (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+              <span className="text-sm text-blue-700">Loading LangChain capabilities...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* System Message */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                System Message *
+                <HelpTooltip type="agent" field="systemMessage" />
+              </label>
+              <textarea
+                name="systemMessage"
+                value={formData.systemMessage || ''}
+                onChange={handleLocalInputChange}
+                rows="3"
+                placeholder="You are a helpful AI assistant with access to tools. Use tools when necessary to provide accurate information."
+                className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                required
+              />
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Chain Type *
-            <HelpTooltip type="agent" field="chainType" />
-          </label>
-          <select
-            name="chainType"
-            value={formData.chainType || ''}
-            onChange={handleLocalInputChange}
-            className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
-            required
-          >
-            <option value="">Select Chain Type</option>
-            <option value="simple">Simple LLM Chain</option>
-            <option value="conversation">Conversation Chain</option>
-            <option value="rag">Retrieval QA Chain</option>
-            <option value="agent">Agent with Tools</option>
-          </select>
-        </div>
+            {/* Execution Mode */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Execution Mode *
+                <HelpTooltip type="agent" field="chainType" />
+              </label>
+              <select
+                name="chainType"
+                value={selectedMode}
+                onChange={handleLocalInputChange}
+                className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                required
+              >
+                <option value="auto">Auto-Detect (Recommended)</option>
+                <option value="llm_chain">Simple LLM Chain</option>
+                <option value="conversation">Conversation with Memory</option>
+                <option value="rag">Retrieval QA Chain</option>
+                <option value="agent">Agent with Tools</option>
+              </select>
+              <p className="text-xs text-purple-600 mt-1">
+                Auto-detect will choose agent mode if tools are selected, otherwise simple LLM chain
+              </p>
+            </div>
+
+            {/* Tools Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Available Tools
+                <HelpTooltip type="agent" field="tools" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {langchainTools.map((tool) => (
+                  <div
+                    key={tool.id || tool.name}
+                    className={`p-3 border rounded-lg cursor-pointer transition-all ${
+                      selectedTools.includes(tool.id || tool.name)
+                        ? 'border-purple-500 bg-purple-100'
+                        : 'border-gray-300 hover:border-purple-300'
+                    }`}
+                    onClick={() => handleToolSelection(tool.id || tool.name)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-sm">{tool.name}</div>
+                        <div className="text-xs text-gray-600">{tool.description}</div>
+                      </div>
+                      <div className="text-lg">
+                        {tool.category === 'computation' && '🧮'}
+                        {tool.category === 'information' && '🔍'}
+                        {tool.category === 'file_processing' && '📁'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {selectedTools.length > 0 && (
+                <p className="text-xs text-purple-600 mt-2">
+                  Selected: {selectedTools.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderAutoGenFields = () => (
-    <div className="mb-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
-      <h4 className="text-sm font-medium text-orange-800 mb-4">🤝 AutoGen Agent Configuration</h4>
+    <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
+      <h4 className="text-sm font-medium text-green-800 mb-4">🤝 AutoGen Multi-Agent Configuration</h4>
       
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            System Message *
-            <HelpTooltip type="agent" field="systemMessage" />
-          </label>
-          <textarea
-            name="systemMessage"
-            value={formData.systemMessage || ''}
-            onChange={handleLocalInputChange}
-            rows="3"
-            placeholder="You are a helpful AI assistant..."
-            className="w-full p-3 border border-orange-300 rounded-md focus:ring-2 focus:ring-orange-500"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Agent Type *
-            <HelpTooltip type="agent" field="agentType" />
-          </label>
-          <select
-            name="agentType"
-            value={formData.agentType || ''}
-            onChange={handleLocalInputChange}
-            className="w-full p-3 border border-orange-300 rounded-md focus:ring-2 focus:ring-orange-500"
-            required
-          >
-            <option value="">Select Agent Type</option>
-            <option value="assistant">Assistant Agent</option>
-            <option value="user_proxy">User Proxy Agent</option>
-            <option value="conversable">Conversable Agent</option>
-          </select>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderLlamaIndexFields = () => (
-    <div className="mb-6 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
-      <h4 className="text-sm font-medium text-indigo-800 mb-4">📚 LlamaIndex Agent Configuration</h4>
-      
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Index Type *
-              <HelpTooltip type="agent" field="indexType" />
-            </label>
-            <select
-              name="indexType"
-              value={formData.indexType || ''}
-              onChange={handleLocalInputChange}
-              className="w-full p-3 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-              required
-            >
-              <option value="">Select Index Type</option>
-              <option value="vector">Vector Store Index</option>
-              <option value="tree">Tree Index</option>
-              <option value="list">List Index</option>
-              <option value="keyword">Keyword Table Index</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Documents Source *
-              <HelpTooltip type="agent" field="documentsSource" />
-            </label>
-            <select
-              name="documentsSource"
-              value={formData.documentsSource || ''}
-              onChange={handleLocalInputChange}
-              className="w-full p-3 border border-indigo-300 rounded-md focus:ring-2 focus:ring-indigo-500"
-              required
-            >
-              <option value="">Select Source</option>
-              <option value="upload">File Upload</option>
-              <option value="url">Web URL</option>
-              <option value="text">Direct Text</option>
-            </select>
+      {autogenLoading ? (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+            <span className="text-sm text-blue-700">Loading AutoGen capabilities...</span>
           </div>
         </div>
-      </div>
+      ) : !autogenCapabilities.available ? (
+        <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center">
+            <span className="text-yellow-600 mr-2">⚠️</span>
+            <span className="text-sm text-yellow-700">
+              AutoGen not available: {autogenCapabilities.error || 'Installation required'}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Quick Setup with Templates */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <h5 className="text-sm font-medium text-blue-900 mb-3">🚀 Quick Setup</h5>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Agent Template
+                  <HelpTooltip type="agent" field="agentTemplate" />
+                </label>
+                <select
+                  value={selectedAgentTemplate}
+                  onChange={(e) => {
+                    setSelectedAgentTemplate(e.target.value);
+                    // Auto-fill agent configuration from template
+                    const template = autogenAgentTemplates.find(t => t.id === e.target.value);
+                    if (template) {
+                      handleInputChange({ target: { name: 'agentType', value: template.agentType } });
+                      handleInputChange({ target: { name: 'systemMessage', value: template.systemMessage } });
+                    }
+                  }}
+                  className="w-full p-3 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Custom Agent</option>
+                  {autogenAgentTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} - {template.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Conversation Template
+                  <HelpTooltip type="agent" field="conversationTemplate" />
+                </label>
+                <select
+                  value={selectedConversationTemplate}
+                  onChange={(e) => {
+                    setSelectedConversationTemplate(e.target.value);
+                    // Auto-fill conversation configuration from template
+                    const template = autogenConversationTemplates.find(t => t.id === e.target.value);
+                    if (template) {
+                      handleInputChange({ target: { name: 'conversationMode', value: template.conversationMode } });
+                      handleInputChange({ target: { name: 'maxTurns', value: template.maxTurns } });
+                    }
+                  }}
+                  className="w-full p-3 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Custom Conversation</option>
+                  {autogenConversationTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} - {template.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Agent Configuration */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Agent Type *
+                <HelpTooltip type="agent" field="agentType" />
+              </label>
+              <select
+                name="agentType"
+                value={formData.agentType || 'assistant'}
+                onChange={handleLocalInputChange}
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+                required
+              >
+                {autogenCapabilities.agent_types?.map((agentType) => (
+                  <option key={agentType} value={agentType}>
+                    {agentType.replace('_', ' ').split(' ').map(word => 
+                      word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Conversation Mode *
+                <HelpTooltip type="agent" field="conversationMode" />
+              </label>
+              <select
+                name="conversationMode"
+                value={formData.conversationMode || 'one_on_one'}
+                onChange={handleLocalInputChange}
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+                required
+              >
+                {autogenCapabilities.conversation_modes?.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode.replace('_', ' ').split(' ').map(word => 
+                      word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Conversation Settings */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Max Turns
+                <HelpTooltip type="agent" field="maxTurns" />
+              </label>
+              <input
+                type="number"
+                name="maxTurns"
+                value={formData.maxTurns || 10}
+                onChange={handleLocalInputChange}
+                min="1"
+                max="50"
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Human Input Mode
+                <HelpTooltip type="agent" field="humanInputMode" />
+              </label>
+              <select
+                name="humanInputMode"
+                value={formData.humanInputMode || 'NEVER'}
+                onChange={handleLocalInputChange}
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+              >
+                {autogenCapabilities.human_input_modes?.map((mode) => (
+                  <option key={mode} value={mode}>
+                    {mode}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Code Execution
+                <HelpTooltip type="agent" field="codeExecution" />
+              </label>
+              <select
+                name="codeExecution"
+                value={formData.codeExecution || 'disabled'}
+                onChange={handleLocalInputChange}
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+              >
+                {autogenCapabilities.code_execution?.map((option) => (
+                  <option key={option} value={option}>
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Agent Name and Description */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Agent Name
+                <HelpTooltip type="agent" field="agentName" />
+              </label>
+              <input
+                type="text"
+                name="agentName"
+                value={formData.agentName || ''}
+                onChange={handleLocalInputChange}
+                placeholder="e.g., ResearchAssistant"
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Agent Description
+                <HelpTooltip type="agent" field="agentDescription" />
+              </label>
+              <input
+                type="text"
+                name="agentDescription"
+                value={formData.agentDescription || ''}
+                onChange={handleLocalInputChange}
+                placeholder="Brief description of agent's role"
+                className="w-full p-3 border border-green-300 rounded-md focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+          </div>
+
+          {/* Advanced Multi-Agent Features */}
+          {formData.conversationMode === 'group_chat' && (
+            <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <h5 className="text-sm font-medium text-yellow-900 mb-3">👥 Group Chat Configuration</h5>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Speaker Selection Method
+                    <HelpTooltip type="agent" field="speakerSelectionMethod" />
+                  </label>
+                  <select
+                    name="speakerSelectionMethod"
+                    value={formData.speakerSelectionMethod || 'auto'}
+                    onChange={handleLocalInputChange}
+                    className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+                  >
+                    <option value="auto">Auto Selection</option>
+                    <option value="manual">Manual Selection</option>
+                    <option value="random">Random Selection</option>
+                    <option value="round_robin">Round Robin</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Max Concurrent Agents
+                    <HelpTooltip type="agent" field="maxConcurrentAgents" />
+                  </label>
+                  <input
+                    type="number"
+                    name="maxConcurrentAgents"
+                    value={formData.maxConcurrentAgents || 5}
+                    onChange={handleLocalInputChange}
+                    min="2"
+                    max="10"
+                    className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Code Execution Settings */}
+          {formData.codeExecution !== 'disabled' && (
+            <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+              <h5 className="text-sm font-medium text-purple-900 mb-3">💻 Code Execution Settings</h5>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Code Timeout (seconds)
+                    <HelpTooltip type="agent" field="codeTimeout" />
+                  </label>
+                  <input
+                    type="number"
+                    name="codeTimeout"
+                    value={formData.codeTimeout || 60}
+                    onChange={handleLocalInputChange}
+                    min="10"
+                    max="300"
+                    className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Work Directory
+                    <HelpTooltip type="agent" field="workDirectory" />
+                  </label>
+                  <input
+                    type="text"
+                    name="workDirectory"
+                    value={formData.workDirectory || 'autogen_workspace'}
+                    onChange={handleLocalInputChange}
+                    placeholder="autogen_workspace"
+                    className="w-full p-3 border border-purple-300 rounded-md focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Capability Overview */}
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="text-sm">
+              <strong>AutoGen Version:</strong> {autogenCapabilities.version || 'Unknown'}
+            </div>
+            <div className="text-sm mt-1">
+              <strong>Available Features:</strong> {Object.entries(autogenCapabilities.features || {})
+                .filter(([key, value]) => value)
+                .map(([key]) => key.replace('_', ' '))
+                .join(', ') || 'Loading...'}
+            </div>
+            <div className="text-xs text-green-600 mt-1">
+              Supported providers: {autogenCapabilities.supported_providers?.join(', ') || 'Loading...'}
+            </div>
+          </div>
+
+          {/* Template Preview */}
+          {selectedAgentTemplate && (
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <h6 className="text-sm font-medium text-blue-900 mb-2">📝 Agent Template Preview</h6>
+              {(() => {
+                const template = autogenAgentTemplates.find(t => t.id === selectedAgentTemplate);
+                return template ? (
+                  <div className="text-xs space-y-1">
+                    <div><strong>Type:</strong> {template.agentType}</div>
+                    <div><strong>Description:</strong> {template.description}</div>
+                    <div><strong>System Message:</strong> {template.systemMessage.substring(0, 100)}...</div>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
-  const renderHuggingFaceFields = () => (
-    <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-      <h4 className="text-sm font-medium text-yellow-800 mb-4">🤗 HuggingFace Model Configuration</h4>
+  const renderHuggingFaceFields = () => {
+    const currentModels = hfModels[selectedHfTask] || {};
+    const primaryModel = currentModels.primary || '';
+    
+    const handleTaskChange = async (e) => {
+      const newTask = e.target.value;
+      setSelectedHfTask(newTask);
+      handleInputChange(e);
       
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Model Name *
-            <HelpTooltip type="agent" field="modelName" />
-          </label>
-          <input
-            type="text"
-            name="modelName"
-            value={formData.modelName || ''}
-            onChange={handleLocalInputChange}
-            placeholder="e.g., microsoft/DialoGPT-medium"
-            className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
-            required
-          />
-        </div>
+      // Reset model when task changes
+      handleInputChange({
+        target: { name: 'modelName', value: '' }
+      });
+      
+      // ✅ FIX: Immediately load models for the selected task
+      if (newTask) {
+        try {
+          const response = await fetch(`http://localhost:8000/api/tools/huggingface/models/${newTask}`);
+          if (response.ok) {
+            const data = await response.json();
+            const taskModels = data.models || {};
+            
+            // Update models state
+            setHfModels(prev => ({
+              ...prev,
+              [newTask]: taskModels
+            }));
+            
+            // ✅ AUTO-POPULATE recommended model immediately
+            if (taskModels.primary) {
+              handleInputChange({
+                target: { name: 'modelName', value: taskModels.primary }
+              });
+              console.log(`🤗 Auto-selected recommended model: ${taskModels.primary}`);
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to load models for task ${newTask}:`, error);
+        }
+      }
+    };
+    
+    return (
+      <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+        <h4 className="text-sm font-medium text-yellow-800 mb-4">🤗 HuggingFace Model Configuration</h4>
+        
+        {hfLoading ? (
+          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+              <span className="text-sm text-blue-700">Loading HuggingFace capabilities...</span>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Task Type Selection */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Task Type *
+                <HelpTooltip type="agent" field="taskType" />
+              </label>
+              <select
+                name="taskType"
+                value={selectedHfTask}
+                onChange={handleTaskChange}
+                className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+                required
+              >
+                <option value="">Select Task Type</option>
+                {hfTasks.map((task) => (
+                  <option key={task} value={task}>
+                    {task.split('-').map(word => 
+                      word.charAt(0).toUpperCase() + word.slice(1)
+                    ).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Task Type *
-            <HelpTooltip type="agent" field="taskType" />
-          </label>
-          <select
-            name="taskType"
-            value={formData.taskType || ''}
-            onChange={handleLocalInputChange}
-            className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
-            required
-          >
-            <option value="">Select Task Type</option>
-            <option value="text-generation">Text Generation</option>
-            <option value="conversational">Conversational</option>
-            <option value="question-answering">Question Answering</option>
-            <option value="summarization">Summarization</option>
-          </select>
-        </div>
+            {/* Model Selection */}
+            {selectedHfTask && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Model Name *
+                  <HelpTooltip type="agent" field="modelName" />
+                </label>
+                {primaryModel ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      name="modelName"
+                      value={formData.modelName || primaryModel}
+                      onChange={handleLocalInputChange}
+                      placeholder={primaryModel}
+                      className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+                      required
+                    />
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="text-sm font-medium text-green-800 mb-1">
+                        ✅ Recommended (Auto-Selected): {primaryModel}
+                      </div>
+                      {currentModels.description && (
+                        <div className="text-xs text-green-700 mb-2">
+                          {currentModels.description}
+                        </div>
+                      )}
+                      <div className="text-xs text-green-600">
+                        💡 <strong>Pro tip:</strong> This model is tested and verified to work well. You can also type a different model if you prefer.
+                      </div>
+                    </div>
+                    {currentModels.alternatives && currentModels.alternatives.length > 0 && (
+                      <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                        <strong>Alternative options:</strong> {currentModels.alternatives.join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      name="modelName"
+                      value={formData.modelName || ''}
+                      onChange={handleLocalInputChange}
+                      placeholder="e.g., microsoft/DialoGPT-medium, facebook/bart-large-cnn"
+                      className="w-full p-3 border border-yellow-300 rounded-md focus:ring-2 focus:ring-yellow-500"
+                      required
+                    />
+                    <div className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                      ⚠️ No verified models loaded yet. Please enter a HuggingFace model name manually.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Task Description */}
+            {selectedHfTask && (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="text-sm">
+                  <strong>Task:</strong> {selectedHfTask.split('-').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                  ).join(' ')}
+                </div>
+                <div className="text-xs text-gray-600 mt-1">
+                  This agent will be specialized for {selectedHfTask} tasks using HuggingFace models.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderWebhookFields = () => (
     <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">

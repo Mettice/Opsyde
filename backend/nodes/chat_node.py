@@ -68,17 +68,11 @@ async def call_perplexity(messages: list, model: str, temperature: float, max_to
         api_key=api_key
     )
 
-async def call_huggingface(messages: list, model: str, temperature: float, max_tokens: int, api_key: str = None) -> str:
-    """Call HuggingFace API - using tool runner as chat wrapper"""
-    # Convert chat format to tool format for HuggingFace
-    config = {
-        "model": model,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "api_key": api_key
-    }
+async def call_huggingface(messages: list, model: str, temperature: float, max_tokens: int, api_key: str = None, context=None) -> str:
+    """Call HuggingFace with conversational format"""
+    from frameworks.huggingface_runner import run_huggingface_tool
     
-    # Convert messages to a single prompt
+    # Convert messages to a single prompt for HuggingFace
     prompt = ""
     for msg in messages:
         if msg["role"] == "system":
@@ -88,9 +82,19 @@ async def call_huggingface(messages: list, model: str, temperature: float, max_t
         elif msg["role"] == "assistant":
             prompt += f"Assistant: {msg['content']}\n"
     
-    inputs = {"prompt": prompt}
+    # Build config for enhanced runner
+    config = {
+        "modelName": model,
+        "taskType": "conversational",
+        "temperature": temperature,
+        "maxLength": max_tokens,
+        "doSample": True
+    }
     
-    result = await run_huggingface_tool(config, inputs)
+    inputs = {"input": prompt}
+    
+    # Use enhanced runner with context support
+    result = await run_huggingface_tool(config, inputs, context)
     
     # Extract the response text
     if isinstance(result, dict) and "output" in result:
@@ -98,7 +102,7 @@ async def call_huggingface(messages: list, model: str, temperature: float, max_t
     else:
         return str(result)
 
-async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
     """
     Run chat node with support for multiple frameworks
     """
@@ -196,7 +200,7 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[st
         elif framework == "perplexity":
             result = await call_perplexity(messages, model, temperature, max_tokens, api_key)
         elif framework == "huggingface":
-            result = await call_huggingface(messages, model, temperature, max_tokens, api_key)
+            result = await call_huggingface(messages, model, temperature, max_tokens, api_key, context)
         else:
             return {
                 "type": "error",
@@ -279,7 +283,7 @@ async def process_chat_node(
         logger.info(f"🚀 CHAT PROCESSED INPUTS: {processed_inputs}")
         
         # Run the chat node
-        result = await run_chat_node(node_data, processed_inputs)
+        result = await run_chat_node(node_data, processed_inputs, context)
         
         logger.info(f"🚀 CHAT NODE RESULT: {result}")
         return result
@@ -303,8 +307,9 @@ async def run_chat_endpoint(data: Dict[str, Any]) -> Dict[str, Any]:
     try:
         inputs = data.get("inputs", {})
         node_data = data.get("node_data", {})
+        context = data.get("context", None)
         
-        result = await run_chat_node(node_data, inputs)
+        result = await run_chat_node(node_data, inputs, context)
         return result
     except Exception as e:
         logger.error(f"Error in chat endpoint: {str(e)}")

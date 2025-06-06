@@ -9,15 +9,32 @@ logger = logging.getLogger(__name__)
 try:
     from crewai import Agent, Task, Crew, Process
     from crewai.tools import BaseTool
-    # New 0.1.21 imports
-    from crewai.tools import WebSearchTool, CalculatorTool, FileReaderTool
-    from langchain.tools import Tool
+    # New 0.121.0 imports - make built-in tools optional
     CREWAI_AVAILABLE = True
-    CREWAI_VERSION = "0.1.21"
+    CREWAI_VERSION = "0.121.0"
+    
+    # Try to import built-in tools but don't fail if they don't exist
+    BUILTIN_TOOLS_AVAILABLE = False
+    try:
+        from crewai.tools import WebSearchTool, CalculatorTool, FileReaderTool
+        BUILTIN_TOOLS_AVAILABLE = True
+    except ImportError:
+        # Built-in tools not available or named differently
+        pass
+    
+    # Also try LangChain tools as fallback
+    try:
+        from langchain.tools import Tool
+        LANGCHAIN_TOOLS_AVAILABLE = True
+    except ImportError:
+        LANGCHAIN_TOOLS_AVAILABLE = False
+        
 except ImportError:
     logger.warning("CrewAI not installed - using fallback implementation")
     CREWAI_AVAILABLE = False
     CREWAI_VERSION = "fallback"
+    BUILTIN_TOOLS_AVAILABLE = False
+    LANGCHAIN_TOOLS_AVAILABLE = False
     # Define fallback BaseTool when CrewAI is not available
     class BaseTool:
         """Fallback BaseTool class when CrewAI is not available"""
@@ -33,19 +50,87 @@ class EnhancedCrewAIRunner:
         self.intermediate_steps = []
     
     def get_built_in_tools(self) -> Dict[str, BaseTool]:
-        """Get CrewAI 0.1.21 built-in tools"""
+        """Get CrewAI 0.121.0 built-in tools"""
         if not CREWAI_AVAILABLE:
             return {}
         
+        tools = {}
+        
+        # Try to get built-in tools if available
+        if BUILTIN_TOOLS_AVAILABLE:
+            try:
+                tools.update({
+                    'web_search': WebSearchTool(),
+                    'calculator': CalculatorTool(),
+                    'file_reader': FileReaderTool(),
+                })
+            except Exception as e:
+                logger.warning(f"Could not load built-in tools: {e}")
+        
+        # If no built-in tools available, create basic LangChain tools as fallback
+        if not tools and LANGCHAIN_TOOLS_AVAILABLE:
+            try:
+                from langchain_community.tools import DuckDuckGoSearchRun
+                from langchain.tools import Tool
+                
+                # Create basic tools using LangChain
+                search_tool = Tool(
+                    name="web_search",
+                    description="Search the web for information",
+                    func=DuckDuckGoSearchRun().run
+                )
+                
+                calculator_tool = Tool(
+                    name="calculator",
+                    description="Perform mathematical calculations",
+                    func=self._basic_calculator
+                )
+                
+                tools.update({
+                    'web_search': search_tool,
+                    'calculator': calculator_tool
+                })
+                
+                logger.info("✅ Using LangChain tools as CrewAI fallback")
+                
+            except Exception as e:
+                logger.warning(f"Could not create LangChain fallback tools: {e}")
+        
+        logger.info(f"📦 Available CrewAI tools: {list(tools.keys())}")
+        return tools
+    
+    def _basic_calculator(self, expression: str) -> str:
+        """Basic calculator function for fallback"""
         try:
-            return {
-                'web_search': WebSearchTool(),
-                'calculator': CalculatorTool(),
-                'file_reader': FileReaderTool(),
+            import ast
+            import operator
+            
+            # Safe evaluation of basic math expressions
+            safe_ops = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+                ast.Div: operator.truediv,
+                ast.Pow: operator.pow,
+                ast.USub: operator.neg,
             }
+            
+            def eval_expr(node):
+                if isinstance(node, ast.Constant):
+                    return node.value
+                elif isinstance(node, ast.BinOp):
+                    return safe_ops[type(node.op)](eval_expr(node.left), eval_expr(node.right))
+                elif isinstance(node, ast.UnaryOp):
+                    return safe_ops[type(node.op)](eval_expr(node.operand))
+                else:
+                    raise TypeError(f"Unsupported operation: {type(node)}")
+            
+            tree = ast.parse(expression, mode='eval')
+            result = eval_expr(tree.body)
+            return str(result)
+            
         except Exception as e:
-            logger.warning(f"Could not load built-in tools: {e}")
-            return {}
+            return f"Calculator error: {str(e)}"
     
     def get_llm_for_framework(self, framework_config: Dict[str, Any]):
         """Get appropriate LLM based on configuration with token tracking"""
@@ -194,6 +279,12 @@ class EnhancedCrewAIRunner:
             # Create LLM with token tracking
             llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
             
+            # 🔧 CRITICAL FIX: If LLM is None (e.g., for Perplexity), use fallback execution immediately
+            # This prevents CrewAI from defaulting to OpenAI when we want to use a different provider
+            if llm is None:
+                logger.info(f"🔄 LLM is None - using fallback execution for provider: {agent_config.get('frameworkConfig', {}).get('provider')}")
+                return await self._fallback_execution(agent_config, task_config, inputs)
+            
             # Create tools (including built-in ones)
             crewai_tools = []
             if tools:
@@ -238,19 +329,30 @@ class EnhancedCrewAIRunner:
                 memory=agent_config.get('enableMemory', False)
             )
             
-            # Execute crew with new 0.1.21 methods
+            # Execute with enhanced 0.121.0 methods
             if chat_mode:
-                # Use new chat mode
-                result = crew.chat(
-                    message=task_description,
-                    return_intermediate_steps=return_intermediate_steps
-                )
+                try:
+                    result = crew.chat(
+                        message=f"Execute tasks: {[task.get('description') for task in tasks]}",
+                        return_intermediate_steps=return_intermediate_steps
+                    )
+                except AttributeError:
+                    # Fallback if chat method doesn't exist
+                    result = crew.kickoff(inputs=inputs or {})
             else:
-                # Use enhanced run method
-                result = crew.run(
-                    inputs=inputs or {},
-                    return_intermediate_steps=return_intermediate_steps
-                )
+                # Use kickoff method for 0.121.0 compatibility
+                try:
+                    result = crew.kickoff(inputs=inputs or {})
+                except AttributeError:
+                    # Fallback to run if kickoff doesn't exist
+                    try:
+                        result = crew.run(
+                            inputs=inputs or {},
+                            return_intermediate_steps=return_intermediate_steps
+                        )
+                    except AttributeError:
+                        # Final fallback - simple kickoff without params
+                        result = crew.kickoff()
             
             # Enhanced result with 0.1.21 features
             return {
@@ -321,6 +423,16 @@ class EnhancedCrewAIRunner:
             crew_agents = []
             for agent_config in agents:
                 llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
+                
+                # 🔧 CRITICAL FIX: If any agent has LLM=None, use fallback for the entire crew
+                # This prevents CrewAI from defaulting to OpenAI when we want to use a different provider
+                if llm is None:
+                    logger.info(f"🔄 Agent LLM is None - multi-agent CrewAI not supported for provider: {agent_config.get('frameworkConfig', {}).get('provider')}")
+                    # For multi-agent, we'll run the first agent with fallback execution
+                    if agents and tasks:
+                        return await self._fallback_execution(agents[0], tasks[0], inputs)
+                    else:
+                        return {"error": "Cannot use multi-agent CrewAI with unsupported LLM provider", "success": False}
                 
                 agent = Agent(
                     role=agent_config.get('role'),
@@ -742,3 +854,70 @@ def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]],
         )
     finally:
         loop.close()
+
+# 🔌 FRONTEND INTEGRATION UTILITIES
+def get_crewai_capabilities() -> Dict[str, Any]:
+    """Get complete CrewAI capabilities for frontend configuration"""
+    
+    # Get built-in tools if CrewAI is available
+    available_tools = []
+    if CREWAI_AVAILABLE:
+        runner = EnhancedCrewAIRunner()
+        built_in_tools = runner.get_built_in_tools()
+        available_tools = [
+            {
+                "id": tool_name,
+                "name": tool_name.replace('_', ' ').title(),
+                "description": f"Built-in CrewAI {tool_name} tool",
+                "category": "built_in"
+            }
+            for tool_name in built_in_tools.keys()
+        ]
+    
+    return {
+        "available": CREWAI_AVAILABLE,
+        "version": CREWAI_VERSION,
+        "features": {
+            "multi_agent": CREWAI_AVAILABLE,
+            "hierarchical_process": CREWAI_AVAILABLE,
+            "sequential_process": CREWAI_AVAILABLE,
+            "consensus_process": CREWAI_AVAILABLE,
+            "memory": CREWAI_AVAILABLE,
+            "delegation": CREWAI_AVAILABLE,
+            "built_in_tools": CREWAI_AVAILABLE,
+            "custom_tools": CREWAI_AVAILABLE,
+            "chat_mode": CREWAI_AVAILABLE,
+            "token_tracking": CREWAI_AVAILABLE
+        },
+        "supported_providers": [
+            "openai", "anthropic", "openrouter", "perplexity", "google"
+        ] if CREWAI_AVAILABLE else [],
+        "agent_types": [
+            "assistant", "researcher", "analyst", "writer", "reviewer"
+        ] if CREWAI_AVAILABLE else [],
+        "process_types": [
+            "sequential", "hierarchical", "consensus"
+        ] if CREWAI_AVAILABLE else [],
+        "tools": available_tools,
+        "capabilities": [
+            "Role-based agents",
+            "Multi-agent collaboration", 
+            "Process orchestration",
+            "Memory and context management",
+            "Built-in tool integration",
+            "Custom tool creation",
+            "Token usage tracking",
+            "Step-by-step execution"
+        ] if CREWAI_AVAILABLE else []
+    }
+
+# Export main functions
+__all__ = [
+    "run_crewai_tool",
+    "run_crewai_individual_tool", 
+    "run_crewai_agent_legacy",
+    "run_agents",
+    "get_crewai_capabilities",
+    "EnhancedCrewAIRunner",
+    "CREWAI_AVAILABLE"
+]

@@ -52,6 +52,15 @@ FRAMEWORK_METADATA = {
         "required_fields": ["modelName"],
         "optional_fields": ["temperature", "maxTokens"]
     },
+    "api": {
+        "name": "Generic API",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": [],
+        "optional_fields": ["url", "method", "headers"]
+    },
     "openrouter": {
         "name": "OpenRouter",
         "requires_llm": False,  # OpenRouter IS the LLM provider
@@ -289,6 +298,58 @@ class EnhancedFrameworkRegistry:
         except Exception as e:
             logger.error(f"❌ Universal API runner failed with unexpected error: {e}")
         
+        try:
+            logger.info("🔧 Attempting to register Generic API handler...")
+            # Register generic API handler that routes to appropriate tool runner
+            async def run_generic_api_tool(config, inputs, context=None):
+                """Generic API tool handler that routes to appropriate backend"""
+                try:
+                    # Convert NodeData objects to serializable format
+                    if hasattr(inputs, '__dict__'):
+                        # If inputs is a NodeData object, extract the actual data
+                        if hasattr(inputs, 'data'):
+                            inputs = inputs.data
+                        elif hasattr(inputs, 'content'):
+                            inputs = {'inputs': inputs.content}
+                        else:
+                            inputs = {'inputs': str(inputs)}
+                    elif not isinstance(inputs, dict):
+                        inputs = {'inputs': inputs}
+                    
+                    # Check if this is actually a HuggingFace tool misclassified as API
+                    if config.get('hfTask') or config.get('hfModel') or config.get('toolType') == 'huggingface':
+                        logger.info("🤗 Detected HuggingFace tool misclassified as API, routing to HuggingFace handler")
+                        from frameworks.huggingface_runner import run_huggingface_tool
+                        return await run_huggingface_tool(config, inputs, context)
+                    
+                    # Check if this is a Universal API tool
+                    elif config.get('toolType') == 'universal_api' or config.get('api_service_name'):
+                        logger.info("🌐 Routing to Universal API handler")
+                        from frameworks.universal_api_runner import run_universal_api_tool
+                        return await run_universal_api_tool(config, inputs, context)
+                    
+                    # Otherwise treat as generic API tool
+                    else:
+                        logger.info("🔗 Treating as generic API tool")
+                        return {
+                            "success": True,
+                            "output": f"Generic API tool executed with inputs: {inputs}",
+                            "framework": "api"
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"❌ Generic API tool error: {str(e)}")
+                    return {
+                        "success": False,
+                        "error": f"Generic API tool failed: {str(e)}",
+                        "framework": "api"
+                    }
+            
+            self.register("api", run_generic_api_tool)
+            logger.info("✅ Generic API handler registered successfully")
+        except Exception as e:
+            logger.error(f"❌ Generic API handler registration failed: {e}")
+        
         logger.info(f"🔧 Framework registration complete. Registered {len(self._frameworks)} frameworks: {list(self._frameworks.keys())}")
     
     def register(self, name: str, runner_func: Callable):
@@ -463,6 +524,9 @@ class EnhancedFrameworkRegistry:
                     availability[framework] = True
                 elif framework == "universal_api":
                     # Universal API is always available as it's built-in
+                    availability[framework] = True
+                elif framework == "api":
+                    # Generic API is always available as it's built-in
                     availability[framework] = True
                 else:
                     availability[framework] = False

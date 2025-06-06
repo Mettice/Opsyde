@@ -2,11 +2,86 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 import logging
+import sys
+import os
 
 from backend.frameworks.universal_api_runner import UniversalAPIRunner
 from backend.frameworks.shared_api_research import research_for_tool, research_for_output
 from backend.utils.security import get_current_user, security_manager
 from backend.utils.logging import get_logger
+# Import HuggingFace functions directly
+try:
+    # Try relative import first (when running from backend directory)
+    from frameworks.huggingface_utils import (
+        get_frontend_task_config, 
+        validate_task_input,
+        get_task_info_enhanced,
+        get_models_for_task_enhanced
+    )
+    HF_IMPORT_SUCCESS = True
+except ImportError:
+    try:
+        # Try absolute import (when sys.path includes root directory)
+        from backend.frameworks.huggingface_utils import (
+            get_frontend_task_config, 
+            validate_task_input,
+            get_task_info_enhanced,
+            get_models_for_task_enhanced
+        )
+        HF_IMPORT_SUCCESS = True
+    except ImportError as e:
+        print(f"Warning: Could not import HuggingFace utils: {e}")
+        HF_IMPORT_SUCCESS = False
+
+# Import LangChain functions
+try:
+    from frameworks.langchain_runner import (
+        get_available_tools,
+        get_execution_modes, 
+        get_langchain_capabilities,
+        LANGCHAIN_AVAILABLE
+    )
+    LANGCHAIN_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"Warning: Could not import LangChain utils: {e}")
+    LANGCHAIN_IMPORT_SUCCESS = False
+
+# Import LlamaIndex functions
+try:
+    from frameworks.llamaindex_runner import (
+        get_llamaindex_capabilities,
+        LLAMAINDEX_FEATURES,
+        LLAMAINDEX_AVAILABLE
+    )
+    LLAMAINDEX_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"Warning: Could not import LlamaIndex utils: {e}")
+    LLAMAINDEX_IMPORT_SUCCESS = False
+
+# Import AutoGen functions
+try:
+    from frameworks.autogen_runner import (
+        get_autogen_capabilities,
+        get_agent_templates,
+        get_conversation_templates,
+        AUTOGEN_FEATURES,
+        AUTOGEN_AVAILABLE
+    )
+    AUTOGEN_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"Warning: Could not import AutoGen utils: {e}")
+    AUTOGEN_IMPORT_SUCCESS = False
+
+# Import CrewAI functions
+try:
+    from frameworks.crewai_runner import (
+        get_crewai_capabilities,
+        CREWAI_AVAILABLE
+    )
+    CREWAI_IMPORT_SUCCESS = True
+except ImportError as e:
+    print(f"Warning: Could not import CrewAI utils: {e}")
+    CREWAI_IMPORT_SUCCESS = False
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["tools"])
@@ -399,6 +474,215 @@ async def test_endpoint():
         "timestamp": "2024-01-01T00:00:00Z"
     }
 
+@router.get("/huggingface/debug")
+async def debug_huggingface_imports():
+    """Debug HuggingFace imports step by step AND return full task configuration"""
+    try:
+        result = {"status": "debugging", "steps": []}
+        
+        # Step 1: Check import success flag
+        result["steps"].append(f"Import success flag: {HF_IMPORT_SUCCESS}")
+        
+        if HF_IMPORT_SUCCESS:
+            # Step 2: Try to call the function
+            try:
+                result["steps"].append("Attempting to call get_frontend_task_config...")
+                config = get_frontend_task_config()
+                result["steps"].append(f"Function call successful - got {len(config.get('tasks', []))} tasks")
+                result["status"] = "success"
+                result["config_sample"] = {
+                    "task_count": len(config.get('tasks', [])),
+                    "categories_count": len(config.get('categories', {})),
+                    "first_task": config.get('tasks', [])[0] if config.get('tasks') else None
+                }
+                
+                # ALSO return the full configuration for frontend use
+                result["success"] = True
+                result["tasks"] = config.get("tasks", [])
+                result["categories"] = config.get("categories", {})
+                result["task_formats"] = config.get("task_formats", {})
+                result["verified_models"] = config.get("verified_models", {})
+                result["examples"] = config.get("examples", {})
+                result["message"] = "HuggingFace configuration retrieved successfully"
+                
+            except Exception as func_error:
+                result["steps"].append(f"Function call failed: {str(func_error)}")
+                result["status"] = "function_error"
+                result["error"] = str(func_error)
+                # Add fallback empty data
+                result["success"] = False
+                result["tasks"] = []
+                result["categories"] = {}
+                result["task_formats"] = {}
+                result["verified_models"] = {}
+                result["examples"] = {}
+        else:
+            result["steps"].append("Import failed - using mock config")
+            result["status"] = "import_failed"
+            # Add fallback empty data
+            result["success"] = False
+            result["tasks"] = []
+            result["categories"] = {}
+            result["task_formats"] = {}
+            result["verified_models"] = {}
+            result["examples"] = {}
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "debug_error",
+            "error": str(e),
+            "type": type(e).__name__,
+            # Add fallback empty data
+            "success": False,
+            "tasks": [],
+            "categories": {},
+            "task_formats": {},
+            "verified_models": {},
+            "examples": {}
+        }
+
+@router.get("/huggingface/tasks")
+async def get_huggingface_tasks():
+    """Get HuggingFace task configuration for frontend"""
+    try:
+        logger.info("Starting HuggingFace tasks endpoint...")
+        
+        if HF_IMPORT_SUCCESS:
+            try:
+                logger.info("Calling get_frontend_task_config()...")
+                config = get_frontend_task_config()
+                logger.info(f"Config received: {type(config)}, keys: {list(config.keys()) if isinstance(config, dict) else 'not a dict'}")
+                
+                # Safely extract data with explicit type checking
+                tasks = config.get("tasks", []) if isinstance(config, dict) else []
+                categories = config.get("categories", {}) if isinstance(config, dict) else {}
+                task_formats = config.get("task_formats", {}) if isinstance(config, dict) else {}
+                verified_models = config.get("verified_models", {}) if isinstance(config, dict) else {}
+                examples = config.get("examples", {}) if isinstance(config, dict) else {}
+                
+                logger.info(f"Extracted data - tasks: {len(tasks)}, categories: {len(categories)}")
+                
+                # Return in the format the frontend expects
+                response = {
+                    "success": True,
+                    "tasks": tasks,
+                    "categories": categories,
+                    "task_formats": task_formats,
+                    "verified_models": verified_models,
+                    "examples": examples,
+                    "message": "HuggingFace task configuration retrieved successfully"
+                }
+                
+                logger.info(f"Returning response with {len(tasks)} tasks")
+                return response
+                
+            except Exception as func_error:
+                logger.error(f"Function call failed: {str(func_error)}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                
+                return {
+                    "success": False,
+                    "error": f"Function call failed: {str(func_error)}",
+                    "message": "Failed to get HuggingFace task configuration",
+                    "tasks": []
+                }
+        else:
+            logger.warning("HuggingFace imports failed")
+            return {
+                "success": False,
+                "error": "HuggingFace imports failed",
+                "message": "HuggingFace configuration not available",
+                "tasks": []
+            }
+            
+    except Exception as e:
+        logger.error(f"Unexpected error in HuggingFace tasks endpoint: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Unexpected error occurred",
+            "tasks": []
+        }
+
+@router.get("/huggingface/tasks/{task}")
+async def get_huggingface_task_info(task: str):
+    """Get detailed information about a specific HuggingFace task"""
+    try:
+        logger.info(f"Getting info for HuggingFace task: {task}")
+        
+        task_info = get_task_info_enhanced(task)
+        
+        return {
+            "success": True,
+            "data": task_info,
+            "message": f"Task information for {task} retrieved successfully"
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get task info for {task}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get task information: {str(e)}"
+        )
+
+@router.get("/huggingface/models/{task}")
+async def get_huggingface_models(task: str):
+    """Get available models for a specific HuggingFace task"""
+    try:
+        logger.info(f"Getting models for HuggingFace task: {task}")
+        
+        models = get_models_for_task_enhanced(task)
+        
+        return {
+            "success": True,
+            "models": models,
+            "task": task,
+            "message": f"Models for {task} retrieved successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get models for {task}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "models": {},
+            "task": task,
+            "message": f"Failed to get models for {task}"
+        }
+
+class HuggingFaceTaskValidationRequest(BaseModel):
+    task: str
+    inputs: Dict[str, Any]
+
+@router.post("/huggingface/validate")
+async def validate_huggingface_inputs(request: HuggingFaceTaskValidationRequest):
+    """Validate inputs for a specific HuggingFace task"""
+    try:
+        logger.info(f"Validating inputs for HuggingFace task: {request.task}")
+        
+        result = validate_task_input(request.task, request.inputs)
+        
+        return {
+            "success": True,
+            "data": result,
+            "message": "Input validation completed"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to validate inputs for {request.task}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Input validation failed: {str(e)}"
+        )
+
 async def _get_user_api_keys(user_id: str) -> Dict[str, str]:
     """Get user API keys from environment variables or user settings"""
     import os
@@ -412,3 +696,671 @@ async def _get_user_api_keys(user_id: str) -> Dict[str, str]:
         'huggingface_key': os.getenv('HUGGINGFACE_API_KEY'),
         'groq_key': os.getenv('GROQ_API_KEY')
     }
+
+@router.get("/huggingface/test")
+async def test_huggingface_path():
+    """Debug endpoint to test HuggingFace module path resolution"""
+    try:
+        logger.info("Testing HuggingFace module path resolution...")
+        
+        # Test basic imports
+        if HF_IMPORT_SUCCESS:
+            logger.info("✅ HuggingFace utils imported successfully")
+            
+            # Test function availability
+            test_config = get_frontend_task_config()
+            if test_config:
+                logger.info("✅ get_frontend_task_config() working")
+                return {
+                    "status": "success",
+                    "imports": "✅ All imports successful",
+                    "functions": "✅ All functions accessible",
+                    "test_config_keys": list(test_config.keys())
+                }
+            else:
+                logger.warning("⚠️ get_frontend_task_config() returned None")
+                return {
+                    "status": "partial",
+                    "imports": "✅ Imports successful",
+                    "functions": "⚠️ Some functions not working",
+                    "issue": "get_frontend_task_config() returned None"
+                }
+        else:
+            logger.error("❌ HuggingFace utils import failed")
+            return {
+                "status": "error",
+                "imports": "❌ Import failed",
+                "functions": "❌ Functions not available"
+            }
+        
+    except Exception as e:
+        logger.error(f"HuggingFace path test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "type": type(e).__name__
+        }
+
+# 🦜 LANGCHAIN ENDPOINTS
+@router.get("/langchain/capabilities")
+async def get_langchain_capabilities_endpoint():
+    """Get LangChain capabilities for frontend configuration"""
+    try:
+        if not LANGCHAIN_IMPORT_SUCCESS:
+            return {
+                "available": False,
+                "error": "LangChain not available",
+                "tools": {},
+                "execution_modes": {},
+                "supported_providers": [],
+                "features": {}
+            }
+        
+        logger.info("Getting LangChain capabilities...")
+        capabilities = get_langchain_capabilities()
+        logger.info(f"✅ LangChain capabilities retrieved: {len(capabilities.get('tools', {}))} tools")
+        
+        return capabilities
+        
+    except Exception as e:
+        logger.error(f"Failed to get LangChain capabilities: {str(e)}")
+        return {
+            "available": False,
+            "error": str(e),
+            "tools": {},
+            "execution_modes": {},
+            "supported_providers": [],
+            "features": {}
+        }
+
+@router.get("/langchain/tools")
+async def get_langchain_tools():
+    """Get available LangChain tools"""
+    try:
+        if not LANGCHAIN_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="LangChain not available")
+        
+        logger.info("Getting LangChain tools...")
+        tools = get_available_tools()
+        
+        # Format for frontend
+        formatted_tools = []
+        for tool_id, tool_info in tools.items():
+            formatted_tools.append({
+                "id": tool_id,
+                "name": tool_info["name"],
+                "description": tool_info["description"],
+                "category": tool_info["category"],
+                "requires_api": tool_info["requires_api"]
+            })
+        
+        logger.info(f"✅ Found {len(formatted_tools)} LangChain tools")
+        
+        return {
+            "success": True,
+            "tools": formatted_tools,
+            "count": len(formatted_tools)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get LangChain tools: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tools: {str(e)}")
+
+@router.get("/langchain/execution-modes")
+async def get_langchain_execution_modes():
+    """Get available LangChain execution modes"""
+    try:
+        if not LANGCHAIN_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="LangChain not available")
+        
+        logger.info("Getting LangChain execution modes...")
+        modes = get_execution_modes()
+        
+        # Format for frontend
+        formatted_modes = []
+        for mode_id, description in modes.items():
+            formatted_modes.append({
+                "id": mode_id,
+                "name": mode_id.replace('_', ' ').title(),
+                "description": description
+            })
+        
+        logger.info(f"✅ Found {len(formatted_modes)} execution modes")
+        
+        return {
+            "success": True,
+            "execution_modes": formatted_modes,
+            "count": len(formatted_modes)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get execution modes: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution modes: {str(e)}")
+
+@router.get("/langchain/test")
+async def test_langchain_integration():
+    """Test LangChain integration and capabilities"""
+    try:
+        logger.info("Testing LangChain integration...")
+        
+        test_results = {
+            "import_success": LANGCHAIN_IMPORT_SUCCESS,
+            "langchain_available": False,
+            "tools_count": 0,
+            "execution_modes_count": 0,
+            "supported_providers": [],
+            "features": {}
+        }
+        
+        if LANGCHAIN_IMPORT_SUCCESS:
+            try:
+                # Test capabilities
+                capabilities = get_langchain_capabilities()
+                test_results.update({
+                    "langchain_available": capabilities.get("available", False),
+                    "tools_count": len(capabilities.get("tools", {})),
+                    "execution_modes_count": len(capabilities.get("execution_modes", {})),
+                    "supported_providers": capabilities.get("supported_providers", []),
+                    "features": capabilities.get("features", {})
+                })
+                
+                # Test tools
+                tools = get_available_tools()
+                test_results["tools_available"] = list(tools.keys())
+                
+                # Test execution modes
+                modes = get_execution_modes()
+                test_results["execution_modes_available"] = list(modes.keys())
+                
+                logger.info("✅ LangChain integration test passed")
+                test_results["status"] = "success"
+                
+            except Exception as e:
+                logger.error(f"LangChain functions failed: {str(e)}")
+                test_results.update({
+                    "status": "partial",
+                    "function_error": str(e)
+                })
+        else:
+            test_results["status"] = "import_failed"
+            
+        return test_results
+        
+    except Exception as e:
+        logger.error(f"LangChain integration test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "import_success": LANGCHAIN_IMPORT_SUCCESS
+        }
+
+# 📚 LLAMAINDEX ENDPOINTS
+@router.get("/llamaindex/capabilities")
+async def get_llamaindex_capabilities_endpoint():
+    """Get LlamaIndex capabilities for frontend configuration"""
+    try:
+        if not LLAMAINDEX_IMPORT_SUCCESS:
+            return {
+                "available": False,
+                "error": "LlamaIndex not available",
+                "features": {},
+                "supported_providers": [],
+                "index_types": [],
+                "document_sources": [],
+                "query_modes": [],
+                "vector_stores": []
+            }
+        
+        logger.info("Getting LlamaIndex capabilities...")
+        capabilities = get_llamaindex_capabilities()
+        logger.info(f"✅ LlamaIndex capabilities retrieved")
+        
+        return capabilities
+        
+    except Exception as e:
+        logger.error(f"Failed to get LlamaIndex capabilities: {str(e)}")
+        return {
+            "available": False,
+            "error": str(e),
+            "features": {},
+            "supported_providers": [],
+            "index_types": [],
+            "document_sources": [],
+            "query_modes": [],
+            "vector_stores": []
+        }
+
+@router.get("/llamaindex/index-types")
+async def get_llamaindex_index_types():
+    """Get available LlamaIndex index types"""
+    try:
+        if not LLAMAINDEX_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="LlamaIndex not available")
+        
+        logger.info("Getting LlamaIndex index types...")
+        index_types = LLAMAINDEX_FEATURES.get("index_types", [])
+        
+        # Format for frontend
+        formatted_types = []
+        descriptions = {
+            "vector": "Vector embeddings for semantic search",
+            "list": "Simple list index for small documents", 
+            "tree": "Hierarchical tree structure for complex documents",
+            "keyword": "Keyword-based search index",
+            "knowledge_graph": "Graph-based knowledge representation"
+        }
+        
+        for index_type in index_types:
+            formatted_types.append({
+                "id": index_type,
+                "name": index_type.replace('_', ' ').title(),
+                "description": descriptions.get(index_type, f"{index_type} index")
+            })
+        
+        logger.info(f"✅ Found {len(formatted_types)} index types")
+        
+        return {
+            "success": True,
+            "index_types": formatted_types,
+            "count": len(formatted_types)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get index types: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get index types: {str(e)}")
+
+@router.get("/llamaindex/document-sources")
+async def get_llamaindex_document_sources():
+    """Get available LlamaIndex document sources"""
+    try:
+        if not LLAMAINDEX_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="LlamaIndex not available")
+        
+        logger.info("Getting LlamaIndex document sources...")
+        sources = LLAMAINDEX_FEATURES.get("document_sources", [])
+        
+        # Format for frontend
+        formatted_sources = []
+        descriptions = {
+            "text": "Direct text input from user",
+            "url": "Load content from web URLs",
+            "file": "Upload and process files (PDF, TXT, etc.)",
+            "database": "Connect to database sources",
+            "api": "Fetch content from external APIs"
+        }
+        
+        for source in sources:
+            formatted_sources.append({
+                "id": source,
+                "name": source.replace('_', ' ').title(),
+                "description": descriptions.get(source, f"{source} source")
+            })
+        
+        logger.info(f"✅ Found {len(formatted_sources)} document sources")
+        
+        return {
+            "success": True,
+            "document_sources": formatted_sources,
+            "count": len(formatted_sources)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get document sources: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get document sources: {str(e)}")
+
+@router.get("/llamaindex/test")
+async def test_llamaindex_integration():
+    """Test LlamaIndex integration and capabilities"""
+    try:
+        logger.info("Testing LlamaIndex integration...")
+        
+        test_results = {
+            "import_success": LLAMAINDEX_IMPORT_SUCCESS,
+            "llamaindex_available": False,
+            "features": {},
+            "supported_providers": [],
+            "index_types": [],
+            "document_sources": [],
+            "query_modes": [],
+            "vector_stores": []
+        }
+        
+        if LLAMAINDEX_IMPORT_SUCCESS:
+            try:
+                # Test capabilities
+                capabilities = get_llamaindex_capabilities()
+                test_results.update({
+                    "llamaindex_available": capabilities.get("available", False),
+                    "features": capabilities.get("features", {}),
+                    "supported_providers": capabilities.get("supported_providers", []),
+                    "index_types": capabilities.get("index_types", []),
+                    "document_sources": capabilities.get("document_sources", []),
+                    "query_modes": capabilities.get("query_modes", []),
+                    "vector_stores": capabilities.get("vector_stores", [])
+                })
+                
+                logger.info("✅ LlamaIndex integration test passed")
+                test_results["status"] = "success"
+                
+            except Exception as e:
+                logger.error(f"LlamaIndex functions failed: {str(e)}")
+                test_results.update({
+                    "status": "partial",
+                    "function_error": str(e)
+                })
+        else:
+            test_results["status"] = "import_failed"
+            
+        return test_results
+        
+    except Exception as e:
+        logger.error(f"LlamaIndex integration test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "import_success": LLAMAINDEX_IMPORT_SUCCESS
+        }
+
+# 🤝 AUTOGEN ENDPOINTS
+@router.get("/autogen/capabilities")
+async def get_autogen_capabilities_endpoint():
+    """Get AutoGen capabilities for frontend configuration"""
+    try:
+        if not AUTOGEN_IMPORT_SUCCESS:
+            return {
+                "available": False,
+                "error": "AutoGen not available",
+                "version": "not_installed",
+                "features": {},
+                "supported_providers": [],
+                "agent_types": [],
+                "conversation_modes": [],
+                "code_execution": [],
+                "human_input_modes": [],
+                "termination_criteria": []
+            }
+        
+        logger.info("Getting AutoGen capabilities...")
+        capabilities = get_autogen_capabilities()
+        logger.info(f"✅ AutoGen capabilities retrieved")
+        
+        return capabilities
+        
+    except Exception as e:
+        logger.error(f"Failed to get AutoGen capabilities: {str(e)}")
+        return {
+            "available": False,
+            "error": str(e),
+            "version": "error",
+            "features": {},
+            "supported_providers": [],
+            "agent_types": [],
+            "conversation_modes": [],
+            "code_execution": [],
+            "human_input_modes": [],
+            "termination_criteria": []
+        }
+
+@router.get("/autogen/agent-templates")
+async def get_autogen_agent_templates():
+    """Get predefined AutoGen agent templates"""
+    try:
+        if not AUTOGEN_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="AutoGen not available")
+        
+        logger.info("Getting AutoGen agent templates...")
+        templates = get_agent_templates()
+        
+        # Format for frontend
+        formatted_templates = []
+        for template_id, template_config in templates.items():
+            formatted_templates.append({
+                "id": template_id,
+                "name": template_config.get("name", template_id.title()),
+                "agentType": template_config.get("agentType"),
+                "systemMessage": template_config.get("systemMessage"),
+                "description": template_config.get("description"),
+                "codeExecution": template_config.get("codeExecution", False),
+                "humanInputMode": template_config.get("humanInputMode", "NEVER")
+            })
+        
+        logger.info(f"✅ Found {len(formatted_templates)} agent templates")
+        
+        return {
+            "success": True,
+            "agent_templates": formatted_templates,
+            "count": len(formatted_templates)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get agent templates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get agent templates: {str(e)}")
+
+@router.get("/autogen/conversation-templates")
+async def get_autogen_conversation_templates():
+    """Get predefined AutoGen conversation templates"""
+    try:
+        if not AUTOGEN_IMPORT_SUCCESS:
+            raise HTTPException(status_code=503, detail="AutoGen not available")
+        
+        logger.info("Getting AutoGen conversation templates...")
+        templates = get_conversation_templates()
+        
+        # Format for frontend
+        formatted_templates = []
+        for template_id, template_config in templates.items():
+            formatted_templates.append({
+                "id": template_id,
+                "name": template_id.replace('_', ' ').title(),
+                "conversationMode": template_config.get("conversationMode"),
+                "maxTurns": template_config.get("maxTurns"),
+                "description": template_config.get("description"),
+                "agents": template_config.get("agents", [])
+            })
+        
+        logger.info(f"✅ Found {len(formatted_templates)} conversation templates")
+        
+        return {
+            "success": True,
+            "conversation_templates": formatted_templates,
+            "count": len(formatted_templates)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get conversation templates: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation templates: {str(e)}")
+
+@router.get("/autogen/test")
+async def test_autogen_integration():
+    """Test AutoGen integration and capabilities"""
+    try:
+        logger.info("Testing AutoGen integration...")
+        
+        test_results = {
+            "import_success": AUTOGEN_IMPORT_SUCCESS,
+            "autogen_available": False,
+            "version": "unknown",
+            "features": {},
+            "supported_providers": [],
+            "agent_types": [],
+            "conversation_modes": [],
+            "templates_count": {
+                "agents": 0,
+                "conversations": 0
+            }
+        }
+        
+        if AUTOGEN_IMPORT_SUCCESS:
+            try:
+                # Test capabilities
+                capabilities = get_autogen_capabilities()
+                test_results.update({
+                    "autogen_available": capabilities.get("available", False),
+                    "version": capabilities.get("version", "unknown"),
+                    "features": capabilities.get("features", {}),
+                    "supported_providers": capabilities.get("supported_providers", []),
+                    "agent_types": capabilities.get("agent_types", []),
+                    "conversation_modes": capabilities.get("conversation_modes", [])
+                })
+                
+                # Test templates
+                agent_templates = get_agent_templates()
+                conversation_templates = get_conversation_templates()
+                
+                test_results["templates_count"] = {
+                    "agents": len(agent_templates),
+                    "conversations": len(conversation_templates)
+                }
+                
+                test_results["agent_templates_available"] = list(agent_templates.keys())
+                test_results["conversation_templates_available"] = list(conversation_templates.keys())
+                
+                logger.info("✅ AutoGen integration test passed")
+                test_results["status"] = "success"
+                
+            except Exception as e:
+                logger.error(f"AutoGen functions failed: {str(e)}")
+                test_results.update({
+                    "status": "partial",
+                    "function_error": str(e)
+                })
+        else:
+            test_results["status"] = "import_failed"
+            
+        return test_results
+        
+    except Exception as e:
+        logger.error(f"AutoGen integration test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "import_success": AUTOGEN_IMPORT_SUCCESS
+        }
+
+# 🚀 ADVANCED MULTI-FRAMEWORK ENDPOINT
+@router.get("/frameworks/all-capabilities")
+async def get_all_framework_capabilities():
+    """Get capabilities for all available frameworks"""
+    try:
+        logger.info("Getting all framework capabilities...")
+        
+        all_capabilities = {
+            "timestamp": datetime.now().isoformat(),
+            "frameworks": {}
+        }
+        
+        # HuggingFace
+        if HF_IMPORT_SUCCESS:
+            try:
+                hf_config = get_frontend_task_config()
+                all_capabilities["frameworks"]["huggingface"] = {
+                    "available": True,
+                    "tasks": hf_config.get("tasks", []),
+                    "categories": hf_config.get("categories", {}),
+                    "verified_models": len(hf_config.get("verified_models", {})),
+                    "examples": len(hf_config.get("examples", {}))
+                }
+            except Exception as e:
+                all_capabilities["frameworks"]["huggingface"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        else:
+            all_capabilities["frameworks"]["huggingface"] = {
+                "available": False,
+                "error": "Import failed"
+            }
+        
+        # LangChain
+        if LANGCHAIN_IMPORT_SUCCESS:
+            try:
+                lc_capabilities = get_langchain_capabilities()
+                all_capabilities["frameworks"]["langchain"] = lc_capabilities
+            except Exception as e:
+                all_capabilities["frameworks"]["langchain"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        else:
+            all_capabilities["frameworks"]["langchain"] = {
+                "available": False,
+                "error": "Import failed"
+            }
+        
+        # LlamaIndex
+        if LLAMAINDEX_IMPORT_SUCCESS:
+            try:
+                li_capabilities = get_llamaindex_capabilities()
+                all_capabilities["frameworks"]["llamaindex"] = li_capabilities
+            except Exception as e:
+                all_capabilities["frameworks"]["llamaindex"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        else:
+            all_capabilities["frameworks"]["llamaindex"] = {
+                "available": False,
+                "error": "Import failed"
+            }
+        
+        # AutoGen
+        if AUTOGEN_IMPORT_SUCCESS:
+            try:
+                ag_capabilities = get_autogen_capabilities()
+                all_capabilities["frameworks"]["autogen"] = ag_capabilities
+            except Exception as e:
+                all_capabilities["frameworks"]["autogen"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        else:
+            all_capabilities["frameworks"]["autogen"] = {
+                "available": False,
+                "error": "Import failed"
+            }
+        
+        # CrewAI
+        if CREWAI_IMPORT_SUCCESS:
+            try:
+                crewai_capabilities = get_crewai_capabilities()
+                all_capabilities["frameworks"]["crewai"] = crewai_capabilities
+            except Exception as e:
+                all_capabilities["frameworks"]["crewai"] = {
+                    "available": False,
+                    "error": str(e)
+                }
+        else:
+            all_capabilities["frameworks"]["crewai"] = {
+                "available": False,
+                "error": "Import failed"
+            }
+        
+        # Summary
+        available_frameworks = [
+            name for name, config in all_capabilities["frameworks"].items() 
+            if config.get("available", False)
+        ]
+        
+        all_capabilities["summary"] = {
+            "total_frameworks": len(all_capabilities["frameworks"]),
+            "available_frameworks": len(available_frameworks),
+            "framework_names": available_frameworks,
+            "import_status": {
+                "huggingface": HF_IMPORT_SUCCESS,
+                "langchain": LANGCHAIN_IMPORT_SUCCESS,
+                "llamaindex": LLAMAINDEX_IMPORT_SUCCESS,
+                "autogen": AUTOGEN_IMPORT_SUCCESS,
+                "crewai": CREWAI_IMPORT_SUCCESS
+            }
+        }
+        
+        logger.info(f"✅ All framework capabilities retrieved: {len(available_frameworks)}/{len(all_capabilities['frameworks'])} available")
+        
+        return all_capabilities
+        
+    except Exception as e:
+        logger.error(f"Failed to get all framework capabilities: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get framework capabilities: {str(e)}")
+
+# Add missing import for datetime
+from datetime import datetime

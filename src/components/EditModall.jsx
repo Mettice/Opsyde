@@ -147,6 +147,7 @@ export const FRAMEWORK_OPTIONS = {
     { value: 'api', label: 'Generic API', description: 'Standard REST API calls' },
     { value: 'openai', label: 'OpenAI API', description: 'OpenAI API integration' },
     { value: 'anthropic', label: 'Anthropic API', description: 'Claude API integration' },
+    { value: 'langchain', label: 'LangChain Agents', description: 'AI agents with tools and memory' },
     { value: 'webhook', label: 'Webhook', description: 'HTTP webhook calls' },
     { value: 'custom', label: 'Custom Integration', description: 'Custom tool implementation' },
     { value: 'universal_api', label: 'Universal API', description: 'AI-powered API integration' }

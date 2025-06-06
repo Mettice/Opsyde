@@ -1,7 +1,7 @@
 # Core
-fastapi
-uvicorn[standard]
-pydantic
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
 python-dotenv
 sqlalchemy
 alembic
@@ -57,7 +57,7 @@ seaborn
 # Utils
 requests
 aiohttp
-python-multipart
+python-multipart==0.0.6
 simpleeval
 gspread
 oauth2client
@@ -91,3 +91,6 @@ httpx
 black
 isort
 flake8
+
+# Added from the code block
+pyyaml==6.0.1

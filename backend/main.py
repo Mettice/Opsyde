@@ -30,6 +30,7 @@ from api.routers.auth_router import router as auth_router
 from api.routers.trigger_router import router as trigger_router, root_router as trigger_root_router
 from api.routers.output_router import router as output_router
 from api.routers.user_settings import router as user_settings_router
+from api.routers.export_router import router as export_router
 
 # Models
 from backend.models.data import NodeData
@@ -124,9 +125,9 @@ def convert_nodedata_to_dict(obj: Any, depth: int = 0) -> Any:
             return str(obj)
 
 app = FastAPI(
-    title="Nodai",
-    description="Nodai - Workflow Automation Platform",
-    version="1.0.0"
+    title="CrewBuilder API",
+    description="Backend API for CrewBuilder workflow management and export system",
+    version="2.0.0"
 )
 
 # Initialize core components
@@ -135,11 +136,10 @@ unified_runner = UnifiedRunner()
 # Configure CORS with more explicit settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*", "http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*", "Content-Type", "Authorization"],
-    max_age=3600,
+    allow_headers=["*"],
 )
 
 # Add unified runner to app state
@@ -252,6 +252,7 @@ app.include_router(trigger_router, prefix="/api/triggers")
 app.include_router(trigger_root_router)
 app.include_router(output_router, prefix="/api/outputs")
 app.include_router(user_settings_router, prefix="/api/user-settings")
+app.include_router(export_router)
 
 # Error handlers
 @app.exception_handler(CrewFlowError)
@@ -605,11 +606,7 @@ async def execute_node(
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "version": "1.0.0",
-        "timestamp": datetime.now().isoformat()
-    }
+    return {"status": "healthy", "service": "crewbuilder_api"}
 
 # Debug endpoint to list all routes
 @app.get("/debug/routes")

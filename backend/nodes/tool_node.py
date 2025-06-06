@@ -36,13 +36,33 @@ class ToolNode:
             # Extract and validate tool configuration
             config = ToolConfig(**node_data)
             
+            # Convert NodeData inputs to regular values
+            processed_inputs = {}
+            for key, value in inputs.items():
+                if hasattr(value, 'get_value'):
+                    # It's a NodeData object
+                    try:
+                        processed_inputs[key] = value.get_value()
+                    except Exception:
+                        # Fallback to accessing value directly
+                        processed_inputs[key] = value.value if hasattr(value, 'value') else str(value)
+                elif hasattr(value, 'value'):
+                    # It has a value attribute
+                    processed_inputs[key] = value.value
+                elif hasattr(value, '__dict__'):
+                    # It's some kind of object, try to convert to dict
+                    processed_inputs[key] = value.__dict__ if hasattr(value, '__dict__') else str(value)
+                else:
+                    # It's already a regular value
+                    processed_inputs[key] = value
+            
             # First, try to get framework handler from registry
             framework_handler = framework_registry._frameworks.get(config.framework)
             if framework_handler:
                 return await self._execute_with_framework_handler(
                     framework_handler, 
                     node_data,  # Pass original node_data instead of config.dict()
-                    inputs, 
+                    processed_inputs,  # Pass processed inputs instead of raw inputs
                     context
                 )
             
@@ -50,15 +70,15 @@ class ToolNode:
             tool_type = config.tool_type
             
             if tool_type == "llm":
-                result = await self._process_llm_tool(node_data, inputs)  # Pass original node_data
+                result = await self._process_llm_tool(node_data, processed_inputs)  # Pass processed inputs
             elif tool_type == "api":
-                result = await self._process_api_tool(config.dict(), inputs)
+                result = await self._process_api_tool(config.dict(), processed_inputs)
             elif tool_type == "webhook":
-                result = await self._process_webhook_tool(config.dict(), inputs)
+                result = await self._process_webhook_tool(config.dict(), processed_inputs)
             elif tool_type == "universal_api":  # Universal API support
-                result = await self._process_universal_api_tool(node_data, inputs, context)
+                result = await self._process_universal_api_tool(node_data, processed_inputs, context)
             elif tool_type == "custom":
-                result = await self._process_custom_tool(config.dict(), inputs)
+                result = await self._process_custom_tool(config.dict(), processed_inputs)
             else:
                 return {
                     "success": False,

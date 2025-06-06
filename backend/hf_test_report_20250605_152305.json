@@ -1,0 +1,228 @@
+{
+  "timestamp": "2025-06-05T15:23:05.657167",
+  "summary": {
+    "total_tests": 10,
+    "passed_tests": 6,
+    "success_rate": 60.0,
+    "execution_time": 439.4830803871155,
+    "status": "\ud83d\udfe0 FAIR - Requires Fixes"
+  },
+  "detailed_results": [
+    {
+      "category": "\ud83d\udcc4 Document Summarization",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "type": "long_text",
+            "success": false
+          },
+          {
+            "type": "short_text",
+            "success": false
+          }
+        ],
+        "success_rate": "0/2"
+      },
+      "timestamp": "2025-06-05T15:22:46.768007"
+    },
+    {
+      "category": "\ud83d\ude0a Sentiment Analysis",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "text": "Nodai makes workflow automation incredibly easy and intuitive!",
+            "sentiment": "LABEL_2",
+            "confidence": 0.9588416218757629,
+            "time": 3.9309442043304443,
+            "success": true
+          },
+          {
+            "text": "I'm frustrated with the complexity of setting up these AI workflows.",
+            "sentiment": "LABEL_0",
+            "confidence": 0.9300937056541443,
+            "time": 0.5116128921508789,
+            "success": true
+          },
+          {
+            "text": "The platform is okay, nothing particularly impressive.",
+            "sentiment": "LABEL_0",
+            "confidence": 0.648510754108429,
+            "time": 0.4094541072845459,
+            "success": true
+          },
+          {
+            "text": "This is the best automation tool I've ever used in my career!",
+            "sentiment": "LABEL_2",
+            "confidence": 0.9894536733627319,
+            "time": 0.30740857124328613,
+            "success": true
+          },
+          {
+            "text": "I hate how complicated this system is to configure.",
+            "sentiment": "LABEL_0",
+            "confidence": 0.9725844264030457,
+            "time": 0.31302738189697266,
+            "success": true
+          }
+        ],
+        "success_rate": "5/5",
+        "avg_confidence": "0.900"
+      },
+      "timestamp": "2025-06-05T15:22:52.241455"
+    },
+    {
+      "category": "\u2753 Question Answering",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "question": "What is Nodai?",
+            "success": false
+          },
+          {
+            "question": "What features does Nodai provide?",
+            "success": false
+          },
+          {
+            "question": "How does Nodai help users?",
+            "success": false
+          }
+        ],
+        "success_rate": "0/3",
+        "avg_response_time": "0.000s"
+      },
+      "timestamp": "2025-06-05T15:22:56.638712"
+    },
+    {
+      "category": "\ud83d\udcdd Text Generation",
+      "result": {
+        "success": false,
+        "results": [
+          {
+            "prompt": "Nodai revolutionizes workflow automation by",
+            "success": false
+          },
+          {
+            "prompt": "The future of AI-powered business processes includes",
+            "success": false
+          },
+          {
+            "prompt": "Organizations using Nodai report that",
+            "success": false
+          }
+        ],
+        "success_rate": "0/3"
+      },
+      "timestamp": "2025-06-05T15:22:57.511296"
+    },
+    {
+      "category": "\ud83d\udd17 Feature Extraction",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "text": "Nodai workflow automation platform",
+            "embedding_size": 2,
+            "time": 0.921314001083374,
+            "success": true
+          },
+          {
+            "text": "AI-powered business process optimization",
+            "embedding_size": 2,
+            "time": 0.9710838794708252,
+            "success": true
+          },
+          {
+            "text": "Drag-and-drop interface for AI workflows",
+            "embedding_size": 2,
+            "time": 0.17916202545166016,
+            "success": true
+          },
+          {
+            "text": "Real-time monitoring and error handling",
+            "embedding_size": 2,
+            "time": 0.43885087966918945,
+            "success": true
+          }
+        ],
+        "success_rate": "4/4"
+      },
+      "timestamp": "2025-06-05T15:23:00.023713"
+    },
+    {
+      "category": "\ud83c\udfaf Zero-Shot Classification",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "text": "I love using Nodai for my automation workflows",
+            "classification": "positive",
+            "confidence": 0.9426353573799133,
+            "time": 0.6085450649261475,
+            "success": true
+          },
+          {
+            "text": "The platform needs better documentation",
+            "classification": "feature request",
+            "confidence": 0.7908109426498413,
+            "time": 0.5490062236785889,
+            "success": true
+          }
+        ],
+        "success_rate": "2/2"
+      },
+      "timestamp": "2025-06-05T15:23:01.181264"
+    },
+    {
+      "category": "\u26a1 Performance Benchmarks",
+      "result": {
+        "success": false,
+        "results": {}
+      },
+      "timestamp": "2025-06-05T15:23:03.704030"
+    },
+    {
+      "category": "\ud83d\udd04 Fallback Mechanisms",
+      "result": {
+        "success": true,
+        "message": "Fallback mechanism working correctly"
+      },
+      "timestamp": "2025-06-05T15:23:03.705324"
+    },
+    {
+      "category": "\ud83d\udcca Batch Processing",
+      "result": {
+        "success": true,
+        "processed": 3,
+        "successful": 3,
+        "total_time": "1.227s"
+      },
+      "timestamp": "2025-06-05T15:23:04.932786"
+    },
+    {
+      "category": "\ud83d\udee1\ufe0f Error Handling",
+      "result": {
+        "success": true,
+        "results": [
+          {
+            "test": "Invalid task type",
+            "handled": true
+          },
+          {
+            "test": "Empty input",
+            "handled": true
+          },
+          {
+            "test": "Malformed config",
+            "handled": true
+          }
+        ],
+        "error_handling_rate": "3/3"
+      },
+      "timestamp": "2025-06-05T15:23:05.654167"
+    }
+  ],
+  "recommendations": "Fix critical issues before production deployment"
+}
