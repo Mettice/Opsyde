@@ -228,6 +228,14 @@ export default function NavHeader({ showHelp, projectName, editingProjectName, s
                           🎯 Framework Models
                         </Link>
                         
+                        <Link 
+                          to="/linkedin-outreach-template" 
+                          className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          onClick={() => setIsMenuOpen(false)}
+                        >
+                          🎯 LinkedIn Outreach
+                        </Link>
+                        
                         {isBuilderPage && (
                           <button
                             onClick={() => {
@@ -355,6 +363,13 @@ export default function NavHeader({ showHelp, projectName, editingProjectName, s
                 onClick={() => setIsMenuOpen(false)}
               >
                 🎯 Framework Models
+              </Link>
+              <Link
+                to="/linkedin-outreach-template"
+                className="block px-3 py-2 rounded-md text-base font-medium text-white hover:bg-gray-700"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                🎯 LinkedIn Outreach
               </Link>
             </div>
           )}

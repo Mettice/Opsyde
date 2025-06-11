@@ -675,9 +675,29 @@ const LogicEditor = ({
   };
 
   const updateCondition = (id, field, value) => {
-    setConditions(conditions.map(c => 
-      c.id === id ? { ...c, [field]: value } : c
-    ));
+    console.log('🔍 Updating condition:', { id, field, value });
+    
+    const newConditions = conditions.map(c => {
+      if (c.id === id) {
+        const updated = { ...c, [field]: value };
+        console.log('🔍 Updated condition item:', updated);
+        return updated;
+      }
+      return c;
+    });
+    
+    console.log('🔍 All conditions after update:', newConditions);
+    setConditions(newConditions);
+    
+    // Force immediate update to parent form
+    setTimeout(() => {
+      const generated = generateConditionFromVisual();
+      if (generated) {
+        handleInputChange({
+          target: { name: 'condition', value: generated }
+        });
+      }
+    }, 100);
   };
 
   const getOperatorsForField = (fieldId) => {
@@ -879,8 +899,10 @@ const LogicEditor = ({
             onBlur={() => console.log('🔍 Logic condition textarea blurred')}
             className="w-full p-3 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
             rows="4"
-            placeholder="Enter your condition (e.g., records[0].Category == 'Hot' && records[0].Email.includes('@'))"
+            placeholder="Enter your condition (e.g., response && response !== null)"
             style={{ zIndex: 1 }}
+            disabled={false}
+            readOnly={false}
           />
           <div className="text-xs text-gray-500 mt-1">
             💡 Use field names from the detected fields above (e.g., records[0].Name, records[0].Category)
@@ -920,8 +942,11 @@ const LogicEditor = ({
               )}
               
                         <select
-                          value={condition.field}
-                onChange={(e) => updateCondition(condition.id, 'field', e.target.value)}
+                          value={condition.field || ''}
+                          onChange={(e) => {
+                            console.log('🔍 Field dropdown changed:', e.target.value);
+                            updateCondition(condition.id, 'field', e.target.value);
+                          }}
                 className="flex-1 text-xs border rounded px-2 py-1"
               >
                 <option value="">Select Field</option>
@@ -933,8 +958,11 @@ const LogicEditor = ({
                         </select>
               
                         <select
-                          value={condition.operator}
-                          onChange={(e) => updateCondition(condition.id, 'operator', e.target.value)}
+                          value={condition.operator || ''}
+                          onChange={(e) => {
+                            console.log('🔍 Operator dropdown changed:', e.target.value);
+                            updateCondition(condition.id, 'operator', e.target.value);
+                          }}
                 className="text-xs border rounded px-2 py-1"
               >
                 <option value="">Operator</option>

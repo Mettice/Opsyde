@@ -15,7 +15,8 @@ const LogsTab = ({
   structuredLogs,
   getLogStyle,
   getCardStyle,
-  getStatusIcon
+  getStatusIcon,
+  processStandardizedResult
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -290,6 +291,7 @@ const LogsTab = ({
                     getStatusIcon={safeGetStatusIcon}
                     getLogStyle={safeGetLogStyle}
                     debugMode={debugMode}
+                    processStandardizedResult={processStandardizedResult}
                   />
                 ))}
               </div>
@@ -306,6 +308,7 @@ const LogsTab = ({
                     getCardStyle={safeGetCardStyle}
                     getStatusIcon={safeGetStatusIcon}
                     debugMode={debugMode}
+                    processStandardizedResult={processStandardizedResult}
                   />
                 ))}
               </div>
@@ -328,7 +331,8 @@ LogsTab.propTypes = {
   structuredLogs: PropTypes.array,
   getLogStyle: PropTypes.func.isRequired,
   getCardStyle: PropTypes.func.isRequired,
-  getStatusIcon: PropTypes.func.isRequired
+  getStatusIcon: PropTypes.func.isRequired,
+  processStandardizedResult: PropTypes.func.isRequired
 };
 
 export default LogsTab;

@@ -1,14 +1,18 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union, Tuple
 from datetime import datetime
 import aiohttp
 import asyncio
 import json
+import hashlib
+
+# Import NodeData class
+from models.data import NodeData
 
 # NEW: Import the advanced data state manager
 from services.data_state_manager import data_state_manager
 
-# Import the universal data transformer
+# Import the universal data transformer (the real one, not hardcoded)
 from core.data_transformer import data_transformer
 
 logger = logging.getLogger(__name__)
@@ -145,12 +149,12 @@ def run_trigger_node(data=None):
             "trigger_id": trigger_id
         }
 
-async def process_trigger_node(node_data: Dict[str, Any], inputs: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Process trigger node with universal data transformation and intelligent change detection"""
+async def process_trigger_node(node_data: Dict[str, Any], inputs: Dict[str, Any], context: Dict[str, Any] = None) -> NodeData:
+    """Enhanced trigger node processor with standardized output format for all trigger types"""
     
     if not node_data:
         logger.error("No node data provided to trigger processor")
-        return {"error": "No node data provided", "status": "error"}
+        return NodeData.from_error("No node data provided")
     
     # Fix: Handle both camelCase and snake_case trigger type fields
     trigger_type = node_data.get('triggerType') or node_data.get('trigger_type', 'manual')
@@ -160,352 +164,131 @@ async def process_trigger_node(node_data: Dict[str, Any], inputs: Dict[str, Any]
     
     try:
         if trigger_type == 'manual':
-            return {
-                "status": "success",
-                "message": "Manual trigger activated",
-                "trigger_type": "manual",
-                "timestamp": datetime.now().isoformat()
+            # 🚀 STANDARDIZED MANUAL TRIGGER
+            standardized_result = {
+                "success": True,
+                "data": {
+                    "type": "trigger_activation",
+                    "trigger_type": "manual",
+                    "message": "Manual trigger activated",
+                    "trigger_id": trigger_id
+                },
+                "error": None,
+                "metadata": {
+                    "node_type": "trigger",
+                    "trigger_type": "manual",
+                    "timestamp": datetime.now().isoformat()
+                }
             }
+            return NodeData.from_value(standardized_result)
         
         elif trigger_type == 'webhook':
+            # 🚀 STANDARDIZED WEBHOOK TRIGGER
             webhook_data = node_data.get('webhookData', {})
-            return {
-                "status": "success",
-                "message": f"Webhook trigger activated for {webhook_data.get('service', 'unknown service')}",
-                "trigger_type": "webhook",
-                "webhook_service": webhook_data.get('service'),
-                "timestamp": datetime.now().isoformat(),
-                "data": webhook_data
+            service_name = webhook_data.get('service', 'unknown service')
+            
+            standardized_result = {
+                "success": True,
+                "data": {
+                    "type": "webhook_activation",
+                    "trigger_type": "webhook",
+                    "message": f"Webhook trigger activated for {service_name}",
+                    "service": service_name,
+                    "webhook_data": webhook_data,
+                    "trigger_id": trigger_id
+                },
+                "error": None,
+                "metadata": {
+                    "node_type": "trigger",
+                    "trigger_type": "webhook",
+                    "service": service_name,
+                    "timestamp": datetime.now().isoformat()
+                }
             }
+            return NodeData.from_value(standardized_result)
         
         elif trigger_type == 'schedule':
+            # 🚀 STANDARDIZED SCHEDULE TRIGGER
             schedule_type = node_data.get('scheduleType', 'once')
             schedule_time = node_data.get('scheduleTime')
             
-            return {
-                "status": "success",
-                "message": f"Schedule trigger activated ({schedule_type})",
-                "trigger_type": "schedule",
-                "schedule_type": schedule_type,
-                "schedule_time": schedule_time,
-                "timestamp": datetime.now().isoformat()
+            standardized_result = {
+                "success": True,
+                "data": {
+                    "type": "schedule_activation",
+                    "trigger_type": "schedule",
+                    "message": f"Schedule trigger activated ({schedule_type})",
+                    "schedule_type": schedule_type,
+                    "schedule_time": schedule_time,
+                    "trigger_id": trigger_id
+                },
+                "error": None,
+                "metadata": {
+                    "node_type": "trigger",
+                    "trigger_type": "schedule",
+                    "schedule_type": schedule_type,
+                    "timestamp": datetime.now().isoformat()
+                }
             }
+            return NodeData.from_value(standardized_result)
         
         elif trigger_type == 'universal_polling':
-            # Enhanced universal polling with DataStateManager integration
+            # 🚀 ENHANCED UNIVERSAL POLLING TRIGGER with data transformation
             service_name = node_data.get('serviceName', 'Unknown Service')
             api_endpoint = node_data.get('apiEndpoint')
             polling_interval = node_data.get('pollingInterval', 300)
             change_detection_method = node_data.get('changeDetectionMethod', 'array_length')
             
-            # User configuration (no more hardcoded overrides!)
-            summary_mode = node_data.get('summaryMode', False)
-            target_fields = node_data.get('targetFields', [])
-            exclude_fields = node_data.get('excludeFields', [])
-            max_records = node_data.get('maxRecords', 10)  # User controls this now
-            max_tokens = node_data.get('maxTokens', 4000)  # User controls this now
-            
-            logger.info(f"Universal polling trigger: {service_name} - {api_endpoint}")
-            logger.info(f"🎯 User Configuration: max_records={max_records}, max_tokens={max_tokens}, summary_mode={summary_mode}")
-            
             if not api_endpoint:
-                return {
-                    "status": "error",
-                    "message": "API endpoint is required for universal polling",
-                    "trigger_type": "universal_polling"
-                }
+                return NodeData.from_error("API endpoint is required for universal polling")
             
             try:
-                # Step 1: Fetch API data
+                # Fetch API data
                 api_data = await fetch_api_data(node_data)
                 
-                if not api_data:
-                    return {
-                        "status": "error",
-                        "message": f"Failed to fetch data from {service_name}",
-                        "trigger_type": "universal_polling"
-                    }
-                
-                logger.info(f"Successfully fetched data from {service_name}")
-                
-                # Step 2: Use DataStateManager to detect changes (THE KEY FIX!)
-                change_config = {
-                    "id_field": "pairAddress" if 'dexscreener' in service_name.lower() else "id",
-                    "max_new_records": max_records,
-                    "filter_fields": target_fields if target_fields else None,
-                    "change_detection_fields": node_data.get('selectedFields', None)
-                }
-                
-                # Initialize DataStateManager if needed
-                await data_state_manager.initialize()
-                
-                # Detect changes using smart detection
-                changes = await data_state_manager.detect_changes(
-                    trigger_id=trigger_id,
-                    current_data=api_data,
-                    detection_method="smart",
-                    config=change_config
-                )
-                
-                logger.info(f"🔍 Change Detection Results: {changes.get('summary', {})}")
-                
-                # NEW: Check if user wants to review data before processing
-                require_approval = node_data.get('requireDataApproval', False)
-                
-                if require_approval and changes.get('has_changes', False):
-                    # Return data for user review instead of auto-processing
-                    new_records = changes.get('new_records', [])
-                    modified_records = changes.get('modified_records', [])
-                    
-                    # Combine new and modified records for review
-                    records_for_review = []
-                    for record in new_records:
-                        records_for_review.append({
-                            "type": "new",
-                            "data": record.get('data', record),
-                            "id": record.get('id', 'unknown')
-                        })
-                    for record in modified_records:
-                        records_for_review.append({
-                            "type": "modified", 
-                            "data": record.get('data', record),
-                            "id": record.get('id', 'unknown')
-                        })
-                    
-                    logger.info(f"🔍 Requiring user approval for {len(records_for_review)} changed records")
-                    
-                    return {
-                        "status": "pending_approval",
-                        "message": f"Changes detected in {service_name} - Review required",
-                        "trigger_type": "universal_polling",
-                        "service_name": service_name,
-                        "api_endpoint": api_endpoint,
-                        "timestamp": datetime.now().isoformat(),
-                        "type": "pending_approval",
-                        "records_for_review": records_for_review,
-                        "available_fields": node_data.get('discoveredFields', []),
-                        "selected_fields": node_data.get('selectedFields', []),
-                        "change_summary": changes.get('summary', {}),
-                        "approval_endpoint": f"/api/triggers/data-approval/{trigger_id}",
-                        "instructions": "Review the detected changes and approve the data you want to send to your agent."
-                    }
-                
-                # Step 3: Process only NEW or MODIFIED records OR initial data
-                if not changes.get('has_changes', False):
-                    # Check if this is the first run or if we should pass initial data
-                    change_type = changes.get('change_type', '')
-                    is_first_run = change_type == 'initial_state'
-                    pass_initial_data = node_data.get('passInitialData', True)  # Default to True for better UX
-                    
-                    if is_first_run and pass_initial_data:
-                        logger.info(f"🚀 First run detected - processing initial data from {service_name}")
-                        # Process a sample of the initial data for the agent
-                        if isinstance(api_data, list):
-                            initial_records = api_data[:max_records]  # Respect user's max_records setting
-                        elif isinstance(api_data, dict) and 'pairs' in api_data:
-                            initial_records = api_data['pairs'][:max_records]
-                        else:
-                            initial_records = [api_data] if api_data else []
-                        
-                        # Process initial data same as changed data
-                        if initial_records:
-                            # For DexScreener, wrap in expected structure
-                            if 'dexscreener' in service_name.lower():
-                                if isinstance(api_data, dict):
-                                    processed_data = {
-                                        "pairs": initial_records,
-                                        "schemaVersion": api_data.get('schemaVersion', '1.0.0'),
-                                        "source": "DexScreener",
-                                        "timestamp": datetime.now().isoformat()
-                                    }
-                                else:
-                                    processed_data = {
-                                        "pairs": initial_records,
-                                        "schemaVersion": "1.0.0",
-                                        "source": "DexScreener",
-                                        "timestamp": datetime.now().isoformat()
-                                    }
-                            else:
-                                processed_data = initial_records
-                            
-                            # Create context for transformation
-                            transformation_context = {
-                                "trigger_type": "universal_polling", 
-                                "node_data": node_data,
-                                "summary_mode": summary_mode,
-                                "target_fields": target_fields,
-                                "exclude_fields": exclude_fields,
-                                "max_records": max_records,
-                                "max_tokens": max_tokens,
-                                "change_detection_enabled": True,
-                                "is_initial_data": True
-                            }
-                            
-                            # Transform using universal data transformer
-                            standard_records = await data_transformer.transform_api_response(
-                                processed_data, 
-                                service_name,
-                                context=transformation_context
-                            )
-                            
-                            # Convert to agent format
-                            agent_data = data_transformer.to_agent_format(standard_records)
-                            
-                            # Add metadata for initial data
-                            agent_data["change_detection"] = {
-                                "enabled": True,
-                                "is_initial_data": True,
-                                "initial_records": len(initial_records),
-                                "detection_method": "smart",
-                                "summary": changes.get('summary', {})
-                            }
-                            
-                            logger.info(f"✅ Processed {len(standard_records)} initial records for agent")
-                            
-                            return {
-                                "status": "success",
-                                "message": f"Initial data from {service_name} - {len(initial_records)} records",
-                                "trigger_type": "universal_polling",
-                                "service_name": service_name,
-                                "api_endpoint": api_endpoint,
-                                "timestamp": datetime.now().isoformat(),
-                                "type": "api_data",
-                                "api_data": agent_data,
-                                "raw_api_data": processed_data,
-                                "standard_records": standard_records,
-                                "data_summary": f"Initial data: {len(standard_records)} records from {service_name}",
-                                "transformation_confidence": agent_data.get("transformation_summary", {}).get("avg_confidence", 0),
-                                "record_types": agent_data.get("transformation_summary", {}).get("record_types", []),
-                                "field_count": sum(len(record.fields) for record in standard_records),
-                                "change_detection_enabled": True,
-                                "change_summary": changes.get('summary', {}),
-                                "is_initial_data": True
-                            }
-                    
-                    # No changes and not first run - return no changes status
-                    logger.info(f"✅ No changes detected for {service_name} - skipping processing")
-                    return {
-                        "status": "success",
-                        "message": f"No changes detected in {service_name}",
-                        "trigger_type": "universal_polling",
-                        "service_name": service_name,
-                        "timestamp": datetime.now().isoformat(),
-                        "type": "no_changes",
-                        "summary": changes.get('summary', {}),
-                        "change_detection_enabled": True
-                    }
-                    
-                # Extract only the changed data (when changes ARE detected)
-                new_records = changes.get('new_records', [])
-                modified_records = changes.get('modified_records', [])
-                
-                # Combine new and modified records for processing
-                records_to_process = []
-                for record in new_records:
-                    records_to_process.append(record.get('data', record))
-                for record in modified_records:
-                    records_to_process.append(record.get('data', record))
-                
-                logger.info(f"🚀 Processing {len(records_to_process)} changed records (was {len(api_data) if isinstance(api_data, list) else 1} total)")
-                
-                # Step 4: Transform only the changed data
-                if records_to_process:
-                    # For DexScreener, wrap in expected structure
-                    if 'dexscreener' in service_name.lower():
-                        # Handle both object and array responses from DexScreener
-                        if isinstance(api_data, dict):
-                            # Standard DexScreener search API response
-                            processed_data = {
-                                "pairs": records_to_process,
-                                "schemaVersion": api_data.get('schemaVersion', '1.0.0'),
-                                "source": "DexScreener",
-                                "timestamp": datetime.now().isoformat()
-                            }
-                        else:
-                            # Token profiles API returns direct array
-                            processed_data = {
-                                "pairs": records_to_process,
-                                "schemaVersion": "1.0.0",
-                                "source": "DexScreener",
-                                "timestamp": datetime.now().isoformat()
-                            }
-                    else:
-                        processed_data = records_to_process
-                    
-                    # Create context for transformation (user controls, no emergency overrides)
-                    transformation_context = {
-                        "trigger_type": "universal_polling", 
-                        "node_data": node_data,
-                        "summary_mode": summary_mode,
-                        "target_fields": target_fields,
-                        "exclude_fields": exclude_fields,
-                        "max_records": max_records,  # User setting respected
-                        "max_tokens": max_tokens,    # User setting respected
-                        "change_detection_enabled": True,
-                        "only_changed_data": True
-                    }
-                    
+                if api_data:
                     # Transform using universal data transformer
                     standard_records = await data_transformer.transform_api_response(
-                        processed_data, 
+                        api_data, 
                         service_name,
-                        context=transformation_context
+                        context={
+                            "trigger_type": "universal_polling", 
+                            "node_data": node_data
+                        }
                     )
                     
                     # Convert to agent format
                     agent_data = data_transformer.to_agent_format(standard_records)
                     
-                    # Add change detection metadata
-                    agent_data["change_detection"] = {
-                        "enabled": True,
-                        "new_records": len(new_records),
-                        "modified_records": len(modified_records),
-                        "total_changes": len(records_to_process),
-                        "detection_method": "smart",
-                        "summary": changes.get('summary', {})
+                    standardized_result = {
+                        "success": True,
+                        "data": {
+                            "type": "api_data",
+                            "trigger_type": "universal_polling",
+                            "service_name": service_name,
+                            "api_data": agent_data,
+                            "standard_records": standard_records,
+                            "data_summary": f"Processed {len(standard_records)} records from {service_name}",
+                            "transformation_confidence": agent_data.get("transformation_summary", {}).get("avg_confidence", 0),
+                            "trigger_id": trigger_id
+                        },
+                        "error": None,
+                        "metadata": {
+                            "node_type": "trigger",
+                            "trigger_type": "universal_polling",
+                            "service_name": service_name,
+                            "api_endpoint": api_endpoint,
+                            "record_count": len(standard_records),
+                            "timestamp": datetime.now().isoformat()
+                        }
                     }
-                    
-                    logger.info(f"✅ Processed {len(standard_records)} changed records with avg confidence: {agent_data.get('transformation_summary', {}).get('avg_confidence', 0):.2f}")
-                    
-                    # Return standardized data for the agent
-                    return {
-                        "status": "success",
-                        "message": f"Changes detected in {service_name} - {len(records_to_process)} new/modified records",
-                        "trigger_type": "universal_polling",
-                        "service_name": service_name,
-                        "api_endpoint": api_endpoint,
-                        "timestamp": datetime.now().isoformat(),
-                        "type": "api_data",
-                        "api_data": agent_data,  # Standardized format for agents
-                        "raw_api_data": processed_data,  # Include processed data for debugging
-                        "standard_records": standard_records,  # Full transformation details
-                        "data_summary": f"Processed {len(standard_records)} changed records from {service_name}",
-                        "transformation_confidence": agent_data.get("transformation_summary", {}).get("avg_confidence", 0),
-                        "record_types": agent_data.get("transformation_summary", {}).get("record_types", []),
-                        "field_count": sum(len(record.fields) for record in standard_records),
-                        "change_detection_enabled": True,
-                        "change_summary": changes.get('summary', {})
-                    }
+                    return NodeData.from_value(standardized_result)
                 else:
-                    logger.warning(f"⚠️ Changes detected but no records to process for {service_name}")
-                    return {
-                        "status": "success",
-                        "message": f"Changes detected but no processable records in {service_name}",
-                        "trigger_type": "universal_polling",
-                        "service_name": service_name,
-                        "timestamp": datetime.now().isoformat(),
-                        "type": "no_processable_changes",
-                        "change_detection_enabled": True,
-                        "change_summary": changes.get('summary', {})
-                    }
-            except Exception as e:
-                logger.error(f"Error in universal polling for {service_name}: {str(e)}")
-                return {
-                    "status": "error",
-                    "message": f"Universal polling error for {service_name}: {str(e)}",
-                    "trigger_type": "universal_polling",
-                    "error": str(e)
-                }
+                    return NodeData.from_error(f"Failed to fetch data from {service_name}")
+                    
+            except Exception as api_error:
+                logger.error(f"Universal polling API error: {str(api_error)}")
+                return NodeData.from_error(f"Universal polling failed: {str(api_error)}")
         
         elif trigger_type == 'universal_webhook':
             service_name = node_data.get('serviceName', 'Unknown Service')
@@ -522,21 +305,14 @@ async def process_trigger_node(node_data: Dict[str, Any], inputs: Dict[str, Any]
             }
         
         else:
-            logger.warning(f"Unsupported trigger type: {trigger_type}")
-            return {
-                "status": "error",
-                "message": f"Unsupported trigger type: {trigger_type}",
-                "trigger_type": trigger_type
-            }
-    
+            # 🚀 UNKNOWN TRIGGER TYPE - STANDARDIZED ERROR
+            error_msg = f"Unknown trigger type: {trigger_type}"
+            logger.warning(error_msg)
+            return NodeData.from_error(error_msg)
+            
     except Exception as e:
         logger.error(f"Error processing trigger node: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Error processing trigger: {str(e)}",
-            "trigger_type": trigger_type,
-            "error": str(e)
-        }
+        return NodeData.from_error(f"Trigger processing failed: {str(e)}")
 
 async def fetch_api_data(node_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """

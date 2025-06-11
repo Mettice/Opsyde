@@ -357,7 +357,7 @@ const EnhancedEditModal = ({
         return newData;
       });
     } else if (name === 'llmModel') {
-      // Map llmModel to llm.model
+      // 🚀 FIXED: Single setFormData call for llmModel
       setFormData(prev => ({
         ...prev,
         llm: {
@@ -371,6 +371,7 @@ const EnhancedEditModal = ({
         llmModel: type === 'checkbox' ? checked : value // Keep for backward compatibility
       }));
     } else {
+      // 🚀 FIXED: Handle all other inputs properly
       setFormData(prev => ({
         ...prev,
         [name]: type === 'checkbox' ? checked : value

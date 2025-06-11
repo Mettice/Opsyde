@@ -902,8 +902,8 @@ class UniversalDataTransformer:
         edge_label: str = None
     ) -> Dict[str, Any]:
         """
-        Transform data from source node type to target node type format
-        This method provides compatibility with the graph utilities
+        🚀 ENHANCED: Transform data from source node type to target node type format
+        Supports ALL 11 node types: trigger, input, agent, task, tool, logic, chat, delay, output, cv_parser, webhook
         
         Args:
             source_output: Output from source node
@@ -923,52 +923,154 @@ class UniversalDataTransformer:
             else:
                 actual_data = source_output
             
-            # Simple transformation based on target type
+            # 🚀 ENHANCED: Handle standardized format {success, data, error, metadata}
+            if isinstance(actual_data, dict) and "success" in actual_data:
+                if actual_data["success"] and "data" in actual_data:
+                    # Extract the clean data from standardized format
+                    clean_data = actual_data["data"]
+                    logger.info(f"✅ Extracted clean data from standardized format: {type(clean_data)}")
+                    actual_data = clean_data
+                else:
+                    logger.warning(f"⚠️ Standardized result failed: {actual_data.get('error')}")
+                    return {"error": actual_data.get("error", "Upstream node failed")}
+            
+            # 🚀 CRITICAL FIX: Handle legacy logic node outputs correctly
+            if source_type == 'logic' and isinstance(actual_data, dict) and actual_data.get('type') == 'logic_result':
+                # Extract the actual data from logic node result
+                if 'value' in actual_data:
+                    actual_data = actual_data['value']
+                    logger.info(f"✅ Extracted data from logic node result: {type(actual_data)}")
+                else:
+                    logger.warning(f"⚠️ Logic node result missing 'value' field: {actual_data.keys()}")
+            
+            # 🚀 NEW: Handle all node type transformations
+            
+            # === TARGET: LOGIC NODES ===
             if target_type == 'logic':
                 # Logic nodes need simple key-value pairs for condition evaluation
                 if isinstance(actual_data, dict):
-                    return actual_data
+                    # For complex data, flatten it for logic evaluation
+                    flattened = {}
+                    if "type" in actual_data:
+                        flattened["result_type"] = actual_data["type"]
+                    if "response" in actual_data:
+                        flattened["response"] = actual_data["response"]
+                    if "value" in actual_data:
+                        flattened["value"] = actual_data["value"]
+                    if "text_content" in actual_data:
+                        flattened["text"] = actual_data["text_content"]
+                    # Add the whole object as well
+                    flattened.update(actual_data)
+                    return flattened
                 else:
-                    return {"value": actual_data}
+                    return {"value": actual_data, "result": actual_data}
                     
+            # === TARGET: CHAT NODES ===
             elif target_type == 'chat':
                 # Chat nodes need text input
                 if isinstance(actual_data, dict):
-                    # Extract meaningful text from the data
-                    text_content = ""
-                    if "value" in actual_data:
-                        text_content = str(actual_data["value"])
+                    # Extract text from various data types
+                    if "text_content" in actual_data:
+                        text_input = actual_data["text_content"]
+                    elif "response" in actual_data:
+                        text_input = actual_data["response"]
+                    elif "extracted_text" in actual_data:
+                        text_input = actual_data["extracted_text"]
+                    elif "value" in actual_data:
+                        text_input = str(actual_data["value"])
                     elif "message" in actual_data:
-                        text_content = str(actual_data["message"])
+                        text_input = actual_data["message"]
                     else:
-                        text_content = str(actual_data)
-                    return {"text_input": text_content}
+                        # Convert whole object to string for chat processing
+                        text_input = str(actual_data)
+                    return {"text_input": text_input, "prompt": text_input}
                 else:
-                    return {"text_input": str(actual_data)}
+                    return {"text_input": str(actual_data), "prompt": str(actual_data)}
                     
-            elif target_type == 'output':
-                # Output nodes can handle any data
-                return {"output_data": actual_data}
+            # === TARGET: AGENT NODES ===
+            elif target_type == 'agent':
+                # Agents need query/input fields
+                if isinstance(actual_data, dict):
+                    # Extract meaningful input for agents
+                    if "text_content" in actual_data:
+                        agent_input = actual_data["text_content"]
+                    elif "response" in actual_data:
+                        agent_input = actual_data["response"]
+                    elif "extracted_text" in actual_data:
+                        agent_input = actual_data["extracted_text"]
+                    elif "api_data" in actual_data:
+                        # For trigger data
+                        agent_input = actual_data["api_data"]
+                        return {"input": agent_input, "query": str(agent_input)}
+                    elif "value" in actual_data:
+                        agent_input = actual_data["value"]
+                    else:
+                        agent_input = actual_data
+                    
+                    return {"input": agent_input, "query": str(agent_input)}
+                else:
+                    return {"input": actual_data, "query": str(actual_data)}
+                    
+            # === TARGET: TASK NODES ===
+            elif target_type == 'task':
+                # Tasks need description/query
+                if isinstance(actual_data, dict):
+                    if "text_content" in actual_data:
+                        task_input = actual_data["text_content"]
+                    elif "response" in actual_data:
+                        task_input = actual_data["response"]
+                    elif "value" in actual_data:
+                        task_input = actual_data["value"]
+                    else:
+                        task_input = str(actual_data)
+                    return {"query": task_input, "description": task_input}
+                else:
+                    return {"query": str(actual_data), "description": str(actual_data)}
+                    
+            # === TARGET: TOOL NODES ===
+            elif target_type == 'tool':
+                # Tools need input_data
+                return {"input_data": actual_data, "parameters": actual_data}
                 
+            # === TARGET: OUTPUT NODES ===
+            elif target_type == 'output':
+                # 🚀 ENHANCED: Output nodes get the clean data, not the wrapper
+                logger.info(f"🔄 Preparing data for output node: {type(actual_data)}")
+                if isinstance(actual_data, dict):
+                    # Pass through the actual data structure
+                    return actual_data
+                else:
+                    return {"output_data": actual_data}
+                    
+            # === TARGET: DELAY NODES ===
             elif target_type == 'delay':
                 # Delay nodes pass data through
-                return {"passthrough_data": actual_data}
+                return {"passthrough_data": actual_data, "data": actual_data}
                 
+            # === TARGET: INPUT NODES ===
+            elif target_type == 'input':
+                # Input nodes usually don't receive data, but handle it if they do
+                return {"initial_data": actual_data}
+                
+            # === TARGET: TRIGGER NODES ===
+            elif target_type == 'trigger':
+                # Triggers usually don't receive data, but handle it for manual triggers
+                return {"trigger_data": actual_data}
+                
+            # === GENERIC TRANSFORMATION ===
             else:
-                # Generic transformation
+                # Generic transformation for unknown node types
                 if isinstance(actual_data, dict):
                     return actual_data
                 else:
-                    return {"value": actual_data}
+                    return {"value": actual_data, "data": actual_data}
                     
         except Exception as e:
-            logger.error(f"❌ Data transformation failed: {str(e)}")
-            return {
-                "type": "error",
-                "error": f"Data transformation failed: {str(e)}",
-                "source_type": source_type,
-                "target_type": target_type
-            }
+            logger.error(f"Error in data transformation {source_type} → {target_type}: {str(e)}")
+            # Return the data as-is if transformation fails
+            return {"value": source_output, "error": f"Transformation failed: {str(e)}"}
+            
+        logger.info(f"✅ Successfully transformed {source_type} → {target_type}")
 
 # Global transformer instance
 data_transformer = UniversalDataTransformer() 

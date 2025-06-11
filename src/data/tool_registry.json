@@ -144,6 +144,23 @@
           "customizable": true
         }
       }
+    },
+    "social_media": {
+      "name": "Social Media",
+      "icon": "📱",
+      "description": "Connect to social media platforms",
+      "config": {
+        "platforms": {
+          "values": ["linkedin", "facebook", "whatsapp", "telegram"],
+          "default": "linkedin",
+          "customizable": true
+        },
+        "auth_type": {
+          "values": ["oauth2", "bearer", "bot_token"],
+          "default": "oauth2",
+          "customizable": false
+        }
+      }
     }
   },
   "tools": [
@@ -333,6 +350,134 @@
           "default": "llm.default"
         },
         "components": "Chain components"
+      }
+    },
+    {
+      "name": "LinkedIn Post",
+      "description": "Create and publish LinkedIn posts",
+      "framework": "social_media",
+      "type": "universal_api",
+      "customTool": "linkedin_post",
+      "category": "Social Media",
+      "icon": "💼",
+      "parameters": {
+        "content": {
+          "type": "textarea",
+          "description": "Post content",
+          "required": true,
+          "placeholder": "What would you like to share on LinkedIn?"
+        },
+        "visibility": {
+          "type": "select",
+          "description": "Post visibility",
+          "options": ["PUBLIC", "CONNECTIONS"],
+          "default": "PUBLIC"
+        }
+      },
+      "config": {
+        "service_name": "linkedin",
+        "api_endpoint": "https://api.linkedin.com/v2/ugcPosts",
+        "method": "POST",
+        "auth_type": "oauth2"
+      }
+    },
+    {
+      "name": "Facebook Page Post",
+      "description": "Post content to Facebook page",
+      "framework": "social_media", 
+      "type": "universal_api",
+      "customTool": "facebook_post",
+      "category": "Social Media",
+      "icon": "📘",
+      "parameters": {
+        "message": {
+          "type": "textarea",
+          "description": "Post message",
+          "required": true
+        },
+        "page_id": {
+          "type": "text",
+          "description": "Facebook Page ID",
+          "required": true
+        },
+        "link": {
+          "type": "url",
+          "description": "Optional link to share",
+          "required": false
+        }
+      },
+      "config": {
+        "service_name": "facebook",
+        "api_endpoint": "https://graph.facebook.com/v18.0/{page_id}/feed",
+        "method": "POST",
+        "auth_type": "bearer"
+      }
+    },
+    {
+      "name": "WhatsApp Message",
+      "description": "Send WhatsApp Business messages",
+      "framework": "social_media",
+      "type": "universal_api", 
+      "customTool": "whatsapp_message",
+      "category": "Messaging",
+      "icon": "💬",
+      "parameters": {
+        "to": {
+          "type": "text",
+          "description": "Recipient phone number (with country code)",
+          "required": true,
+          "placeholder": "+1234567890"
+        },
+        "message": {
+          "type": "textarea",
+          "description": "Message content",
+          "required": true
+        },
+        "phone_number_id": {
+          "type": "text",
+          "description": "WhatsApp Business Phone Number ID",
+          "required": true
+        }
+      },
+      "config": {
+        "service_name": "whatsapp",
+        "api_endpoint": "https://graph.facebook.com/v18.0/{phone_number_id}/messages",
+        "method": "POST",
+        "auth_type": "bearer"
+      }
+    },
+    {
+      "name": "Telegram Message",
+      "description": "Send Telegram messages",
+      "framework": "social_media",
+      "type": "universal_api",
+      "customTool": "telegram_message", 
+      "category": "Messaging",
+      "icon": "✈️",
+      "parameters": {
+        "chat_id": {
+          "type": "text",
+          "description": "Chat ID or username",
+          "required": true,
+          "placeholder": "@username or chat_id"
+        },
+        "text": {
+          "type": "textarea", 
+          "description": "Message text",
+          "required": true
+        },
+        "parse_mode": {
+          "type": "select",
+          "description": "Message formatting",
+          "options": ["HTML", "Markdown", "MarkdownV2"],
+          "default": "HTML"
+        }
+      },
+      "config": {
+        "service_name": "telegram",
+        "api_endpoint": "https://api.telegram.org/bot{bot_token}/sendMessage",
+        "method": "POST",
+        "auth_type": "bot_token"
       }
     }
   ]

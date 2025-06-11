@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Backgroun
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Dict, List, Any, Optional, Union
+from fastapi.staticfiles import StaticFiles
 
 # Framework imports
 from frameworks.email_notifier import send_email
@@ -32,6 +33,11 @@ from api.routers.output_router import router as output_router
 from api.routers.user_settings import router as user_settings_router
 from api.routers.export_router import router as export_router
 from api.routers.framework_models import router as framework_models_router
+from api.routers.integration_router import router as integration_router
+from backend.api.routers import crew, social_media
+from backend.api.routers.multimodal import router as multimodal_router
+from api.routers.smart_mapping_router import router as smart_mapping_router
+from api.routers.llm_mode_router import router as llm_mode_router
 
 # Models
 from backend.models.data import NodeData
@@ -126,9 +132,11 @@ def convert_nodedata_to_dict(obj: Any, depth: int = 0) -> Any:
             return str(obj)
 
 app = FastAPI(
-    title="CrewBuilder API",
-    description="Backend API for CrewBuilder workflow management and export system",
-    version="2.0.0"
+    title="Nodai API",
+    description="Backend API for Nodai workflow management and export system",
+    version="2.0.0",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
 )
 
 # Initialize core components
@@ -147,7 +155,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    logger.info("🚀 Starting CrewBuilder backend...")
+    logger.info("🚀 Starting Nodai backend...")
     
     # Initialize database
     try:
@@ -233,7 +241,7 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Scheduler initialization failed: {str(e)}")
     
-    logger.info("🎉 CrewBuilder backend startup complete!")
+    logger.info("🎉 Nodai backend startup complete!")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -255,6 +263,12 @@ app.include_router(output_router, prefix="/api/outputs")
 app.include_router(user_settings_router, prefix="/api/user-settings")
 app.include_router(export_router)
 app.include_router(framework_models_router)
+app.include_router(integration_router, prefix="/api/integrations")
+app.include_router(crew.router, prefix="/api")
+app.include_router(social_media.router, prefix="/api")
+app.include_router(multimodal_router, prefix="/api")
+app.include_router(smart_mapping_router)
+app.include_router(llm_mode_router)
 
 # Error handlers
 @app.exception_handler(CrewFlowError)
@@ -608,7 +622,7 @@ async def execute_node(
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "crewbuilder_api"}
+    return {"status": "healthy", "service": "Nodai_api"}
 
 # Debug endpoint to list all routes
 @app.get("/debug/routes")
@@ -1174,8 +1188,8 @@ async def test_email(request: Request):
         
         data = await request.json()
         recipient = data.get('recipient', 'test@example.com')
-        subject = data.get('subject', 'CrewFlow Email Test')
-        body = data.get('body', 'This is a test email from CrewFlow to verify email functionality is working.')
+        subject = data.get('subject', 'Nodai Email Test')
+        body = data.get('body', 'This is a test email from Nodai to verify email functionality is working.')
         
         result = await send_email(recipient, subject, body)
         
@@ -1190,6 +1204,54 @@ async def test_email(request: Request):
             "error": str(e)
         }
 
+# Serve static files (if needed)
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "message": "Nodai API",
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat(),
+        "features": [
+            "🤖 AI Agent Management",
+            "🔧 Tool Integration", 
+            "📊 Workflow Execution",
+            "📱 Social Media Integration",
+            "🧠 Smart Input Mapping",
+            "🎯 Multimodal Processing"
+        ],
+        "endpoints": {
+            "docs": "/api/docs",
+            "crew": "/api/crew",
+            "nodes": "/api/nodes", 
+            "social_media": "/api/social-media",
+            "multimodal": "/api/multimodal"
+        }
+    }
+
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "services": {
+            "api": "running",
+            "crew_engine": "ready",
+            "multimodal_processor": "ready"
+        }
+    }
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    logger.info("🚀 Starting Nodai API server...")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

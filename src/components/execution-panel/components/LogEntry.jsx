@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import RichContentRenderer from '../../rich-content/RichContentRenderer';
 import ResultDisplayCard from '../../rich-content/renderers/ResultDisplayCard';
+import { extractNodeContent } from '../../../utils/flowExecutionEngine';
 
 const LogEntry = ({ 
   log, 
@@ -11,9 +12,26 @@ const LogEntry = ({
   getCardStyle, 
   getStatusIcon, 
   getLogStyle, 
-  debugMode 
+  debugMode,
+  processStandardizedResult  // 🚀 NEW: Enhanced result processor
 }) => {
   const [showMetadata, setShowMetadata] = useState(false);
+
+  // 🔧 NEW: Process the log through our enhanced standardized result handler
+  const processedLog = React.useMemo(() => {
+    if (processStandardizedResult && typeof processStandardizedResult === 'function') {
+      return processStandardizedResult(log);
+    }
+    return log;
+  }, [log, processStandardizedResult]);
+
+  // 🔧 NEW: Extract enhanced content using our utility
+  const extractedContent = React.useMemo(() => {
+    if (processedLog.result) {
+      return extractNodeContent(processedLog.result, processedLog.node_type || processedLog.nodeType || 'unknown');
+    }
+    return null;
+  }, [processedLog.result, processedLog.node_type, processedLog.nodeType]);
 
   // Determine color scheme based on log status/type
   const getColorScheme = (log) => {
@@ -26,14 +44,14 @@ const LogEntry = ({
     return 'blue';
   };
 
-  const colorScheme = getColorScheme(log);
+  const colorScheme = getColorScheme(processedLog);
 
   if (viewMode === 'structured') {
     try {
-      const nodeId = log.node_id || log.nodeId || 'unknown';
-      const nodeName = log.node_name || log.nodeName || 'Unknown Node';
-      const logType = log.type || 'info';
-      const status = log.status || (log.metadata?.has_error ? 'error' : 'completed');
+      const nodeId = processedLog.node_id || processedLog.nodeId || 'unknown';
+      const nodeName = processedLog.node_name || processedLog.nodeName || 'Unknown Node';
+      const logType = processedLog.type || 'info';
+      const status = processedLog.status || (processedLog.metadata?.has_error ? 'error' : 'completed');
       
       return (
         <div key={`log-${index}-${nodeId}`} className={`${getCardStyle(status, logType)} flex-shrink-0`}>
@@ -65,12 +83,29 @@ const LogEntry = ({
                     <span className="px-2 py-1 bg-white/60 rounded-md text-xs capitalize">
                       {logType}
                     </span>
+                    {/* 🚀 NEW: Show framework and execution time if available */}
+                    {processedLog.metadata?.framework && (
+                      <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs">
+                        {processedLog.metadata.framework}
+                      </span>
+                    )}
+                    {processedLog.metadata?.execution_time && (
+                      <span className="px-2 py-1 bg-green-100 text-green-700 rounded-md text-xs">
+                        {Math.round(processedLog.metadata.execution_time * 1000)}ms
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
               
-              {/* Status Badge */}
-              <div className="flex-shrink-0">
+              {/* Enhanced Status Badge */}
+              <div className="flex-shrink-0 flex items-center gap-2">
+                {/* Success Indicator */}
+                {processedLog.success !== undefined && (
+                  <div className={`w-3 h-3 rounded-full ${processedLog.success ? 'bg-green-400' : 'bg-red-400'} shadow-sm`} 
+                       title={processedLog.success ? 'Success' : 'Failed'} />
+                )}
+                
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                   status === 'started' ? 'bg-blue-100 text-blue-800' :
                   status === 'completed' ? 'bg-green-100 text-green-800' :
@@ -83,25 +118,35 @@ const LogEntry = ({
               </div>
             </div>
 
-            {/* Beautiful Result Display */}
-            {log.result && (
+            {/* 🚀 ENHANCED: Beautiful Result Display with processed data */}
+            {(processedLog.processedResult || processedLog.result) && (
               <div className="mt-4">
                 <ResultDisplayCard
-                  content={log.result}
+                  content={processedLog.processedResult || processedLog.result}
                   title="Execution Result"
                   colorScheme={colorScheme}
                   defaultExpanded={false}
                   showMetrics={true}
                   className="mb-3"
+                  metadata={{
+                    nodeType: processedLog.node_type || processedLog.nodeType,
+                    framework: processedLog.metadata?.framework,
+                    extractedContent
+                  }}
                 />
               </div>
             )}
 
-            {/* Error Details */}
-            {log.error && (
+            {/* 🚀 ENHANCED: Error Details with better formatting */}
+            {processedLog.error && (
               <div className="mt-3">
                 <ResultDisplayCard
-                  content={log.error}
+                  content={{
+                    error: processedLog.error,
+                    errorType: processedLog.metadata?.error_type,
+                    framework: processedLog.metadata?.framework,
+                    nodeType: processedLog.metadata?.node_type || processedLog.nodeType
+                  }}
                   title="Error Details"
                   colorScheme="orange"
                   defaultExpanded={true}
@@ -112,10 +157,10 @@ const LogEntry = ({
             )}
 
             {/* Message */}
-            {log.message && (
+            {processedLog.message && (
               <div className="mt-3">
                 <ResultDisplayCard
-                  content={log.message}
+                  content={processedLog.message}
                   title="Message"
                   colorScheme="blue"
                   defaultExpanded={false}
@@ -125,8 +170,8 @@ const LogEntry = ({
               </div>
             )}
 
-            {/* Metadata Toggle */}
-            {log.metadata && Object.keys(log.metadata).length > 0 && (
+            {/* 🚀 ENHANCED: Metadata Toggle with richer information */}
+            {processedLog.metadata && Object.keys(processedLog.metadata).length > 0 && (
               <div className="mt-3">
                 <button
                   onClick={() => setShowMetadata(!showMetadata)}
@@ -135,14 +180,19 @@ const LogEntry = ({
                   <span className={`transform transition-transform duration-200 ${showMetadata ? 'rotate-90' : ''}`}>
                     ▶
                   </span>
-                  <span>Metadata ({Object.keys(log.metadata).length} items)</span>
+                  <span>Execution Metadata ({Object.keys(processedLog.metadata).length} items)</span>
+                  {processedLog.metadata.execution_time && (
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                      {Math.round(processedLog.metadata.execution_time * 1000)}ms
+                    </span>
+                  )}
                 </button>
                 
                 {showMetadata && (
                   <div className="mt-2">
                     <ResultDisplayCard
-                      content={log.metadata}
-                      title="Metadata"
+                      content={processedLog.metadata}
+                      title="Execution Metadata"
                       colorScheme="purple"
                       defaultExpanded={false}
                       showMetrics={false}
@@ -153,6 +203,25 @@ const LogEntry = ({
               </div>
             )}
 
+            {/* 🚀 NEW: Data Flow Debug Information */}
+            {debugMode && extractedContent && (
+              <details className="mt-3">
+                <summary className="text-xs text-blue-500 cursor-pointer hover:text-blue-700">
+                  🔧 Data Flow: Extracted content preview
+                </summary>
+                <div className="mt-2">
+                  <ResultDisplayCard
+                    content={extractedContent}
+                    title="Extracted Content"
+                    colorScheme="blue"
+                    defaultExpanded={false}
+                    showMetrics={true}
+                    className="mb-3"
+                  />
+                </div>
+              </details>
+            )}
+
             {/* Debug Information */}
             {debugMode && (
               <details className="mt-3">
@@ -161,7 +230,7 @@ const LogEntry = ({
                 </summary>
                 <div className="mt-2">
                   <ResultDisplayCard
-                    content={log}
+                    content={processedLog}
                     title="Raw Log Data"
                     colorScheme="orange"
                     defaultExpanded={false}
@@ -173,17 +242,17 @@ const LogEntry = ({
             )}
 
             {/* Timestamp */}
-            {(log.timestamp || log.metadata?.timestamp) && (
+            {(processedLog.timestamp || processedLog.metadata?.timestamp) && (
               <div className="mt-3 text-xs text-gray-500 flex items-center gap-2">
                 <span>🕒</span>
-                <span>{new Date(log.timestamp || log.metadata.timestamp).toLocaleString()}</span>
+                <span>{new Date(processedLog.timestamp || processedLog.metadata.timestamp).toLocaleString()}</span>
               </div>
             )}
           </div>
         </div>
       );
     } catch (error) {
-      console.error('Error rendering log entry:', error, log);
+      console.error('Error rendering log entry:', error, processedLog);
       return (
         <div key={`error-log-${index}`} className="p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
           <div className="text-red-700 font-medium">Error rendering log entry #{index}</div>
@@ -194,7 +263,7 @@ const LogEntry = ({
             <summary className="text-red-600 text-sm cursor-pointer">Raw log data</summary>
             <div className="max-h-32 overflow-auto mt-1">
               <pre className="text-xs text-red-500 whitespace-pre-wrap">
-                {JSON.stringify(log, null, 2)}
+                {JSON.stringify(processedLog, null, 2)}
               </pre>
             </div>
           </details>
@@ -260,7 +329,8 @@ LogEntry.propTypes = {
   getCardStyle: PropTypes.func.isRequired,
   getStatusIcon: PropTypes.func.isRequired,
   getLogStyle: PropTypes.func.isRequired,
-  debugMode: PropTypes.bool
+  debugMode: PropTypes.bool,
+  processStandardizedResult: PropTypes.func
 };
 
 export default LogEntry;

@@ -18,74 +18,41 @@ export const CONTENT_TYPES = {
 };
 
 /**
- * Detect content type based on content analysis
+ * Enhanced content type detection with support for standardized result format
  */
 export const detectContentType = (content) => {
+  // Handle null/undefined
   if (!content && content !== 0 && content !== false) {
     return CONTENT_TYPES.TEXT;
   }
 
-  // Handle strings
-  if (typeof content === 'string') {
-    const trimmed = content.trim();
-    
-    // Check for HTML first (more specific)
-    if (isHtmlContent(trimmed)) {
-      return CONTENT_TYPES.HTML;
-    }
-    
-    // Check for JSON (be more strict)
-    if (isJsonContent(trimmed)) {
-      return CONTENT_TYPES.JSON;
-    }
-    
-    // Check for Markdown
-    if (isMarkdownContent(trimmed)) {
-      return CONTENT_TYPES.MARKDOWN;
-    }
-    
-    // Check for code
-    if (isCodeContent(trimmed)) {
-      return CONTENT_TYPES.CODE;
-    }
-    
-    // Check for base64 images
-    if (isBase64Image(trimmed)) {
-      return CONTENT_TYPES.IMAGE;
-    }
-    
-    // Check for URLs pointing to media
-    if (isMediaUrl(trimmed)) {
-      if (trimmed.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
-        return CONTENT_TYPES.IMAGE;
-      }
-      if (trimmed.match(/\.(mp4|webm|ogg|avi|mov)$/i)) {
-        return CONTENT_TYPES.VIDEO;
-      }
-      if (trimmed.match(/\.(mp3|wav|ogg|m4a|flac)$/i)) {
-        return CONTENT_TYPES.AUDIO;
-      }
-    }
-    
-    return CONTENT_TYPES.TEXT;
-  }
-  
-  // Handle arrays - these are always JSON for display purposes
-  if (Array.isArray(content)) {
-    // Check if it's table-like data
-    if (content.length > 0 && typeof content[0] === 'object' && content[0] !== null) {
-      const firstItem = content[0];
-      if (typeof firstItem === 'object' && !Array.isArray(firstItem)) {
-        return CONTENT_TYPES.TABLE;
-      }
-    }
-    return CONTENT_TYPES.JSON;
-  }
-  
-  // Handle objects - these are always JSON for display purposes
+  // 🚀 NEW: Handle standardized result format first
   if (typeof content === 'object' && content !== null) {
+    // Detect standardized format: { success, data, error, metadata }
+    if (content.hasOwnProperty('success')) {
+      if (content.success === false) {
+        return CONTENT_TYPES.ERROR;
+      } else if (content.data !== undefined) {
+        // Recursively detect the type of the data field
+        return detectContentType(content.data);
+      } else {
+        return CONTENT_TYPES.TEXT; // Success with no data
+      }
+    }
+    
+    // Handle specific structured types first
+    if (content.type && Object.values(CONTENT_TYPES).includes(content.type)) {
+      return content.type;
+    }
+    
+    // Check for error objects
+    if (content.error || content.type === 'error') {
+      return CONTENT_TYPES.ERROR;
+    }
+    
     // Check for chart data
-    if (content.labels && content.datasets) {
+    if (content.type === 'chart' || content.chartType || 
+        (content.data && (content.labels || content.datasets))) {
       return CONTENT_TYPES.CHART;
     }
     
@@ -94,21 +61,84 @@ export const detectContentType = (content) => {
       return CONTENT_TYPES.TABLE;
     }
     
-    // Check for error objects
-    if (content.error || (content.message && content.stack)) {
-      return CONTENT_TYPES.ERROR;
+    // Check for image data  
+    if (content.type === 'image' || 
+        (content.data && typeof content.data === 'string' && isBase64Image(content.data))) {
+      return CONTENT_TYPES.IMAGE;
     }
     
-    // Check for media objects
-    if (content.type) {
-      if (content.type.startsWith('image/')) return CONTENT_TYPES.IMAGE;
-      if (content.type.startsWith('video/')) return CONTENT_TYPES.VIDEO;
-      if (content.type.startsWith('audio/')) return CONTENT_TYPES.AUDIO;
+    // Check for file data
+    if (content.filename || content.file || content.type === 'file') {
+      return CONTENT_TYPES.FILE;
     }
     
+    // Check for label/value pairs
+    if (content.label && content.value !== undefined) {
+      return 'label_value_pair'; // Custom type for input/output pairs
+    }
+    
+    // For objects, return JSON to let the renderer handle the structure
     return CONTENT_TYPES.JSON;
   }
-  
+
+  // Handle strings
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+    
+    if (!trimmed) {
+      return CONTENT_TYPES.TEXT;
+    }
+    
+    // Check for code
+    if (isCodeContent(trimmed)) {
+      return CONTENT_TYPES.CODE;
+    }
+    
+    // Check for markdown
+    if (isMarkdownContent(trimmed)) {
+      return CONTENT_TYPES.MARKDOWN;
+    }
+    
+    // Check for HTML
+    if (isHtmlContent(trimmed)) {
+      return CONTENT_TYPES.HTML;
+    }
+    
+    // Check for JSON string
+    if (isJsonString(trimmed)) {
+      return CONTENT_TYPES.JSON;
+    }
+    
+    // Default to text
+    return CONTENT_TYPES.TEXT;
+  }
+
+  // Handle arrays
+  if (Array.isArray(content)) {
+    if (content.length === 0) {
+      return CONTENT_TYPES.TEXT;
+    }
+    
+    // If all items are objects with similar structure, might be table data
+    if (content.every(item => typeof item === 'object' && item !== null)) {
+      return CONTENT_TYPES.TABLE;
+    }
+    
+    // If all items are strings, treat as text list
+    if (content.every(item => typeof item === 'string')) {
+      return CONTENT_TYPES.TEXT;
+    }
+    
+    // Mixed array, treat as JSON
+    return CONTENT_TYPES.JSON;
+  }
+
+  // Handle primitives
+  if (typeof content === 'number' || typeof content === 'boolean') {
+    return CONTENT_TYPES.TEXT;
+  }
+
+  // Fallback
   return CONTENT_TYPES.TEXT;
 };
 

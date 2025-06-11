@@ -1,7 +1,119 @@
 import axios from 'axios';
 import { apiClient } from '../api/client';
+import { useLLMMode } from '../contexts/LLMContext';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
+// NEW: Enhanced Input Node Execution with LLM-centric processing
+async function executeInputNodeEnhanced(node, inputs, workflowContext) {
+  const nodeData = node.data || {};
+  const nodeId = node.id || nodeData.nodeId || "unknown";
+  const inputType = nodeData.inputType || "text";
+  
+  console.log("🚀 Enhanced input node execution:", {
+    nodeId,
+    inputType,
+    hasMultimodalData: !!nodeData.multimodalResult,
+    inputKeys: Object.keys(inputs)
+  });
+
+  try {
+    // Prepare the request payload for backend processing
+    const payload = {
+      node: {
+        id: nodeId,
+        type: "input",
+        data: {
+          ...nodeData,
+          // Include the node's current value (could be multimodal result)
+          value: nodeData.value || nodeData.multimodalResult || inputs.value || ""
+        }
+      },
+      inputs: inputs,
+      context: {
+        execution_timestamp: new Date().toISOString(),
+        workflow_context: workflowContext,
+        node_id: nodeId
+      }
+    };
+
+    // Call backend input node processor
+    const response = await fetch(`${BACKEND_URL}/api/nodes/input`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || errorData.error || "Failed to process input node");
+    }
+
+    const result = await response.json();
+    console.log("✅ Input node processing result:", result);
+
+    // Return standardized result format
+    return {
+      success: result.success || false,
+      data: result.data || result.value || {},
+      metadata: result.metadata || {},
+      error: result.error || null
+    };
+
+  } catch (error) {
+    console.error("❌ Enhanced input node execution failed:", error);
+    
+    // Fallback: create a basic result from the input
+    return {
+      success: false,
+      data: {
+        type: "text_input",
+        input_type: inputType,
+        label: nodeData.label || "Input",
+        value: nodeData.value || inputs.value || "",
+        text_content: String(nodeData.value || inputs.value || "")
+      },
+      metadata: {
+        node_type: "input",
+        input_type: inputType,
+        timestamp: new Date().toISOString(),
+        llm_processed: false,
+        fallback: true,
+        error: error.message
+      },
+      error: error.message
+    };
+  }
+}
+
+function resolveInheritance(node, workflowContext) {
+  if (!workflowContext || !node.data?.inherits_from) {
+    return node; // No inheritance, return as-is
+  }
+  
+  const parentNode = workflowContext.nodes?.find(n => n.id === node.data.inherits_from);
+  if (!parentNode) {
+    return node; // Parent not found, return as-is
+  }
+  
+  // Merge parent data with node data (node data takes precedence)
+  const mergedData = {
+    ...parentNode.data,
+    ...node.data,
+    // Special handling for nested objects like frameworkConfig
+    frameworkConfig: {
+      ...parentNode.data?.frameworkConfig,
+      ...node.data?.frameworkConfig
+    }
+  };
+  
+  return {
+    ...node,
+    data: mergedData
+  };
+}
 
 // Helper function to remove circular references
 function removeCircularReferences(obj) {
@@ -63,32 +175,6 @@ export async function executeNode(node, connectedAgentData, inputs = {}, workflo
       const missingFields = requiredFields.filter(field => !connectedAgentData[field]);
       if (missingFields.length > 0) {
         throw new Error(`Missing required agent fields: ${missingFields.join(", ")}`);
-      }
-function resolveInheritance(node, workflowContext) {
-        if (!workflowContext || !node.data?.inherits_from) {
-          return node; // No inheritance, return as-is
-        }
-        
-        const parentNode = workflowContext.nodes?.find(n => n.id === node.data.inherits_from);
-        if (!parentNode) {
-          return node; // Parent not found, return as-is
-        }
-        
-        // Merge parent data with node data (node data takes precedence)
-        const mergedData = {
-          ...parentNode.data,
-          ...node.data,
-          // Special handling for nested objects like frameworkConfig
-          frameworkConfig: {
-            ...parentNode.data?.frameworkConfig,
-            ...node.data?.frameworkConfig
-          }
-        };
-        
-        return {
-          ...node,
-          data: mergedData
-        };
       }
 
       // Sanitize and structure agent data
@@ -166,11 +252,49 @@ function resolveInheritance(node, workflowContext) {
         break;
       case "input":
         try {
-          console.log("Executing input node:", nodeId, cleanedInputs);
-          response = await apiClient.executeInputNode(nodeId, cleanedInputs);
+          console.log("🎯 Executing input node:", nodeId, "Type:", nodeData.inputType, cleanedInputs);
+          
+          // NEW: Enhanced input processing with context chaining
+          const inputNodeResult = await executeInputNodeEnhanced(node, cleanedInputs, workflowContext);
+          
+          // Return standardized format for downstream nodes
+          return {
+            nodeId: nodeId,
+            nodeType: "input",
+            success: inputNodeResult.success,
+            data: inputNodeResult.data,
+            
+            // NEW: Provide standardized outputs for easy downstream consumption
+            processed_content: inputNodeResult.data?.processed_content || inputNodeResult.data?.text_content || inputNodeResult.data?.value,
+            extracted_entities: inputNodeResult.data?.extracted_entities || [],
+            file_info: inputNodeResult.data?.filename ? {
+              filename: inputNodeResult.data.filename,
+              type: inputNodeResult.data.file_type,
+              size: inputNodeResult.data.file_size
+            } : null,
+            
+            // Context for chaining
+            context: {
+              input_type: inputNodeResult.data?.input_type,
+              llm_processed: inputNodeResult.metadata?.llm_processed || false,
+              api_used: inputNodeResult.metadata?.api_used,
+              processing_timestamp: inputNodeResult.metadata?.processing_timestamp || new Date().toISOString()
+            },
+            
+            // Full result for debugging
+            raw_result: inputNodeResult,
+            timestamp: new Date().toISOString()
+          };
         } catch (error) {
-          console.error("Error executing input node:", error, nodeId, cleanedInputs);
-          throw error;
+          console.error("❌ Error executing input node:", error, nodeId, cleanedInputs);
+          return {
+            nodeId: nodeId,
+            nodeType: "input",
+            success: false,
+            error: error.message,
+            data: null,
+            timestamp: new Date().toISOString()
+          };
         }
         break;
       case "agent":
@@ -321,4 +445,245 @@ export const nodeExecutors = {
   logic: (node, inputs) => executeNode(node, null, inputs),
   delay: (node, inputs) => executeNode(node, null, inputs),
   agent: (node, inputs) => executeNode(node, null, inputs)
-}; 
+};
+
+// Enhanced execute function that includes LLM mode
+export const executeNodeWithLLMMode = async (nodeType, nodeData, inputs, llmModeEnabled = false, smartMappingEnabled = true) => {
+  try {
+    console.log(`🚀 Executing ${nodeType} node with LLM mode: ${llmModeEnabled}`);
+    
+    // Add LLM mode configuration to node data
+    const enhancedNodeData = {
+      ...nodeData,
+      llm_mode_enabled: llmModeEnabled,
+      smart_mapping_enabled: smartMappingEnabled
+    };
+    
+    switch (nodeType) {
+      case 'input':
+        return await executeInputNodeEnhanced(enhancedNodeData, inputs);
+      case 'chat':
+        return await executeChatNode(enhancedNodeData, inputs);
+      case 'task':
+        return await executeTaskNode(enhancedNodeData, inputs);
+      case 'logic':
+        return await executeLogicNode(enhancedNodeData, inputs);
+      case 'delay':
+        return await executeDelayNode(enhancedNodeData, inputs);
+      case 'agent':
+        return await executeAgentNode(enhancedNodeData, inputs);
+      case 'tool':
+        return await executeToolNode(enhancedNodeData, inputs);
+      case 'output':
+        return await executeOutputNode(enhancedNodeData, inputs);
+      default:
+        throw new Error(`Unsupported node type: ${nodeType}`);
+    }
+  } catch (error) {
+    console.error(`❌ Error executing ${nodeType} node:`, error);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      metadata: {
+        node_type: nodeType,
+        llm_mode_enabled: llmModeEnabled,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+};
+
+// Enhanced chat node executor with LLM mode support
+export const executeChatNode = async (nodeData, inputs) => {
+  try {
+    console.log('🗣️ Executing chat node with data:', nodeData);
+    
+    const response = await fetch('/api/nodes/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        node_data: nodeData,
+        inputs: inputs
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Chat node execution failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Chat node result:', result);
+    
+    return {
+      success: result.success || true,
+      data: result.data || result,
+      error: result.error || null,
+      metadata: {
+        ...result.metadata,
+        node_type: 'chat',
+        llm_mode_processed: nodeData.llm_mode_enabled
+      }
+    };
+  } catch (error) {
+    console.error('❌ Chat node execution error:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      metadata: {
+        node_type: 'chat',
+        llm_mode_enabled: nodeData.llm_mode_enabled,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+};
+
+// Enhanced task node executor with LLM mode support
+export const executeTaskNode = async (nodeData, inputs) => {
+  try {
+    console.log('📋 Executing task node with data:', nodeData);
+    
+    const response = await fetch('/api/nodes/task', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        node_data: nodeData,
+        inputs: inputs
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Task node execution failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Task node result:', result);
+    
+    return {
+      success: result.success || true,
+      data: result.data || result,
+      error: result.error || null,
+      metadata: {
+        ...result.metadata,
+        node_type: 'task',
+        llm_mode_processed: nodeData.llm_mode_enabled
+      }
+    };
+  } catch (error) {
+    console.error('❌ Task node execution error:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      metadata: {
+        node_type: 'task',
+        llm_mode_enabled: nodeData.llm_mode_enabled,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+};
+
+// Enhanced logic node executor with LLM mode support
+export const executeLogicNode = async (nodeData, inputs) => {
+  try {
+    console.log('🧠 Executing logic node with data:', nodeData);
+    
+    const response = await fetch('/api/nodes/logic', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        node_data: nodeData,
+        inputs: inputs
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Logic node execution failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Logic node result:', result);
+    
+    return {
+      success: result.success || true,
+      data: result.data || result,
+      error: result.error || null,
+      metadata: {
+        ...result.metadata,
+        node_type: 'logic',
+        llm_mode_processed: nodeData.llm_mode_enabled
+      }
+    };
+  } catch (error) {
+    console.error('❌ Logic node execution error:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      metadata: {
+        node_type: 'logic',
+        llm_mode_enabled: nodeData.llm_mode_enabled,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+};
+
+// Enhanced delay node executor with LLM mode support
+export const executeDelayNode = async (nodeData, inputs) => {
+  try {
+    console.log('⏱️ Executing delay node with data:', nodeData);
+    
+    const response = await fetch('/api/nodes/delay', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        node_data: nodeData,
+        inputs: inputs
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Delay node execution failed: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log('✅ Delay node result:', result);
+    
+    return {
+      success: result.success || true,
+      data: result.data || result,
+      error: result.error || null,
+      metadata: {
+        ...result.metadata,
+        node_type: 'delay',
+        llm_mode_processed: nodeData.llm_mode_enabled
+      }
+    };
+  } catch (error) {
+    console.error('❌ Delay node execution error:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: null,
+      metadata: {
+        node_type: 'delay',
+        llm_mode_enabled: nodeData.llm_mode_enabled,
+        timestamp: new Date().toISOString()
+      }
+    };
+  }
+};
+
+// ... keep all existing functions ... 

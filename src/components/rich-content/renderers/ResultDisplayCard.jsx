@@ -76,6 +76,16 @@ const ResultDisplayCard = ({
 
   // Get content type for appropriate icon
   const getContentIcon = () => {
+    // Handle error states with specific error icon
+    if (typeof content === 'object' && content?.error) {
+      return '❌';
+    }
+    
+    // Handle standardized success states
+    if (typeof content === 'object' && content?.success === true) {
+      return '✅';
+    }
+    
     if (typeof content === 'string') {
       if (content.includes('```') || content.includes('function')) return '💻';
       if (content.includes('# ') || content.includes('## ')) return '📝';
@@ -87,27 +97,96 @@ const ResultDisplayCard = ({
     return '✨';
   };
 
+  // 🔧 NEW: Get status indicator based on content
+  const getStatusIndicator = () => {
+    if (typeof content === 'object' && content !== null) {
+      // Handle standardized format
+      if (content.hasOwnProperty('success')) {
+        if (content.success === false) {
+          return {
+            status: 'error',
+            color: 'bg-red-500',
+            label: 'Failed',
+            details: content.error || 'Unknown error'
+          };
+        } else {
+          return {
+            status: 'success',
+            color: 'bg-green-500',
+            label: 'Success',
+            details: 'Operation completed successfully'
+          };
+        }
+      }
+      
+      // Handle legacy error format
+      if (content.error || content.type === 'error') {
+        return {
+          status: 'error',
+          color: 'bg-red-500',
+          label: 'Error',
+          details: content.error || content.message || 'Unknown error'
+        };
+      }
+      
+      // Handle legacy success format
+      if (content.result || content.output || content.data) {
+        return {
+          status: 'success',
+          color: 'bg-green-500',
+          label: 'Result',
+          details: 'Data available'
+        };
+      }
+    }
+    
+    // Default status
+    return {
+      status: 'info',
+      color: 'bg-blue-500',
+      label: 'Info',
+      details: 'Content available'
+    };
+  };
+
   // Calculate content metrics
   const getContentMetrics = () => {
     let wordCount = 0;
     let charCount = 0;
     let lineCount = 0;
+    let dataType = 'unknown';
 
-    if (typeof content === 'string') {
-      charCount = content.length;
-      wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
-      lineCount = content.split('\n').length;
-    } else if (typeof content === 'object') {
-      const jsonStr = JSON.stringify(content, null, 2);
-      charCount = jsonStr.length;
-      lineCount = jsonStr.split('\n').length;
-      wordCount = Object.keys(content).length;
+    // 🔧 Enhanced: Handle standardized format for metrics
+    let actualContent = content;
+    
+    if (typeof content === 'object' && content !== null) {
+      if (content.hasOwnProperty('success') && content.data) {
+        actualContent = content.data;
+        dataType = content.success ? 'standardized_success' : 'standardized_error';
+      } else if (content.result || content.output || content.data) {
+        actualContent = content.result || content.output || content.data;
+        dataType = 'legacy_result';
+      }
     }
 
-    return { wordCount, charCount, lineCount };
+    if (typeof actualContent === 'string') {
+      charCount = actualContent.length;
+      wordCount = actualContent.split(/\s+/).filter(word => word.length > 0).length;
+      lineCount = actualContent.split('\n').length;
+      dataType = dataType === 'unknown' ? 'text' : dataType;
+    } else if (typeof actualContent === 'object' && actualContent !== null) {
+      const jsonStr = JSON.stringify(actualContent, null, 2);
+      charCount = jsonStr.length;
+      lineCount = jsonStr.split('\n').length;
+      wordCount = Object.keys(actualContent).length;
+      dataType = dataType === 'unknown' ? 'object' : dataType;
+    }
+
+    return { wordCount, charCount, lineCount, dataType };
   };
 
   const metrics = getContentMetrics();
+  const statusIndicator = getStatusIndicator();
 
   const toggleExpanded = () => {
     setIsExpanded(!isExpanded);
@@ -157,9 +236,10 @@ const ResultDisplayCard = ({
 
         {/* Status Indicators - Top Right */}
         <div className="absolute -top-2 -right-2 flex gap-1">
-          <div className={`w-4 h-4 rounded-full ${colors.indicator} animate-pulse shadow-lg`} />
-          <div className={`w-3 h-3 rounded-full bg-green-400 shadow-lg`} />
-          <div className={`w-2 h-2 rounded-full bg-yellow-400 shadow-lg`} />
+          <div className={`w-4 h-4 rounded-full ${statusIndicator.color} animate-pulse shadow-lg`} 
+               title={`${statusIndicator.label}: ${statusIndicator.details}`} />
+          <div className={`w-3 h-3 rounded-full ${statusIndicator.status === 'error' ? 'bg-red-300' : 'bg-green-400'} shadow-lg`} />
+          <div className={`w-2 h-2 rounded-full ${statusIndicator.status === 'error' ? 'bg-red-200' : 'bg-yellow-400'} shadow-lg`} />
         </div>
 
         {/* Header */}
@@ -177,15 +257,38 @@ const ResultDisplayCard = ({
                 {getContentIcon()}
               </div>
               <div>
-                <h3 className="font-bold text-lg text-gray-800">{title}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-lg text-gray-800">{title}</h3>
+                  {/* 🔧 NEW: Status badge */}
+                  <span className={`
+                    inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
+                    ${statusIndicator.status === 'error' 
+                      ? 'bg-red-100 text-red-700 border border-red-200' 
+                      : statusIndicator.status === 'success'
+                      ? 'bg-green-100 text-green-700 border border-green-200'
+                      : 'bg-blue-100 text-blue-700 border border-blue-200'
+                    }
+                  `}>
+                    {statusIndicator.label}
+                  </span>
+                </div>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <span>📊 Rich Content</span>
                   {showMetrics && (
                     <>
                       <span>•</span>
-                      <span>{metrics.wordCount} {typeof content === 'object' ? 'keys' : 'words'}</span>
+                      <span>{metrics.wordCount} {metrics.dataType === 'object' ? 'keys' : 'words'}</span>
                       <span>•</span>
                       <span>{metrics.lineCount} lines</span>
+                      {/* 🔧 NEW: Data type indicator */}
+                      <span>•</span>
+                      <span className="font-medium" title={`Data format: ${metrics.dataType}`}>
+                        {metrics.dataType === 'standardized_success' && '🟢 Standard'}
+                        {metrics.dataType === 'standardized_error' && '🔴 Standard'}
+                        {metrics.dataType === 'legacy_result' && '🟡 Legacy'}
+                        {metrics.dataType === 'text' && '📝 Text'}
+                        {metrics.dataType === 'object' && '🗂️ Object'}
+                      </span>
                     </>
                   )}
                 </div>

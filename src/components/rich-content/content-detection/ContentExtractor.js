@@ -72,12 +72,55 @@ const deepSearchForText = (obj, maxDepth = 4, currentDepth = 0, visited = new We
 
 /**
  * Enhanced content extraction with better error handling and structure detection
+ * Now supports the standardized result format: { success, data, error, metadata }
  */
 export const extractDisplayContent = (content) => {
   try {
     // Handle null/undefined
     if (!content && content !== 0 && content !== false) {
       return { type: CONTENT_TYPES.TEXT, content: 'No content available' };
+    }
+    
+    // 🚀 NEW: Handle standardized result format first
+    if (typeof content === 'object' && content !== null && content.hasOwnProperty('success')) {
+      // This is our new standardized format: { success, data, error, metadata }
+      const { success, data, error, metadata } = content;
+      
+      if (!success) {
+        // Handle error cases with proper error display
+        return {
+          type: CONTENT_TYPES.ERROR,
+          content: {
+            error: error || 'Node execution failed',
+            metadata: metadata || {},
+            originalContent: content
+          }
+        };
+      }
+      
+      // Success case - extract from data field
+      if (data !== undefined && data !== null) {
+        // Recursively extract from the data field
+        const extractedData = extractDisplayContent(data);
+        
+        // Enhance with metadata if available
+        if (extractedData && metadata) {
+          extractedData.metadata = {
+            ...extractedData.metadata,
+            ...metadata,
+            standardized: true
+          };
+        }
+        
+        return extractedData;
+      }
+      
+      // Fallback if no data but success=true
+      return {
+        type: CONTENT_TYPES.TEXT,
+        content: 'Operation completed successfully',
+        metadata: { ...metadata, standardized: true }
+      };
     }
     
     // Handle simple strings - prioritize these
@@ -120,19 +163,54 @@ export const extractDisplayContent = (content) => {
         return { type: content.type, content };
       }
       
-      // PRIORITY: Handle result objects with success/output structure
-      if (content.success !== undefined && content.output) {
-        const outputContent = content.output;
-        if (typeof outputContent === 'string' && outputContent.trim()) {
-          const contentType = detectContentType(outputContent);
-          return { type: contentType, content: outputContent };
+      // 🔧 Enhanced: Handle legacy result objects with better priority
+      const resultKeys = ['result', 'output', 'data'];
+      for (const key of resultKeys) {
+        if (content[key] !== undefined && content[key] !== null) {
+          const extractedContent = content[key];
+          
+          // Handle string content
+          if (typeof extractedContent === 'string') {
+            const trimmed = extractedContent.trim();
+            if (trimmed) {
+              const contentType = detectContentType(trimmed);
+              return { 
+                type: contentType, 
+                content: trimmed,
+                metadata: { source_field: key, legacy_format: true }
+              };
+            }
+          }
+          
+          // Handle primitives
+          if (typeof extractedContent === 'number' || typeof extractedContent === 'boolean') {
+            return { 
+              type: CONTENT_TYPES.TEXT, 
+              content: String(extractedContent),
+              metadata: { source_field: key, legacy_format: true }
+            };
+          }
+          
+          // Handle nested objects/arrays
+          if (typeof extractedContent === 'object') {
+            const nestedResult = extractDisplayContent(extractedContent);
+            if (nestedResult.type !== CONTENT_TYPES.JSON || 
+                (nestedResult.content && typeof nestedResult.content === 'string')) {
+              // Enhance with source metadata
+              nestedResult.metadata = {
+                ...nestedResult.metadata,
+                source_field: key,
+                legacy_format: true
+              };
+              return nestedResult;
+            }
+          }
         }
       }
       
       // Enhanced meaningful content extraction with better priority
       const meaningfulContentKeys = [
-        'output', 'result', 'response', 'text_output', 'content', 'data', 
-        'text', 'message', 'body', 'value', 'answer', 'summary'
+        'text_output', 'response', 'text', 'message', 'body', 'value', 'answer', 'summary', 'content'
       ];
       
       for (const key of meaningfulContentKeys) {
@@ -144,13 +222,21 @@ export const extractDisplayContent = (content) => {
             const trimmed = extractedContent.trim();
             if (trimmed) {
               const contentType = detectContentType(trimmed);
-              return { type: contentType, content: trimmed };
+              return { 
+                type: contentType, 
+                content: trimmed,
+                metadata: { source_field: key }
+              };
             }
           }
           
           // Handle primitives
           if (typeof extractedContent === 'number' || typeof extractedContent === 'boolean') {
-            return { type: CONTENT_TYPES.TEXT, content: String(extractedContent) };
+            return { 
+              type: CONTENT_TYPES.TEXT, 
+              content: String(extractedContent),
+              metadata: { source_field: key }
+            };
           }
           
           // Handle nested objects/arrays
@@ -159,6 +245,10 @@ export const extractDisplayContent = (content) => {
             const nestedResult = extractDisplayContent(extractedContent);
             if (nestedResult.type !== CONTENT_TYPES.JSON || 
                 (nestedResult.content && typeof nestedResult.content === 'string')) {
+              nestedResult.metadata = {
+                ...nestedResult.metadata,
+                source_field: key
+              };
               return nestedResult;
             }
           }
@@ -182,7 +272,11 @@ export const extractDisplayContent = (content) => {
       const deepText = deepSearchForText(content);
       if (deepText && deepText.length > 20) {
         const contentType = detectContentType(deepText);
-        return { type: contentType, content: deepText };
+        return { 
+          type: contentType, 
+          content: deepText,
+          metadata: { source: 'deep_search' }
+        };
       }
       
       // Create intelligent object summary
@@ -204,14 +298,27 @@ export const extractDisplayContent = (content) => {
         
         if (typeof value === 'string' && value.trim()) {
           const contentType = detectContentType(value);
-          return { type: contentType, content: value };
+          return { 
+            type: contentType, 
+            content: value,
+            metadata: { single_key: key }
+          };
         }
         
         if (typeof value === 'object' && value !== null) {
-          return extractDisplayContent(value);
+          const extracted = extractDisplayContent(value);
+          extracted.metadata = {
+            ...extracted.metadata,
+            single_key: key
+          };
+          return extracted;
         }
         
-        return { type: CONTENT_TYPES.TEXT, content: `${key}: ${String(value)}` };
+        return { 
+          type: CONTENT_TYPES.TEXT, 
+          content: `${key}: ${String(value)}`,
+          metadata: { single_key: key }
+        };
       }
       
       // Multiple keys - create formatted summary for simple objects
@@ -222,14 +329,20 @@ export const extractDisplayContent = (content) => {
         const summary = meaningfulKeys.map(key => `**${key}**: ${content[key]}`).join('\n\n');
         return { 
           type: CONTENT_TYPES.MARKDOWN, 
-          content: summary 
+          content: summary,
+          metadata: { summary_type: 'simple_object', key_count: meaningfulKeys.length }
         };
       }
       
-      // For complex objects, return as JSON
+      // For complex objects, return as JSON with metadata about complexity
       return { 
         type: CONTENT_TYPES.JSON, 
-        content: content 
+        content: content,
+        metadata: { 
+          object_complexity: 'complex',
+          key_count: meaningfulKeys.length,
+          total_keys: keys.length
+        }
       };
     }
     
@@ -238,7 +351,11 @@ export const extractDisplayContent = (content) => {
     console.error('Error in extractDisplayContent:', error);
     return { 
       type: CONTENT_TYPES.ERROR, 
-      content: `Error processing content: ${error.message}` 
+      content: {
+        error: `Error processing content: ${error.message}`,
+        originalContent: content,
+        stack: error.stack
+      }
     };
   }
 };

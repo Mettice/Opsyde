@@ -5,10 +5,11 @@ import logging
 import sys
 import os
 
-from backend.frameworks.universal_api_runner import UniversalAPIRunner
-from backend.frameworks.shared_api_research import research_for_tool, research_for_output
-from backend.utils.security import get_current_user, security_manager
-from backend.utils.logging import get_logger
+# Fix imports to use relative paths
+from frameworks.universal_api_runner import UniversalAPIRunner
+from frameworks.shared_api_research import research_for_tool, research_for_output
+from utils.security import get_current_user, security_manager
+from utils.logging import get_logger
 # Import HuggingFace functions directly
 try:
     # Try relative import first (when running from backend directory)
@@ -163,7 +164,7 @@ async def research_api(
                     user_id = current_user.get('user_id') if current_user else "anonymous"
                     
                     # Get user's execution keys from BYOK system
-                    from backend.services.user_settings_service import user_settings_service
+                    from services.user_settings_service import user_settings_service
                     execution_keys = await user_settings_service.get_user_keys_for_execution(user_id)
                     
                     # Map provider to the expected key format
@@ -198,7 +199,7 @@ async def research_api(
             service_name=request.service_name,
             description=request.description,
             endpoint_hint=request.endpoint_hint,
-            user_id=current_user.get('user_id') if current_user else "anonymous"
+            user_keys=user_keys
         )
         
         logger.info(f"API research completed for {request.service_name}: {research_result.get('success')}")
@@ -227,7 +228,7 @@ async def research_output_api(
         if request.selected_llm and request.selected_llm.get('provider'):
             try:
                 # Get user's API keys from BYOK system
-                from backend.services.user_settings_service import user_settings_service
+                from services.user_settings_service import user_settings_service
                 
                 # Use actual user ID if authenticated, otherwise anonymous
                 user_id = current_user.get('user_id') if current_user else "anonymous"
@@ -256,7 +257,7 @@ async def research_output_api(
         logger.info(f"User keys available: {list(user_keys.keys()) if user_keys else 'None'}")
         
         # Use shared research for output
-        from backend.frameworks.shared_api_research import research_for_output
+        from frameworks.shared_api_research import research_for_output
         
         result = await research_for_output(
             service_name=request.service_name,
@@ -295,7 +296,7 @@ async def research_email_format(
         if request.selected_llm and request.selected_llm.get('provider'):
             try:
                 # Get user's API keys from BYOK system
-                from backend.services.user_settings_service import user_settings_service
+                from services.user_settings_service import user_settings_service
                 
                 # Use actual user ID if authenticated, otherwise anonymous
                 user_id = current_user.get('user_id') if current_user else "anonymous"
@@ -322,7 +323,7 @@ async def research_email_format(
             user_keys = await _get_user_api_keys('anonymous')
         
         # Use shared research for email formatting
-        from backend.frameworks.shared_api_research import research_for_output
+        from frameworks.shared_api_research import research_for_output
         
         # Build email-specific description
         email_description = f"Email formatting and delivery for: {request.description}"
@@ -490,19 +491,38 @@ async def debug_huggingface_imports():
                 config = get_frontend_task_config()
                 result["steps"].append(f"Function call successful - got {len(config.get('tasks', []))} tasks")
                 result["status"] = "success"
-                result["config_sample"] = {
-                    "task_count": len(config.get('tasks', [])),
-                    "categories_count": len(config.get('categories', {})),
-                    "first_task": config.get('tasks', [])[0] if config.get('tasks') else None
-                }
                 
-                # ALSO return the full configuration for frontend use
+                # CRITICAL FIX: Safely serialize data by filtering out non-serializable objects
+                def make_serializable(obj):
+                    """Recursively make an object JSON serializable"""
+                    if obj is None:
+                        return None
+                    elif isinstance(obj, (str, int, float, bool)):
+                        return obj
+                    elif isinstance(obj, (list, tuple)):
+                        return [make_serializable(item) for item in obj]
+                    elif isinstance(obj, dict):
+                        return {k: make_serializable(v) for k, v in obj.items() 
+                               if not callable(v) and not k.startswith('_')}
+                    elif callable(obj):
+                        return f"<function {getattr(obj, '__name__', 'unknown')}>"
+                    else:
+                        try:
+                            # Try to convert to string if it's not a basic type
+                            return str(obj)
+                        except:
+                            return f"<non-serializable {type(obj).__name__}>"
+                
+                # Safely serialize the config
+                safe_config = make_serializable(config)
+                
+                # Return safe, serializable configuration for frontend use
                 result["success"] = True
-                result["tasks"] = config.get("tasks", [])
-                result["categories"] = config.get("categories", {})
-                result["task_formats"] = config.get("task_formats", {})
-                result["verified_models"] = config.get("verified_models", {})
-                result["examples"] = config.get("examples", {})
+                result["tasks"] = safe_config.get("tasks", [])
+                result["categories"] = safe_config.get("categories", {})
+                result["task_formats"] = safe_config.get("task_formats", {})
+                result["verified_models"] = safe_config.get("verified_models", {})
+                result["examples"] = safe_config.get("examples", {})
                 result["message"] = "HuggingFace configuration retrieved successfully"
                 
             except Exception as func_error:
@@ -555,12 +575,36 @@ async def get_huggingface_tasks():
                 config = get_frontend_task_config()
                 logger.info(f"Config received: {type(config)}, keys: {list(config.keys()) if isinstance(config, dict) else 'not a dict'}")
                 
+                # Safely serialize data by filtering out non-serializable objects
+                def make_serializable(obj):
+                    """Recursively make an object JSON serializable"""
+                    if obj is None:
+                        return None
+                    elif isinstance(obj, (str, int, float, bool)):
+                        return obj
+                    elif isinstance(obj, (list, tuple)):
+                        return [make_serializable(item) for item in obj]
+                    elif isinstance(obj, dict):
+                        return {k: make_serializable(v) for k, v in obj.items() 
+                               if not callable(v) and not k.startswith('_')}
+                    elif callable(obj):
+                        return f"<function {getattr(obj, '__name__', 'unknown')}>"
+                    else:
+                        try:
+                            # Try to convert to string if it's not a basic type
+                            return str(obj)
+                        except:
+                            return f"<non-serializable {type(obj).__name__}>"
+                
+                # Safely serialize the config
+                safe_config = make_serializable(config)
+                
                 # Safely extract data with explicit type checking
-                tasks = config.get("tasks", []) if isinstance(config, dict) else []
-                categories = config.get("categories", {}) if isinstance(config, dict) else {}
-                task_formats = config.get("task_formats", {}) if isinstance(config, dict) else {}
-                verified_models = config.get("verified_models", {}) if isinstance(config, dict) else {}
-                examples = config.get("examples", {}) if isinstance(config, dict) else {}
+                tasks = safe_config.get("tasks", []) if isinstance(safe_config, dict) else []
+                categories = safe_config.get("categories", {}) if isinstance(safe_config, dict) else {}
+                task_formats = safe_config.get("task_formats", {}) if isinstance(safe_config, dict) else {}
+                verified_models = safe_config.get("verified_models", {}) if isinstance(safe_config, dict) else {}
+                examples = safe_config.get("examples", {}) if isinstance(safe_config, dict) else {}
                 
                 logger.info(f"Extracted data - tasks: {len(tasks)}, categories: {len(categories)}")
                 

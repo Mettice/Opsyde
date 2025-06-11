@@ -52,9 +52,18 @@ class AgentConfig(BaseNodeConfig):
     framework: str
     framework_config: Dict[str, Any] = Field(default_factory=dict)
     
+    # 🧠 SMART MAPPING: Input schema for intelligent mapping
+    input_schema: Dict[str, Any] = Field(default_factory=lambda: {
+        'query': {'type': 'string', 'description': 'Main query or task for the agent'},
+        'user_input': {'type': 'string', 'description': 'User provided input'},
+        'context': {'type': 'string', 'description': 'Additional context or background information'},
+        'instructions': {'type': 'string', 'description': 'Specific instructions for the agent'},
+        'data': {'type': 'any', 'description': 'Any data to be processed by the agent'}
+    })
+
     def can_inherit_from(self, parent_type: NodeType) -> bool:
-        """Agents can inherit from other agents"""
-        return parent_type == NodeType.AGENT
+        """Agents can inherit from other agents and tools"""
+        return parent_type in [NodeType.AGENT, NodeType.TOOL]
 
 class TaskConfig(BaseNodeConfig):
     description: str
@@ -65,9 +74,18 @@ class TaskConfig(BaseNodeConfig):
     # NEW: Task-specific inheritance fields
     agent_ref: Optional[str] = Field(None, description="Reference to associated agent for inheritance")
     
+    # 🧠 SMART MAPPING: Input schema for intelligent mapping
+    input_schema: Dict[str, Any] = Field(default_factory=lambda: {
+        'task_input': {'type': 'string', 'description': 'Input data for the task'},
+        'agent_output': {'type': 'any', 'description': 'Output from associated agent'},
+        'instructions': {'type': 'string', 'description': 'Task instructions or description'},
+        'context': {'type': 'string', 'description': 'Context for task execution'},
+        'data': {'type': 'any', 'description': 'Any data required for task completion'}
+    })
+
     def can_inherit_from(self, parent_type: NodeType) -> bool:
-        """Tasks can inherit from agents"""
-        return parent_type == NodeType.AGENT
+        """Tasks can inherit from agents and other tasks"""
+        return parent_type in [NodeType.AGENT, NodeType.TASK]
 
 class ToolConfig(BaseNodeConfig):
     tool_type: Optional[ToolType] = Field(default=ToolType.API)
@@ -75,9 +93,18 @@ class ToolConfig(BaseNodeConfig):
     framework_config: Dict[str, Any] = Field(default_factory=dict)
     parameters: Dict[str, Any] = Field(default_factory=dict)
     
+    # 🧠 SMART MAPPING: Input schema for intelligent mapping
+    input_schema: Dict[str, Any] = Field(default_factory=lambda: {
+        'input_data': {'type': 'any', 'description': 'Data to be processed by the tool'},
+        'parameters': {'type': 'object', 'description': 'Tool-specific parameters'},
+        'query': {'type': 'string', 'description': 'Query or request for the tool'},
+        'context': {'type': 'string', 'description': 'Context for tool execution'},
+        'config': {'type': 'object', 'description': 'Tool configuration parameters'}
+    })
+
     def can_inherit_from(self, parent_type: NodeType) -> bool:
-        """Tools can inherit from agents"""
-        return parent_type == NodeType.AGENT
+        """Tools can inherit from other tools and agents"""
+        return parent_type in [NodeType.TOOL, NodeType.AGENT]
 
 class ChatConfig(BaseNodeConfig):
     """Chat/Chatbot node configuration"""
@@ -89,13 +116,31 @@ class ChatConfig(BaseNodeConfig):
     framework: Optional[str] = None
     framework_config: Dict[str, Any] = Field(default_factory=dict)
     
+    # 🧠 SMART MAPPING: Input schema for intelligent mapping
+    input_schema: Dict[str, Any] = Field(default_factory=lambda: {
+        'message': {'type': 'string', 'description': 'User message or chat input'},
+        'conversation_history': {'type': 'array', 'description': 'Previous conversation messages'},
+        'context': {'type': 'string', 'description': 'Chat context or system message'},
+        'user_input': {'type': 'string', 'description': 'Direct user input'},
+        'prompt': {'type': 'string', 'description': 'System prompt for the chat'}
+    })
+
     def can_inherit_from(self, parent_type: NodeType) -> bool:
-        """Chat nodes can inherit from agents"""
-        return parent_type == NodeType.AGENT
+        """Chat nodes can inherit from agents and other chat nodes"""
+        return parent_type in [NodeType.AGENT, NodeType.CHAT]
 
 class OutputConfig(BaseNodeConfig):
     output_type: str
     config: Dict[str, Any] = Field(default_factory=dict)
+    
+    # 🧠 SMART MAPPING: Input schema for intelligent mapping
+    input_schema: Dict[str, Any] = Field(default_factory=lambda: {
+        'output_data': {'type': 'any', 'description': 'Data to be output'},
+        'template_context': {'type': 'object', 'description': 'Template variables for formatting'},
+        'content': {'type': 'any', 'description': 'Content to be sent or saved'},
+        'data': {'type': 'any', 'description': 'Raw data from previous nodes'},
+        'result': {'type': 'any', 'description': 'Result data to be processed'}
+    })
 
 # NEW: Enhanced Node class with inheritance support
 class Node(BaseModel):

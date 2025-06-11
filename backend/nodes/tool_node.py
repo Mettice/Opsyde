@@ -33,58 +33,53 @@ class ToolNode:
             # Migrate old node data format if needed
             node_data = self._migrate_node_data(node.data)
             
-            # Extract and validate tool configuration
-            config = ToolConfig(**node_data)
+            # Extract tool configuration
+            tool_data = node_data.get('data', node_data)
+            config = ToolConfig(**tool_data)
             
-            # Convert NodeData inputs to regular values
-            processed_inputs = {}
-            for key, value in inputs.items():
-                if hasattr(value, 'get_value'):
-                    # It's a NodeData object
-                    try:
-                        processed_inputs[key] = value.get_value()
-                    except Exception:
-                        # Fallback to accessing value directly
-                        processed_inputs[key] = value.value if hasattr(value, 'value') else str(value)
-                elif hasattr(value, 'value'):
-                    # It has a value attribute
-                    processed_inputs[key] = value.value
-                elif hasattr(value, '__dict__'):
-                    # It's some kind of object, try to convert to dict
-                    processed_inputs[key] = value.__dict__ if hasattr(value, '__dict__') else str(value)
-                else:
-                    # It's already a regular value
-                    processed_inputs[key] = value
+            # Check if this is an integration template
+            framework_config = config.framework_config or {}
+            is_integration_template = framework_config.get('isIntegrationTemplate', False)
             
-            # First, try to get framework handler from registry
-            framework_handler = framework_registry._frameworks.get(config.framework)
-            if framework_handler:
-                return await self._execute_with_framework_handler(
-                    framework_handler, 
-                    node_data,  # Pass original node_data instead of config.dict()
-                    processed_inputs,  # Pass processed inputs instead of raw inputs
-                    context
-                )
-            
-            # Fallback to processing based on tool type
-            tool_type = config.tool_type
-            
-            if tool_type == "llm":
-                result = await self._process_llm_tool(node_data, processed_inputs)  # Pass processed inputs
-            elif tool_type == "api":
-                result = await self._process_api_tool(config.dict(), processed_inputs)
-            elif tool_type == "webhook":
-                result = await self._process_webhook_tool(config.dict(), processed_inputs)
-            elif tool_type == "universal_api":  # Universal API support
-                result = await self._process_universal_api_tool(node_data, processed_inputs, context)
-            elif tool_type == "custom":
-                result = await self._process_custom_tool(config.dict(), processed_inputs)
+            if is_integration_template:
+                logger.info(f"🎯 Detected integration template for {framework_config.get('platform')}")
+                # Process as integration template (skip Universal API research)
+                result = await self._process_integration_template(node_data, inputs, context)
             else:
-                return {
-                    "success": False,
-                    "error": f"Unsupported tool type: {tool_type}",
-                    "type": "tool_error"
-                }
+                # Process using existing framework handlers
+                if config.framework in framework_registry.get_available_frameworks():
+                    # Use registered framework handler
+                    framework_handler = framework_registry.get_framework_handler(config.framework)
+                    result = await self._execute_with_framework_handler(framework_handler, node_data, inputs, context)
+                else:
+                    # Use tool type processing (legacy)
+                    tool_type = config.tool_type
+                    
+                    # Process inputs to extract actual values from NodeData
+                    processed_inputs = {}
+                    for key, value in inputs.items():
+                        if hasattr(value, 'value'):
+                            processed_inputs[key] = value.value
+                        else:
+                            processed_inputs[key] = value
+                    
+                    # Route to appropriate processor
+                    if tool_type == ToolType.UNIVERSAL_API:
+                        result = await self._process_universal_api_tool(node_data, processed_inputs, context)
+                    elif tool_type == ToolType.LLM:
+                        result = await self._process_llm_tool(config.dict(), processed_inputs)
+                    elif tool_type == ToolType.API:
+                        result = await self._process_api_tool(config.dict(), processed_inputs)
+                    elif tool_type == ToolType.WEBHOOK:
+                        result = await self._process_webhook_tool(config.dict(), processed_inputs)
+                    elif tool_type == ToolType.CUSTOM:
+                        result = await self._process_custom_tool(config.dict(), processed_inputs)
+                    else:
+                        return {
+                            "type": "error",
+                            "error": f"Unsupported tool type: {tool_type}",
+                            "node_id": node.id
+                        }
             
             return {
                 "success": True,
@@ -439,6 +434,75 @@ class ToolNode:
                 "error": f"Custom tool error: {str(e)}"
             }
 
+    async def _process_integration_template(
+        self, 
+        node_data: Dict[str, Any], 
+        inputs: Dict[str, Any], 
+        context: ExecutionContext
+    ) -> Dict[str, Any]:
+        """
+        Process pre-configured integration templates efficiently
+        """
+        try:
+            framework_config = node_data.get('frameworkConfig', {})
+            platform = framework_config.get('platform')
+            
+            if not platform:
+                return {
+                    "success": False,
+                    "error": "Platform not specified in integration template"
+                }
+            
+            logger.info(f"🚀 Processing integration template for {platform}")
+            
+            # Import the social media runner
+            from backend.frameworks.integration_runners.social_media_runner import social_media_runner
+            
+            # Extract input data
+            input_data = {}
+            for key, value in inputs.items():
+                if hasattr(value, 'value'):
+                    input_data[key] = value.value
+                else:
+                    input_data[key] = value
+            
+            # Execute the template
+            result = await social_media_runner.execute_integration_template(
+                platform=platform,
+                action='default',  # Default action
+                config=framework_config,
+                inputs=input_data
+            )
+            
+            logger.info(f"✅ Integration template result: {result.get('success', False)}")
+            
+            if result.get('success'):
+                return {
+                    "type": "integration_template_result",
+                    "success": True,
+                    "data": result.get('data'),
+                    "platform": platform,
+                    "message": result.get('message'),
+                    "metadata": {
+                        "template_type": "pre_configured",
+                        "platform": platform,
+                        "skipped_api_research": True
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": result.get('error', 'Integration template execution failed'),
+                    "platform": platform
+                }
+                
+        except Exception as e:
+            logger.error(f"Error processing integration template: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Integration template processing failed: {str(e)}"
+            }
+
     def validate_config(self, config: Dict[str, Any]) -> bool:
         """Enhanced validation with Universal API support"""
         if not config.tool_type or not config.framework:
@@ -503,10 +567,23 @@ async def process_tool_node(
     tool_node = ToolNode()
     
     # Convert to expected format
+    # Extract the actual node data/configuration
+    node_config = node_data.get('data', node_data.copy())
+    
+    # Ensure required fields exist for ToolConfig validation
+    if 'label' not in node_config or not node_config['label']:
+        node_config['label'] = f"Tool {node_data.get('nodeId', node_data.get('id', 'unknown'))}"
+    
+    if 'tool_type' not in node_config or not node_config['tool_type']:
+        node_config['tool_type'] = 'api'  # Default tool type
+        
+    if 'framework' not in node_config or not node_config['framework']:
+        node_config['framework'] = 'api'  # Default framework
+    
     node = Node(
         id=node_data.get("nodeId") or node_data.get("id") or "tool-node",
         type=NodeType.TOOL,
-        data=node_data,
+        data=node_config,  # Use extracted config, not entire node_data
         position={"x": 0, "y": 0}  # Placeholder position
     )
     

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, memo, useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import PropTypes from 'prop-types';
+import MultimodalFileUpload from './MultimodalFileUpload';
 
 const InputNode = memo(({ 
   data, 
@@ -18,6 +19,7 @@ const InputNode = memo(({
   const nodeId = data.nodeId || `input-node-${Math.random().toString(36).substring(2, 9)}`;
   const [value, setValue] = useState(data.value || '');
   const [filePreview, setFilePreview] = useState(null);
+  const [multimodalResult, setMultimodalResult] = useState(null); // NEW: Store LLM processing result
   const [customFields, setCustomFields] = useState(data.customFields || {});
   const [newFieldKey, setNewFieldKey] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
@@ -54,6 +56,55 @@ const InputNode = memo(({
       setCost(data.executionState.cost || 0);
     }
   }, [data.executionState]);
+
+  // NEW: Handle multimodal file processing
+  const handleMultimodalFileProcessed = useCallback((fileInfo) => {
+    console.log('🎯 Multimodal file processed:', fileInfo);
+    
+    setStatus('processing');
+    
+    // Store the full multimodal processing result
+    setMultimodalResult({
+      type: fileInfo.type,
+      filename: fileInfo.name,
+      extractedData: fileInfo.extractedData,
+      success: fileInfo.success,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Create standardized output for downstream nodes
+    const standardizedOutput = {
+      type: fileInfo.type, // image, audio, document
+      filename: fileInfo.name,
+      content: fileInfo.extractedData?.content || fileInfo.extractedData?.transcription?.text || fileInfo.extractedData?.analysis?.description,
+      extracted_entities: fileInfo.extractedData?.structure?.extracted_entities || [],
+      metadata: {
+        api_used: fileInfo.extractedData?.api_used,
+        processing_timestamp: new Date().toISOString(),
+        node_type: 'input_multimodal'
+      }
+    };
+    
+    setValue(standardizedOutput);
+    setStatus('success');
+    
+    // Update the node data to pass to downstream nodes
+    if (data.onChange) {
+      data.onChange({
+        ...data,
+        value: standardizedOutput,
+        multimodalResult: standardizedOutput
+      });
+    }
+  }, [data]);
+
+  // NEW: Handle multimodal processing errors
+  const handleMultimodalError = useCallback((errorMessage) => {
+    console.error('❌ Multimodal processing error:', errorMessage);
+    setError(errorMessage);
+    setStatus('error');
+    setMultimodalResult(null);
+  }, []);
 
   // Beautiful input-specific colors and status system
   const getStatusConfig = () => {
@@ -137,6 +188,18 @@ const InputNode = memo(({
           glass: 'bg-gradient-to-br from-purple-500/10 to-violet-600/10'
         }
       },
+      multimodal: { // NEW: Multimodal input type
+        name: 'Multimodal Input',
+        colors: {
+          primary: 'from-indigo-400 to-purple-600',
+          secondary: 'from-indigo-50/90 to-purple-100/80',
+          accent: 'bg-gradient-to-r from-indigo-500 to-purple-600',
+          text: 'text-indigo-700',
+          glow: 'shadow-indigo-400/30',
+          border: 'border-indigo-300/50',
+          glass: 'bg-gradient-to-br from-indigo-500/10 to-purple-600/10'
+        }
+      },
       url: {
         name: 'URL Input',
         colors: {
@@ -161,6 +224,8 @@ const InputNode = memo(({
     switch (inputType) {
       case 'file':
         return '📁';
+      case 'multimodal':
+        return '🎭'; // NEW: Multimodal icon
       case 'url':
         return '🔗';
       default:
@@ -178,12 +243,16 @@ const InputNode = memo(({
     switch (safeData.inputType) {
       case 'text': return 'Text input for entering custom values';
       case 'file': return 'File upload input for documents and files';
+      case 'multimodal': return 'AI-powered multimodal input for images, audio, and documents';
       case 'url': return 'URL input for web addresses';
       default: return 'Input node for data collection';
     }
   };
 
   const getTruncatedValue = () => {
+    if (multimodalResult) {
+      return `${multimodalResult.type}: ${multimodalResult.filename}`;
+    }
     if (!value) return 'No value set';
     if (typeof value === 'object') {
       const jsonStr = JSON.stringify(value);
@@ -193,6 +262,7 @@ const InputNode = memo(({
     return stringValue.length > 50 ? stringValue.substring(0, 50) + '...' : stringValue;
   };
 
+  // Legacy file upload handling (kept for compatibility)
   const handleUploadClick = useCallback((e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -667,6 +737,98 @@ const InputNode = memo(({
                   {value && (
                     <div className="text-xs text-gray-500 truncate">
                       Current: {getTruncatedValue()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* NEW: Multimodal Input with LLM Processing */}
+              {safeData.inputType === 'multimodal' && (
+                <div className="space-y-3">
+                  <MultimodalFileUpload
+                    onFileProcessed={handleMultimodalFileProcessed}
+                    onError={handleMultimodalError}
+                    multiple={false}
+                    className="border-0 bg-transparent p-0"
+                    acceptedTypes="image/*,audio/*,.pdf,.docx,.txt,.md,.csv"
+                    maxSizeMB={10}
+                  />
+                  
+                  {/* Processing Preview */}
+                  {multimodalResult && (
+                    <div className="bg-white/70 backdrop-blur-sm rounded-lg p-3 border border-indigo-200/50">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0">
+                          {multimodalResult.type === 'image' && <span className="text-lg">🖼️</span>}
+                          {multimodalResult.type === 'audio' && <span className="text-lg">🎵</span>}
+                          {multimodalResult.type === 'document' && <span className="text-lg">📄</span>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="text-sm font-medium text-indigo-700 truncate">
+                              {multimodalResult.filename}
+                            </h4>
+                            <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full font-medium">
+                              {multimodalResult.type}
+                            </span>
+                          </div>
+                          
+                          {/* Show extracted content preview */}
+                          {multimodalResult.extractedData && (
+                            <div className="space-y-2">
+                              {/* For images: show description */}
+                              {multimodalResult.type === 'image' && multimodalResult.extractedData.analysis?.description && (
+                                <div>
+                                  <p className="text-xs text-gray-600 mb-1">🤖 AI Description:</p>
+                                  <p className="text-xs text-gray-700 line-clamp-2">
+                                    {multimodalResult.extractedData.analysis.description}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* For audio: show transcription */}
+                              {multimodalResult.type === 'audio' && multimodalResult.extractedData.transcription?.text && (
+                                <div>
+                                  <p className="text-xs text-gray-600 mb-1">🎤 Transcription:</p>
+                                  <p className="text-xs text-gray-700 line-clamp-2">
+                                    {multimodalResult.extractedData.transcription.text}
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* For documents: show content preview */}
+                              {multimodalResult.type === 'document' && multimodalResult.extractedData.content && (
+                                <div>
+                                  <p className="text-xs text-gray-600 mb-1">📄 Content Preview:</p>
+                                  <p className="text-xs text-gray-700 line-clamp-2">
+                                    {multimodalResult.extractedData.content.substring(0, 100)}...
+                                  </p>
+                                </div>
+                              )}
+                              
+                              {/* Show API used */}
+                              {multimodalResult.extractedData.api_used && (
+                                <div className="flex items-center gap-1 pt-1">
+                                  <span className="text-xs text-gray-500">Processed with:</span>
+                                  <span className="text-xs text-indigo-600 font-medium">
+                                    {multimodalResult.extractedData.api_used}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Error Display */}
+                  {error && (
+                    <div className="bg-red-50/80 backdrop-blur-sm rounded-lg p-3 border border-red-200/50">
+                      <div className="flex items-center gap-2">
+                        <span className="text-red-500">⚠️</span>
+                        <span className="text-xs text-red-700">{error}</span>
+                      </div>
                     </div>
                   )}
                 </div>

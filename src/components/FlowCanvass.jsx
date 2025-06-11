@@ -15,11 +15,12 @@ import PropTypes from 'prop-types';
 
 // Custom components
 import AnimatedEdge from './AnimatedEdge';
-import FloatingMetricsPanel from "./builder/FloatingMetricsPanel";
+import FloatingIntegrationHub from "./FloatingIntegrationHub";
 import TemplateGallery from './flowcanvas/TemplateGallery';
 import ContextMenu from './ContextMenu';
 import SaveTemplateModal from './SaveTemplateModal';
 import TemplateManager from './TemplateManager';
+import LLMModeToggle from './LLMModeToggle';
 
 // Utilities
 import { validateConnection } from '../utils/validateConnection';
@@ -337,8 +338,8 @@ const FlowCanvasBase = forwardRef(({
   onPaneClick,
   className = '',
   style = {},
-  nodeStates = new Map(),
-  connectionStates = new Map(),
+  nodeStates = {},
+  connectionStates = {},
   isExecuting = false,
   ...reactFlowProps // All other props go to ReactFlow, not the div
 }, ref) => {
@@ -750,7 +751,7 @@ const FlowCanvasBase = forwardRef(({
         ...node,
         data: {
           ...(node.data || {}),
-          executionState: nodeStates.get(node.id) || { status: 'idle', progress: 0 }
+          executionState: nodeStates[node.id] || { status: 'idle', progress: 0 }
         }
       };
     }).filter(Boolean);
@@ -764,8 +765,8 @@ const FlowCanvasBase = forwardRef(({
         ...edge,
       data: {
           ...(edge.data || {}),
-          state: connectionStates.get(edge.id)?.state || 'idle',
-          animated: connectionStates.get(edge.id)?.state === 'active' || connectionStates.get(edge.id)?.state === 'processing'
+          state: connectionStates[edge.id]?.state || 'idle',
+          animated: connectionStates[edge.id]?.state === 'active' || connectionStates[edge.id]?.state === 'processing'
       }
       };
     }).filter(Boolean);
@@ -881,7 +882,7 @@ const FlowCanvasBase = forwardRef(({
             backdropFilter: 'blur(10px)'
           }}
           nodeColor={(node) => {
-            const state = nodeStates.get(node.id);
+            const state = nodeStates[node.id];
             const status = state?.status || 'idle';
             
             // Color based on execution state
@@ -910,16 +911,26 @@ const FlowCanvasBase = forwardRef(({
           }}
         />
 
-        {/* Floating Metrics Panel */}
-        <Panel position="top-right">
-        <FloatingMetricsPanel 
-          nodes={nodes} 
-          edges={edges} 
-            nodeStates={nodeStates}
-            connectionStates={connectionStates}
-            isExecuting={isExecuting}
-          />
-        </Panel>
+        {/* Floating Integration Hub */}
+        <FloatingIntegrationHub 
+          onAddNode={(nodeData) => {
+            // Add new integration node to the canvas
+            const newNode = {
+              ...nodeData,
+              position: nodeData.position || { x: 300, y: 300 }
+            };
+            
+            // Use existing node management functions
+            onNodesChange([{
+              type: 'add',
+              item: newNode
+            }]);
+            
+            // Show success toast
+            toast.success(`Added ${nodeData.data?.label || 'integration'} to canvas`);
+          }}
+          reactFlowInstance={reactFlowInstance}
+        />
 
       </ReactFlow>
       
@@ -966,6 +977,11 @@ const FlowCanvasBase = forwardRef(({
           onClose={() => toggleTemplateGallery(false)}
         />
       )}
+
+      {/* NEW: LLM Mode Toggle Panel - Top Right */}
+      <div className="absolute top-4 right-4 z-50">
+        <LLMModeToggle className="w-80" />
+      </div>
 
       {/* Minimal Metrics Panel - Bottom Right */}
       <div className="absolute bottom-4 right-4">
@@ -1022,8 +1038,8 @@ FlowCanvasBase.propTypes = {
   onPaneClick: PropTypes.func,
   className: PropTypes.string,
   style: PropTypes.object,
-  nodeStates: PropTypes.instanceOf(Map),
-  connectionStates: PropTypes.instanceOf(Map),
+  nodeStates: PropTypes.object,
+  connectionStates: PropTypes.object,
   isExecuting: PropTypes.bool,
 };
 

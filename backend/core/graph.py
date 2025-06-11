@@ -110,95 +110,97 @@ def determine_execution_order(nodes: List[Union[Dict[str, Any], Node]], edges: L
     
     return order
 
-def get_node_inputs(
-    node_id: str, 
-    edges: List[Union[Dict[str, Any], Edge]], 
-    node_results: Dict[str, Any], 
-    global_inputs: Dict[str, Any] = None,
-    nodes: List[Union[Dict[str, Any], Node]] = None
-) -> Dict[str, Any]:
+def get_node_inputs(node_id: str, edges: List[Dict], node_results: Dict, global_inputs: Dict = None, nodes: List[Dict] = None) -> Dict[str, Any]:
     """
-    Get inputs for a specific node based on edges and previous results.
-    Enhanced with universal data transformation for seamless data flow.
+    Get inputs for a specific node based on edges and previous results
+    Enhanced with data preprocessing for agent consumption
     """
-    inputs = dict(global_inputs or {})
-    logger.info(f"🔄 Processing inputs for node {node_id}")
+    inputs = {}
     
-    # Create node lookup for type detection
-    node_lookup = {}
-    if nodes:
-        for node in nodes:
-            node_id_lookup = _get_id(node)
-            if isinstance(node, dict):
-                node_type = node.get("type") or node.get("data", {}).get("nodeType")
-            else:
-                node_type = getattr(node, "type", None)
-            node_lookup[node_id_lookup] = node_type
+    # Add global inputs first (these are override)
+    if global_inputs:
+        inputs.update(global_inputs)
     
-    # Get target node type
-    target_node_type = node_lookup.get(node_id, "unknown")
+    # Find incoming edges for this node
+    incoming_edges = [edge for edge in edges if edge.get('target') == node_id]
     
-    # DEBUG: Log available node results
-    logger.info(f"🔄 Available node results: {list(node_results.keys())}")
-    
-    for edge in edges:
-        target = _get_target(edge)
-        if target == node_id:
-            source_id = _get_source(edge)
-            logger.info(f"🔄 Processing edge: {source_id} → {node_id}")
+    for edge in incoming_edges:
+        source_node_id = edge.get('source')
+        target_handle = edge.get('targetHandle', 'input')
+        
+        if source_node_id in node_results:
+            source_result = node_results[source_node_id]
             
-            if source_id in node_results:
-                # Get edge label
-                edge_data = edge.get("data", {}) if isinstance(edge, dict) else getattr(edge, "data", {})
-                label = edge_data.get("label", f"input_from_{source_id}")
-                source_output = node_results[source_id]
-                
-                # Get source node type
-                source_node_type = node_lookup.get(source_id, "unknown")
-                
-                # Skip if source output is an error
-                if isinstance(source_output, dict) and source_output.get("type") == "error":
-                    logger.warning(f"Skipping error input from {source_id}")
+            # 🚀 NEW: Enhanced data extraction for standardized results
+            data_to_pass = None
+            
+            # Handle standardized result format from UnifiedRunner
+            if isinstance(source_result, dict) and "success" in source_result and "data" in source_result:
+                if source_result["success"]:
+                    # 🔧 CRITICAL FIX: Preserve API data structure for agent consumption
+                    raw_data = source_result["data"]
+                    
+                    # Check if this is API data from a trigger
+                    if isinstance(raw_data, dict) and (
+                        raw_data.get("type") == "api_data" or 
+                        "api_data" in raw_data or 
+                        "records" in raw_data or
+                        raw_data.get("trigger_type") == "universal_polling"
+                    ):
+                        logger.info(f"🔧 Preserving API data structure for {node_id}")
+                        # For agent nodes, provide the FULL API data structure
+                        current_node = next((n for n in (nodes or []) if n.get('id') == node_id), None)
+                        if current_node and current_node.get('type') == 'agent':
+                            # Agent gets the complete trigger result with all metadata
+                            data_to_pass = raw_data
+                            logger.info(f"🔧 Agent {node_id} receiving full API data: {raw_data.get('service_name', 'Unknown Service')}")
+                            
+                            # Extract record count for debugging
+                            records = raw_data.get('api_data', {}).get('records', raw_data.get('records', []))
+                            if records:
+                                logger.info(f"🔧 Agent {node_id} will process {len(records)} records")
+                        else:
+                            # Other nodes get extracted data
+                            if "_clean_data" in source_result:
+                                data_to_pass = source_result["_clean_data"]
+                            else:
+                                data_to_pass = raw_data
+                    else:
+                        # Non-API data - use clean data if available
+                        if "_clean_data" in source_result:
+                            data_to_pass = source_result["_clean_data"]
+                            logger.info(f"🔧 Using extracted clean data for {node_id}")
+                        else:
+                            data_to_pass = raw_data
+                            logger.info(f"🔧 Using raw data for {node_id}")
+                else:
+                    # Handle error case
+                    logger.warning(f"🔧 Source node {source_node_id} failed, skipping data")
                     continue
-                
-                # 🚀 UNIVERSAL DATA TRANSFORMATION
-                try:
-                    transformed_data = data_transformer.transform_for_target(
-                        source_output=source_output,
-                        source_type=source_node_type,
-                        target_type=target_node_type,
-                        edge_label=label
-                    )
-                    
-                    inputs[label] = transformed_data
-                    logger.info(f"✅ Transformed {source_node_type} → {target_node_type} data for input '{label}'")
-                    
-                    # Add compatibility aliases
-                    if target_node_type == "agent":
-                        if transformed_data.get("type") == "text":
-                            inputs["query"] = transformed_data.get("value")
-                            inputs["data"] = transformed_data
-                        elif transformed_data.get("type") == "collaboration":
-                            inputs["collaboration"] = transformed_data
-                    
-                    elif target_node_type == "task":
-                        if transformed_data.get("type") == "agent_input":
-                            inputs["agent"] = transformed_data.get("agent_info", {})
-                            inputs["agent_result"] = transformed_data.get("value")
-                        elif transformed_data.get("type") == "data_input":
-                            inputs["data"] = transformed_data
-                            inputs["query"] = transformed_data.get("value")
-                    
-                except Exception as e:
-                    logger.error(f"❌ Data transformation failed for {source_id} → {node_id}: {str(e)}")
-                    # Fallback to original data
-                    inputs[label] = source_output
             else:
-                logger.warning(f"🔄 Source node {source_id} not found in results")
+                # Legacy support - use the result as-is
+                data_to_pass = source_result
+                logger.info(f"🔧 Using legacy result format for {node_id}")
+            
+            # Set the input using the target handle
+            inputs[target_handle] = data_to_pass
     
-    # DEBUG: Log final inputs
-    logger.info(f"🔄 Final inputs for node {node_id}: {list(inputs.keys())}")
+    # 🚀 CRITICAL FIX: Debug logging for agent inputs
+    current_node = next((n for n in (nodes or []) if n.get('id') == node_id), None)
+    if current_node and current_node.get('type') == 'agent':
+        logger.info(f"🔧 Graph processor final inputs for agent {node_id}:")
+        for key, value in inputs.items():
+            if isinstance(value, dict):
+                if 'api_data' in value or 'records' in value:
+                    records = value.get('api_data', {}).get('records', value.get('records', []))
+                    service_name = value.get('service_name', 'Unknown')
+                    logger.info(f"   - {key}: {service_name} API data with {len(records)} records")
+                else:
+                    logger.info(f"   - {key}: dict with {len(value)} keys")
+            else:
+                logger.info(f"   - {key}: {type(value).__name__}")
     
+    logger.debug(f"Node {node_id} inputs: {list(inputs.keys())}")
     return inputs
 
 def cleanup_node_results(node_results: Dict[str, Any], edges: List[Union[Dict[str, Any], Edge]], executed_nodes: Set[str]) -> None:

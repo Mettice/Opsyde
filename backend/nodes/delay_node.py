@@ -3,6 +3,7 @@ import re
 import logging
 from typing import Dict, Any
 from datetime import datetime
+from core.llm_runner import llm_runner
 
 logger = logging.getLogger(__name__)
 
@@ -71,31 +72,140 @@ async def process_delay_node(
     node_data: Dict[str, Any], 
     inputs: Dict[str, Any], 
     context: Dict[str, Any] = None
-) -> Dict[str, Any]:
-    """
-    Process delay node - wrapper function expected by the node processor
-    
-    Args:
-        node_data: Delay node configuration
-        inputs: Input values from connected nodes (passed through)
-        context: Execution context
-        
-    Returns:
-        Dictionary with the delay result
-    """
+) -> NodeData:
+    """Enhanced delay node processor with LLM-centric processing support"""
     try:
-        # Run the delay
-        result = await run_delay_node(node_data, inputs)
-        return result
+        # 🚀 CHECK FOR LLM-CENTRIC MODE
+        llm_mode_enabled = node_data.get('llm_mode_enabled', False)
         
-    except Exception as e:
-        logger.error(f"Error processing delay node: {str(e)}")
-        return {
-            "type": "error",
-            "error": f"Delay node processing failed: {str(e)}",
+        # If LLM-centric mode is enabled, use LLM Runner for intelligent delay processing
+        if llm_mode_enabled:
+            logger.info(f"🤖 Using LLM-centric processing for delay node")
+            
+            # Prepare input data for LLM delay evaluation
+            llm_input_data = {
+                'node_id': node_data.get('nodeId', node_data.get('id', 'unknown')),
+                'node_type': 'delay',
+                'node_config': node_data,
+                'duration': node_data.get('duration', '5s'),
+                'inputs': {key: value.value if isinstance(value, NodeData) else value for key, value in inputs.items()},
+                'description': f"Process a delay of {node_data.get('duration', '5s')} and pass through the input data"
+            }
+            
+            # Get user ID from context
+            user_id = None
+            if context and isinstance(context, dict):
+                user_id = context.get('user_id')
+            
+            # Execute LLM task for delay processing (mainly for logging/analysis)
+            llm_result = await llm_runner.execute_llm_task(
+                task_type='input_processing',
+                input_data=llm_input_data,
+                context=context or {},
+                user_id=user_id,
+                stream=False
+            )
+            
+            if llm_result.get('success'):
+                # LLM processing successful - still execute the actual delay
+                logger.info(f"✅ LLM analyzed delay requirements")
+                
+                # Get main input data for preservation
+                main_input_data = None
+                for key, value in inputs.items():
+                    if isinstance(value, NodeData) and not value.is_error():
+                        main_input_data = value.value
+                        break
+                    elif not isinstance(value, NodeData):
+                        main_input_data = value
+                        break
+                
+                # Execute the actual delay
+                delay_result = await run_delay_node(node_data, {})
+                
+                standardized_result = {
+                    "success": True,
+                    "data": main_input_data,  # 🔑 PRESERVE INPUT DATA FOR DOWNSTREAM FLOW
+                    "error": None,
+                    "metadata": {
+                        "node_type": "delay",
+                        "processing_mode": "llm_centric",
+                        "delay_duration": node_data.get('duration', '5s'),
+                        "delay_result": delay_result,
+                        "llm_analysis": llm_result.get('output', {}),
+                        "llm_metadata": llm_result.get('metadata', {}),
+                        "timestamp": datetime.now().isoformat(),
+                        "data_preserved": main_input_data is not None
+                    }
+                }
+                
+                logger.info(f"✅ LLM-centric delay processing completed with {node_data.get('duration', '5s')} delay")
+                return NodeData.from_value(standardized_result)
+            else:
+                # LLM processing failed, fall back to traditional processing
+                logger.warning(f"LLM-centric delay processing failed, falling back to traditional processing: {llm_result.get('error')}")
+        
+        # 🚀 TRADITIONAL PROCESSING WITH ENHANCED DATA PRESERVATION
+        preserved_data = {}
+        main_input_data = None
+        
+        for key, value in inputs.items():
+            if isinstance(value, NodeData):
+                if value.is_error():
+                    return NodeData.from_error(f"Input '{key}' has error: {value.error}")
+                # Extract clean data from NodeData
+                actual_value = value.value
+            else:
+                actual_value = value
+            
+            # Handle standardized format data extraction
+            if isinstance(actual_value, dict):
+                if "success" in actual_value and "data" in actual_value:
+                    if actual_value["success"]:
+                        preserved_data[key] = actual_value["data"]
+                        # Use first successful input as main data
+                        if main_input_data is None:
+                            main_input_data = actual_value["data"]
+                    else:
+                        return NodeData.from_error(f"Input '{key}' failed: {actual_value.get('error')}")
+                elif "_clean_data" in actual_value:
+                    preserved_data[key] = actual_value["_clean_data"]
+                    if main_input_data is None:
+                        main_input_data = actual_value["_clean_data"]
+                else:
+                    preserved_data[key] = actual_value
+                    if main_input_data is None:
+                        main_input_data = actual_value
+            else:
+                preserved_data[key] = actual_value
+                if main_input_data is None:
+                    main_input_data = actual_value
+        
+        # Execute delay with preserved data
+        result = await run_delay_node(node_data, preserved_data)
+        
+        # 🚀 STANDARDIZE OUTPUT FORMAT WITH PRESERVED DATA
+        delay_duration = result.get("output", {}).get("duration", node_data.get("duration", "5s"))
+        actual_duration = result.get("output", {}).get("actual_duration", 0)
+        
+        standardized_result = {
+            "success": True,
+            "data": main_input_data,  # 🔑 CRITICAL: Pass through the main input data
+            "error": None,
             "metadata": {
+                "node_type": "delay",
+                "processing_mode": "traditional",
+                "delay_duration": delay_duration,
+                "actual_duration": actual_duration,
+                "preserved_inputs": preserved_data,  # Keep all inputs for debugging
                 "timestamp": datetime.now().isoformat(),
-                "node_type": "delay"
+                "data_preserved": main_input_data is not None
             }
         }
+        
+        return NodeData.from_value(standardized_result)
+            
+    except Exception as e:
+        logger.error(f"Error in delay node processor: {str(e)}")
+        return NodeData.from_error(f"Delay node processing failed: {str(e)}")
 

@@ -1,8 +1,5 @@
 import { toast } from 'react-hot-toast';
 
-// Import the workflow data manager
-import { get_workflow_context } from '../backend/core/workflow_data_manager.py';
-
 /**
  * Topologically sort nodes based on their dependencies
  * @param {Array} nodes - Array of node objects
@@ -10,80 +7,51 @@ import { get_workflow_context } from '../backend/core/workflow_data_manager.py';
  * @returns {Array} - Sorted array of node IDs
  */
 export const topologicalSort = (nodes, edges) => {
-  // Create adjacency list
-  const graph = {};
   const inDegree = {};
-  const triggerNodes = [];
-  
-  // Initialize graph and in-degree count
+  const adjList = {};
+  const result = [];
+
+  // Initialize in-degree and adjacency list
   nodes.forEach(node => {
-    graph[node.id] = [];
     inDegree[node.id] = 0;
-    
-    // Identify trigger nodes
-    const nodeType = node.type || (node.data && node.data.nodeType);
-    if (nodeType === 'trigger') {
-      triggerNodes.push(node.id);
-    }
+    adjList[node.id] = [];
   });
-  
-  // Build the graph
+
+  // Build adjacency list and calculate in-degrees
   edges.forEach(edge => {
-    if (graph[edge.source]) {
-      graph[edge.source].push(edge.target);
+    if (edge.source && edge.target) {
+      adjList[edge.source].push(edge.target);
       inDegree[edge.target] = (inDegree[edge.target] || 0) + 1;
     }
   });
-  
-  // Find all nodes with no incoming edges (in-degree = 0)
-  // Prioritize trigger nodes
-  const queue = [];
-  
-  // First add trigger nodes with no incoming edges
-  triggerNodes.forEach(nodeId => {
-    if (inDegree[nodeId] === 0) {
-      queue.push(nodeId);
-    }
-  });
-  
-  // Then add other nodes with no incoming edges
-  nodes.forEach(node => {
-    if (inDegree[node.id] === 0 && !triggerNodes.includes(node.id)) {
-      queue.push(node.id);
-    }
-  });
-  
-  const result = [];
-  
-  // Process queue
+
+  // Initialize queue with nodes having in-degree 0
+  const queue = nodes.filter(node => inDegree[node.id] === 0).map(node => node.id);
+
   while (queue.length > 0) {
-    const current = queue.shift();
-    result.push(current);
-    
-    // For each neighbor, reduce in-degree by 1
-    graph[current].forEach(neighbor => {
+    const nodeId = queue.shift();
+    result.push(nodeId);
+
+    // For each neighbor
+    adjList[nodeId].forEach(neighbor => {
       inDegree[neighbor]--;
-      
-      // If in-degree becomes 0, add to queue
-      // Prioritize trigger nodes
       if (inDegree[neighbor] === 0) {
-        if (triggerNodes.includes(neighbor)) {
-          queue.unshift(neighbor); // Add trigger nodes to front
-        } else {
-          queue.push(neighbor);
-        }
+        queue.push(neighbor);
       }
     });
   }
-  
-  // Check for cycles
+
+  // Check for cycles (optional - for debugging)
   if (result.length !== nodes.length) {
-    console.warn('Graph contains cycles, execution order may not be optimal');
+    console.warn('Cycle detected in graph or disconnected nodes');
+    // Add remaining nodes to ensure execution continues
+    nodes.forEach(node => {
+      if (!result.includes(node.id)) {
+        result.push(node.id);
+      }
+    });
   }
-  
-  console.log('Execution order:', result);
-  console.log('Trigger nodes found:', triggerNodes);
-  
+
   return result;
 };
 
@@ -96,75 +64,79 @@ export const topologicalSort = (nodes, edges) => {
  * @returns {Object} - Collected input data
  */
 export const collectInputData = (nodeId, edges, executionState, globalInputs = {}) => {
+  console.log(`🌐 Collecting input data for node: ${nodeId}`);
+  
   const inputs = { ...globalInputs };
   
-  // Find all edges where this node is the target
+  // Find all edges that connect to this node (incoming edges)
   const incomingEdges = edges.filter(edge => edge.target === nodeId);
   
-  // For each incoming edge, get the output from the source node
+  console.log(`🔗 Found ${incomingEdges.length} incoming connections for ${nodeId}`);
+  
   incomingEdges.forEach(edge => {
-    const sourceId = edge.source;
-    const sourceOutput = executionState[sourceId];
+    const sourceNodeId = edge.source;
+    const sourceResult = executionState[sourceNodeId];
     
-    if (sourceOutput !== undefined) {
-      // Use the edge label as the input key if available
-      const inputKey = edge.label || `input_from_${sourceId}`;
+    if (sourceResult) {
+      const outputHandle = edge.sourceHandle || 'output';
+      let processedData = sourceResult;
       
-      // Special handling for agent connection to task node
-      if (edge.targetHandle === 'agent' && sourceOutput) {
-        // Store agent data properly for task nodes
-        inputs.agent = sourceOutput;
-        console.log("Setting agent data for task node:", nodeId, inputs.agent);
-      }
-      // Regular handling for other connections
-      else {
-        // Special handling for agent data
-        if (sourceOutput.type === 'agent_status') {
-          // Store agent data in a consistent format
-          inputs.agent = {
-            type: 'agent_status',
-            agent_name: sourceOutput.agent_name,
-            agent_role: sourceOutput.agent_role,
-            agent_id: sourceOutput.agent_id,
-            llmModel: sourceOutput.llmModel,
-            temperature: sourceOutput.temperature,
-            maxTokens: sourceOutput.maxTokens,
-            useMemory: sourceOutput.useMemory,
-            prompt: sourceOutput.prompt,
-            status: sourceOutput.status
-          };
-        }
+      // 🚀 NEW: Preprocess Airtable data for agent consumption
+      if (sourceResult.metadata?.serviceName === 'Airtable' || 
+          sourceResult.metadata?.source_api === 'Airtable' ||
+          (sourceResult.content && typeof sourceResult.content === 'object' && 
+           (sourceResult.content.api_data || sourceResult.content.records))) {
         
-        // Special handling for CV parser results
-        if (sourceOutput.type === 'cv_result' && sourceOutput.data) {
-          // Store CV data under both the edge label and a consistent key
-          inputs[inputKey] = sourceOutput;
-          inputs.cv_result = sourceOutput;
-          // Also store the data directly for backward compatibility
-          inputs.cv_data = sourceOutput.data;
-        } else {
-          // Handle different output formats
-          if (typeof sourceOutput === 'object' && sourceOutput !== null) {
-            // If it has a data field and is from a tool, preserve the structure
-            if (sourceOutput.data && sourceOutput.type) {
-              inputs[inputKey] = sourceOutput;
-            }
-            // If the output is an object with an 'output' field, use that
-            else if (sourceOutput.output !== undefined) {
-              inputs[inputKey] = sourceOutput;
-            } else {
-              // Otherwise use the whole object
-              inputs[inputKey] = sourceOutput;
-            }
-          } else {
-            // For primitive values
-            inputs[inputKey] = sourceOutput;
+        console.log('🔧 Preprocessing Airtable data for agent consumption...');
+        
+        // Extract clean data from the source result
+        let rawData = sourceResult.content || sourceResult.output || sourceResult;
+        if (typeof rawData === 'string') {
+          try {
+            rawData = JSON.parse(rawData);
+          } catch (e) {
+            // Keep as string if not JSON
           }
         }
+        
+        const extractedData = extractAirtableData(rawData);
+        
+        if (extractedData.textSummary) {
+          // Provide both structured and text formats for agent
+          processedData = {
+            // Text format for agent processing
+            text: extractedData.textSummary,
+            // Structured format for programmatic access
+            structured: extractedData.data,
+            // Summary information
+            summary: `Retrieved ${extractedData.totalRecords} records from Airtable with fields: ${extractedData.fields.join(', ')}`,
+            // Original metadata
+            metadata: sourceResult.metadata || {}
+          };
+          
+          console.log(`✅ Preprocessed Airtable data: ${extractedData.totalRecords} records extracted`);
+        } else {
+          processedData = sourceResult;
+        }
       }
+      
+      // Store the data with appropriate key
+      if (outputHandle === 'output' || outputHandle === 'result') {
+        inputs.input = processedData;
+      } else {
+        inputs[outputHandle] = processedData;
+      }
+      
+      console.log(`📤 Input from ${sourceNodeId} (${outputHandle}):`, 
+                  typeof processedData === 'object' ? 
+                  `${Object.keys(processedData).length} properties` : 
+                  typeof processedData);
+    } else {
+      console.log(`⚠️ No result found for source node: ${sourceNodeId}`);
     }
   });
   
+  console.log(`🎯 Final inputs for ${nodeId}:`, Object.keys(inputs));
   return inputs;
 };
 
@@ -639,4 +611,519 @@ function getNodeTypeDescription(node) {
     default:
       return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Unknown';
   }
-} 
+}
+
+// Helper function to determine content type based on data
+function determineContentType(data) {
+  if (!data) return 'empty';
+  
+  if (typeof data === 'string') {
+    if (data.trim().startsWith('{') || data.trim().startsWith('[')) {
+      try {
+        JSON.parse(data);
+        return 'json';
+      } catch {
+        return 'text';
+      }
+    }
+    if (data.includes('\n') && data.length > 100) return 'long_text';
+    if (data.includes('http://') || data.includes('https://')) return 'url';
+    return 'text';
+  }
+  
+  if (typeof data === 'object') {
+    if (Array.isArray(data)) return 'array';
+    if (data.type === 'api_data' || data.api_data) return 'api_data';
+    if (data.records && Array.isArray(data.records)) return 'records';
+    return 'object';
+  }
+  
+  if (typeof data === 'number') return 'number';
+  if (typeof data === 'boolean') return 'boolean';
+  
+  return 'unknown';
+}
+
+// 🚀 NEW: Airtable data extraction and flattening
+function extractAirtableData(data) {
+  try {
+    // Handle direct Airtable API response format
+    if (data.api_data && data.api_data.records) {
+      const records = data.api_data.records;
+      return extractAirtableRecords(records);
+    }
+    
+    // Handle nested trigger data format
+    if (data.type === 'api_data' && data.api_data && data.api_data.records) {
+      const records = data.api_data.records;
+      return extractAirtableRecords(records);
+    }
+    
+    // Handle direct records array
+    if (Array.isArray(data.records)) {
+      return extractAirtableRecords(data.records);
+    }
+    
+    // Handle single record
+    if (data.data && data.data.Fields) {
+      return extractSingleAirtableRecord(data);
+    }
+    
+    return data; // Return as-is if not Airtable format
+  } catch (error) {
+    console.error('🔧 Error extracting Airtable data:', error);
+    return data;
+  }
+}
+
+function extractAirtableRecords(records) {
+  if (!Array.isArray(records)) return records;
+  
+  const extractedRecords = records.map(record => extractSingleAirtableRecord(record));
+  
+  // Create a summary for agent consumption
+  const summary = {
+    totalRecords: extractedRecords.length,
+    fields: extractedRecords.length > 0 ? Object.keys(extractedRecords[0]) : [],
+    data: extractedRecords,
+    // Create a readable text summary for agents
+    textSummary: extractedRecords.map((record, index) => {
+      const fields = Object.entries(record)
+        .filter(([key, value]) => key !== 'id' && key !== 'Created Time')
+        .map(([key, value]) => `${key}: ${value}`)
+        .join(', ');
+      return `Record ${index + 1}: ${fields}`;
+    }).join('\n')
+  };
+  
+  return summary;
+}
+
+function extractSingleAirtableRecord(record) {
+  try {
+    // Extract from nested structure: record.data.Fields
+    if (record.data && record.data.Fields) {
+      return {
+        id: record.id || record.data.Id,
+        createdTime: record.data['Created Time'],
+        ...record.data.Fields // Spread all the field values
+      };
+    }
+    
+    // Handle direct field access
+    if (record.fields) {
+      return {
+        id: record.id,
+        ...record.fields
+      };
+    }
+    
+    return record; // Return as-is if structure doesn't match
+  } catch (error) {
+    console.error('🔧 Error extracting single Airtable record:', error);
+    return record;
+  }
+}
+
+/**
+ * 🔧 ENHANCED: Extract meaningful content from standardized node results
+ * This handles the new standardized format: { success, data, error, metadata }
+ * and provides clean content for display with better error handling
+ */
+export const extractNodeContent = (nodeResult, nodeType = 'unknown') => {
+  try {
+    console.log(`🔧 Extracting content from ${nodeType} node:`, nodeResult);
+    
+    // Handle null/undefined
+    if (!nodeResult) {
+      return {
+        content: 'No output',
+        type: 'text',
+        isError: false,
+        metadata: {}
+      };
+    }
+
+    // 🚀 ENHANCED: Handle standardized backend format {success, data, error, metadata}
+    if (typeof nodeResult === 'object' && 'success' in nodeResult) {
+      if (nodeResult.success && 'data' in nodeResult) {
+        // Extract data from successful standardized result
+        const extractedData = nodeResult.data;
+        console.log(`✅ Extracted data from standardized format:`, extractedData);
+        
+        // 🚀 NEW: Handle different data types from standardized format
+        if (typeof extractedData === 'object' && extractedData.type) {
+          switch (extractedData.type) {
+            case 'text_input':
+              return {
+                content: extractedData.text_content || extractedData.value || 'No input provided',
+                type: 'input_text',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                inputType: extractedData.input_type
+              };
+              
+            case 'file_input':
+              return {
+                content: extractedData.extracted_text || `File: ${extractedData.filename}`,
+                type: 'file_content',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                filename: extractedData.filename,
+                fileType: extractedData.file_type
+              };
+              
+            case 'trigger_activation':
+            case 'webhook_activation':
+            case 'schedule_activation':
+              return {
+                content: extractedData.message || 'Trigger activated',
+                type: 'trigger_status',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                triggerType: extractedData.trigger_type
+              };
+              
+            case 'api_data':
+              const apiSummary = extractedData.data_summary || `API data from ${extractedData.service_name}`;
+              return {
+                content: apiSummary,
+                type: 'api_response',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                apiData: extractedData.api_data,
+                recordCount: nodeResult.metadata?.record_count || 0
+              };
+              
+            case 'chat_response':
+              return {
+                content: extractedData.response || 'No chat response',
+                type: 'chat_message',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                provider: extractedData.provider,
+                model: extractedData.model
+              };
+              
+            case 'agent_result':
+              return {
+                content: extractedData.result || extractedData.output || 'Agent completed',
+                type: 'agent_response',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                agentName: extractedData.agent_name,
+                framework: nodeResult.metadata?.framework
+              };
+              
+            case 'task_result':
+              return {
+                content: extractedData.result || extractedData.output || 'Task completed',
+                type: 'task_response',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                taskName: extractedData.task_name
+              };
+              
+            case 'tool_result':
+              return {
+                content: extractedData.result || extractedData.data || 'Tool executed',
+                type: 'tool_response',
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                toolType: nodeResult.metadata?.tool_type
+              };
+              
+            default:
+              // Generic standardized data
+              return {
+                content: extractedData,
+                type: determineContentType(extractedData),
+                isError: false,
+                metadata: nodeResult.metadata || {},
+                executionTime: nodeResult.metadata?.execution_time,
+                framework: nodeResult.metadata?.framework
+              };
+          }
+        } else {
+          // Non-typed standardized data
+          return {
+            content: extractedData,
+            type: determineContentType(extractedData),
+            isError: false,
+            metadata: nodeResult.metadata || {},
+            executionTime: nodeResult.metadata?.execution_time,
+            framework: nodeResult.metadata?.framework
+          };
+        }
+      } else {
+        // Handle error in standardized format
+        return {
+          content: nodeResult.error || 'Unknown error occurred',
+          type: 'error', 
+          isError: true,
+          metadata: nodeResult.metadata || {}
+        };
+      }
+    }
+
+    // 🚀 ENHANCED: Handle legacy formats with better detection
+    if (typeof nodeResult === 'object') {
+      // Agent result format
+      if (nodeResult.type === 'agent_result' || nodeResult.agent_name) {
+        return {
+          content: nodeResult.result || nodeResult.output || nodeResult.text_output || 'No agent output',
+          type: 'agent_response',
+          isError: false,
+          metadata: {
+            agentName: nodeResult.agent_name,
+            role: nodeResult.role,
+            framework: nodeResult.framework,
+            llm: nodeResult.llm || {}
+          }
+        };
+      }
+
+      // Task result format  
+      if (nodeResult.type === 'task_result') {
+        return {
+          content: nodeResult.result || nodeResult.output || 'Task completed',
+          type: 'task_response',
+          isError: false,
+          metadata: {
+            taskName: nodeResult.task_name,
+            description: nodeResult.description,
+            status: nodeResult.status
+          }
+        };
+      }
+
+      // Tool result format
+      if (nodeResult.type === 'tool_result' || nodeResult.success !== undefined) {
+        const toolContent = nodeResult.result || nodeResult.data || nodeResult.output || nodeResult.response;
+        return {
+          content: toolContent,
+          type: 'tool_response',
+          isError: !nodeResult.success,
+          metadata: nodeResult.metadata || {}
+        };
+      }
+
+      // Chat result format
+      if (nodeResult.type === 'chat_result' || nodeResult.response) {
+        return {
+          content: nodeResult.response || nodeResult.text || 'Chat completed',
+          type: 'chat_message',
+          isError: false,
+          metadata: {
+            provider: nodeResult.provider,
+            model: nodeResult.model
+          }
+        };
+      }
+
+      // Logic result format
+      if (nodeResult.type === 'logic_result') {
+        const logicOutput = nodeResult.output || {};
+        const resultValue = logicOutput.result !== undefined ? logicOutput.result : 'Logic evaluated';
+        return {
+          content: `Logic condition: ${logicOutput.condition || 'N/A'} → ${resultValue}`,
+          type: 'logic_evaluation',
+          isError: false,
+          metadata: {
+            condition: logicOutput.condition,
+            result: logicOutput.result,
+            path: logicOutput.path
+          }
+        };
+      }
+
+      // Delay result format
+      if (nodeResult.type === 'delay_result') {
+        return {
+          content: `Delay completed (${nodeResult.duration || 'unknown'}ms)`,
+          type: 'delay_status',
+          isError: false,
+          metadata: {
+            duration: nodeResult.duration,
+            dataPassedThrough: nodeResult.value !== undefined
+          }
+        };
+      }
+
+      // Trigger result format
+      if (nodeResult.type === 'trigger_status' || nodeResult.trigger_type) {
+        // 🚀 NEW: Handle Airtable data in trigger results
+        let content = nodeResult.output || nodeResult.message || 'Trigger activated';
+        let metadata = {
+          triggerType: nodeResult.trigger_type,
+          serviceName: nodeResult.service_name
+        };
+        
+        // Extract Airtable data if present
+        if (nodeResult.service_name === 'Airtable' || 
+            (nodeResult.output && typeof nodeResult.output === 'object' && 
+             (nodeResult.output.api_data || nodeResult.output.records))) {
+          console.log('🔧 Detected Airtable data in trigger, extracting...');
+          const extractedData = extractAirtableData(nodeResult.output || nodeResult);
+          
+          if (extractedData.textSummary) {
+            content = `📊 Airtable Data Retrieved (${extractedData.totalRecords} records):\n\n${extractedData.textSummary}`;
+            metadata.airtableData = extractedData;
+            metadata.extractedFields = extractedData.fields;
+          }
+        }
+        
+        return {
+          content: content,
+          type: 'trigger_status',
+          isError: false,
+          metadata: metadata
+        };
+      }
+
+      // Input result format
+      if (nodeResult.type === 'input_result' || nodeResult.input_type) {
+        return {
+          content: nodeResult.value || nodeResult.extracted_text || 'Input provided',
+          type: 'input_text',
+          isError: false,
+          metadata: {
+            inputType: nodeResult.input_type,
+            label: nodeResult.label
+          }
+        };
+      }
+
+      // Universal API result format
+      if (nodeResult.type === 'universal_api_result') {
+        return {
+          content: nodeResult.response || nodeResult.data || 'API call completed',
+          type: 'api_response',
+          isError: !nodeResult.success,
+          metadata: {
+            service: nodeResult.service_detected,
+            protocol: nodeResult.protocol,
+            ...nodeResult.metadata
+          }
+        };
+      }
+
+      // Error format
+      if (nodeResult.type === 'error' || nodeResult.error) {
+        return {
+          content: nodeResult.error || nodeResult.message || 'Error occurred',
+          type: 'error',
+          isError: true,
+          metadata: nodeResult.metadata || {}
+        };
+      }
+
+      // Generic object - try to extract meaningful content
+      const content = nodeResult.output || 
+                     nodeResult.result || 
+                     nodeResult.text_output ||
+                     nodeResult.data ||
+                     nodeResult.value ||
+                     nodeResult.message ||
+                     JSON.stringify(nodeResult, null, 2);
+
+      return {
+        content: content,
+        type: determineContentType(content),
+        isError: false,
+        metadata: nodeResult.metadata || {}
+      };
+    }
+
+    // Handle string results
+    if (typeof nodeResult === 'string') {
+      return {
+        content: nodeResult,
+        type: 'text',
+        isError: false,
+        metadata: {}
+      };
+    }
+
+    // Handle other types (numbers, booleans, etc.)
+    return {
+      content: String(nodeResult),
+      type: 'text',
+      isError: false,
+      metadata: {}
+    };
+
+  } catch (error) {
+    console.error('Error extracting node content:', error);
+    return {
+      content: `Error extracting content: ${error.message}`,
+      type: 'error',
+      isError: true,
+      metadata: {}
+    };
+  }
+};
+
+/**
+ * 🔧 NEW: Generate rich content information for display
+ * Provides summary information about the content for UI components
+ */
+export const generateContentInfo = (extractedContent) => {
+  if (!extractedContent || !extractedContent.content) {
+    return {
+      lines: 0,
+      keys: 0,
+      type: 'empty',
+      size: 0,
+      hasError: extractedContent?.error ? true : false
+    };
+  }
+
+  const { content } = extractedContent;
+  
+  try {
+    // Handle string content
+    if (typeof content === 'string') {
+      return {
+        lines: content.split('\n').length,
+        keys: 0,
+        type: 'text',
+        size: content.length,
+        hasError: false
+      };
+    }
+    
+    // Handle object content
+    if (typeof content === 'object' && content !== null) {
+      const keys = Array.isArray(content) ? content.length : Object.keys(content).length;
+      const jsonString = JSON.stringify(content, null, 2);
+      const lines = jsonString.split('\n').length;
+      
+      return {
+        lines: lines,
+        keys: keys,
+        type: Array.isArray(content) ? 'array' : 'object',
+        size: jsonString.length,
+        hasError: false
+      };
+    }
+    
+    // Handle other types
+    return {
+      lines: 1,
+      keys: 0,
+      type: typeof content,
+      size: String(content).length,
+      hasError: false
+    };
+    
+  } catch (error) {
+    return {
+      lines: 0,
+      keys: 0,
+      type: 'error',
+      size: 0,
+      hasError: true
+    };
+  }
+}; 

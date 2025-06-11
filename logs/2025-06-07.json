@@ -1,0 +1,82 @@
+{"timestamp": "2025-06-07 14:47:39,284", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd11 Execution context initialized: {'user_id': 'demo-user-linkedin', 'workflow_id': 'linkedin_ecosystem_demo', 'execution_start_time': '2025-06-07T14:47:38.890877', 'available_providers': [], 'total_api_keys': 0, 'execution_duration_seconds': 0.393741, 'context_type': 'supabase_byok'}"}
+{"timestamp": "2025-06-07 14:47:39,285", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node input-campaign-config API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,286", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd0d Runner context debug for node input:"}
+{"timestamp": "2025-06-07 14:47:39,286", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context exists: True"}
+{"timestamp": "2025-06-07 14:47:39,286", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context is not None: True"}
+{"timestamp": "2025-06-07 14:47:39,286", "level": "INFO", "name": "core.runner", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,286", "level": "INFO", "name": "core.runner", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,288", "level": "INFO", "name": "core.runner", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,288", "level": "INFO", "name": "core.runner", "message": "   - Context has 'enhance_node_config' method: True"}
+{"timestamp": "2025-06-07 14:47:39,288", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Getting handler for node type: input"}
+{"timestamp": "2025-06-07 14:47:39,289", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd04 Lazy loading input: nodes.input_node.process_input_node"}
+{"timestamp": "2025-06-07 14:47:39,291", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Successfully loaded handler for input"}
+{"timestamp": "2025-06-07 14:47:39,292", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Context debug for node single_node:"}
+{"timestamp": "2025-06-07 14:47:39,292", "level": "INFO", "name": "core.node_processor", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,292", "level": "INFO", "name": "core.node_processor", "message": "   - Context is None: False"}
+{"timestamp": "2025-06-07 14:47:39,292", "level": "INFO", "name": "core.node_processor", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,293", "level": "INFO", "name": "core.node_processor", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,293", "level": "INFO", "name": "core.node_processor", "message": "   - Context dir: ['cleanup', 'context_key', 'enhance_node_config', 'execution_start_time', 'get', 'get_api_key_for_framework', 'get_context_info', 'get_execution_metadata', 'initialize', 'items', 'keys', 'to_dict', 'user_api_keys', 'user_id', 'user_settings_service', 'values', 'workflow_id']"}
+{"timestamp": "2025-06-07 14:47:39,293", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Using WorkflowExecutionContext directly for node single_node"}
+{"timestamp": "2025-06-07 14:47:39,293", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 About to execute handler for input with inputs: []"}
+{"timestamp": "2025-06-07 14:47:39,294", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler function: <function process_input_node at 0x000001DC49959000>"}
+{"timestamp": "2025-06-07 14:47:39,294", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Node data keys: ['label', 'inputType', 'value', 'nodeType']"}
+{"timestamp": "2025-06-07 14:47:39,294", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler execution completed for input"}
+{"timestamp": "2025-06-07 14:47:39,295", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (input) executed in 0.00s"}
+{"timestamp": "2025-06-07 14:47:39,296", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node input-prospect-list API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,296", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd0d Runner context debug for node input:"}
+{"timestamp": "2025-06-07 14:47:39,296", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context exists: True"}
+{"timestamp": "2025-06-07 14:47:39,296", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context is not None: True"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.runner", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.runner", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.runner", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.runner", "message": "   - Context has 'enhance_node_config' method: True"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Getting handler for node type: input"}
+{"timestamp": "2025-06-07 14:47:39,297", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Handler for input already loaded"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Context debug for node single_node:"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "   - Context is None: False"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,298", "level": "INFO", "name": "core.node_processor", "message": "   - Context dir: ['cleanup', 'context_key', 'enhance_node_config', 'execution_start_time', 'get', 'get_api_key_for_framework', 'get_context_info', 'get_execution_metadata', 'initialize', 'items', 'keys', 'to_dict', 'user_api_keys', 'user_id', 'user_settings_service', 'values', 'workflow_id']"}
+{"timestamp": "2025-06-07 14:47:39,299", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Using WorkflowExecutionContext directly for node single_node"}
+{"timestamp": "2025-06-07 14:47:39,299", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 About to execute handler for input with inputs: []"}
+{"timestamp": "2025-06-07 14:47:39,299", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler function: <function process_input_node at 0x000001DC49959000>"}
+{"timestamp": "2025-06-07 14:47:39,300", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Node data keys: ['label', 'inputType', 'value', 'nodeType']"}
+{"timestamp": "2025-06-07 14:47:39,300", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler execution completed for input"}
+{"timestamp": "2025-06-07 14:47:39,301", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (input) executed in 0.00s"}
+{"timestamp": "2025-06-07 14:47:39,302", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node agent-content-intelligence API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,305", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node agent-prospect-research API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,307", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node agent-message-automation API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,308", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node agent-response-analytics API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,309", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node integration-crm-sync API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,310", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd0d Runner context debug for node tool:"}
+{"timestamp": "2025-06-07 14:47:39,310", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context exists: True"}
+{"timestamp": "2025-06-07 14:47:39,310", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context is not None: True"}
+{"timestamp": "2025-06-07 14:47:39,310", "level": "INFO", "name": "core.runner", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,311", "level": "INFO", "name": "core.runner", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,311", "level": "INFO", "name": "core.runner", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,311", "level": "INFO", "name": "core.runner", "message": "   - Context has 'enhance_node_config' method: True"}
+{"timestamp": "2025-06-07 14:47:39,311", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Getting handler for node type: tool"}
+{"timestamp": "2025-06-07 14:47:39,312", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd04 Lazy loading tool: nodes.tool_node.process_tool_node"}
+{"timestamp": "2025-06-07 14:47:39,327", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Successfully loaded handler for tool"}
+{"timestamp": "2025-06-07 14:47:39,327", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\udd0d Context debug for node single_node:"}
+{"timestamp": "2025-06-07 14:47:39,328", "level": "INFO", "name": "core.node_processor", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,328", "level": "INFO", "name": "core.node_processor", "message": "   - Context is None: False"}
+{"timestamp": "2025-06-07 14:47:39,328", "level": "INFO", "name": "core.node_processor", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,329", "level": "INFO", "name": "core.node_processor", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,329", "level": "INFO", "name": "core.node_processor", "message": "   - Context dir: ['cleanup', 'context_key', 'enhance_node_config', 'execution_start_time', 'get', 'get_api_key_for_framework', 'get_context_info', 'get_execution_metadata', 'initialize', 'items', 'keys', 'to_dict', 'user_api_keys', 'user_id', 'user_settings_service', 'values', 'workflow_id']"}
+{"timestamp": "2025-06-07 14:47:39,329", "level": "INFO", "name": "core.node_processor", "message": "\u2705 Using WorkflowExecutionContext directly for node single_node"}
+{"timestamp": "2025-06-07 14:47:39,330", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 About to execute handler for tool with inputs: []"}
+{"timestamp": "2025-06-07 14:47:39,330", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler function: <function process_tool_node at 0x000001DC4995A710>"}
+{"timestamp": "2025-06-07 14:47:39,330", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Node data keys: ['label', 'framework', 'toolType', 'config', 'nodeType']"}
+{"timestamp": "2025-06-07 14:47:39,331", "level": "INFO", "name": "core.node_processor", "message": "\ud83d\ude80 Handler execution completed for tool"}
+{"timestamp": "2025-06-07 14:47:39,331", "level": "INFO", "name": "core.node_processor", "message": "Node single_node (tool) executed in 0.00s"}
+{"timestamp": "2025-06-07 14:47:39,332", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd27 Node output-campaign-dashboard API key injection: False -> False"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "\ud83d\udd0d Runner context debug for node output:"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context exists: True"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - self.execution_context is not None: True"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - Context type: <class 'core.workflow_execution_context.WorkflowExecutionContext'>"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - Context class name: WorkflowExecutionContext"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - Context has 'get' method: True"}
+{"timestamp": "2025-06-07 14:47:39,333", "level": "INFO", "name": "core.runner", "message": "   - Context has 'enhance_node_config' method: True"}
+{"timestamp": "2025-06-07 14:47:39,335", "level": "ERROR", "name": "core.node_processor", "message": "Node single_node: Previous node failed: Framework handler execution error: run_universal_api_tool() got an unexpected keyword argument 'inputs'"}

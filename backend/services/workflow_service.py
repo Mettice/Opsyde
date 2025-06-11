@@ -472,9 +472,15 @@ class WorkflowService:
         pass
 
     def _generate_k8s_config(self, workflow: Workflow) -> Dict[str, Any]:
-        """Generate Kubernetes manifests"""
-        # Implementation for Kubernetes-specific export
-        pass
+        """Generate Kubernetes configuration"""
+        return {
+            "todo": "Kubernetes configuration generation"
+        }
+
+# Dependency injection function
+def get_workflow_service() -> WorkflowService:
+    """Get workflow service instance for dependency injection"""
+    return WorkflowService()
 
 # Register the service
 workflow_service = WorkflowService()

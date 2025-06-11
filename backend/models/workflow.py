@@ -18,6 +18,12 @@ class WorkflowConfig(BaseModel):
     tags: List[str] = Field(default_factory=list)
     settings: Dict[str, Any] = Field(default_factory=dict)
 
+class WorkflowInput(BaseModel):
+    """Model for workflow execution inputs"""
+    inputs: Dict[str, Any] = Field(default_factory=dict)
+    global_inputs: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
 class ExecutionContext(BaseModel):
     workflow_id: Optional[str] = None
     execution_id: str

@@ -9,6 +9,7 @@ import markdown
 from frameworks.openrouter_runner import run_openrouter_chat
 from frameworks.huggingface_runner import run_huggingface_tool
 from frameworks.perplexity_runner import run_perplexity_chat
+from core.llm_runner import llm_runner
 
 logger = logging.getLogger(__name__)
 
@@ -253,51 +254,156 @@ async def run_chat_node(data: Dict[str, Any], inputs: Dict[str, Any], context: A
 
 async def process_chat_node(
     node_data: Dict[str, Any], 
-    inputs: Dict[str, Any], 
+    inputs: Dict[str, NodeData], 
     context: Dict[str, Any] = None
-) -> Dict[str, Any]:
-    """
-    Process chat node - wrapper function expected by the node processor
-    
-    Args:
-        node_data: Chat node configuration
-        inputs: Input values from connected nodes
-        context: Execution context
-        
-    Returns:
-        Dictionary with the chat result
-    """
+) -> NodeData:
+    """Enhanced chat node processor with LLM-centric processing support"""
     try:
-        logger.info(f"🚀 CHAT NODE ENTRY: Starting process_chat_node")
-        logger.info(f"🚀 CHAT NODE DATA: {node_data}")
-        logger.info(f"🚀 CHAT NODE INPUTS: {inputs}")
+        # 🚀 CHECK FOR LLM-CENTRIC MODE
+        llm_mode_enabled = node_data.get('llm_mode_enabled', False)
         
-        # Extract actual values from NodeData wrappers
-        processed_inputs = {}
-        for key, value in inputs.items():
-            if hasattr(value, 'value'):
-                processed_inputs[key] = value.value
-            else:
-                processed_inputs[key] = value
-        
-        logger.info(f"🚀 CHAT PROCESSED INPUTS: {processed_inputs}")
-        
-        # Run the chat node
-        result = await run_chat_node(node_data, processed_inputs, context)
-        
-        logger.info(f"🚀 CHAT NODE RESULT: {result}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"❌ CHAT NODE ERROR: {str(e)}", exc_info=True)
-        return {
-            "type": "error",
-            "error": f"Chat node processing failed: {str(e)}",
-            "metadata": {
-                "timestamp": datetime.now().isoformat(),
-                "node_type": "chat"
+        # If LLM-centric mode is enabled, use LLM Runner for intelligent processing
+        if llm_mode_enabled:
+            logger.info(f"🤖 Using LLM-centric processing for chat node")
+            
+            # Prepare input data for LLM processing
+            llm_input_data = {
+                'node_id': node_data.get('nodeId', node_data.get('id', 'unknown')),
+                'node_type': 'chat',
+                'node_config': node_data,
+                'inputs': {key: value.value if isinstance(value, NodeData) else value for key, value in inputs.items()},
+                'prompt': node_data.get('prompt', 'You are a helpful assistant.'),
+                'framework': node_data.get('framework', 'openai'),
+                'model': node_data.get('llmModel', 'gpt-4'),
+                'temperature': node_data.get('temperature', 0.7)
             }
-        }
+            
+            # Get user ID from context
+            user_id = None
+            if context and isinstance(context, dict):
+                user_id = context.get('user_id')
+            
+            # Execute LLM task for chat reasoning
+            llm_result = await llm_runner.execute_llm_task(
+                task_type='agent_reasoning',
+                input_data=llm_input_data,
+                context=context or {},
+                user_id=user_id,
+                stream=False
+            )
+            
+            if llm_result.get('success'):
+                # LLM processing successful - return standardized result
+                llm_output = llm_result.get('output', {})
+                
+                standardized_result = {
+                    "success": True,
+                    "data": {
+                        "type": "chat_result",
+                        "response": llm_output.get('output', llm_output.get('reasoning', 'No response')),
+                        "reasoning": llm_output.get('reasoning', ''),
+                        "confidence": llm_output.get('confidence', 0.8),
+                        "model": llm_result.get('metadata', {}).get('model', 'llm'),
+                        "framework": "llm_centric",
+                        "llm_processed": True
+                    },
+                    "error": None,
+                    "metadata": {
+                        "node_type": "chat",
+                        "processing_mode": "llm_centric",
+                        "llm_metadata": llm_result.get('metadata', {}),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                }
+                
+                logger.info(f"✅ LLM-centric chat processing successful")
+                return NodeData.from_value(standardized_result)
+            else:
+                # LLM processing failed, fall back to traditional processing
+                logger.warning(f"LLM-centric processing failed, falling back to traditional processing: {llm_result.get('error')}")
+        
+        # 🚀 TRADITIONAL PROCESSING (existing code with data preservation)
+        formatted_inputs = {}
+        main_input_data = None
+        
+        for key, value in inputs.items():
+            if isinstance(value, NodeData):
+                if value.is_error():
+                    return NodeData.from_error(f"Input '{key}' has error: {value.error}")
+                # Extract clean data from NodeData
+                actual_value = value.value
+            else:
+                actual_value = value
+            
+            # Handle standardized format data extraction and preserve for context
+            if isinstance(actual_value, dict):
+                if "success" in actual_value and "data" in actual_value:
+                    if actual_value["success"]:
+                        clean_data = actual_value["data"]
+                        formatted_inputs[key] = clean_data
+                        # Preserve main input data for context
+                        if main_input_data is None:
+                            main_input_data = clean_data
+                    else:
+                        return NodeData.from_error(f"Input '{key}' failed: {actual_value.get('error')}")
+                elif "_clean_data" in actual_value:
+                    clean_data = actual_value["_clean_data"]
+                    formatted_inputs[key] = clean_data
+                    if main_input_data is None:
+                        main_input_data = clean_data
+                else:
+                    formatted_inputs[key] = actual_value
+                    if main_input_data is None:
+                        main_input_data = actual_value
+            else:
+                formatted_inputs[key] = actual_value
+                if main_input_data is None:
+                    main_input_data = actual_value
+        
+        # Execute traditional chat processing
+        result = await run_chat_node(node_data, formatted_inputs, context)
+        
+        # 🚀 STANDARDIZE OUTPUT FORMAT WITH DATA PRESERVATION
+        if result.get("type") == "chat_result":
+            standardized_result = {
+                "success": True,
+                "data": {
+                    "type": "chat_result", 
+                    "response": result.get("output", {}).get("raw", "No response"),
+                    "model": result.get("metadata", {}).get("model", "unknown"),
+                    "framework": result.get("metadata", {}).get("framework", "unknown"),
+                    "session_id": result.get("metadata", {}).get("session_id", ""),
+                    "llm_processed": False,
+                    # 🔑 PRESERVE INPUT CONTEXT FOR DOWNSTREAM PROCESSING
+                    "input_context": main_input_data
+                },
+                "error": None,
+                "metadata": {
+                    "node_type": "chat",
+                    "processing_mode": "traditional",
+                    "chat_metadata": result.get("metadata", {}),
+                    "preserved_inputs": formatted_inputs,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+        else:
+            # Error case
+            standardized_result = {
+                "success": False,
+                "data": None,
+                "error": result.get("error", "Chat processing failed"),
+                "metadata": {
+                    "node_type": "chat",
+                    "processing_mode": "traditional",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+        
+        return NodeData.from_value(standardized_result)
+            
+    except Exception as e:
+        logger.error(f"Error in chat node processor: {str(e)}")
+        return NodeData.from_error(f"Chat node processing failed: {str(e)}")
 
 @router.post("/run-chat")
 async def run_chat_endpoint(data: Dict[str, Any]) -> Dict[str, Any]:

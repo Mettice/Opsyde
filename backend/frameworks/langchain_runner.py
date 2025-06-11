@@ -1154,7 +1154,6 @@ class EnhancedLangChainRunner:
                         elif tool in ['file_reader']:
                             tool_capabilities.append("**File Reader**: Read and analyze content from files")
                         else:
-                            # Generic fallback for unknown tools
                             tool_capabilities.append(f"**{tool.title()}**: Use {tool} functionality to assist with the task")
                     
                     if tool_capabilities:
@@ -1252,7 +1251,7 @@ class EnhancedLangChainRunner:
                     "provider": provider,
                     "model": model
                 }
-                
+            
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
             logger.error(f"❌ Fallback execution failed: {str(e)}")
@@ -1369,7 +1368,7 @@ def get_langchain_capabilities() -> Dict[str, Any]:
             "tools": True,
             "conversation": True
         }
-    }
+        }
 
 # Backward compatibility
 def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 

@@ -1,9 +1,11 @@
 // components/execution-panel/hooks/useLogProcessing.js
 import { useMemo, useCallback } from 'react';
 import { safeStringify } from '../../rich-content/utils/safeStringify';
+import { extractNodeContent } from '../../../utils/flowExecutionEngine';
 
 /**
  * Custom hook for processing and parsing execution logs
+ * 🔧 ENHANCED: Now supports standardized result format from data flow fixes
  */
 export const useLogProcessing = (logs, structuredLogs, nodes = []) => {
   
@@ -39,6 +41,50 @@ export const useLogProcessing = (logs, structuredLogs, nodes = []) => {
     
     return emojiMap[type] || '📄';
   }, [getLogType]);
+
+  // 🚀 NEW: Enhanced result processor for standardized format
+  const processStandardizedResult = useCallback((log) => {
+    try {
+      // Check if this is our new standardized format
+      if (log.result && typeof log.result === 'object' && 'success' in log.result) {
+        const standardizedResult = log.result;
+        
+        return {
+          ...log,
+          // Extract clean data for display
+          processedResult: standardizedResult.success ? standardizedResult.data : null,
+          error: standardizedResult.success ? null : (standardizedResult.error || 'Execution failed'),
+          success: standardizedResult.success,
+          metadata: {
+            ...log.metadata,
+            ...standardizedResult.metadata,
+            execution_time: standardizedResult.metadata?.execution_time,
+            framework: standardizedResult.metadata?.framework,
+            node_type: standardizedResult.metadata?.node_type || log.node_type || log.nodeType
+          },
+          // Enhanced status detection
+          status: standardizedResult.success ? 'completed' : 'error'
+        };
+      }
+      
+      // Handle legacy formats
+      return {
+        ...log,
+        processedResult: log.result,
+        success: !log.error,
+        status: log.error ? 'error' : (log.status || 'completed')
+      };
+    } catch (error) {
+      console.warn('Error processing standardized result:', error);
+      return {
+        ...log,
+        processedResult: null,
+        error: `Result processing failed: ${error.message}`,
+        success: false,
+        status: 'error'
+      };
+    }
+  }, []);
 
   // Enhanced text log parser with better error handling
   const parseTextLogs = useCallback((logText) => {
@@ -366,6 +412,7 @@ export const useLogProcessing = (logs, structuredLogs, nodes = []) => {
     getLogEmoji,
     
     // Utilities
-    parseTextLogs
+    parseTextLogs,
+    processStandardizedResult
   };
 };

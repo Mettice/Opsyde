@@ -9,6 +9,7 @@ from models.nodes import Node, NodeType
 from models.workflow import ExecutionContext
 from models.results import NodeResult, ExecutionStatus
 from models.data import NodeData
+from core.llm_runner import llm_runner
 
 logger = logging.getLogger(__name__)
 
@@ -44,20 +45,13 @@ class TaskNode:
                 enhanced_framework_config = getattr(config, 'frameworkConfig', {}) or {}
                 logger.info(f"🔧 TaskNode enhanced frameworkConfig from Node object: {enhanced_framework_config}")
 
-            # Format input data
+            # Format input data - SIMPLIFIED since graph processor now provides clean data
             formatted_inputs = {}
             if inputs:
                 for key, value in inputs.items():
-                    if hasattr(value, 'value') and isinstance(value.value, dict):
-                        # Handle NodeData objects - extract the nested value
-                        nested_value = value.value
-                        if 'value' in nested_value and isinstance(nested_value['value'], dict):
-                            # Double nested (NodeData.value.value)
-                            formatted_inputs[key] = nested_value['value']
-                        else:
-                            # Single nested (NodeData.value)
-                            formatted_inputs[key] = nested_value
-                    elif isinstance(value, dict):
+                    # 🚀 SIMPLIFIED INPUT PROCESSING - Graph processor provides clean data
+                    if isinstance(value, dict):
+                        # Check if this needs further extraction
                         if 'output' in value:
                             formatted_inputs[key] = value['output']
                         elif 'value' in value:
@@ -1047,20 +1041,100 @@ async def process_task_node(
     context: Dict[str, Any] = None
 ) -> NodeData:
     """
-    Process task node - standalone function for node processor
+    Process task node with LLM-centric processing support
     """
     try:
         from models.data import NodeData
         
+        # 🚀 CHECK FOR LLM-CENTRIC MODE
+        llm_mode_enabled = node_data.get('llm_mode_enabled', False)
+        
+        # If LLM-centric mode is enabled, use LLM Runner for intelligent task processing
+        if llm_mode_enabled:
+            logger.info(f"🤖 Using LLM-centric processing for task node")
+            
+            # Extract task configuration
+            task_description = node_data.get('description', node_data.get('data', {}).get('description', ''))
+            expected_output = node_data.get('expectedOutput', node_data.get('data', {}).get('expectedOutput', ''))
+            
+            # Prepare input data for LLM task execution
+            llm_input_data = {
+                'node_id': node_data.get('nodeId', node_data.get('id', 'unknown')),
+                'node_type': 'task',
+                'node_config': node_data,
+                'description': task_description,
+                'expected_output': expected_output,
+                'input_data': {key: value.value if isinstance(value, NodeData) else value for key, value in inputs.items()}
+            }
+            
+            # Get user ID from context
+            user_id = None
+            if context and isinstance(context, dict):
+                user_id = context.get('user_id')
+            
+            # Execute LLM task for task execution
+            llm_result = await llm_runner.execute_llm_task(
+                task_type='task_execution',
+                input_data=llm_input_data,
+                context=context or {},
+                user_id=user_id,
+                stream=False
+            )
+            
+            if llm_result.get('success'):
+                # LLM processing successful - return standardized result
+                llm_output = llm_result.get('output', {})
+                
+                standardized_result = {
+                    "success": True,
+                    "data": {
+                        "type": "task_result",
+                        "task_name": node_data.get('label', 'LLM Task'),
+                        "description": task_description,
+                        "expected_output": expected_output,
+                        "result": llm_output.get('result', llm_output.get('output', 'Task completed')),
+                        "status": "completed" if llm_output.get('task_completed', True) else "partial",
+                        "summary": llm_output.get('summary', 'Task processed by LLM'),
+                        "llm_processed": True,
+                        "reasoning": llm_output.get('reasoning', ''),
+                        "confidence": llm_output.get('confidence', 0.8)
+                    },
+                    "error": None,
+                    "metadata": {
+                        "node_type": "task",
+                        "processing_mode": "llm_centric",
+                        "llm_metadata": llm_result.get('metadata', {}),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                }
+                
+                logger.info(f"✅ LLM-centric task processing successful")
+                return NodeData.from_value(standardized_result)
+            else:
+                # LLM processing failed, fall back to traditional processing
+                logger.warning(f"LLM-centric task processing failed, falling back to traditional processing: {llm_result.get('error')}")
+        
+        # 🚀 TRADITIONAL PROCESSING (existing code)
         # Create TaskNode instance
         task_node = TaskNode()
         
         # Create a Node object from node_data
         from models.nodes import Node, NodeType
+        
+        # Extract the actual node data/configuration
+        node_config = node_data.get('data', node_data.copy())
+        
+        # Ensure required fields exist for TaskConfig validation
+        if 'label' not in node_config or not node_config['label']:
+            node_config['label'] = f"Task {node_data.get('nodeId', node_data.get('id', 'unknown'))}"
+            
+        if 'description' not in node_config or not node_config['description']:
+            node_config['description'] = f"Processing task for {node_data.get('nodeId', node_data.get('id', 'unknown'))}"
+        
         node = Node(
             id=node_data.get('nodeId', node_data.get('id', 'unknown')),
             type=NodeType.TASK,
-            data=node_data,
+            data=node_config,  # Use extracted config, not entire node_data
             position=node_data.get('position', {'x': 0, 'y': 0})
         )
         

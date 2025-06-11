@@ -21,7 +21,6 @@ import ToolTemplates from '../components/templates/ToolTemplates';
 import PreviewMode from '../components/PreviewMode';
 import HelpPanel from '../components/HelpPanel';
 import TemplateModal from '../components/builder/TemplateModal';
-import RunCrewButton from '../components/RunCrewButton';
 import WebRunnerPanel from '../components/webrunners/WebRunnerPanel';
 import WebhookFlowModal from '../components/WebhookFlowModal';
 import TriggerHistoryPanel from '../components/TriggerHistoryPanel';
@@ -32,7 +31,7 @@ import HelpTooltip from '../components/HelpTooltip';
 import CrewAIImporter from '../components/CrewAIImporter';
 
 // Data
-import { flowTemplates } from '../data/flowTemplates';
+import { optimizedTemplates, linkedinTemplates } from '../data/index';
 
 // Custom Hooks
 import { useNodeManagement } from '../hooks/useNodeManagement';
@@ -304,14 +303,17 @@ const BuilderPageContent = () => {
     isExecuting,
     textLogs,
     structuredLogs,
-    setTextLogs,
-    setStructuredLogs,
     executionState,
     runCrew,
     validateFlow,
     nodeStates,
     connectionStates,
-    testExecutionStates
+    // NEW: Smart Mapping Integration
+    smartMappingEnabled,
+    setSmartMappingEnabled,
+    smartMappingStats,
+    debugMode,
+    toggleDebugMode
   } = useFlowExecution({ nodes, edges, inputs });
   
   const {
@@ -1001,28 +1003,23 @@ const BuilderPageContent = () => {
           pollingInterval={customPollingInterval}
           onPollingIntervalChange={setCustomPollingInterval}
           nodes={nodes}
+          // NEW: Smart Mapping Integration
+          smartMappingEnabled={smartMappingEnabled}
+          onToggleSmartMapping={setSmartMappingEnabled}
+          smartMappingStats={smartMappingStats}
+          debugMode={debugMode}
+          onToggleDebugMode={toggleDebugMode}
         />
       )}
-      
-      {/* RunCrew Button - Bottom Right (Restored) */}
-      <RunCrewButton
-        onClick={() => {
-          runCrew();
-          toggleExecutionPanel(true);
-        }}
-        isRunning={isExecuting}
-        hasErrors={validateFlow().some(issue => issue.type === 'error')}
-        nodeCount={nodes.length}
-      />
       
       {/* Center Bottom Action Group */}
       <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-3 z-50">
         <button
           onClick={() => togglePreview(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg transition-colors"
-          title="Preview workflow"
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-lg transition-colors flex items-center gap-2"
+          title="Preview"
         >
-          👁️ Preview
+          👁️
         </button>
         
         <button
@@ -1030,10 +1027,57 @@ const BuilderPageContent = () => {
             console.log('🧪 Test States clicked - Starting test execution...');
             testExecutionStates();
           }}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg transition-colors"
-          title="Run test execution to simulate workflow states"
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg shadow-lg transition-colors flex items-center gap-2"
+          title="Test States"
         >
-          🧪 Test States
+          🧪
+        </button>
+        
+        {/* RunCrew Button - Now centralized */}
+        <button
+          onClick={() => {
+            runCrew();
+            toggleExecutionPanel(true);
+          }}
+          disabled={isExecuting || validateFlow().some(issue => issue.type === 'error') || nodes.length === 0}
+          className={`px-4 py-2 text-white rounded-lg shadow-lg transition-colors flex items-center gap-2 ${
+            isExecuting 
+              ? "bg-blue-500 animate-pulse" 
+              : validateFlow().some(issue => issue.type === 'error')
+                ? "bg-red-600 hover:bg-red-700" 
+                : nodes.length === 0 
+                  ? "bg-gray-500" 
+                  : "bg-green-600 hover:bg-green-700"
+          }`}
+          title="Run Nodes"
+        >
+          {isExecuting 
+            ? <>
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Running...
+              </>
+            : validateFlow().some(issue => issue.type === 'error')
+              ? <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  Fix Errors to Run
+                </>
+              : nodes.length === 0 
+                ? <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Nodes to Run
+                  </>
+                : <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </>}
         </button>
       </div>
       
@@ -1079,7 +1123,7 @@ const BuilderPageContent = () => {
       
       {showTemplateModal && (
         <TemplateModal
-          templates={flowTemplates}
+          templates={[...optimizedTemplates, ...linkedinTemplates]}
           onClose={closeTemplateModal}
           onSelectTemplate={applyFlowTemplate}
         />

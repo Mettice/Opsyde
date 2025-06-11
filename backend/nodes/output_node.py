@@ -5,6 +5,8 @@ from datetime import datetime
 import asyncio
 import json
 import re
+import os
+import aiohttp
 
 # Import the new rich output schema
 try:
@@ -92,7 +94,7 @@ class OutputNode:
             return NodeData.from_error(f"Output processing failed: {str(e)}")
     
     def _collect_output_data(self, inputs: Dict[str, NodeData]) -> Dict[str, Any]:
-        """Enhanced data collection with rich content detection"""
+        """Enhanced data collection with rich content detection and standardized format handling"""
         collected_data = {}
         rich_outputs = []
         
@@ -101,12 +103,37 @@ class OutputNode:
                 collected_data[f"{input_id}_error"] = node_data.error
             else:
                 data_value = node_data.value
-                collected_data[input_id] = data_value
                 
-                # If rich output is available, try to create rich content
-                if RICH_OUTPUT_AVAILABLE and data_value:
+                # 🚀 ENHANCED: Handle standardized format data extraction
+                if isinstance(data_value, dict):
+                    # Check for standardized format
+                    if "success" in data_value and "data" in data_value:
+                        if data_value["success"]:
+                            # Extract the clean data from standardized format
+                            extracted_data = data_value["data"]
+                            collected_data[input_id] = extracted_data
+                            logger.info(f"✅ Output node extracted clean data from {input_id}: {type(extracted_data)}")
+                        else:
+                            # Handle error in standardized format
+                            collected_data[f"{input_id}_error"] = data_value.get("error", "Unknown error")
+                            continue
+                    
+                    # Check for clean data stored by runner
+                    elif "_clean_data" in data_value:
+                        extracted_data = data_value["_clean_data"]
+                        collected_data[input_id] = extracted_data
+                        logger.info(f"✅ Output node using clean data from {input_id}: {type(extracted_data)}")
+                    
+                    # Legacy format handling
+                    else:
+                        collected_data[input_id] = data_value
+                else:
+                    collected_data[input_id] = data_value
+                
+                # Create rich output if available
+                if RICH_OUTPUT_AVAILABLE and collected_data.get(input_id):
                     try:
-                        rich_output = smart_format_output(data_value, title=f"Output from {input_id}")
+                        rich_output = smart_format_output(collected_data[input_id], title=f"Output from {input_id}")
                         rich_outputs.append(rich_output.to_dict())
                     except Exception as e:
                         self.logger.warning(f"Failed to create rich output for {input_id}: {e}")
@@ -266,15 +293,22 @@ class OutputNode:
         output_type = node_data.get('outputType', 'webhook')
         
         try:
+            # 🚀 CRITICAL FIX: Build proper template context with rich data extraction
+            template_context = _build_template_context(output_data, context)
+            
+            self.logger.info(f"✅ Built template context with keys: {list(template_context.keys())}")
+            self.logger.info(f"✅ text_context available: {'✅' if template_context.get('text_context') else '❌'}")
+            self.logger.info(f"✅ value available: {'✅' if template_context.get('value') else '❌'}")
+            
             # Route to appropriate handler based on output type
             if output_type == 'webhook':
-                return await self._send_webhook(node_data, output_data)
+                return await self._send_webhook(node_data, output_data, template_context)
             elif output_type == 'email':
-                return await self._send_email(node_data, output_data)
+                return await self._send_email(node_data, output_data, template_context)
             elif output_type == 'discord':
-                return await self._send_discord(node_data, output_data)
+                return await self._send_discord(node_data, output_data, template_context)
             elif output_type == 'sheets':
-                return await self._send_to_sheets(node_data, output_data)
+                return await self._send_to_sheets(node_data, output_data, template_context)
             elif output_type in ['smart_email', 'smart_api']:
                 # These should be handled by AI processing, not traditional
                 return NodeData.from_error(f"Output type '{output_type}' should use AI processing")
@@ -284,7 +318,12 @@ class OutputNode:
                     "success": True,
                     "output_type": output_type,
                     "summary": f"Output processed successfully",
-                    "data": output_data
+                    "data": output_data,
+                    # 🚀 ADD RICH CONTEXT DATA FOR FRONTEND DISPLAY
+                    "text_context": template_context.get('text_context'),
+                    "value": template_context.get('value'),
+                    "rich_content": template_context.get('rich_content'),
+                    "template_context": template_context
                 }
                 
                 # Add rich output representation
@@ -301,61 +340,101 @@ class OutputNode:
             self.logger.error(f"Traditional output processing failed: {str(e)}")
             return NodeData.from_error(f"Output processing failed: {str(e)}")
     
-    async def _send_webhook(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
-        """Send data via webhook"""
-        # Use your existing webhook infrastructure
-        from frameworks.webhook_runner import post_to_webhook
+    async def _send_webhook(self, node_data: Dict[str, Any], output_data: Dict[str, Any], template_context: Dict[str, Any] = None) -> NodeData:
+        """Enhanced webhook sending with rich content preservation"""
+        config = node_data.get('config', {})
+        url = config.get('url', 'https://webhook.site/test')
+        method = config.get('method', 'POST')
+        headers = config.get('headers', {'Content-Type': 'application/json'})
         
-        webhook_url = node_data.get('webhookUrl') or node_data.get('config', {}).get('url')
-        if not webhook_url:
-            # For webhook type, URL is required
-            if node_data.get('outputType') == 'webhook':
-                return NodeData.from_error("Webhook URL is required for webhook output type")
-            else:
-                # For other types, return success with data
-                return NodeData.from_value({
-                    "success": True,
-                    "output_type": node_data.get('outputType', 'unknown'),
-                    "summary": f"Data processed successfully (no webhook configured)",
-                    "data": output_data
-                })
-        
-        # Replace template variables in webhook URL
-        webhook_url = self._replace_template_variables(webhook_url, node_data, output_data)
-        
-        # Validate the URL after template replacement
-        if '{' in webhook_url and '}' in webhook_url:
-            return NodeData.from_error(f"Webhook URL contains unresolved template variables: {webhook_url}")
-        
-        # Prepare payload data with template replacement
-        payload_data = output_data.copy()
-        
-        # If there's a custom webhook payload defined, use it and replace variables
-        if 'webhookPayload' in node_data:
-            custom_payload = node_data['webhookPayload']
-            
-            # Handle different payload formats
-            if isinstance(custom_payload, str):
-                try:
-                    custom_payload = json.loads(custom_payload)
-                    self.logger.info("Parsed webhook payload from JSON string")
-                except json.JSONDecodeError as e:
-                    self.logger.error(f"Failed to parse webhook payload JSON: {e}")
-                    return NodeData.from_error(f"Invalid JSON in webhook payload: {e}")
-            
-            # Replace template variables in the custom payload
-            payload_data = self._replace_template_variables_in_dict(custom_payload, node_data, output_data)
+        # 🚀 CRITICAL FIX: Use template_context if available, otherwise build it
+        if template_context is None:
+            template_context = _build_template_context(output_data)
         
         try:
-            result = await post_to_webhook(webhook_url, payload_data)
-            return NodeData.from_value({
-                "success": True,
-                "output_type": "webhook",
-                "summary": f"Successfully sent data to webhook",
-                "data": result
-            })
+            # Create the payload to send
+            payload = {
+                'timestamp': datetime.now().isoformat(),
+                'data': template_context.get('task_output', output_data),
+                'metadata': {
+                    'node_id': node_data.get('id'),
+                    'execution_id': template_context.get('execution_id'),
+                    'workflow_id': template_context.get('workflow_id')
+                }
+            }
+            
+            # Replace template variables in payload if configured
+            if config.get('use_template', False):
+                template_str = config.get('template', '{{task_output}}')
+                resolved_template = _resolve_template_variables(template_str, template_context)
+                payload['templated_content'] = resolved_template
+            
+            async with aiohttp.ClientSession() as session:
+                if method.upper() == 'GET':
+                    async with session.get(url, headers=headers, params=payload) as response:
+                        response_text = await response.text()
+                        webhook_result = {
+                            'success': response.status < 400,
+                            'status_code': response.status,
+                            'response': response_text,
+                            'url': url,
+                            'method': method
+                        }
+                else:
+                    async with session.request(method, url, json=payload, headers=headers) as response:
+                        response_text = await response.text()
+                        webhook_result = {
+                            'success': response.status < 400,
+                            'status_code': response.status,
+                            'response': response_text,
+                            'url': url,
+                            'method': method
+                        }
+            
+            # 🚀 CRITICAL FIX: Return rich result that includes display data
+            final_result = {
+                'webhook_result': webhook_result,
+                'sent_data': payload,
+                'template_context': template_context,  # Include full context for display
+                # Add display-specific fields
+                'value': template_context.get('task_output'),
+                'text_context': template_context.get('text_context'),
+                'rich_content': template_context.get('rich_content'),
+                'display_data': {
+                    'title': f"Webhook sent to {url}",
+                    'content': template_context.get('text_context', str(template_context.get('task_output', 'No content'))),
+                    'metadata': {
+                        'status': 'success' if webhook_result['success'] else 'error',
+                        'timestamp': datetime.now().isoformat(),
+                        'webhook_status': webhook_result['status_code']
+                    }
+                }
+            }
+            
+            if webhook_result['success']:
+                self.logger.info(f"✅ Webhook sent successfully to {url}")
+                return NodeData.from_value(final_result)
+            else:
+                self.logger.error(f"❌ Webhook failed: {webhook_result['status_code']}")
+                return NodeData.from_error(f"Webhook failed with status {webhook_result['status_code']}: {webhook_result['response']}")
+                
         except Exception as e:
-            return NodeData.from_error(f"Webhook failed: {str(e)}")
+            self.logger.error(f"Exception in webhook sending: {str(e)}")
+            error_result = {
+                'webhook_result': {'success': False, 'error': str(e)},
+                'template_context': template_context,
+                'value': None,
+                'text_context': f"Error: {str(e)}",
+                'display_data': {
+                    'title': f"Webhook Error",
+                    'content': f"Failed to send webhook to {url}: {str(e)}",
+                    'metadata': {
+                        'status': 'error',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                }
+            }
+            return NodeData.from_error(str(e), metadata=error_result)
     
     def _replace_template_variables(self, template: str, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> str:
         """
@@ -485,8 +564,8 @@ class OutputNode:
         else:
             return data
     
-    async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
-        """Send data via email"""
+    async def _send_email(self, node_data: Dict[str, Any], output_data: Dict[str, Any], template_context: Dict[str, Any]) -> NodeData:
+        """Send data via email with enhanced template context"""
         try:
             from frameworks.email_notifier import send_email
         
@@ -529,7 +608,12 @@ class OutputNode:
                         "subject": subject,
                         "status": "sent",
                         "message": result.get('message', 'Email sent successfully')
-                    }
+                    },
+                    # 🚀 ADD RICH CONTEXT DATA FOR FRONTEND DISPLAY
+                    "text_context": template_context.get('text_context'),
+                    "value": template_context.get('value'),
+                    "rich_content": template_context.get('rich_content'),
+                    "template_context": template_context
                 })
             else:
                 error_msg = f"Email failed: {result.get('message', 'Unknown error')}"
@@ -545,8 +629,8 @@ class OutputNode:
             self.logger.error(error_msg)
             return NodeData.from_error(error_msg)
     
-    async def _send_discord(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
-        """Send data to Discord"""
+    async def _send_discord(self, node_data: Dict[str, Any], output_data: Dict[str, Any], template_context: Dict[str, Any]) -> NodeData:
+        """Send data to Discord with enhanced template context"""
         # Implementation for Discord webhook
         webhook_url = node_data.get('webhookUrl') or node_data.get('config', {}).get('url')
         if not webhook_url:
@@ -557,10 +641,10 @@ class OutputNode:
             "content": f"**Workflow Results**\n```json\n{output_data}\n```"
         }
         
-        return await self._send_webhook({"webhookUrl": webhook_url}, discord_payload)
+        return await self._send_webhook({"webhookUrl": webhook_url}, discord_payload, template_context)
     
-    async def _send_to_sheets(self, node_data: Dict[str, Any], output_data: Dict[str, Any]) -> NodeData:
-        """Send data to Google Sheets"""
+    async def _send_to_sheets(self, node_data: Dict[str, Any], output_data: Dict[str, Any], template_context: Dict[str, Any]) -> NodeData:
+        """Send data to Google Sheets with enhanced template context"""
         sheet_id = node_data.get('sheetId') or node_data.get('config', {}).get('sheet_id')
         if not sheet_id:
             return NodeData.from_error("Google Sheet ID is required")
@@ -573,7 +657,12 @@ class OutputNode:
                 "success": True,
                 "output_type": "sheets",
                 "summary": f"Successfully added data to sheet {sheet_id}",
-                "data": {"sheet_id": sheet_id, "rows_added": 1}
+                "data": {"sheet_id": sheet_id, "rows_added": 1},
+                # 🚀 ADD RICH CONTEXT DATA FOR FRONTEND DISPLAY
+                "text_context": template_context.get('text_context'),
+                "value": template_context.get('value'),
+                "rich_content": template_context.get('rich_content'),
+                "template_context": template_context
             })
         except Exception as e:
             return NodeData.from_error(f"Sheets integration failed: {str(e)}")
@@ -1140,103 +1229,217 @@ async def process_output_node(
 
 def _build_template_context(inputs: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
     """
-    Build a comprehensive template context from all available data sources
+    Enhanced template context builder that properly extracts content from standardized formats
     """
     template_context = {}
     
-    # Add context data - handle WorkflowExecutionContext properly
+    # Add context information
     if context:
-        # Check if context is a WorkflowExecutionContext object
-        if hasattr(context, 'to_dict') and callable(context.to_dict):
-            # It's a WorkflowExecutionContext, convert to dict
-            try:
-                context_dict = context.to_dict()
-                template_context.update(context_dict)
-            except Exception as e:
-                logger.warning(f"Failed to convert WorkflowExecutionContext to dict: {e}")
-                # Fallback: extract basic info manually
-                if hasattr(context, 'user_id'):
-                    template_context['user_id'] = context.user_id
-                if hasattr(context, 'workflow_id'):
-                    template_context['workflow_id'] = context.workflow_id
-        elif hasattr(context, '__class__') and context.__class__.__name__ == 'WorkflowExecutionContext':
-            # It's a WorkflowExecutionContext but doesn't have to_dict method
-            logger.warning("WorkflowExecutionContext detected but no to_dict method available")
-            # Extract basic attributes manually
-            try:
-                if hasattr(context, 'user_id'):
-                    template_context['user_id'] = context.user_id
-                if hasattr(context, 'workflow_id'):
-                    template_context['workflow_id'] = context.workflow_id
-                if hasattr(context, 'get_execution_metadata'):
-                    metadata = context.get_execution_metadata()
-                    template_context.update(metadata)
-            except Exception as e:
-                logger.warning(f"Failed to extract WorkflowExecutionContext attributes: {e}")
-        elif isinstance(context, dict):
-            # It's a regular dictionary, safe to update
-            template_context.update(context)
-        else:
-            # Unknown context type, log warning and skip
-            logger.warning(f"Unknown context type: {type(context)}, skipping context update")
-    
-    # Process inputs and extract meaningful variables
-    for input_key, input_value in inputs.items():
-        if isinstance(input_value, dict):
-            # Handle agent results
-            if 'result' in input_value:
-                template_context['task_output'] = str(input_value['result'])
-                template_context['agent_result'] = str(input_value['result'])
-            
-            # Handle text outputs
-            if 'text_output' in input_value:
-                template_context['task_output'] = str(input_value['text_output'])
-                template_context['text_output'] = str(input_value['text_output'])
-            
-            # Handle output field
-            if 'output' in input_value:
-                template_context['task_output'] = str(input_value['output'])
-                template_context['output'] = str(input_value['output'])
-            
-            # Handle standardized API data
-            if input_value.get('type') == 'api_data' and 'api_data' in input_value:
-                api_data = input_value['api_data']
-                service_name = input_value.get('service_name', 'API')
-                
-                # Format standardized data for output
-                if isinstance(api_data, dict) and 'records' in api_data:
-                    records = api_data['records']
-                    
-                    # Create formatted output for different output types
-                    template_context['api_data'] = api_data
-                    template_context['records'] = records
-                    template_context['record_count'] = len(records)
-                    template_context['service_name'] = service_name
-                    
-                    # Create formatted text representation
-                    formatted_text = _format_records_for_output(records, service_name)
-                    template_context['formatted_data'] = formatted_text
-                    template_context['task_output'] = formatted_text  # Default output
-            
-            # Handle nested data
-            for nested_key, nested_value in input_value.items():
-                if isinstance(nested_value, (str, int, float, bool)):
-                    template_context[f"{input_key}_{nested_key}"] = nested_value
+        template_context.update({
+            'user_id': context.get('user_id'),
+            'workflow_id': context.get('workflow_id'),
+            'execution_id': context.get('execution_id', f'exec_{int(datetime.now().timestamp())}'),
+            'execution_timestamp': datetime.now().isoformat(),
+            'user_keys': context.get('user_keys', {}),
+            'context_key': context.get('context_key', 'unknown'),
+        })
         
-        elif isinstance(input_value, (str, int, float, bool)):
-            template_context[input_key] = input_value
+        # Extract user API keys info
+        user_keys = context.get('user_keys', {})
+        if user_keys:
+            template_context.update({
+                'available_providers': list(user_keys.keys()),
+                'total_api_keys': len(user_keys)
+            })
     
-    # Ensure we have a task_output
-    if 'task_output' not in template_context:
-        # Try to find any meaningful output
-        for key, value in template_context.items():
-            if 'output' in key.lower() or 'result' in key.lower():
-                template_context['task_output'] = str(value)
-                break
+    # 🚀 ENHANCED: Extract task output with multiple fallback strategies
+    task_output = None
+    text_content = None
+    all_extracted_data = {}
+    rich_content_parts = []
+    
+    logger.info(f"🔧 Building template context from {len(inputs)} inputs")
+    
+    for key, value in inputs.items():
+        logger.info(f"Processing input '{key}': {type(value)}")
+        
+        # Strategy 1: Extract from NodeData wrapper
+        if hasattr(value, 'value'):
+            extracted_value = value.value
+            logger.info(f"  - Extracted from NodeData: {type(extracted_value)}")
         else:
-            template_context['task_output'] = "No output available"
+            extracted_value = value
+        
+        # Strategy 2: Extract from standardized format
+        if isinstance(extracted_value, dict):
+            if "success" in extracted_value and "data" in extracted_value:
+                if extracted_value["success"]:
+                    clean_data = extracted_value["data"]
+                    all_extracted_data[key] = clean_data
+                    
+                    # 🚀 ENHANCED: Better content extraction with type detection
+                    if isinstance(clean_data, str):
+                        # Direct string content
+                        if not text_content:
+                            text_content = clean_data
+                        rich_content_parts.append(f"**{key}**: {clean_data}")
+                        logger.info(f"  ✅ Found text content from {key}: {len(clean_data)} chars")
+                    elif isinstance(clean_data, dict):
+                        # Look for known content fields
+                        content_value = (
+                            clean_data.get('result') or
+                            clean_data.get('output') or 
+                            clean_data.get('content') or
+                            clean_data.get('text') or
+                            clean_data.get('response') or
+                            clean_data.get('answer')
+                        )
+                        if content_value and isinstance(content_value, str):
+                            if not text_content:
+                                text_content = content_value
+                            rich_content_parts.append(f"**{key}**: {content_value}")
+                            logger.info(f"  ✅ Found nested text content from {key}: {len(content_value)} chars")
+                        else:
+                            # Fallback: stringify the whole object meaningfully
+                            if clean_data:
+                                formatted_data = json.dumps(clean_data, indent=2, ensure_ascii=False)
+                                rich_content_parts.append(f"**{key}**:\n```json\n{formatted_data}\n```")
+                                if not text_content:
+                                    text_content = formatted_data
+                                logger.info(f"  ✅ Found structured content from {key}")
+                    elif isinstance(clean_data, list) and clean_data:
+                        # Handle lists of data
+                        if all(isinstance(item, str) for item in clean_data):
+                            # List of strings
+                            list_content = "\n".join(f"• {item}" for item in clean_data)
+                            rich_content_parts.append(f"**{key}**:\n{list_content}")
+                            if not text_content:
+                                text_content = list_content
+                        else:
+                            # List of objects
+                            formatted_list = json.dumps(clean_data, indent=2, ensure_ascii=False)
+                            rich_content_parts.append(f"**{key}**:\n```json\n{formatted_list}\n```")
+                            if not text_content:
+                                text_content = formatted_list
+                        logger.info(f"  ✅ Found list content from {key}: {len(clean_data)} items")
+                    
+                    # Always set as task_output if we haven't found one yet
+                    if task_output is None:
+                        task_output = clean_data
+                        logger.info(f"  ✅ Set task_output from {key}: {type(clean_data)}")
+                else:
+                    logger.warning(f"  ⚠️ Input {key} failed: {extracted_value.get('error')}")
+                    continue
+            
+            # Strategy 3: Extract from _clean_data field
+            elif "_clean_data" in extracted_value:
+                clean_data = extracted_value["_clean_data"]
+                all_extracted_data[key] = clean_data
+                if task_output is None:
+                    task_output = clean_data
+                    logger.info(f"  ✅ Found task_output from _clean_data in {key}")
+            
+            # Strategy 4: Look for direct task/agent result fields
+            elif any(field in extracted_value for field in ['result', 'output', 'text_output', 'response', 'content', 'answer']):
+                # Extract the actual content
+                content = (extracted_value.get('result') or 
+                          extracted_value.get('output') or 
+                          extracted_value.get('text_output') or 
+                          extracted_value.get('response') or
+                          extracted_value.get('content') or
+                          extracted_value.get('answer'))
+                all_extracted_data[key] = content
+                if task_output is None and content:
+                    task_output = content
+                    logger.info(f"  ✅ Found task_output from result field in {key}")
+                
+                # Add to rich content
+                if isinstance(content, str):
+                    rich_content_parts.append(f"**{key}**: {content}")
+                    if not text_content:
+                        text_content = content
+                elif content:
+                    formatted_content = json.dumps(content, indent=2, ensure_ascii=False)
+                    rich_content_parts.append(f"**{key}**:\n```json\n{formatted_content}\n```")
+                    if not text_content:
+                        text_content = formatted_content
+            
+            # Strategy 5: Use the whole dict as fallback
+            else:
+                all_extracted_data[key] = extracted_value
+                if task_output is None:
+                    task_output = extracted_value
+                
+                # Try to create meaningful text from the whole object
+                if extracted_value:
+                    formatted_data = json.dumps(extracted_value, indent=2, ensure_ascii=False)
+                    rich_content_parts.append(f"**{key}**:\n```json\n{formatted_data}\n```")
+                    if not text_content:
+                        text_content = formatted_data
+        else:
+            # Direct value (string, number, etc.)
+            all_extracted_data[key] = extracted_value
+            if task_output is None:
+                task_output = extracted_value
+            
+            # Add to rich content
+            if isinstance(extracted_value, str):
+                rich_content_parts.append(f"**{key}**: {extracted_value}")
+                if not text_content:
+                    text_content = extracted_value
+            elif extracted_value is not None:
+                str_value = str(extracted_value)
+                rich_content_parts.append(f"**{key}**: {str_value}")
+                if not text_content:
+                    text_content = str_value
     
-    logger.info(f"Built template context with keys: {list(template_context.keys())}")
+    # 🚀 CRITICAL FIX: Ensure task_output and text_context are always populated
+    if task_output is not None:
+        template_context['task_output'] = task_output
+        logger.info(f"✅ Set task_output in template context: {type(task_output)}")
+    else:
+        # Provide a meaningful fallback
+        if all_extracted_data:
+            template_context['task_output'] = all_extracted_data
+            logger.info("✅ Set fallback task_output from all_extracted_data")
+        else:
+            template_context['task_output'] = "No output data available"
+            logger.warning("⚠️ NO task_output found - using fallback message")
+    
+    # 🚀 NEW: Always provide text_context for rich display
+    if text_content:
+        template_context['text_context'] = text_content
+        logger.info(f"✅ Set text_context: {len(text_content)} chars")
+    elif rich_content_parts:
+        template_context['text_context'] = "\n\n".join(rich_content_parts)
+        logger.info(f"✅ Set rich text_context from {len(rich_content_parts)} parts")
+    else:
+        template_context['text_context'] = template_context.get('task_output', "No content available")
+        logger.info("✅ Set fallback text_context")
+    
+    # 🚀 NEW: Add rich formatted content for display
+    if rich_content_parts:
+        template_context['rich_content'] = "\n\n".join(rich_content_parts)
+        template_context['content_parts'] = rich_content_parts
+        logger.info(f"✅ Built rich content with {len(rich_content_parts)} parts")
+    
+    # Add all extracted data to context for template variables
+    template_context.update(all_extracted_data)
+    
+    # Add convenience fields for common template patterns
+    template_context.update({
+        'content': text_content or task_output,
+        'data': all_extracted_data,
+        'output': task_output,
+        'result': task_output,
+        'value': text_content or task_output,  # Ensure 'value' is always present
+        'timestamp': datetime.now().isoformat()
+    })
+    
+    logger.info(f"✅ Built template context with keys: {list(template_context.keys())}")
+    logger.info(f"✅ text_context: {'✅' if template_context.get('text_context') else '❌'}")
+    logger.info(f"✅ value: {'✅' if template_context.get('value') else '❌'}")
+    
     return template_context
 
 def _format_records_for_output(records: List[Dict[str, Any]], service_name: str) -> str:
@@ -1289,7 +1492,6 @@ async def _process_webhook_output(node_data: Dict[str, Any], template_context: D
         resolved_payload = _resolve_template_variables(webhook_payload, template_context)
         
         # Make the webhook request
-        import aiohttp
         async with aiohttp.ClientSession() as session:
             if webhook_method.upper() == 'GET':
                 async with session.get(resolved_url, headers=resolved_headers, params=resolved_payload) as response:
@@ -1302,7 +1504,7 @@ async def _process_webhook_output(node_data: Dict[str, Any], template_context: D
                         "method": webhook_method
                     }
             else:
-                async with session.post(resolved_url, headers=resolved_headers, json=resolved_payload) as response:
+                async with session.request(webhook_method, resolved_url, json=resolved_payload, headers=resolved_headers) as response:
                     response_text = await response.text()
                     return {
                         "success": True,

@@ -1,0 +1,411 @@
+{
+  "test_timestamp": "2025-06-08T03:14:36.954668",
+  "system_stats": {
+    "total_categories": 7,
+    "total_platforms": 17,
+    "categories": {
+      "communication": {
+        "platforms": [
+          "slack",
+          "discord",
+          "teams"
+        ],
+        "platform_count": 3,
+        "runner_class": "CommunicationIntegrationRunner",
+        "has_custom_auth": [
+          "slack",
+          "discord",
+          "teams"
+        ],
+        "has_transformers": [
+          "slack",
+          "discord",
+          "teams"
+        ],
+        "category": "communication",
+        "supported_platforms": [
+          "slack",
+          "discord",
+          "teams"
+        ],
+        "registered_platforms": [
+          "slack",
+          "discord",
+          "teams"
+        ]
+      },
+      "productivity": {
+        "platforms": [
+          "notion",
+          "airtable",
+          "googlesheets"
+        ],
+        "platform_count": 3,
+        "runner_class": "ProductivityIntegrationRunner",
+        "has_custom_auth": [
+          "notion",
+          "airtable",
+          "googlesheets"
+        ],
+        "has_transformers": [
+          "notion",
+          "airtable",
+          "googlesheets"
+        ],
+        "category": "productivity",
+        "supported_platforms": [
+          "notion",
+          "airtable",
+          "googlesheets"
+        ],
+        "registered_platforms": [
+          "notion",
+          "airtable",
+          "googlesheets"
+        ]
+      },
+      "developer": {
+        "platforms": [
+          "github",
+          "gitlab",
+          "webhook"
+        ],
+        "platform_count": 3,
+        "runner_class": "DeveloperIntegrationRunner",
+        "has_custom_auth": [
+          "github",
+          "gitlab",
+          "webhook"
+        ],
+        "has_transformers": [
+          "github",
+          "gitlab",
+          "webhook"
+        ],
+        "category": "developer",
+        "supported_platforms": [
+          "github",
+          "gitlab",
+          "webhook"
+        ],
+        "registered_platforms": [
+          "github",
+          "gitlab",
+          "webhook"
+        ]
+      },
+      "marketing": {
+        "platforms": [
+          "mailchimp",
+          "sendgrid"
+        ],
+        "platform_count": 2,
+        "runner_class": "MarketingIntegrationRunner",
+        "has_custom_auth": [
+          "mailchimp",
+          "sendgrid"
+        ],
+        "has_transformers": [
+          "mailchimp",
+          "sendgrid"
+        ],
+        "category": "marketing",
+        "supported_platforms": [
+          "mailchimp",
+          "sendgrid"
+        ],
+        "registered_platforms": [
+          "mailchimp",
+          "sendgrid"
+        ]
+      },
+      "crm": {
+        "platforms": [
+          "hubspot",
+          "salesforce"
+        ],
+        "platform_count": 2,
+        "runner_class": "CRMIntegrationRunner",
+        "has_custom_auth": [
+          "hubspot",
+          "salesforce"
+        ],
+        "has_transformers": [
+          "hubspot",
+          "salesforce"
+        ],
+        "category": "crm",
+        "supported_platforms": [
+          "hubspot",
+          "salesforce"
+        ],
+        "registered_platforms": [
+          "hubspot",
+          "salesforce"
+        ]
+      },
+      "ecommerce": {
+        "platforms": [
+          "shopify",
+          "stripe"
+        ],
+        "platform_count": 2,
+        "runner_class": "EcommerceIntegrationRunner",
+        "has_custom_auth": [
+          "shopify",
+          "stripe"
+        ],
+        "has_transformers": [
+          "shopify",
+          "stripe"
+        ],
+        "category": "ecommerce",
+        "supported_platforms": [
+          "shopify",
+          "stripe"
+        ],
+        "registered_platforms": [
+          "shopify",
+          "stripe"
+        ]
+      },
+      "storage": {
+        "platforms": [
+          "google_drive",
+          "dropbox"
+        ],
+        "platform_count": 2,
+        "runner_class": "StorageIntegrationRunner",
+        "has_custom_auth": [
+          "google_drive",
+          "dropbox"
+        ],
+        "has_transformers": [
+          "google_drive",
+          "dropbox"
+        ],
+        "category": "storage",
+        "supported_platforms": [
+          "google_drive",
+          "dropbox"
+        ],
+        "registered_platforms": [
+          "google_drive",
+          "dropbox"
+        ]
+      }
+    },
+    "generated_at": "2025-06-08 03:14:36.953670"
+  },
+  "category_tests": {
+    "communication": {
+      "platform": "slack",
+      "action": "send_message",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": true,
+      "platform_config": {
+        "base_url": "https://slack.com/api",
+        "auth_type": "bearer",
+        "headers": {
+          "Content-Type": "application/json; charset=utf-8"
+        },
+        "default_params": {
+          "mrkdwn": true
+        },
+        "test_endpoint": "auth.test",
+        "rate_limits": {
+          "tier1": 1,
+          "tier2": 20,
+          "tier3": 50,
+          "tier4": 100
+        }
+      }
+    },
+    "marketing": {
+      "platform": "mailchimp",
+      "action": "send_email",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": true,
+      "platform_config": {
+        "base_url": "https://{dc}.api.mailchimp.com/3.0",
+        "auth_type": "api_key",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "endpoints": {
+          "lists": "/lists",
+          "list_members": "/lists/{list_id}/members",
+          "add_member": "/lists/{list_id}/members",
+          "campaigns": "/campaigns",
+          "create_campaign": "/campaigns",
+          "send_campaign": "/campaigns/{campaign_id}/actions/send",
+          "templates": "/templates",
+          "reports": "/reports"
+        },
+        "rate_limits": {
+          "requests_per_second": 10,
+          "burst_limit": 50
+        }
+      }
+    },
+    "crm": {
+      "platform": "hubspot",
+      "action": "create_contact",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": true,
+      "platform_config": {
+        "base_url": "https://api.hubapi.com",
+        "auth_type": "bearer",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "endpoints": {
+          "contacts": "/crm/v3/objects/contacts",
+          "create_contact": "/crm/v3/objects/contacts",
+          "update_contact": "/crm/v3/objects/contacts/{contact_id}",
+          "deals": "/crm/v3/objects/deals",
+          "create_deal": "/crm/v3/objects/deals",
+          "companies": "/crm/v3/objects/companies",
+          "create_company": "/crm/v3/objects/companies",
+          "tickets": "/crm/v3/objects/tickets",
+          "search": "/crm/v3/objects/{object_type}/search"
+        },
+        "rate_limits": {
+          "requests_per_second": 10,
+          "burst_limit": 100
+        }
+      }
+    },
+    "ecommerce": {
+      "platform": "stripe",
+      "action": "process_payment",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": true,
+      "platform_config": {
+        "base_url": "https://api.stripe.com/v1",
+        "auth_type": "bearer",
+        "headers": {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        "endpoints": {
+          "customers": "/customers",
+          "create_customer": "/customers",
+          "charges": "/charges",
+          "create_charge": "/charges",
+          "payment_intents": "/payment_intents",
+          "create_payment_intent": "/payment_intents",
+          "subscriptions": "/subscriptions",
+          "create_subscription": "/subscriptions",
+          "products": "/products",
+          "create_product": "/products",
+          "prices": "/prices",
+          "create_price": "/prices"
+        },
+        "rate_limits": {
+          "requests_per_second": 25,
+          "burst_limit": 100
+        }
+      }
+    },
+    "storage": {
+      "platform": "google_drive",
+      "action": "upload_file",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": true,
+      "platform_config": {
+        "base_url": "https://www.googleapis.com/drive/v3",
+        "upload_url": "https://www.googleapis.com/upload/drive/v3",
+        "auth_type": "oauth2",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "endpoints": {
+          "files": "/files",
+          "upload": "/files",
+          "create_folder": "/files",
+          "list_files": "/files",
+          "get_file": "/files/{file_id}",
+          "update_file": "/files/{file_id}",
+          "delete_file": "/files/{file_id}",
+          "permissions": "/files/{file_id}/permissions",
+          "share": "/files/{file_id}/permissions"
+        },
+        "scopes": [
+          "https://www.googleapis.com/auth/drive",
+          "https://www.googleapis.com/auth/drive.file"
+        ],
+        "rate_limits": {
+          "requests_per_second": 10,
+          "burst_limit": 100
+        }
+      }
+    },
+    "productivity": {
+      "platform": "notion",
+      "action": "create_page",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": false,
+      "platform_config": {
+        "base_url": "https://api.notion.com/v1",
+        "auth_type": "bearer",
+        "headers": {
+          "Notion-Version": "2022-06-28",
+          "Content-Type": "application/json"
+        },
+        "endpoints": {
+          "create_page": "/pages",
+          "update_page": "/pages/{page_id}",
+          "query_database": "/databases/{database_id}/query",
+          "create_database": "/databases",
+          "search": "/search"
+        },
+        "rate_limits": {
+          "requests_per_second": 3,
+          "burst_limit": 10
+        }
+      }
+    },
+    "developer": {
+      "platform": "github",
+      "action": "create_issue",
+      "status": "configured",
+      "has_auth_handler": true,
+      "has_transformer": true,
+      "has_method": false,
+      "platform_config": {
+        "base_url": "https://api.github.com",
+        "auth_type": "bearer",
+        "headers": {
+          "Accept": "application/vnd.github.v3+json",
+          "Content-Type": "application/json"
+        },
+        "endpoints": {
+          "list_repos": "/user/repos",
+          "get_repo": "/repos/{owner}/{repo}",
+          "create_issue": "/repos/{owner}/{repo}/issues",
+          "list_issues": "/repos/{owner}/{repo}/issues",
+          "create_pull_request": "/repos/{owner}/{repo}/pulls",
+          "list_pull_requests": "/repos/{owner}/{repo}/pulls",
+          "get_user": "/user",
+          "list_commits": "/repos/{owner}/{repo}/commits"
+        },
+        "rate_limits": {
+          "requests_per_hour": 5000,
+          "burst_limit": 100
+        }
+      }
+    }
+  }
+}

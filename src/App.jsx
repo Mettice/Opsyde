@@ -10,9 +10,12 @@ import APIKeyManager from './components/APIKeyManager';
 import WorkflowDashboard from './components/WorkflowDashboard';
 import NavHeader from './components/profile/NavHeader';
 import FrameworkModelDemo from './components/demo/FrameworkModelDemo';
+import LinkedInOutreachTemplate from './components/templates/LinkedInOutreachTemplate';
+import IntegrationDemo from './components/IntegrationDemo';
 import './App.css';
 import { Toaster } from 'react-hot-toast';
 import HelpPanel from './components/HelpPanel';
+import { LLMProvider } from './contexts/LLMContext';
 
 // Protected route component
 function ProtectedRoute({ children }) {
@@ -62,62 +65,74 @@ function AppLayout({ children }) {
 
 function App() {
   return (
-    <Router>
+    <LLMProvider>
       <AuthProvider>
         <Toaster position="top-right" />
-        <Routes>
-          <Route path="/" element={
-            <AppLayout>
-              <HomePage />
-            </AppLayout>
-          } />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/dashboard" element={
-            <ProtectedRoute>
+        <Router>
+          <Routes>
+            <Route path="/" element={
               <AppLayout>
-                <Dashboard />
+                <HomePage />
               </AppLayout>
-            </ProtectedRoute>
-          } />
-          <Route path="/profile" element={
-            <ProtectedRoute>
-              <Navigate to="/dashboard" replace />
-            </ProtectedRoute>
-          } />
-          <Route path="/builder" element={
-            <ProtectedRoute>
-              <Builder/>
-            </ProtectedRoute>
-          } />
-          <Route path="/api-key-manager" element={
-            <AppLayout>
-              <APIKeyManager />
-            </AppLayout>
-          } />
-          <Route path="/api-keys" element={
-            <AppLayout>
-              <APIKeyManager />
-            </AppLayout>
-          } />
-          <Route path="/workflows" element={
-            <ProtectedRoute>
-              <WorkflowDashboard />
-            </ProtectedRoute>
-          } />
-          <Route path="/framework-models" element={
-            <AppLayout>
-              <FrameworkModelDemo />
-            </AppLayout>
-          } />
-          <Route path="/demo" element={
-            <AppLayout>
-              <FrameworkModelDemo />
-            </AppLayout>
-          } />
-        </Routes>
+            } />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Dashboard />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/profile" element={
+              <ProtectedRoute>
+                <Navigate to="/dashboard" replace />
+              </ProtectedRoute>
+            } />
+            <Route path="/builder" element={
+              <ProtectedRoute>
+                <Builder/>
+              </ProtectedRoute>
+            } />
+            <Route path="/api-key-manager" element={
+              <AppLayout>
+                <APIKeyManager />
+              </AppLayout>
+            } />
+            <Route path="/api-keys" element={
+              <AppLayout>
+                <APIKeyManager />
+              </AppLayout>
+            } />
+            <Route path="/workflows" element={
+              <ProtectedRoute>
+                <WorkflowDashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/framework-models" element={
+              <AppLayout>
+                <FrameworkModelDemo />
+              </AppLayout>
+            } />
+            <Route path="/demo" element={
+              <AppLayout>
+                <FrameworkModelDemo />
+              </AppLayout>
+            } />
+            <Route path="/linkedin-outreach-template" element={
+              <AppLayout>
+                <LinkedInOutreachTemplate />
+              </AppLayout>
+            } />
+            <Route path="/integration-demo" element={
+              <AppLayout>
+                <IntegrationDemo />
+              </AppLayout>
+            } />
+          </Routes>
+        </Router>
       </AuthProvider>
-    </Router>
+    </LLMProvider>
   );
 }
 

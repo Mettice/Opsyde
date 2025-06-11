@@ -29,46 +29,64 @@ FRAMEWORK_METADATA = {
         "name": "AutoGen",
         "requires_llm": True,
         "supports_tools": True,
-        "supports_memory": True,
+        "supports_memory": False,
         "supports_multi_agent": True,
-        "required_fields": ["systemMessage", "agentType"],
-        "optional_fields": ["tools", "memory", "maxRounds"]
+        "required_fields": ["agentType"],
+        "optional_fields": ["tools", "maxMessages", "temperature", "maxTokens"]
     },
     "llamaindex": {
         "name": "LlamaIndex",
         "requires_llm": True,
         "supports_tools": False,
-        "supports_memory": False,
+        "supports_memory": True,
         "supports_multi_agent": False,
         "required_fields": ["indexType", "documentsSource"],
-        "optional_fields": ["chunkSize", "overlap"]
+        "optional_fields": ["queryMode", "temperature", "maxTokens", "chunkSize"]
     },
-    "huggingface": {
-        "name": "HuggingFace",
-        "requires_llm": False,
+    "openai": {
+        "name": "OpenAI",
+        "requires_llm": True,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "required_fields": ["modelName"],
-        "optional_fields": ["temperature", "maxTokens"]
+        "required_fields": ["model"],
+        "optional_fields": ["temperature", "maxTokens", "tools", "systemMessage"]
     },
-    "api": {
-        "name": "Generic API",
-        "requires_llm": False,
-        "supports_tools": True,
-        "supports_memory": False,
-        "supports_multi_agent": False,
-        "required_fields": [],
-        "optional_fields": ["url", "method", "headers"]
-    },
-    "openrouter": {
-        "name": "OpenRouter",
-        "requires_llm": False,  # OpenRouter IS the LLM provider
+    "anthropic": {
+        "name": "Anthropic",
+        "requires_llm": True,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["model"],
         "optional_fields": ["temperature", "maxTokens", "systemMessage"]
+    },
+    "perplexity": {
+        "name": "Perplexity AI",
+        "requires_llm": True,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["model"],
+        "optional_fields": ["temperature", "maxTokens", "systemMessage"]
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "requires_llm": True,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["model"],
+        "optional_fields": ["temperature", "maxTokens", "tools", "systemMessage"]
+    },
+    "huggingface": {
+        "name": "Hugging Face",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["model", "task"],
+        "optional_fields": ["temperature", "maxTokens", "use_cache"]
     },
     "universal_api": {
         "name": "Universal API",
@@ -77,7 +95,236 @@ FRAMEWORK_METADATA = {
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["api_service_name"],
-        "optional_fields": ["api_endpoint_hint", "ai_description", "api_research_result"]
+        "optional_fields": ["auth_token", "endpoint", "headers", "api_key"],
+        "description": "Universal API integration for any REST/GraphQL service"
+    },
+    "api": {
+        "name": "Generic API",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["endpoint"],
+        "optional_fields": ["method", "headers", "auth_token", "api_key"],
+        "description": "Generic API tool for REST calls"
+    },
+    "webhook": {
+        "name": "Webhook",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["url"],
+        "optional_fields": ["method", "headers", "auth_token"],
+        "description": "HTTP webhook calls and notifications"
+    },
+    "communication": {
+        "name": "Communication",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "channel_id", "user_id", "platform"],
+        "supported_platforms": ["slack", "discord", "teams"],
+        "description": "Communication platforms integration"
+    },
+    "productivity": {
+        "name": "Productivity",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "workspace_id", "database_id", "platform"],
+        "supported_platforms": ["notion", "airtable", "googlesheets"],
+        "description": "Productivity and workspace tools"
+    },
+    "developer": {
+        "name": "Developer Tools",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "repo_name", "org_name", "platform"],
+        "supported_platforms": ["github", "gitlab", "webhook"],
+        "description": "Developer tools and version control"
+    },
+    "marketing": {
+        "name": "Marketing",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "list_id", "campaign_id", "platform"],
+        "supported_platforms": ["mailchimp", "sendgrid"],
+        "description": "Marketing automation and email campaigns"
+    },
+    "crm": {
+        "name": "CRM",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "contact_id", "deal_id", "platform"],
+        "supported_platforms": ["hubspot", "salesforce"],
+        "description": "Customer relationship management"
+    },
+    "social_media": {
+        "name": "Social Media",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "page_id", "user_id", "platform"],
+        "supported_platforms": ["linkedin", "facebook", "whatsapp", "telegram"],
+        "description": "Social media platforms integration"
+    },
+    "ecommerce": {
+        "name": "E-commerce",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "shop_name", "product_id", "platform"],
+        "supported_platforms": ["shopify", "stripe"],
+        "description": "Online store and payment processing"
+    },
+    "storage": {
+        "name": "Storage",
+        "requires_llm": False,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["api_service_name"],
+        "optional_fields": ["auth_token", "folder_id", "file_path", "platform"],
+        "supported_platforms": ["google_drive", "dropbox"],
+        "description": "Cloud storage and file management"
+    },
+    "task": {
+        "name": "Task",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["description"],
+        "optional_fields": ["expectedOutput", "agentId"],
+        "description": "Task execution node"
+    },
+    "logic": {
+        "name": "Logic",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["condition"],
+        "optional_fields": [],
+        "description": "Logic gate and conditional routing"
+    },
+    "trigger": {
+        "name": "Trigger",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["triggerType"],
+        "optional_fields": ["scheduleType", "runAt", "interval"],
+        "description": "Workflow trigger and scheduling"
+    },
+    "input": {
+        "name": "Input",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": [],
+        "optional_fields": ["defaultValue", "inputType"],
+        "description": "Input data collection"
+    },
+    "output": {
+        "name": "Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["outputType"],
+        "optional_fields": ["destination", "template"],
+        "description": "Output data routing"
+    },
+    "output_webhook": {
+        "name": "Webhook Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["webhook_url"],
+        "optional_fields": ["method", "headers"],
+        "description": "Webhook output destination"
+    },
+    "output_email": {
+        "name": "Email Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["to", "subject"],
+        "optional_fields": ["cc", "bcc", "template"],
+        "description": "Email output destination"
+    },
+    "output_file": {
+        "name": "File Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["file_path"],
+        "optional_fields": ["format", "encoding"],
+        "description": "File output destination"
+    },
+    "output_database": {
+        "name": "Database Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["connection_string", "table"],
+        "optional_fields": ["schema", "batch_size"],
+        "description": "Database output destination"
+    },
+    "output_cms": {
+        "name": "CMS Output",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["cms_type"],
+        "optional_fields": ["api_key", "content_type"],
+        "description": "Content management system output"
+    },
+    "delay": {
+        "name": "Delay",
+        "requires_llm": False,
+        "supports_tools": False,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["duration"],
+        "optional_fields": ["unit"],
+        "description": "Workflow delay and timing"
+    },
+    "chat": {
+        "name": "Chat",
+        "requires_llm": True,
+        "supports_tools": False,
+        "supports_memory": True,
+        "supports_multi_agent": False,
+        "required_fields": ["prompt"],
+        "optional_fields": ["model", "temperature", "max_tokens"],
+        "description": "Chat and conversational AI"
     }
 }
 
@@ -299,6 +546,36 @@ class EnhancedFrameworkRegistry:
             logger.error(f"❌ Universal API runner failed with unexpected error: {e}")
         
         try:
+            logger.info("🔧 Attempting to import Social Media runner...")
+            from frameworks.social_media_runner import run_social_media_tool
+            self.register("social_media", run_social_media_tool)
+            logger.info("✅ Social Media runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ Social Media runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ Social Media runner failed with unexpected error: {e}")
+        
+        try:
+            logger.info("🔧 Attempting to import Integration Manager...")
+            from frameworks.integration_manager import run_integration_tool
+            self.register("integration_manager", run_integration_tool)
+            logger.info("✅ Integration Manager registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ Integration Manager not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ Integration Manager failed with unexpected error: {e}")
+        
+        try:
+            logger.info("🔧 Attempting to import Communication runner...")
+            from frameworks.integration_runners.communication_runner import run_communication_tool
+            self.register("communication", run_communication_tool)
+            logger.info("✅ Communication runner registered successfully")
+        except ImportError as e:
+            logger.warning(f"❌ Communication runner not available: {e}")
+        except Exception as e:
+            logger.error(f"❌ Communication runner failed with unexpected error: {e}")
+        
+        try:
             logger.info("🔧 Attempting to register Generic API handler...")
             # Register generic API handler that routes to appropriate tool runner
             async def run_generic_api_tool(config, inputs, context=None):
@@ -326,7 +603,7 @@ class EnhancedFrameworkRegistry:
                     elif config.get('toolType') == 'universal_api' or config.get('api_service_name'):
                         logger.info("🌐 Routing to Universal API handler")
                         from frameworks.universal_api_runner import run_universal_api_tool
-                        return await run_universal_api_tool(config, inputs, context)
+                        return await run_universal_api_tool(config, inputs)
                     
                     # Otherwise treat as generic API tool
                     else:
@@ -527,6 +804,9 @@ class EnhancedFrameworkRegistry:
                     availability[framework] = True
                 elif framework == "api":
                     # Generic API is always available as it's built-in
+                    availability[framework] = True
+                elif framework == "social_media":
+                    # Social Media is always available as it's built-in
                     availability[framework] = True
                 else:
                     availability[framework] = False

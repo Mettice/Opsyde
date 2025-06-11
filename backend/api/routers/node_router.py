@@ -765,3 +765,90 @@ async def run_universal_api_tool_endpoint(
     except Exception as e:
         logger.error(f"Error running universal API tool: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/input")
+async def run_input_enhanced(
+    data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Enhanced input node execution with LLM-centric processing and multimodal support
+    Supports text, file, URL, and multimodal inputs with intelligent processing
+    """
+    try:
+        logger.info("🎯 Enhanced input node endpoint called")
+        
+        # Extract node, inputs, and context from request
+        node_data = data.get("node", {})
+        inputs = data.get("inputs", {})
+        context = data.get("context", {})
+        
+        node_id = node_data.get("id", "unknown")
+        node_type = node_data.get("type", "input")
+        node_config = node_data.get("data", {})
+        
+        logger.info(f"Processing input node: {node_id}, type: {node_config.get('inputType', 'text')}")
+        
+        # Use the enhanced input node processor
+        from nodes.input_node import InputNode
+        
+        input_processor = InputNode()
+        result = await input_processor.process(node_config, inputs, context)
+        
+        # Format response for frontend consumption
+        if result.is_error():
+            return {
+                "success": False,
+                "error": result.get_error(),
+                "data": None,
+                "metadata": {
+                    "node_id": node_id,
+                    "node_type": node_type,
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+        else:
+            result_value = result.get_value()
+            
+            # Ensure we have the standardized format
+            if isinstance(result_value, dict) and "data" in result_value:
+                return {
+                    "success": result_value.get("success", True),
+                    "data": result_value.get("data", {}),
+                    "metadata": result_value.get("metadata", {}),
+                    "error": result_value.get("error"),
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                # Fallback format
+                return {
+                    "success": True,
+                    "data": {
+                        "type": "input_result",
+                        "value": result_value,
+                        "text_content": str(result_value) if result_value else ""
+                    },
+                    "metadata": {
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "timestamp": datetime.now().isoformat(),
+                        "llm_processed": False
+                    },
+                    "error": None
+                }
+        
+    except Exception as e:
+        logger.error(f"Error in enhanced input node endpoint: {str(e)}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
+        return {
+            "success": False,
+            "error": str(e),
+            "data": None,
+            "metadata": {
+                "node_id": data.get("node", {}).get("id", "unknown"),
+                "node_type": "input",
+                "timestamp": datetime.now().isoformat(),
+                "error_type": type(e).__name__
+            }
+        }

@@ -56,6 +56,151 @@ class UnifiedRunner:
         """
         return get_node_inputs(node_id, edges, node_results, global_inputs or {}, nodes)
     
+    def standardize_node_result(self, raw_result: Any, node_type: str, node_id: str, node_data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Standardize node results into a consistent format:
+        {
+            "success": bool,
+            "data": Any,  # The actual meaningful content
+            "error": str | None,
+            "metadata": {
+                "node_type": str,
+                "node_id": str,
+                "execution_time": float,
+                "timestamp": str,
+                "framework": str | None
+            }
+        }
+        """
+        try:
+            # 🚀 CRITICAL FIX: Extract framework information from node_data if provided
+            framework = None
+            if node_data:
+                # Strategy 1: Direct framework field
+                if node_data.get("framework"):
+                    framework = node_data.get("framework")
+                
+                # Strategy 2: Framework in frameworkConfig
+                elif node_data.get("frameworkConfig", {}).get("framework"):
+                    framework = node_data.get("frameworkConfig", {}).get("framework")
+                
+                # Strategy 3: LLM provider as framework
+                elif node_data.get("llm", {}).get("provider"):
+                    framework = node_data.get("llm", {}).get("provider")
+                elif node_data.get("llmProvider"):
+                    framework = node_data.get("llmProvider")
+                
+                # Strategy 4: Tool type as framework  
+                elif node_data.get("tool_type"):
+                    framework = node_data.get("tool_type")
+                elif node_data.get("toolType"):
+                    framework = node_data.get("toolType")
+                
+                # Strategy 5: Output type as framework
+                elif node_data.get("output_type"):
+                    framework = f"output_{node_data.get('output_type')}"
+                elif node_data.get("outputType"):
+                    framework = f"output_{node_data.get('outputType')}"
+                
+                # Strategy 6: Check nested data
+                elif node_data.get("data", {}).get("framework"):
+                    framework = node_data.get("data", {}).get("framework")
+                elif node_data.get("data", {}).get("llmProvider"):
+                    framework = node_data.get("data", {}).get("llmProvider")
+            
+            # 🚀 CRITICAL FIX: Always ensure proper metadata even for already standardized results
+            if isinstance(raw_result, dict) and "success" in raw_result and "data" in raw_result:
+                # This is already standardized - preserve existing data but ensure metadata
+                result = raw_result.copy()
+                
+                # Ensure metadata exists and is properly populated
+                if "metadata" not in result:
+                    result["metadata"] = {}
+                
+                # Always set these core metadata fields
+                result["metadata"]["node_type"] = node_type
+                result["metadata"]["node_id"] = node_id
+                result["metadata"]["timestamp"] = datetime.now().isoformat()
+                
+                # Add framework if detected
+                if framework:
+                    result["metadata"]["framework"] = framework
+                elif "framework" not in result["metadata"]:
+                    result["metadata"]["framework"] = None
+                
+                return result
+            
+            # Handle various result types
+            if isinstance(raw_result, dict):
+                if "success" in raw_result:
+                    # Partial standardization
+                    return {
+                        "success": raw_result.get("success", True),
+                        "data": raw_result.get("data") or raw_result.get("result") or raw_result.get("output"),
+                        "error": raw_result.get("error"),
+                        "metadata": {
+                            "node_type": node_type,
+                            "node_id": node_id,
+                            "timestamp": datetime.now().isoformat(),
+                            "framework": framework,
+                            **raw_result.get("metadata", {})
+                        }
+                    }
+                elif "error" in raw_result:
+                    # Error result
+                    return {
+                        "success": False,
+                        "data": None,
+                        "error": raw_result.get("error"),
+                        "metadata": {
+                            "node_type": node_type,
+                            "node_id": node_id,
+                            "timestamp": datetime.now().isoformat(),
+                            "framework": framework,
+                            **raw_result.get("metadata", {})
+                        }
+                    }
+                else:
+                    # Raw dict result
+                    return {
+                        "success": True,
+                        "data": raw_result,
+                        "error": None,
+                        "metadata": {
+                            "node_type": node_type,
+                            "node_id": node_id,
+                            "timestamp": datetime.now().isoformat(),
+                            "framework": framework
+                        }
+                    }
+            else:
+                # Simple value result
+                return {
+                    "success": True,
+                    "data": raw_result,
+                    "error": None,
+                    "metadata": {
+                        "node_type": node_type,
+                        "node_id": node_id,
+                        "timestamp": datetime.now().isoformat(),
+                        "framework": framework
+                    }
+                }
+                
+        except Exception as e:
+            logger.error(f"Error standardizing result for {node_type} node {node_id}: {str(e)}")
+            return {
+                "success": False,
+                "data": None,
+                "error": f"Standardization error: {str(e)}",
+                "metadata": {
+                    "node_type": node_type,
+                    "node_id": node_id,
+                    "timestamp": datetime.now().isoformat(),
+                    "framework": framework
+                }
+            }
+    
     # Enhanced function to prevent circular references
     def sanitize_result(self, obj, depth=0, seen_objects=None, path=None):
         """
@@ -286,17 +431,39 @@ class UnifiedRunner:
                     # Execute the node
                     result = await self.execute_node(enhanced_node.get("type"), enhanced_node.get("data", {}), node_inputs)
                     
-                    # Store result
+                    # 🚀 CRITICAL FIX: Store standardized result and extract clean data
+                    # The result from execute_node is already standardized
                     node_results[node_id] = result
                     
-                    # Yield result
-                    yield {
+                    # For the graph processor: extract clean data if standardized format
+                    if isinstance(result, dict) and "success" in result and "data" in result:
+                        if result["success"]:
+                            # Store the clean data for next node consumption
+                            clean_data = result["data"]
+                            logger.info(f"✅ Storing clean data for {node_id}: {type(clean_data)}")
+                            # Keep the full result for frontend, but also store clean data for graph processing
+                            result["_clean_data"] = clean_data
+                        else:
+                            logger.warning(f"⚠️ Node {node_id} failed: {result.get('error')}")
+                    
+                    # Yield result with enhanced information
+                    execution_result = {
                         "node_id": node_id,
-                        "node_type": node.get("type"),
+                        "node_type": enhanced_node.get("type"),
                         "result": result,
                         "execution_metadata": self.execution_context.get_execution_metadata(),
                         "timestamp": datetime.now().isoformat()
                     }
+                    
+                    # 🔧 Add data flow information for debugging
+                    if isinstance(result, dict) and "success" in result:
+                        execution_result["success"] = result["success"]
+                        execution_result["error"] = result.get("error")
+                        if result.get("metadata"):
+                            execution_result["execution_time"] = result["metadata"].get("execution_time")
+                            execution_result["framework"] = result["metadata"].get("framework")
+                    
+                    yield execution_result
                     
                 except Exception as e:
                     error_result = {
@@ -318,54 +485,136 @@ class UnifiedRunner:
             
     async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single node with framework validation"""
-        try:
-            # NEW: Framework validation before execution (skip for chat nodes)
+        # 🚀 CRITICAL FIX: Get node_id from the correct location
+        node_id = node_data.get("id") or node_data.get("nodeId") or "unknown"
+        
+        # 🚀 CRITICAL FIX: Extract framework information from node_data properly with enhanced detection
+        framework = None
+        
+        # Strategy 1: Direct framework field
+        if node_data.get("framework"):
             framework = node_data.get("framework")
-            if framework and node_type != "chat":  # Chat nodes use LLM providers directly
+        
+        # Strategy 2: Framework in frameworkConfig
+        elif node_data.get("frameworkConfig", {}).get("framework"):
+            framework = node_data.get("frameworkConfig", {}).get("framework")
+        
+        # Strategy 3: LLM provider as framework (for agent nodes)
+        elif node_type == "agent":
+            provider = (
+                node_data.get("llm", {}).get("provider") or
+                node_data.get("llmProvider") or
+                node_data.get("frameworkConfig", {}).get("provider")
+            )
+            if provider:
+                framework = provider
+        
+        # Strategy 4: Tool type as framework (for tool nodes)
+        elif node_type == "tool":
+            tool_framework = (
+                node_data.get("tool_type") or
+                node_data.get("toolType") or
+                node_data.get("framework") or
+                "api"  # default for tools
+            )
+            framework = tool_framework
+        
+        # Strategy 5: Output type as framework (for output nodes) - but don't validate these
+        elif node_type == "output":
+            output_type = node_data.get("outputType", "webhook")
+            framework = f"output_{output_type}"
+        
+        # Strategy 6: Node type as fallback for structural nodes
+        if not framework:
+            framework = node_type
+        
+        start_time = datetime.now()
+        
+        try:
+            # FIXED: Only validate actual AI/ML frameworks, not structural node types
+            structural_node_types = ["input", "output", "logic", "task", "delay", "chat"]
+            
+            if framework and node_type not in structural_node_types and not framework.startswith("output_"):
                 # Validate framework/LLM combination if applicable
                 llm_config = node_data.get("frameworkConfig", {})
                 llm_provider = llm_config.get("provider") or node_data.get("llmProvider")
                 
                 validation = validate_framework_llm_combination(framework, llm_provider)
                 if not validation["valid"]:
-                    return {
+                    error_result = {
                         "type": "error",
                         "error": f"Framework validation failed: {validation['error']}",
-                        "nodeId": node_data.get("id", "unknown"),
+                        "nodeId": node_id,
                         "nodeType": node_type,
                         "timestamp": datetime.now().isoformat()
                     }
+                    return self.standardize_node_result(error_result, node_type, node_id)
+            
+            # 🚀 CRITICAL FIX: Ensure node_id is available in node_data for processors
+            enhanced_node_data = {**node_data, "id": node_id, "nodeId": node_id}
+            if framework:
+                enhanced_node_data["framework"] = framework
             
             node = {
                 "type": node_type,
-                "data": node_data,
-                "id": node_data.get("id", "single_node")
+                "data": enhanced_node_data,
+                "id": node_id
             }
+            
+            # DEBUG: Log inputs for agent nodes to track data loss
+            if node_type == "agent":
+                logger.info(f"🔧 Agent {node_id} inputs debug:")
+                for key, value in inputs.items():
+                    if isinstance(value, dict):
+                        if 'api_data' in value or 'records' in value:
+                            records_count = len(value.get('api_data', {}).get('records', value.get('records', [])))
+                            logger.info(f"   - {key}: API data with {records_count} records")
+                        else:
+                            logger.info(f"   - {key}: dict with {len(value)} keys")
+                    elif isinstance(value, list):
+                        logger.info(f"   - {key}: list with {len(value)} items")
+                    else:
+                        logger.info(f"   - {key}: {type(value).__name__}")
             
             # CRITICAL FIX: Pass the execution context to the node processor
             context = self.execution_context if hasattr(self, 'execution_context') and self.execution_context else None
             
-            # DEBUG: Log context information before passing to node processor
-            logger.info(f"🔍 Runner context debug for node {node_type}:")
-            logger.info(f"   - self.execution_context exists: {hasattr(self, 'execution_context')}")
-            logger.info(f"   - self.execution_context is not None: {self.execution_context is not None if hasattr(self, 'execution_context') else False}")
-            if context:
-                logger.info(f"   - Context type: {type(context)}")
-                logger.info(f"   - Context class name: {context.__class__.__name__}")
-                logger.info(f"   - Context has 'get' method: {hasattr(context, 'get')}")
-                logger.info(f"   - Context has 'enhance_node_config' method: {hasattr(context, 'enhance_node_config')}")
-            
             result = await node_processor.process_node(node, inputs, context)
-            # Sanitize result to prevent circular references
-            return self.sanitize_result(result)
+            
+            # 🔧 NEW: Standardize the result format for consistency
+            execution_time = (datetime.now() - start_time).total_seconds()
+            standardized_result = self.standardize_node_result(result, node_type, node_id, node_data)
+            
+            # 🚀 CRITICAL FIX: Ensure framework is in metadata
+            if "metadata" not in standardized_result:
+                standardized_result["metadata"] = {}
+            
+            standardized_result["metadata"].update({
+                "framework": framework,
+                "execution_time": execution_time,
+                "timestamp": start_time.isoformat()
+            })
+            
+            logger.info(f"✅ Node {node_id} ({node_type}) executed with framework: {framework}")
+            
+            return standardized_result
+            
         except Exception as e:
-            logger.error(f"Error executing node: {str(e)}")
+            execution_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"❌ Node execution failed: {str(e)}")
+            
             return {
-                "type": "error",
+                "success": False,
+                "data": None,
                 "error": str(e),
-                "nodeId": node_data.get("id", "unknown"),
-                "nodeType": node_type,
-                "timestamp": datetime.now().isoformat()
+                "metadata": {
+                    "node_type": node_type,
+                    "node_id": node_id,
+                    "framework": framework,
+                    "execution_time": execution_time,
+                    "timestamp": start_time.isoformat(),
+                    "error_type": "execution_error"
+                }
             }
 
     async def execute_tool(self, data: Dict[str, Any]) -> Dict[str, Any]:

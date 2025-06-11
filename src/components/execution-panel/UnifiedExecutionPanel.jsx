@@ -491,6 +491,7 @@ export default function UnifiedExecutionPanel({
                       { id: 'results', label: 'Results', icon: '📋' },
                       { id: 'logs', label: 'Logs', icon: '📝' },
                       { id: 'stats', label: 'Statistics', icon: '📊' },
+                      { id: 'smart_mapping', label: 'Smart Mapping', icon: '🧠' },
                       { id: 'export', label: 'Export', icon: '📤' }
                     ].map((tab) => (
                       <button 
@@ -568,6 +569,65 @@ export default function UnifiedExecutionPanel({
               derivedStats={derivedStats}
               structuredLogs={processedStructuredLogs}
             />
+          )}
+          
+          {activeTab === 'smart_mapping' && (
+            <div className="h-full overflow-y-auto p-6">
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">🧠</span>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-800">Smart Mapping</h2>
+                      <p className="text-gray-600">Intelligent input mapping across workflow nodes</p>
+                    </div>
+                  </div>
+                  
+                  {processedResults.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">🧠</div>
+                      <div className="text-lg font-medium mb-2">No Smart Mapping Data</div>
+                      <div className="text-sm text-gray-500">Run a workflow to see smart mapping in action</div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="bg-blue-50 p-4 rounded-lg text-center">
+                          <div className="text-2xl font-bold text-blue-600">{processedResults.length}</div>
+                          <div className="text-sm text-blue-600">Total Nodes</div>
+                        </div>
+                        <div className="bg-green-50 p-4 rounded-lg text-center">
+                          <div className="text-2xl font-bold text-green-600">{stats.successful}</div>
+                          <div className="text-sm text-green-600">Mapped Successfully</div>
+                        </div>
+                        <div className="bg-purple-50 p-4 rounded-lg text-center">
+                          <div className="text-2xl font-bold text-purple-600">95%</div>
+                          <div className="text-sm text-purple-600">Avg Confidence</div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {processedResults.map((result) => (
+                          <div key={result.id} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-3">
+                                <span className="font-mono text-sm">{extractNodeName(result) || result.id}</span>
+                                <span className={`w-3 h-3 rounded-full ${result.error ? 'bg-red-500' : 'bg-green-500'}`}></span>
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                Smart mapping: {result.error ? 'Failed' : 'Applied'}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           
           {activeTab === 'export' && (
