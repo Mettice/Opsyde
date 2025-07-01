@@ -22,12 +22,12 @@ class SupabaseRestService:
     
     def __init__(self):
         # Initialize immediately in constructor
-        self.supabase_url = os.getenv("VITE_SUPABASE_URL")
-        self.supabase_anon_key = os.getenv("VITE_SUPABASE_ANON_KEY")
+        self.supabase_url = os.environ.get("SUPABASE_URL")
+        self.supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY")
         self.supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
         if not self.supabase_url or not self.supabase_anon_key:
-            raise ValueError("VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are required")
+            raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY are required")
         
         if not self.supabase_service_key:
             logger.warning("SUPABASE_SERVICE_ROLE_KEY not found - using anon key (may have RLS issues)")

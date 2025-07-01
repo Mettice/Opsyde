@@ -189,28 +189,37 @@ class TriggerService(BaseService[Dict]):
                 return None
 
     async def list_triggers(self, owner: Optional[str] = None) -> List[Dict]:
-        """List all registered triggers"""
+        """List all registered triggers, transformed to match TriggerBase model"""
         try:
             triggers = await storage_list_triggers(owner)
             if not triggers:
                 logger.info(f"No triggers found for owner: {owner}")
                 return []
-                
+
             # Transform the triggers to match the TriggerBase model format
-            return [{
-                "trigger_id": trigger.get("trigger_id", trigger.get("id", "")),
-                "type": trigger.get("type", "manual"),
-                "status": trigger.get("status", "active"),
-                "owner_id": trigger.get("owner", "system"),
-                "created_at": trigger.get("created_at", datetime.now().isoformat()),
-                "last_executed": trigger.get("last_executed"),
-                "execution_count": trigger.get("execution_count", 0),
-                "trigger_count": trigger.get("execution_count", 0)  # Add for backward compatibility
-            } for trigger in triggers]
+            transformed_triggers = []
+            for trigger in triggers:
+                try:
+                    # Map fields to TriggerBase schema
+                    transformed_trigger = {
+                        "trigger_id": trigger.get("trigger_id") or trigger.get("id", "unknown"),
+                        "type": trigger.get("trigger_type", "manual"),
+                        "status": trigger.get("status", "active"),
+                        "owner_id": trigger.get("owner", "system"),
+                        "created_at": trigger.get("created_at"),
+                        "last_executed": trigger.get("last_executed") or trigger.get("last_triggered"),
+                        "execution_count": trigger.get("execution_count", trigger.get("trigger_count", 0)),
+                    }
+                    transformed_triggers.append(transformed_trigger)
+                except Exception as e:
+                    logger.error(f"Error transforming trigger: {str(e)}")
+                    continue
+
+            return transformed_triggers
+
         except Exception as e:
             logger.error(f"Error listing triggers: {str(e)}")
-            # Return empty list instead of raising exception
-            return []
+            return []  # Return empty list instead of raising exception
 
     async def verify_webhook_secret(self, trigger_id: str, provided_secret: str) -> bool:
         """Verify the webhook secret for a trigger"""
@@ -1016,65 +1025,112 @@ class TriggerService(BaseService[Dict]):
             return False
 
     async def execute_full_workflow(self, trigger_id: str) -> Dict[str, Any]:
-        """Execute the complete workflow associated with a trigger automatically"""
+        """Execute the full workflow associated with a trigger with LLM context"""
         try:
-            logger.info(f"[AUTO-EXECUTION] Starting automatic workflow execution for trigger: {trigger_id}")
+            logger.info(f"🚀 Executing full workflow for trigger: {trigger_id}")
             
-            # Get the trigger flow with execution count increment
-            flow = await self.execute_trigger_flow(trigger_id)
+            # Get the trigger flow
+            flow = await storage_get_trigger_flow(trigger_id)
             if not flow:
-                raise ValueError(f"Trigger {trigger_id} not found")
+                logger.error(f"❌ No flow found for trigger {trigger_id}")
+                return {
+                    "success": False,
+                    "error": f"No flow found for trigger {trigger_id}",
+                    "trigger_id": trigger_id
+                }
             
-            # Get the trigger owner for API key access
-            from frameworks.trigger_storage import get_trigger_owner
-            owner = await get_trigger_owner(trigger_id)
-            if not owner:
-                owner = "system"  # Fallback to system if no owner found
+            # Extract workflow components
+            nodes = flow.get('nodes', [])
+            edges = flow.get('edges', [])
             
-            logger.info(f"[AUTO-EXECUTION] Executing trigger {trigger_id} for owner: {owner}")
+            if not nodes:
+                logger.warning(f"⚠️ No nodes found in flow for trigger {trigger_id}")
+                return {
+                    "success": False,
+                    "error": "No nodes found in workflow",
+                    "trigger_id": trigger_id
+                }
             
-            # Import the unified runner to execute the workflow
-            from backend.core.runner import UnifiedRunner
-            runner = UnifiedRunner()
+            logger.info(f"📊 Workflow has {len(nodes)} nodes and {len(edges)} edges")
             
-            # Prepare workflow data for execution
-            workflow_data = {
-                "nodes": flow.get("nodes", []),
-                "edges": flow.get("edges", []),
-                "inputs": flow.get("inputs", {}),
+            # Get trigger owner for BYOK context
+            owner = await storage_get_trigger_owner(trigger_id)
+            
+            # Create execution context with LLM support and BYOK
+            from core.workflow_execution_context import create_execution_context
+            execution_context = await create_execution_context(user_id=owner, workflow_id=trigger_id)
+            
+            # Prepare inputs with LLM context and user keys
+            inputs = {
                 "trigger_id": trigger_id,
-                "execution_type": "automatic",
-                "triggered_at": datetime.now().isoformat()
+                "trigger_type": "automated",
+                "execution_mode": "trigger",
+                # Auto-inject LLM context for triggered workflows
+                "llm_mode_enabled": True,
+                "smart_mapping_enabled": True,
+                "user_keys": execution_context.user_api_keys if execution_context else {},
+                "timestamp": datetime.now().isoformat()
             }
             
-            logger.info(f"[AUTO-EXECUTION] Executing workflow with {len(workflow_data['nodes'])} nodes for user {owner}")
+            logger.info(f"🤖 Executing workflow with LLM mode enabled and {len(inputs.get('user_keys', {}))} user API keys")
             
-            # Execute the workflow with the user_id for BYOK API key access
+            # Execute the workflow using the engine
+            from core.engine import workflow_engine
+            from models.workflow import Workflow
+            from models.nodes import Node
+            
+            # Convert to proper models
+            workflow_nodes = [Node(**node) for node in nodes]
+            workflow = Workflow(
+                id=trigger_id,
+                name=f"Triggered Workflow {trigger_id}",
+                nodes=workflow_nodes,
+                edges=edges
+            )
+            
+            # Execute and collect results
             results = []
-            async for result in runner.execute_workflow(workflow_data, user_id=owner):
-                results.append(result)
-                logger.info(f"[AUTO-EXECUTION] Node result: {result}")
+            async for event in workflow_engine.execute_workflow(workflow, inputs):
+                results.append(event)
+                logger.info(f"📝 Workflow event: {event.get('type', 'unknown')}")
             
-            # Log successful execution
-            logger.info(f"[AUTO-EXECUTION] Workflow execution completed for trigger {trigger_id}")
+            # Determine overall success
+            workflow_completed = any(event.get('type') == 'workflow_completed' for event in results)
+            workflow_errors = [event for event in results if event.get('type') in ['node_error', 'workflow_error']]
             
-            return {
-                "success": True,
+            success = workflow_completed and len(workflow_errors) == 0
+            
+            execution_result = {
+                "success": success,
                 "trigger_id": trigger_id,
-                "execution_type": "automatic",
-                "results": results,
-                "executed_at": datetime.now().isoformat(),
-                "node_count": len(workflow_data['nodes']),
-                "owner": owner
+                "workflow_id": trigger_id,
+                "execution_events": results,
+                "total_events": len(results),
+                "errors": workflow_errors,
+                "completed": workflow_completed,
+                "execution_mode": "llm_centric",
+                "user_keys_used": list(inputs.get('user_keys', {}).keys()),
+                "timestamp": datetime.now().isoformat()
             }
+            
+            if success:
+                logger.info(f"✅ Workflow execution completed successfully for trigger {trigger_id}")
+            else:
+                logger.error(f"❌ Workflow execution failed for trigger {trigger_id}: {len(workflow_errors)} errors")
+            
+            return execution_result
             
         except Exception as e:
-            logger.error(f"[AUTO-EXECUTION] Failed to execute workflow for trigger {trigger_id}: {str(e)}")
+            logger.error(f"❌ Error executing full workflow for trigger {trigger_id}: {str(e)}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            
             return {
                 "success": False,
-                "trigger_id": trigger_id,
                 "error": str(e),
-                "executed_at": datetime.now().isoformat()
+                "trigger_id": trigger_id,
+                "execution_mode": "llm_centric",
+                "timestamp": datetime.now().isoformat()
             }
 
     # Event-driven monitoring functions

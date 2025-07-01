@@ -2,16 +2,36 @@ import React, { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import SmartOutputEditor from './SmartOutputEditor'; 
-import LLMConfigSection from './shared/LLMConfigSection';
+import { LLMConfigSection } from './shared/LLMConfigSection';
 import { toast } from 'react-hot-toast';
-import { AVAILABLE_LLM_PROVIDERS, LLM_MODELS } from '../EditModall';
+import { AVAILABLE_LLM_PROVIDERS, LLM_MODELS, normalizeOutputData } from '../EditModall';
+import { ApiKeyNavigator } from '../shared/ApiKeyNavigator';
+import DynamicSchemaForm from './shared/DynamicSchemaForm';
+import { outputNodeSchema } from './shared/nodeSchemas';
+import FieldMapper from './shared/FieldMapper';
+import NodeOutputPreview from '../NodeOutputPreview';
+import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch } from '@mui/material';
 
-const OutputEditor = ({ formData, handleInputChange }) => {
+const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedNodes = [], previousNodeOutputs = {}, nodeId }) => {
   // ===== STATE MANAGEMENT =====
   const [isTestingIntegration, setIsTestingIntegration] = useState(false);
   const [availableApiKeys, setAvailableApiKeys] = useState([]);
   const [loadingApiKeys, setLoadingApiKeys] = useState(true);
   const [apiKeyError, setApiKeyError] = useState(null);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // State for schema-driven core output config
+  const [outputCoreConfig, setOutputCoreConfig] = useState({
+    label: formData.label || '',
+    description: formData.description || '',
+    outputType: formData.outputType || 'text',
+    defaultValue: formData.defaultValue || '',
+    required: formData.required || false
+  });
+
+  // Field mapping state
+  const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
 
   // ===== CONFIGURATION =====
   const outputTypes = [
@@ -152,6 +172,42 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     }
   };
 
+  // Handler for schema form changes
+  const handleCoreConfigChange = (newConfig) => {
+    setOutputCoreConfig(newConfig);
+  };
+
+  // Handler for schema validation
+  const handleValidationError = (hasErrors) => {
+    setValidationErrors(hasErrors);
+  };
+
+  // Handler for save
+  const handleSave = () => {
+    if (validationErrors) {
+      alert('Please fix validation errors before saving.');
+      return;
+    }
+    onSave({
+      ...formData,
+      ...outputCoreConfig
+    });
+  };
+
+  // Handler for field mapping changes
+  const handleFieldMappingChange = (newMappings) => {
+    setFieldMappings(newMappings);
+    handleInputChange({ target: { name: 'field_mappings', value: newMappings } });
+  };
+
+  const handleOutputTypeChange = (e) => {
+    const newOutputType = e.target.value;
+    handleInputChange({ target: { name: 'output_type', value: newOutputType } });
+    
+    // Reset config when output type changes
+    handleInputChange({ target: { name: 'config', value: {} } });
+  };
+
   // ===== EFFECTS =====
   // Load API Keys from BYOK Manager
   useEffect(() => {
@@ -227,6 +283,11 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     }
   }, [formData.aiProvider, availableApiKeys]);
 
+  // Keep fieldMappings in sync with formData
+  useEffect(() => {
+    setFieldMappings(formData.field_mappings || {});
+  }, [formData.field_mappings]);
+
   // ===== RENDER FUNCTIONS =====
   const renderBYOKStatus = () => {
     if (!isSmartOutput) return null;
@@ -259,17 +320,15 @@ const OutputEditor = ({ formData, handleInputChange }) => {
       return (
         <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
           <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <span className="text-yellow-600 mr-2">🔑</span>
-              <span className="text-sm text-yellow-700">No API keys configured for AI integration</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => window.open('/api-keys', '_blank')}
-              className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+            <span className="text-yellow-700 text-sm">
+              ⚠️ No API keys configured
+            </span>
+            <ApiKeyNavigator 
+              variant="button"
+              className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
             >
-              Add API Keys
-            </button>
+              Add API Key
+            </ApiKeyNavigator>
           </div>
         </div>
       );
@@ -461,142 +520,444 @@ const OutputEditor = ({ formData, handleInputChange }) => {
     );
   };
 
+  const renderOutputSpecificFields = () => {
+    const outputType = formData.output_type;
+
+    switch (outputType) {
+      case 'api':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="API Endpoint"
+              placeholder="https://api.example.com/endpoint"
+              value={formData.config?.endpoint || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, endpoint: e.target.value }
+                }
+              })}
+            />
+            <FormControl fullWidth>
+              <InputLabel>HTTP Method</InputLabel>
+              <Select
+                value={formData.config?.method || 'POST'}
+                onChange={(e) => handleInputChange({
+                  target: { 
+                    name: 'config', 
+                    value: { ...formData.config, method: e.target.value }
+                  }
+                })}
+                label="HTTP Method"
+              >
+                <MenuItem value="GET">GET</MenuItem>
+                <MenuItem value="POST">POST</MenuItem>
+                <MenuItem value="PUT">PUT</MenuItem>
+                <MenuItem value="DELETE">DELETE</MenuItem>
+                <MenuItem value="PATCH">PATCH</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              label="Headers (JSON)"
+              placeholder='{"Content-Type": "application/json"}'
+              value={JSON.stringify(formData.config?.headers || {}, null, 2)}
+              onChange={(e) => {
+                try {
+                  const headers = JSON.parse(e.target.value);
+                  handleInputChange({
+                    target: { 
+                      name: 'config', 
+                      value: { ...formData.config, headers }
+                    }
+                  });
+                } catch (error) {
+                  // Allow invalid JSON during typing
+                }
+              }}
+              multiline
+              rows={3}
+            />
+          </Box>
+        );
+
+      case 'webhook':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="Webhook URL"
+              placeholder="https://webhook.site/your-unique-id"
+              value={formData.config?.url || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, url: e.target.value }
+                }
+              })}
+            />
+            <FormControl fullWidth>
+              <InputLabel>HTTP Method</InputLabel>
+              <Select
+                value={formData.config?.method || 'POST'}
+                onChange={(e) => handleInputChange({
+                  target: { 
+                    name: 'config', 
+                    value: { ...formData.config, method: e.target.value }
+                  }
+                })}
+                label="HTTP Method"
+              >
+                <MenuItem value="GET">GET</MenuItem>
+                <MenuItem value="POST">POST</MenuItem>
+                <MenuItem value="PUT">PUT</MenuItem>
+                <MenuItem value="DELETE">DELETE</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        );
+
+      case 'email':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="To Email"
+              placeholder="recipient@example.com"
+              value={formData.config?.to_email || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, to_email: e.target.value }
+                }
+              })}
+            />
+            <TextField
+              fullWidth
+              label="Subject"
+              placeholder="Email subject"
+              value={formData.config?.subject || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, subject: e.target.value }
+                }
+              })}
+            />
+            <TextField
+              fullWidth
+              label="Email Template"
+              placeholder="Email body template"
+              value={formData.config?.template || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, template: e.target.value }
+                }
+              })}
+              multiline
+              rows={4}
+            />
+          </Box>
+        );
+
+      case 'file':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="File Path"
+              placeholder="/path/to/output/file.json"
+              value={formData.config?.file_path || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, file_path: e.target.value }
+                }
+              })}
+            />
+            <FormControl fullWidth>
+              <InputLabel>File Format</InputLabel>
+              <Select
+                value={formData.config?.format || 'json'}
+                onChange={(e) => handleInputChange({
+                  target: { 
+                    name: 'config', 
+                    value: { ...formData.config, format: e.target.value }
+                  }
+                })}
+                label="File Format"
+              >
+                <MenuItem value="json">JSON</MenuItem>
+                <MenuItem value="csv">CSV</MenuItem>
+                <MenuItem value="txt">Text</MenuItem>
+                <MenuItem value="xml">XML</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        );
+
+      case 'database':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="Database URL"
+              placeholder="postgresql://user:pass@localhost/db"
+              value={formData.config?.database_url || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, database_url: e.target.value }
+                }
+              })}
+            />
+            <TextField
+              fullWidth
+              label="Table Name"
+              placeholder="output_table"
+              value={formData.config?.table_name || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, table_name: e.target.value }
+                }
+              })}
+            />
+          </Box>
+        );
+
+      case 'notification':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="Notification Title"
+              placeholder="Workflow completed"
+              value={formData.config?.title || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, title: e.target.value }
+                }
+              })}
+            />
+            <TextField
+              fullWidth
+              label="Notification Message"
+              placeholder="Your workflow has completed successfully"
+              value={formData.config?.message || ''}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, message: e.target.value }
+                }
+              })}
+              multiline
+              rows={3}
+            />
+          </Box>
+        );
+
+      case 'custom':
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField
+              fullWidth
+              label="Custom Configuration (JSON)"
+              placeholder='{"custom_field": "value"}'
+              value={JSON.stringify(formData.config || {}, null, 2)}
+              onChange={(e) => {
+                try {
+                  const config = JSON.parse(e.target.value);
+                  handleInputChange({
+                    target: { 
+                      name: 'config', 
+                      value: config
+                    }
+                  });
+                } catch (error) {
+                  // Allow invalid JSON during typing
+                }
+              }}
+              multiline
+              rows={4}
+            />
+          </Box>
+        );
+
+      default:
+        return <Typography color="text.secondary">Select an output type to configure</Typography>;
+    }
+  };
+
   // ===== MAIN RENDER =====
   return (
-    <>
-      {/* Output Type Selection */}
-      <div className="mb-4">
-        <label className="block text-gray-700 mb-2 flex items-center font-medium">
-          Output Type
-          <HelpTooltip type="output" field="outputType" />
-        </label>
+    <Box sx={{ p: 3 }}>
+      {/* Core Output Configuration */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Output Configuration
+        </Typography>
         
-        <div className="grid grid-cols-1 gap-2">
-          {outputTypes.map(type => (
-            <label key={type.value} className="flex items-center p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
-              <input
-                type="radio"
-                name="outputType"
-                value={type.value}
-                checked={formData.outputType === type.value}
-                onChange={handleInputChange}
-                className="mr-3"
-              />
-              <div className="flex-1">
-                <div className="font-medium text-gray-800">{type.label}</div>
-                <div className="text-xs text-gray-600">{type.description}</div>
-              </div>
-              {type.value.startsWith('smart_') && (
-                <span className="bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">
-                  AI-Powered
-                </span>
-              )}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      {/* BYOK Status Display */}
-      {renderBYOKStatus()}
-
-      {/* Description */}
-      <div className="mb-4">
-        <label className="block text-gray-700 mb-1 flex items-center">
-          Description
-          <HelpTooltip type="output" field="description" />
-        </label>
-        <textarea
-          name="description"
+        <TextField
+          fullWidth
+          label="Output Name"
+          value={formData.label || ''}
+          onChange={(e) => handleInputChange({ target: { name: 'label', value: e.target.value } })}
+          sx={{ mb: 2 }}
+        />
+        
+        <TextField
+          fullWidth
+          label="Description"
+          placeholder="What does this output do?"
           value={formData.description || ''}
-          onChange={handleInputChange}
-          className="w-full p-2 border rounded"
-          rows="3"
-          placeholder="Describe what this output should do (e.g., 'Send results to Slack channel', 'Save to Airtable', 'Email summary')"
+          onChange={(e) => handleInputChange({ target: { name: 'description', value: e.target.value } })}
+          multiline
+          rows={2}
+          sx={{ mb: 2 }}
         />
-      </div>
+      </Box>
 
-      {/* LLM Configuration for Smart Outputs */}
-      {isSmartOutput && (
-        <LLMConfigSection
-          formData={{
-            frameworkConfig: {
-              model: formData.aiModel,
-              temperature: formData.temperature || 0.7,
-              max_tokens: formData.maxTokens || 1000,
-              api_key: formData.aiProvider ? `[BYOK:${formData.aiProvider}]` : ''
-            }
-          }}
-          handleInputChange={(e) => {
-            const { name, value } = e.target;
-            const mappings = {
-              'frameworkConfig.model': 'aiModel',
-              'frameworkConfig.temperature': 'temperature',
-              'frameworkConfig.max_tokens': 'maxTokens'
-            };
-            
-            if (mappings[name]) {
-              handleInputChange({ target: { name: mappings[name], value } });
-            }
-          }}
-          framework={formData.aiProvider || 'openai'}
-          showApiKey={true}
-        />
-      )}
-
-      {/* Test Integration Button for Smart Outputs */}
-      {isSmartOutput && formData.aiProvider && (
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={handleTestSmartIntegration}
-            disabled={isTestingIntegration}
-            className="w-full bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 disabled:from-gray-400 disabled:to-gray-500 text-white px-4 py-3 rounded font-medium transition-all duration-200 shadow-lg hover:shadow-xl"
+      {/* Output Type Selection */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Output Type
+        </Typography>
+        <FormControl fullWidth>
+          <InputLabel>Select Output Type</InputLabel>
+          <Select
+            value={formData.output_type || ''}
+            onChange={handleOutputTypeChange}
+            label="Select Output Type"
           >
-            {isTestingIntegration ? '🔄 Testing...' : '🧪 Test Smart Integration'}
-          </button>
-          <div className="mt-2 text-xs text-gray-500 text-center">
-            Test your AI-powered output configuration with sample data
-          </div>
-        </div>
+            <MenuItem value="api">API Call</MenuItem>
+            <MenuItem value="webhook">Webhook</MenuItem>
+            <MenuItem value="email">Email</MenuItem>
+            <MenuItem value="file">File</MenuItem>
+            <MenuItem value="database">Database</MenuItem>
+            <MenuItem value="notification">Notification</MenuItem>
+            <MenuItem value="custom">Custom</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
+
+      {/* Output-Specific Configuration */}
+      {formData.output_type && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Configuration
+          </Typography>
+          {renderOutputSpecificFields()}
+        </Box>
       )}
 
-      {/* Service Detection for Smart Outputs */}
-      {isSmartOutput && formData.description && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
-          <div className="text-sm">
-            <strong>🔍 Detected Service:</strong> {extractServiceName(formData.description)}
-          </div>
-          <div className="text-xs text-blue-600 mt-1">
-            AI will automatically configure the integration based on your description
-          </div>
-        </div>
+      {/* Field Mapper for explicit mapping */}
+      <FieldMapper
+        nodeId={nodeId}
+        nodeType="output"
+        currentMappings={fieldMappings}
+        onMappingChange={handleFieldMappingChange}
+        connectedNodes={connectedNodes}
+        previousNodeOutputs={previousNodeOutputs}
+      />
+
+      {/* Advanced Options */}
+      <Box sx={{ mb: 3 }}>
+        <Button
+          variant="text"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          startIcon={<span>{showAdvanced ? '▼' : '▶'}</span>}
+        >
+          Advanced Options
+        </Button>
+        {showAdvanced && (
+          <Box sx={{ mt: 2, pl: 2 }}>
+            <TextField
+              fullWidth
+              label="Retry Count"
+              type="number"
+              inputProps={{ min: 0, max: 10 }}
+              value={formData.config?.retry_count || 3}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, retry_count: parseInt(e.target.value) }
+                }
+              })}
+              sx={{ mb: 2 }}
+            />
+            
+            <TextField
+              fullWidth
+              label="Timeout (seconds)"
+              type="number"
+              inputProps={{ min: 1, max: 300 }}
+              value={formData.config?.timeout || 30}
+              onChange={(e) => handleInputChange({
+                target: { 
+                  name: 'config', 
+                  value: { ...formData.config, timeout: parseInt(e.target.value) }
+                }
+              })}
+              sx={{ mb: 2 }}
+            />
+            
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.config?.async_execution || false}
+                  onChange={(e) => handleInputChange({
+                    target: { 
+                      name: 'config', 
+                      value: { ...formData.config, async_execution: e.target.checked }
+                    }
+                  })}
+                />
+              }
+              label="Execute asynchronously"
+            />
+          </Box>
+        )}
+      </Box>
+
+      {/* Validation Errors */}
+      {Object.keys(validationErrors).length > 0 && (
+        <Box sx={{ mb: 3, p: 2, bgcolor: 'error.light', borderRadius: 1 }}>
+          <Typography variant="subtitle2" color="error" gutterBottom>
+            Validation Errors:
+          </Typography>
+          {Object.entries(validationErrors).map(([field, error]) => (
+            <Typography key={field} variant="body2" color="error">
+              {field}: {error}
+            </Typography>
+          ))}
+        </Box>
       )}
 
-      {/* Smart Integration Configuration */}
-      {isSmartOutput && (
-        <div className="mb-6">
-          <SmartOutputEditor 
-            formData={formData}
-            handleInputChange={handleFormChange}
-            onTestIntegration={handleTestSmartIntegration}
-            isTestingIntegration={isTestingIntegration}
-            testResult={null}
-          />
-        </div>
-      )}
-
-      {/* Traditional Configuration */}
-      {renderTraditionalOutputConfig()}
-
-      {/* Smart Mode Promotion */}
-      {renderSmartModePromotion()}
-    </>
+      {/* Save Button */}
+      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+        <Button onClick={onClose} variant="outlined">
+          Cancel
+        </Button>
+        <Button onClick={handleSave} variant="contained" color="primary">
+          Save Output
+        </Button>
+      </Box>
+    </Box>
   );
 };
 
 OutputEditor.propTypes = {
   formData: PropTypes.object.isRequired,
-  handleInputChange: PropTypes.func.isRequired
+  handleInputChange: PropTypes.func.isRequired,
+  onSave: PropTypes.func.isRequired,
+  onClose: PropTypes.func.isRequired,
+  connectedNodes: PropTypes.array,
+  previousNodeOutputs: PropTypes.object,
+  nodeId: PropTypes.string
 };
 
 export default OutputEditor;

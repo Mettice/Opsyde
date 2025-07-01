@@ -53,7 +53,17 @@ export const optimizedTemplates = [
           },
           verbose: false,
           nodeId: 'agent-deal-hunter',
-          nodeType: 'agent'
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
         }
       },
       {
@@ -156,7 +166,17 @@ export const optimizedTemplates = [
             max_tokens: 2000
           },
           nodeId: 'agent-researcher',
-          nodeType: 'agent'
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
         }
       },
       {
@@ -249,7 +269,17 @@ export const optimizedTemplates = [
           },
           verbose: false,
           nodeId: 'agent-crypto-analyst',
-          nodeType: 'agent'
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
         }
       },
       {
@@ -326,7 +356,17 @@ export const optimizedTemplates = [
             max_tokens: 200
           },
           nodeId: 'agent-api-tester',
-          nodeType: 'agent'
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
         }
       },
       {
@@ -403,7 +443,17 @@ export const optimizedTemplates = [
             max_tokens: 1500
           },
           nodeId: 'agent-content-creator',
-          nodeType: 'agent'
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
         }
       },
       {
@@ -455,6 +505,931 @@ export const optimizedTemplates = [
     estimatedTime: '2 minutes',
     agentCount: 1,
     nodeCount: 5
+  },
+
+  // ✅ NEW: Multimodal LLM-Centric Test Template
+  {
+    name: '🎭 Multimodal LLM-Centric Workflow Test',
+    description: 'Complete test of multimodal input processing flowing through all node types with LLM-centric execution and smart mapping',
+    thumbnail: '/img/multimodal-test.png',
+    nodes: [
+      {
+        id: 'input-multimodal',
+        type: 'input',
+        position: { x: 50, y: 100 },
+        data: {
+          label: '🎭 Multimodal Input',
+          inputType: 'multimodal',
+          placeholder: 'Upload images, audio, or documents',
+          description: 'AI-powered multimodal processing with vision, audio transcription, and document analysis',
+          llmModeEnabled: true,
+          smartMappingEnabled: true,
+          nodeId: 'input-multimodal',
+          nodeType: 'input'
+        }
+      },
+      {
+        id: 'agent-content-analyst',
+        type: 'agent',
+        position: { x: 300, y: 50 },
+        data: {
+          label: '🧠 Content Analyst',
+          role: 'Multimodal Content Analyst',
+          goal: 'Analyze and interpret multimodal content to extract insights and create structured analysis',
+          backstory: 'Expert analyst specializing in multimodal content interpretation, able to understand images, audio, and documents to provide comprehensive insights.',
+          framework: 'crewai',
+          tools: ['calculator', 'search'],
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.3,
+            max_tokens: 1500
+          },
+          verbose: true,
+          nodeId: 'agent-content-analyst',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      {
+        id: 'task-analysis',
+        type: 'task',
+        position: { x: 550, y: 50 },
+        data: {
+          label: '📊 Content Analysis',
+          description: 'Analyze the multimodal content and extract key insights, themes, and actionable information',
+          expectedOutput: 'Structured analysis report with key findings, themes, insights, and recommendations based on the multimodal content',
+          agentId: 'agent-content-analyst',
+          nodeId: 'task-analysis',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'chat-interactive',
+        type: 'chat',
+        position: { x: 300, y: 200 },
+        data: {
+          label: '💬 Interactive Chat',
+          systemPrompt: 'You are a helpful assistant that can discuss the analyzed content. Provide clear, conversational responses based on the multimodal analysis.',
+          temperature: 0.7,
+          maxTokens: 800,
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-3.5-turbo',
+            temperature: 0.7
+          },
+          nodeId: 'chat-interactive',
+          nodeType: 'chat'
+        }
+      },
+      {
+        id: 'logic-quality-gate',
+        type: 'logic',
+        position: { x: 800, y: 100 },
+        data: {
+          label: '✅ Quality Gate',
+          condition: 'analysis_confidence > 0.7 || content_type !== "unknown"',
+          description: 'Check if analysis meets quality threshold before proceeding',
+          nodeId: 'logic-quality-gate',
+          nodeType: 'logic'
+        }
+      },
+      {
+        id: 'delay-processing',
+        type: 'delay',
+        position: { x: 550, y: 200 },
+        data: {
+          label: '⏱️ Processing Delay',
+          duration: 2,
+          unit: 'seconds',
+          description: 'Brief delay to simulate processing time',
+          nodeId: 'delay-processing',
+          nodeType: 'delay'
+        }
+      },
+      {
+        id: 'agent-formatter',
+        type: 'agent',
+        position: { x: 1050, y: 100 },
+        data: {
+          label: '📝 Content Formatter',
+          role: 'Content Formatting Specialist',
+          goal: 'Format analyzed content into professional outputs for different channels',
+          backstory: 'Expert in content formatting and presentation, specializing in creating professional outputs from analysis data.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-3.5-turbo',
+            temperature: 0.2,
+            max_tokens: 1000
+          },
+          nodeId: 'agent-formatter',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      {
+        id: 'task-formatting',
+        type: 'task',
+        position: { x: 1300, y: 100 },
+        data: {
+          label: '🎨 Format Output',
+          description: 'Format the analysis into professional presentation-ready content',
+          expectedOutput: 'Well-formatted, professional content ready for publication or presentation',
+          agentId: 'agent-formatter',
+          nodeId: 'task-formatting',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'output-structured',
+        type: 'output',
+        position: { x: 1550, y: 50 },
+        data: {
+          label: '📋 Structured Output',
+          outputType: 'structured',
+          description: 'Professional formatted analysis report',
+          nodeId: 'output-structured',
+          nodeType: 'output'
+        }
+      },
+      {
+        id: 'output-webhook',
+        type: 'output',
+        position: { x: 1550, y: 150 },
+        data: {
+          label: '🔗 Webhook Output',
+          outputType: 'webhook',
+          description: 'Send results to external system via webhook',
+          nodeId: 'output-webhook',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      // Main analysis flow
+      { id: 'e1', source: 'input-multimodal', target: 'agent-content-analyst', data: { label: '🎭 Multimodal Data' } },
+      { id: 'e2', source: 'agent-content-analyst', target: 'task-analysis', data: { label: '🧠 Agent Context' } },
+      
+      // Parallel chat flow
+      { id: 'e3', source: 'input-multimodal', target: 'chat-interactive', data: { label: '💬 Direct Chat' } },
+      
+      // Quality gate flow
+      { id: 'e4', source: 'task-analysis', target: 'logic-quality-gate', data: { label: '📊 Analysis Result' } },
+      
+      // Delay demonstration
+      { id: 'e5', source: 'chat-interactive', target: 'delay-processing', data: { label: '⏱️ Chat Output' } },
+      { id: 'e6', source: 'delay-processing', target: 'logic-quality-gate', data: { label: '🔄 Delayed Data' } },
+      
+      // Formatting flow
+      { id: 'e7', source: 'logic-quality-gate', target: 'agent-formatter', data: { label: '✅ Approved Data' } },
+      { id: 'e8', source: 'agent-formatter', target: 'task-formatting', data: { label: '📝 Format Context' } },
+      
+      // Output flows
+      { id: 'e9', source: 'task-formatting', target: 'output-structured', data: { label: '📋 Formatted Report' } },
+      { id: 'e10', source: 'task-formatting', target: 'output-webhook', data: { label: '🔗 Webhook Data' } }
+    ]),
+    tags: ['Multimodal', 'LLM-Centric', 'Complete Test', 'All Node Types', 'Smart Mapping', 'AI-Powered'],
+    complexity: 'Advanced',
+    estimatedTime: '3-5 minutes',
+    agentCount: 2,
+    nodeCount: 10,
+    frameworksUsed: ['crewai', 'openai'],
+    features: [
+      '🎭 Multimodal AI Processing (Images, Audio, Documents)',
+      '🧠 LLM-Centric Execution with Smart Mapping',
+      '📊 Complete Node Type Coverage',
+      '🔄 Parallel Processing Demonstration', 
+      '✅ Quality Gates and Logic Conditions',
+      '⏱️ Timing and Delay Management',
+      '📋 Multiple Output Formats',
+      '🔗 External System Integration'
+    ],
+    instructions: [
+      '1. Upload any image, audio file, or document to the multimodal input',
+      '2. Watch AI process the content with vision/transcription/document analysis',
+      '3. See smart mapping flow data between different node types',
+      '4. Observe parallel processing through chat and analysis paths',
+      '5. Check quality gate logic and delay functionality',
+      '6. View formatted outputs in multiple channels',
+      '7. Monitor LLM-centric execution with real-time updates'
+    ],
+    testingNotes: 'This template tests the complete multimodal → LLM-centric → smart mapping → multi-output workflow. Upload any file type to see AI processing in action!'
+  },
+
+  // ✅ SIMPLE: Multimodal Quick Test
+  {
+    name: '⚡ Quick Multimodal Test',
+    description: 'Simple 4-node test: Multimodal Input → Agent → Task → Output',
+    thumbnail: '/img/multimodal-simple.png',
+    nodes: [
+      {
+        id: 'input-quick-multimodal',
+        type: 'input',
+        position: { x: 50, y: 100 },
+        data: {
+          label: '🎭 Quick Upload',
+          inputType: 'multimodal',
+          placeholder: 'Drop any file here',
+          description: 'Quick multimodal AI processing test',
+          nodeId: 'input-quick-multimodal',
+          nodeType: 'input'
+        }
+      },
+      {
+        id: 'agent-quick-analyzer',
+        type: 'agent', 
+        position: { x: 300, y: 100 },
+        data: {
+          label: '🔍 Quick Analyzer',
+          role: 'Content Analyzer',
+          goal: 'Quickly analyze uploaded content',
+          backstory: 'Fast content analysis specialist.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-3.5-turbo',
+            temperature: 0.5,
+            max_tokens: 800
+          },
+          nodeId: 'agent-quick-analyzer',
+          nodeType: 'agent'
+        }
+      },
+      {
+        id: 'task-quick-summary',
+        type: 'task',
+        position: { x: 550, y: 100 },
+        data: {
+          label: '📝 Quick Summary',
+          description: 'Create a brief summary of the uploaded content',
+          expectedOutput: 'Short, clear summary of the content with key points',
+          agentId: 'agent-quick-analyzer',
+          nodeId: 'task-quick-summary',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'output-quick-result',
+        type: 'output',
+        position: { x: 800, y: 100 },
+        data: {
+          label: '📤 Quick Result',
+          outputType: 'display',
+          description: 'Display the analysis result',
+          nodeId: 'output-quick-result',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      { id: 'e1', source: 'input-quick-multimodal', target: 'agent-quick-analyzer', data: { label: '🎭 Content' } },
+      { id: 'e2', source: 'agent-quick-analyzer', target: 'task-quick-summary', data: { label: '🧠 Analysis' } },
+      { id: 'e3', source: 'task-quick-summary', target: 'output-quick-result', data: { label: '📝 Summary' } }
+    ]),
+    tags: ['Quick Test', 'Multimodal', 'Simple', 'Fast'],
+    complexity: 'Beginner',
+    estimatedTime: '1-2 minutes',
+    agentCount: 1,
+    nodeCount: 4,
+    testingNotes: 'Perfect for quick testing! Upload any image, audio, or document to see instant AI analysis.'
+  },
+
+  // ✅ NEW: AI-Powered Email Summarizer
+  {
+    name: "AI-Powered Email Summarizer",
+    description: "Automatically summarize incoming emails using AI.",
+    thumbnail: "https://example.com/email-summarizer.png",
+    nodes: [
+      {
+        id: "trigger-1",
+        type: "trigger",
+        position: { x: 100, y: 100 },
+        data: {
+          label: "Email Trigger",
+          description: "Triggered on new email",
+          triggerType: "webhook",
+          scheduleType: "",
+          runAt: "",
+          interval: ""
+        }
+      },
+      {
+        id: "input-1",
+        type: "input",
+        position: { x: 300, y: 100 },
+        data: {
+          label: "Email Input",
+          description: "Raw email content",
+          inputType: "text",
+          defaultValue: "",
+          required: true
+        }
+      },
+      {
+        id: "chat-1",
+        type: "chat",
+        position: { x: 500, y: 100 },
+        data: {
+          label: "Summarize Email",
+          description: "AI summarizes the email",
+          prompt: "Summarize the following email:",
+          framework: "openai",
+          llmModel: "gpt-3.5-turbo",
+          temperature: 0.7,
+          max_tokens: 500
+        }
+      },
+      {
+        id: "output-1",
+        type: "output",
+        position: { x: 700, y: 100 },
+        data: {
+          label: "Summary Output",
+          description: "Final email summary",
+          outputType: "text",
+          defaultValue: "",
+          required: true
+        }
+      }
+    ],
+    edges: [
+      { id: "e1", source: "trigger-1", target: "input-1" },
+      { id: "e2", source: "input-1", target: "chat-1" },
+      { id: "e3", source: "chat-1", target: "output-1" }
+    ],
+    tags: ["email", "summarization", "ai"],
+    complexity: "medium",
+    estimatedTime: "5 minutes",
+    agentCount: 1,
+    nodeCount: 4
+  },
+
+  // ✅ NEW: RSS to LinkedIn Post (Optimized)
+  {
+    name: '📰 RSS to LinkedIn Post (Optimized)',
+    description: 'Automated workflow: Pulls RSS feed, cleans and summarizes articles, writes LinkedIn post, and sends to Airtable.',
+    thumbnail: '/img/rss-linkedin-optimized.png',
+    nodes: [
+      {
+        id: 'trigger-rss',
+        type: 'trigger',
+        position: { x: 50, y: 100 },
+        data: {
+          label: '📰 RSS Trigger',
+          triggerType: 'schedule',
+          schedule: { cron: '*/30 * * * *', timezone: 'UTC' },
+          config: {
+            feedUrl: 'https://example.com/rss.xml'
+          },
+          nodeId: 'trigger-rss',
+          nodeType: 'trigger'
+        }
+      },
+      {
+        id: 'agent-clean-article',
+        type: 'agent',
+        position: { x: 250, y: 100 },
+        data: {
+          label: '🧹 Clean Article',
+          role: 'Content Cleaner',
+          goal: 'Extract and clean main article text from RSS entry',
+          backstory: 'A meticulous content cleaner who specializes in extracting the core readable text from messy or noisy web articles.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.2,
+            max_tokens: 1200
+          },
+          nodeId: 'agent-clean-article',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      {
+        id: 'task-clean-article',
+        type: 'task',
+        position: { x: 350, y: 100 },
+        data: {
+          label: '🧹 Clean Article Task',
+          description: 'Clean and extract main article text from RSS entry',
+          expectedOutput: 'Cleaned article text',
+          agentId: 'agent-clean-article',
+          nodeId: 'task-clean-article',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'agent-summarize',
+        type: 'agent',
+        position: { x: 450, y: 100 },
+        data: {
+          label: '📝 Summarize Article',
+          role: 'Automation-Focused Summarizer',
+          goal: 'Summarize article with focus on automation/AI',
+          backstory: 'A specialist in distilling long-form content into concise, actionable summaries with a focus on automation and AI topics.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.3,
+            max_tokens: 800
+          },
+          nodeId: 'agent-summarize',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      {
+        id: 'task-summarize',
+        type: 'task',
+        position: { x: 550, y: 100 },
+        data: {
+          label: '📝 Summarize Article Task',
+          description: 'Summarize article with focus on automation/AI',
+          expectedOutput: 'Summarized article text',
+          agentId: 'agent-summarize',
+          nodeId: 'task-summarize',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'agent-linkedin',
+        type: 'agent',
+        position: { x: 650, y: 100 },
+        data: {
+          label: '💼 Write LinkedIn Post',
+          role: 'LinkedIn Content Writer',
+          goal: 'Write a LinkedIn post from summary, engaging and professional',
+          backstory: 'A creative professional with experience in crafting engaging LinkedIn posts that drive conversation and visibility.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.5,
+            max_tokens: 600
+          },
+          nodeId: 'agent-linkedin',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      {
+        id: 'task-linkedin',
+        type: 'task',
+        position: { x: 750, y: 100 },
+        data: {
+          label: '💼 Write LinkedIn Post Task',
+          description: 'Write a LinkedIn post from summary, engaging and professional',
+          expectedOutput: 'LinkedIn post content',
+          agentId: 'agent-linkedin',
+          nodeId: 'task-linkedin',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'tool-airtable',
+        type: 'tool',
+        position: { x: 850, y: 100 },
+        data: {
+          label: '📤 Send to Airtable',
+          toolType: 'api',
+          framework: 'api',
+          config: {
+            apiEndpoint: 'https://api.airtable.com/v0/appId/SocialPosts',
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer YOUR_AIRTABLE_KEY' },
+            parameters: {
+              table: 'SocialPosts',
+              fields: {
+                Content: '{{output}}',
+                Source: 'RSS',
+                Status: 'Pending'
+              }
+            }
+          },
+          nodeId: 'tool-airtable',
+          nodeType: 'tool'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      { id: 'e1', source: 'trigger-rss', target: 'agent-clean-article' },
+      { id: 'e2', source: 'agent-clean-article', target: 'task-clean-article' },
+      { id: 'e3', source: 'task-clean-article', target: 'agent-summarize' },
+      { id: 'e4', source: 'agent-summarize', target: 'task-summarize' },
+      { id: 'e5', source: 'task-summarize', target: 'agent-linkedin' },
+      { id: 'e6', source: 'agent-linkedin', target: 'task-linkedin' },
+      { id: 'e7', source: 'task-linkedin', target: 'tool-airtable' }
+    ]),
+    tags: ['RSS', 'LinkedIn', 'Content', 'Automation', 'Airtable'],
+    complexity: 'Medium',
+    estimatedTime: '2 minutes',
+    agentCount: 3,
+    nodeCount: 8
+  },
+
+  // 🧪 COMPREHENSIVE: End-to-End System Test Workflow
+  {
+    name: '🧪 Comprehensive System Test Workflow',
+    description: 'Complete end-to-end test covering all system components: Smart Mapping, BYOK, Multimodal, Multiple Frameworks, All Node Types',
+    thumbnail: '/img/comprehensive-test.png',
+    nodes: [
+      // 1. TRIGGER NODE - Tests trigger functionality
+      {
+        id: 'trigger-manual-test',
+        type: 'trigger',
+        position: { x: 50, y: 50 },
+        data: {
+          label: '🚀 Manual Test Trigger',
+          triggerType: 'manual',
+          description: 'Manual trigger to start comprehensive system test',
+          config: {
+            trigger_data: 'comprehensive_test_started',
+            timestamp: '{{timestamp}}'
+          },
+          nodeId: 'trigger-manual-test',
+          nodeType: 'trigger'
+        }
+      },
+      
+      // 2. INPUT NODE - Tests input processing and smart mapping
+      {
+        id: 'input-test-data',
+        type: 'input',
+        position: { x: 250, y: 50 },
+        data: {
+          label: '📥 Test Data Input',
+          inputType: 'text',
+          placeholder: 'Analyze this image and create a comprehensive report about AI trends in 2024',
+          description: 'Input test data that will be processed through the entire workflow',
+          defaultValue: 'Create a comprehensive analysis of AI trends in 2024 with market insights and future predictions',
+          nodeId: 'input-test-data',
+          nodeType: 'input'
+        }
+      },
+      
+      // 3. CHAT NODE - Tests chat functionality with different provider
+      {
+        id: 'chat-initial-analysis',
+        type: 'chat',
+        position: { x: 450, y: 50 },
+        data: {
+          label: '💬 Initial Analysis Chat',
+          prompt: 'You are an AI expert. Analyze the input and provide initial insights.',
+          model: 'gpt-4',
+          temperature: 0.7,
+          max_tokens: 1000,
+          framework: 'openai',
+          enable_memory: true,
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 1000
+          },
+          nodeId: 'chat-initial-analysis',
+          nodeType: 'chat'
+        }
+      },
+      
+      // 4. AGENT NODE - Tests CrewAI framework with BYOK
+      {
+        id: 'agent-research-specialist',
+        type: 'agent',
+        position: { x: 650, y: 50 },
+        data: {
+          label: '🔍 Research Specialist Agent',
+          role: 'AI Research Specialist',
+          goal: 'Conduct comprehensive research on AI trends and create detailed analysis',
+          backstory: 'Expert researcher with deep knowledge of AI, machine learning, and market analysis. Specializes in creating comprehensive reports.',
+          framework: 'crewai',
+          tools: ['search', 'url_reader', 'calculator'],
+          frameworkConfig: {
+            provider: 'perplexity',
+            model: 'sonar-pro',
+            temperature: 0.3,
+            max_tokens: 2000
+          },
+          allow_delegation: true,
+          enable_memory: true,
+          max_iterations: 3,
+          nodeId: 'agent-research-specialist',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      
+      // 5. TASK NODE - Tests task execution with agent integration
+      {
+        id: 'task-comprehensive-research',
+        type: 'task',
+        position: { x: 850, y: 50 },
+        data: {
+          label: '📋 Comprehensive Research Task',
+          description: 'Research AI trends, analyze market data, identify key players, and create detailed insights',
+          expectedOutput: 'Comprehensive AI trends report with market analysis, key insights, and future predictions',
+          agentId: 'agent-research-specialist',
+          async_execution: false,
+          dependencies: [],
+          nodeId: 'task-comprehensive-research',
+          nodeType: 'task'
+        }
+      },
+      
+      // 6. TOOL NODE - Tests universal API tool
+      {
+        id: 'tool-market-data',
+        type: 'tool',
+        position: { x: 1050, y: 50 },
+        data: {
+          label: '📊 Market Data Tool',
+          toolType: 'universal_api',
+          framework: 'universal_api',
+          config: {
+            api_service_name: 'market_data_api',
+            endpoint: 'https://api.example.com/market-data',
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer {{api_key}}'
+            },
+            parameters: {
+              query: 'AI market trends 2024',
+              format: 'json'
+            }
+          },
+          parameters: {
+            query: '{{input}}',
+            format: 'json'
+          },
+          retry_count: 3,
+          timeout: 30,
+          is_async: false,
+          nodeId: 'tool-market-data',
+          nodeType: 'tool'
+        }
+      },
+      
+      // 7. LOGIC NODE - Tests conditional routing
+      {
+        id: 'logic-quality-check',
+        type: 'logic',
+        position: { x: 1250, y: 50 },
+        data: {
+          label: '✅ Quality Check Logic',
+          condition: 'response && response.length > 100 && response.includes("AI")',
+          description: 'Check if response meets quality standards before proceeding',
+          operator: 'AND',
+          nodeId: 'logic-quality-check',
+          nodeType: 'logic'
+        }
+      },
+      
+      // 8. DELAY NODE - Tests timing functionality
+      {
+        id: 'delay-processing',
+        type: 'delay',
+        position: { x: 1450, y: 50 },
+        data: {
+          label: '⏱️ Processing Delay',
+          duration: 2,
+          unit: 'seconds',
+          description: 'Brief delay to simulate processing time',
+          nodeId: 'delay-processing',
+          nodeType: 'delay'
+        }
+      },
+      
+      // 9. AGENT NODE - Tests LangChain framework
+      {
+        id: 'agent-content-writer',
+        type: 'agent',
+        position: { x: 1650, y: 50 },
+        data: {
+          label: '✍️ Content Writer Agent',
+          role: 'Professional Content Writer',
+          goal: 'Transform research data into engaging, professional content',
+          backstory: 'Experienced content writer who specializes in creating compelling narratives from complex data.',
+          framework: 'langchain',
+          tools: ['text_processor', 'formatter'],
+          frameworkConfig: {
+            provider: 'anthropic',
+            model: 'claude-3-sonnet',
+            temperature: 0.5,
+            max_tokens: 1500
+          },
+          chain_type: 'llm',
+          memory_config: {
+            type: 'buffer',
+            max_tokens: 1000,
+            return_messages: true
+          },
+          nodeId: 'agent-content-writer',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 4000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 4000
+        }
+      },
+      
+      // 10. TASK NODE - Tests content creation
+      {
+        id: 'task-content-creation',
+        type: 'task',
+        position: { x: 1850, y: 50 },
+        data: {
+          label: '📝 Content Creation Task',
+          description: 'Create engaging content from research data with proper formatting and structure',
+          expectedOutput: 'Professional content piece ready for publication',
+          agentId: 'agent-content-writer',
+          async_execution: false,
+          dependencies: ['task-comprehensive-research'],
+          nodeId: 'task-content-creation',
+          nodeType: 'task'
+        }
+      },
+      
+      // 11. OUTPUT NODE - Tests webhook output
+      {
+        id: 'output-webhook',
+        type: 'output',
+        position: { x: 2050, y: 25 },
+        data: {
+          label: '🌐 Webhook Output',
+          outputType: 'webhook',
+          config: {
+            url: 'https://webhook.site/your-unique-url',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Source': 'CrewBuilder'
+            },
+            template: '{{content}}'
+          },
+          description: 'Send results to external webhook for integration',
+          nodeId: 'output-webhook',
+          nodeType: 'output'
+        }
+      },
+      
+      // 12. OUTPUT NODE - Tests email output
+      {
+        id: 'output-email',
+        type: 'output',
+        position: { x: 2050, y: 75 },
+        data: {
+          label: '📧 Email Output',
+          outputType: 'email',
+          config: {
+            to: 'test@example.com',
+            subject: 'AI Trends Analysis Report - {{timestamp}}',
+            template: 'Here is your comprehensive AI trends analysis:\n\n{{content}}\n\nGenerated by CrewBuilder at {{timestamp}}'
+          },
+          description: 'Send results via email',
+          nodeId: 'output-email',
+          nodeType: 'output'
+        }
+      },
+      
+      // 13. OUTPUT NODE - Tests CMS output
+      {
+        id: 'output-cms',
+        type: 'output',
+        position: { x: 2050, y: 125 },
+        data: {
+          label: '📄 CMS Output',
+          outputType: 'cms',
+          config: {
+            cms_type: 'wordpress',
+            content_type: 'post',
+            title: 'AI Trends Analysis {{timestamp}}',
+            content: '{{content}}',
+            status: 'draft'
+          },
+          description: 'Publish to content management system',
+          nodeId: 'output-cms',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      // Main flow
+      { id: 'e1', source: 'trigger-manual-test', target: 'input-test-data' },
+      { id: 'e2', source: 'input-test-data', target: 'chat-initial-analysis' },
+      { id: 'e3', source: 'chat-initial-analysis', target: 'agent-research-specialist' },
+      { id: 'e4', source: 'agent-research-specialist', target: 'task-comprehensive-research' },
+      { id: 'e5', source: 'task-comprehensive-research', target: 'tool-market-data' },
+      { id: 'e6', source: 'tool-market-data', target: 'logic-quality-check' },
+      { id: 'e7', source: 'logic-quality-check', target: 'delay-processing' },
+      { id: 'e8', source: 'delay-processing', target: 'agent-content-writer' },
+      { id: 'e9', source: 'agent-content-writer', target: 'task-content-creation' },
+      
+      // Output branches
+      { id: 'e10', source: 'task-content-creation', target: 'output-webhook' },
+      { id: 'e11', source: 'task-content-creation', target: 'output-email' },
+      { id: 'e12', source: 'task-content-creation', target: 'output-cms' }
+    ]),
+    tags: ['Comprehensive', 'Test', 'End-to-End', 'All Components', 'Smart Mapping', 'BYOK', 'Multimodal'],
+    complexity: 'High',
+    estimatedTime: '5-8 minutes',
+    agentCount: 2,
+    nodeCount: 13,
+    
+    // Test metadata
+    testMetadata: {
+      componentsTested: [
+        'Smart Mapping',
+        'BYOK (Bring Your Own Key)',
+        'Multimodal Processing',
+        'Multiple Frameworks (CrewAI, LangChain)',
+        'Multiple Providers (OpenAI, Perplexity, Anthropic)',
+        'All Node Types',
+        'Conditional Logic',
+        'Error Handling',
+        'Data Flow',
+        'Output Routing'
+      ],
+      expectedBehaviors: [
+        'Smart mapping should automatically route data between nodes',
+        'BYOK should work with different API providers',
+        'Framework switching should work seamlessly',
+        'Logic nodes should filter data appropriately',
+        'Multiple outputs should receive the same data',
+        'Error handling should be graceful',
+        'Execution should be traceable through logs'
+      ],
+      testScenarios: [
+        'Normal execution flow',
+        'Provider API key validation',
+        'Framework compatibility',
+        'Data transformation',
+        'Error recovery',
+        'Performance monitoring'
+      ]
+    }
   }
 ];
 

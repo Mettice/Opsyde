@@ -22,6 +22,13 @@ class MultimodalProcessor:
         self.supported_image_types = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
         self.supported_audio_types = ['.mp3', '.wav', '.m4a', '.ogg', '.flac']
         self.supported_document_types = ['.pdf', '.docx', '.txt', '.md', '.csv']
+        self.processors = {
+            'markdown_to_html': self._markdown_to_html,
+            'extract_text': self._extract_text,
+            'extract_images': self._extract_images,
+            'extract_audio': self._extract_audio,
+            'extract_video': self._extract_video
+        }
         
     async def process_multimodal_input(
         self, 
@@ -191,57 +198,151 @@ class MultimodalProcessor:
         """Process documents (PDF, DOCX, etc.) and extract text/structure"""
         try:
             file_ext = os.path.splitext(filename.lower())[1]
-            
-            if file_ext == '.txt' or file_ext == '.md':
-                # Plain text files
+            context = context or {}
+
+            # Helper: select best LLM
+            def select_llm(context, file_type):
+                preferred = context.get("preferred_llm")
+                keys = context.get("user_keys", {})
+                if preferred and preferred != 'auto' and preferred in keys:
+                    return preferred, keys[preferred]
+                # Auto-select logic
+                if file_type == "image" and "gemini" in keys:
+                    return "gemini", keys["gemini"]
+                if file_type == "csv" and "claude" in keys:
+                    return "claude", keys["claude"]
+                if "openai" in keys:
+                    return "openai", keys["openai"]
+                for k in keys:
+                    return k, keys[k]
+                return None, None
+
+            # Helper: get default prompt
+            def get_default_prompt(file_type):
+                return (
+                    context.get("prompt") or
+                    {
+                        "csv": "Extract each row as a JSON object with name, email, role, and company. Output as a JSON array.",
+                        "document": "Extract key information as a JSON object. Output as a JSON array if multiple records.",
+                        "image": "Describe the image and extract any text as JSON.",
+                        "audio": "Transcribe the audio and summarize as JSON.",
+                        "json": "Summarize the JSON content and extract key fields.",
+                        "zip": "List the files in the ZIP and extract structured data from each if possible."
+                    }.get(file_type, "Extract structured data as JSON.")
+                )
+
+            # Helper: call LLM API
+            async def _process_with_llm(llm, api_key, prompt, content):
+                if llm == "openai":
+                    url = "https://api.openai.com/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": "gpt-4-turbo",
+                        "messages": [
+                            {"role": "user", "content": f"{prompt}\n\n{content}"}
+                        ],
+                        "max_tokens": 2048
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(url, json=payload, headers=headers) as response:
+                            result = await response.json()
+                            if 'choices' in result and result['choices']:
+                                return result['choices'][0]['message']['content']
+                            return json.dumps(result)
+                elif llm == "gemini":
+                    url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{
+                            "parts": [
+                                {"text": f"{prompt}\n\n{content}"}
+                            ]
+                        }]
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(url, json=payload) as response:
+                            result = await response.json()
+                            if 'candidates' in result and result['candidates']:
+                                return result['candidates'][0]['content']['parts'][0]['text']
+                            return json.dumps(result)
+                elif llm == "claude":
+                    url = "https://api.anthropic.com/v1/messages"
+                    headers = {
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json"
+                    }
+                    payload = {
+                        "model": "claude-3-sonnet-20240229",
+                        "max_tokens": 2048,
+                        "messages": [
+                            {"role": "user", "content": f"{prompt}\n\n{content}"}
+                        ]
+                    }
+                    async with aiohttp.ClientSession() as session:
+                        async with session.post(url, json=payload, headers=headers) as response:
+                            result = await response.json()
+                            if 'content' in result:
+                                return result['content']
+                            return json.dumps(result)
+                # Add more LLMs as needed
+                return None
+
+            # For .txt, .md, .csv, .pdf, .docx: use LLM extraction
+            if file_ext in ['.txt', '.md', '.csv', '.pdf', '.docx']:
                 if isinstance(doc_data, bytes):
-                    content = doc_data.decode('utf-8')
+                    content = doc_data.decode('utf-8', errors='ignore')
                 else:
-                    content = base64.b64decode(doc_data).decode('utf-8')
-                    
-                return {
-                    'type': 'document',
-                    'filename': filename,
-                    'content': content,
-                    'structure': {
-                        'type': 'plain_text',
-                        'length': len(content),
-                        'lines': len(content.split('\n'))
-                    },
-                    'api_used': 'built_in',
-                    'timestamp': datetime.now().isoformat(),
-                    'success': True
-                }
-            
-            elif file_ext == '.csv':
-                # CSV files
-                if isinstance(doc_data, bytes):
-                    content = doc_data.decode('utf-8')
+                    content = base64.b64decode(doc_data).decode('utf-8', errors='ignore')
+                file_type = 'csv' if file_ext == '.csv' else 'document'
+                llm, api_key = select_llm(context, file_type)
+                prompt = get_default_prompt(file_type)
+                if llm and api_key:
+                    llm_response = await _process_with_llm(llm, api_key, prompt, content)
+                    # Try to parse as JSON
+                    try:
+                        parsed = json.loads(llm_response)
+                        return {
+                            'type': 'document',
+                            'filename': filename,
+                            'parsed_output': parsed,
+                            'llm_used': llm,
+                            'prompt': prompt,
+                            'timestamp': datetime.now().isoformat(),
+                            'success': True
+                        }
+                    except Exception:
+                        return {
+                            'type': 'document',
+                            'filename': filename,
+                            'content': llm_response,
+                            'llm_used': llm,
+                            'prompt': prompt,
+                            'timestamp': datetime.now().isoformat(),
+                            'success': True,
+                            'warning': 'LLM output was not valid JSON.'
+                        }
                 else:
-                    content = base64.b64decode(doc_data).decode('utf-8')
-                
-                # Parse CSV structure
-                lines = content.split('\n')
-                headers = lines[0].split(',') if lines else []
-                rows = len(lines) - 1 if len(lines) > 1 else 0
-                
-                return {
-                    'type': 'document',
-                    'filename': filename,
-                    'content': content,
-                    'structure': {
-                        'type': 'csv',
-                        'headers': headers,
-                        'rows': rows,
-                        'columns': len(headers)
-                    },
-                    'api_used': 'built_in',
-                    'timestamp': datetime.now().isoformat(),
-                    'success': True
-                }
-            
+                    # Fallback to built-in
+                    return {
+                        'type': 'document',
+                        'filename': filename,
+                        'content': content,
+                        'structure': {
+                            'type': file_type,
+                            'length': len(content),
+                            'lines': len(content.split('\n'))
+                        },
+                        'api_used': 'built_in',
+                        'timestamp': datetime.now().isoformat(),
+                        'success': True,
+                        'warning': 'No LLM key available, used built-in.'
+                    }
+            # ... existing else for other file types ...
             else:
-                # Complex documents (PDF, DOCX) - would need specialized libraries
+                # Complex documents (other types)
                 return {
                     'type': 'document',
                     'filename': filename,
@@ -255,7 +356,6 @@ class MultimodalProcessor:
                     'timestamp': datetime.now().isoformat(),
                     'success': False
                 }
-                
         except Exception as e:
             logger.error(f"❌ Document processing failed: {str(e)}")
             return {
@@ -448,6 +548,93 @@ class MultimodalProcessor:
         # Fallback to environment variables
         env_key = f"{provider.upper()}_API_KEY"
         return os.getenv(env_key)
+
+    async def process_output(self, content: Any, output_format: str = 'text', post_process: List[str] = None) -> Any:
+        """Process multimodal content with optional post-processing"""
+        if not post_process:
+            return content
+
+        result = content
+        for processor in post_process:
+            if processor in self.processors:
+                result = await self.processors[processor](result)
+            else:
+                logger.warning(f"Unknown post-processor: {processor}")
+
+        return result
+
+    async def _markdown_to_html(self, content: str) -> str:
+        """Convert markdown to HTML"""
+        import markdown
+        return markdown.markdown(content)
+
+    async def _extract_text(self, content: Any) -> str:
+        """Extract text from any content type"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, dict):
+            return content.get('text', '')
+        elif isinstance(content, list):
+            return ' '.join(str(item) for item in content)
+        return str(content)
+
+    async def _extract_images(self, content: Any) -> List[str]:
+        """Extract image URLs or base64 data"""
+        if isinstance(content, str):
+            # Try to find image URLs or base64 data
+            import re
+            image_patterns = [
+                r'https?://[^\s<>"]+?\.(?:jpg|jpeg|gif|png|webp)',
+                r'data:image/[^;]+;base64,[^"]+'
+            ]
+            images = []
+            for pattern in image_patterns:
+                images.extend(re.findall(pattern, content))
+            return images
+        elif isinstance(content, dict):
+            return content.get('images', [])
+        elif isinstance(content, list):
+            return [item for item in content if isinstance(item, str) and 
+                   (item.startswith('http') or item.startswith('data:image'))]
+        return []
+
+    async def _extract_audio(self, content: Any) -> List[str]:
+        """Extract audio URLs or base64 data"""
+        if isinstance(content, str):
+            import re
+            audio_patterns = [
+                r'https?://[^\s<>"]+?\.(?:mp3|wav|ogg|m4a)',
+                r'data:audio/[^;]+;base64,[^"]+'
+            ]
+            audio = []
+            for pattern in audio_patterns:
+                audio.extend(re.findall(pattern, content))
+            return audio
+        elif isinstance(content, dict):
+            return content.get('audio', [])
+        elif isinstance(content, list):
+            return [item for item in content if isinstance(item, str) and 
+                   (item.startswith('http') or item.startswith('data:audio'))]
+        return []
+
+    async def _extract_video(self, content: Any) -> List[str]:
+        """Extract video URLs or base64 data"""
+        if isinstance(content, str):
+            import re
+            video_patterns = [
+                r'https?://[^\s<>"]+?\.(?:mp4|webm|mov)',
+                r'data:video/[^;]+;base64,[^"]+'
+            ]
+            videos = []
+            for pattern in video_patterns:
+                videos.extend(re.findall(pattern, content))
+            return videos
+        elif isinstance(content, dict):
+            return content.get('videos', [])
+        elif isinstance(content, list):
+            return [item for item in content if isinstance(item, str) and 
+                   (item.startswith('http') or item.startswith('data:video'))]
+        return []
 
 # Global instance
 multimodal_processor = MultimodalProcessor()

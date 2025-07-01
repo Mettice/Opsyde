@@ -12,21 +12,72 @@ export const useTriggers = ({ customPollingInterval, addNotification }) => {
       setLoading(true);
       setError(null);
       
-      const triggers = await apiClient.fetchExecutedTriggers();
+      const response = await apiClient.fetchExecutedTriggers();
+      
+      // Handle different response formats
+      let triggers = [];
+      if (response && typeof response === 'object') {
+        // Check if response has data.triggers structure
+        if (response.data && Array.isArray(response.data.triggers)) {
+          triggers = response.data.triggers;
+        }
+        // Check if response is directly an array
+        else if (Array.isArray(response)) {
+          triggers = response;
+        }
+        // Check if response has triggers property
+        else if (response.triggers && Array.isArray(response.triggers)) {
+          triggers = response.triggers;
+        }
+        // Check if response.data is directly an array
+        else if (response.data && Array.isArray(response.data)) {
+          triggers = response.data;
+        }
+      }
       
       // Sort triggers by execution time, most recent first
       const sortedTriggers = [...triggers].sort((a, b) => {
-        return new Date(b.executed_at || b.timestamp) - new Date(a.executed_at || a.timestamp);
+        const dateA = new Date(b.executed_at || b.last_executed || b.timestamp || 0);
+        const dateB = new Date(a.executed_at || a.last_executed || a.timestamp || 0);
+        return dateA - dateB;
       });
       
       setExecutedTriggers(sortedTriggers);
+      
+      // Log success for debugging
+      console.log(`Successfully fetched ${triggers.length} executed triggers`);
+      
     } catch (error) {
       console.error('Error fetching executed triggers:', error);
-      setError(error.message || 'Failed to fetch executed triggers');
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to fetch executed triggers';
+      if (error.message) {
+        if (error.message.includes('EMPTY_RESPONSE')) {
+          errorMessage = 'Server returned empty response. Please check backend logs.';
+        } else if (error.message.includes('PARSE_ERROR')) {
+          errorMessage = 'Invalid response format from server.';
+        } else if (error.message.includes('404')) {
+          errorMessage = 'Trigger endpoint not found. Please check backend configuration.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Show notification if available
+      if (addNotification) {
+        addNotification({
+          message: errorMessage,
+          type: 'error',
+          duration: 5000
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [addNotification]);
   
   // Initial fetch and polling
   useEffect(() => {

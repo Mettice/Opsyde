@@ -21,6 +21,7 @@ const TaskNode = React.memo(({
   const [executionProgress, setExecutionProgress] = useState(0);
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
+  const [validationErrors, setValidationErrors] = useState({});
   
   const framework = data.framework || 'crewai';
   const frameworkConfig = registry.frameworks[framework]?.config || {};
@@ -35,8 +36,50 @@ const TaskNode = React.memo(({
     priority: data.priority || 'medium',
     context: data.context || [],
     tools: data.tools || [],
-    nodeId: data.nodeId || data.id || ''
+    nodeId: data.nodeId || data.id || '',
+    input_schema: data.input_schema || {},
+    output_schema: data.output_schema || {}
   };
+
+  // Schema validation
+  const validateAgainstSchema = useCallback((value, schema) => {
+    const errors = {};
+    
+    if (!schema) return errors;
+
+    // Check required fields
+    Object.entries(schema).forEach(([key, fieldSchema]) => {
+      if (!fieldSchema.optional && !value[key]) {
+        errors[key] = `Field ${key} is required`;
+      }
+    });
+
+    // Type validation
+    Object.entries(schema).forEach(([key, fieldSchema]) => {
+      if (value[key] !== undefined) {
+        const valueType = typeof value[key];
+        if (fieldSchema.type === 'any') return;
+        
+        if (fieldSchema.type === 'object' && valueType !== 'object') {
+          errors[key] = `Field ${key} must be an object`;
+        } else if (fieldSchema.type === 'string' && valueType !== 'string') {
+          errors[key] = `Field ${key} must be a string`;
+        } else if (fieldSchema.type === 'number' && valueType !== 'number') {
+          errors[key] = `Field ${key} must be a number`;
+        }
+      }
+    });
+
+    return errors;
+  }, []);
+
+  // Validate input against schema
+  useEffect(() => {
+    if (safeData.input_schema && data.inputs) {
+      const errors = validateAgainstSchema(data.inputs, safeData.input_schema);
+      setValidationErrors(errors);
+    }
+  }, [data.inputs, safeData.input_schema, validateAgainstSchema]);
 
   // Simulate execution progress and metrics
   useEffect(() => {
@@ -381,13 +424,13 @@ const TaskNode = React.memo(({
         {/* Connection handles with beautiful styling */}
         <Handle
           type="target"
-          position={Position.Left}
+          position={Position.Top}
           isConnectable={isConnectable}
           className="w-4 h-4 bg-gradient-to-r from-blue-400 to-blue-600 border-2 border-white shadow-xl rounded-full"
         />
         <Handle
           type="source"
-          position={Position.Right}
+          position={Position.Bottom}
           isConnectable={isConnectable}
           className="w-4 h-4 bg-gradient-to-r from-purple-400 to-pink-500 border-2 border-white shadow-xl rounded-full"
         />
@@ -465,6 +508,18 @@ const TaskNode = React.memo(({
                 )}
               </div>
             </div>
+
+            {/* Validation Errors */}
+            {Object.keys(validationErrors).length > 0 && (
+              <div className="mt-2">
+                <div className="font-semibold text-red-300">Validation Errors:</div>
+                <ul className="list-disc pl-6">
+                  {Object.entries(validationErrors).map(([key, error]) => (
+                    <li key={key}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -475,7 +530,27 @@ const TaskNode = React.memo(({
 TaskNode.displayName = 'TaskNode';
 
 TaskNode.propTypes = {
-  data: PropTypes.object.isRequired,
+  data: PropTypes.shape({
+    label: PropTypes.string,
+    description: PropTypes.string,
+    expectedOutput: PropTypes.string,
+    agentId: PropTypes.string,
+    async: PropTypes.bool,
+    priority: PropTypes.string,
+    context: PropTypes.array,
+    tools: PropTypes.array,
+    nodeId: PropTypes.string,
+    framework: PropTypes.string,
+    input_schema: PropTypes.object,
+    output_schema: PropTypes.object,
+    inputs: PropTypes.object,
+    executionState: PropTypes.shape({
+      status: PropTypes.string,
+      progress: PropTypes.number,
+      time: PropTypes.number,
+      cost: PropTypes.number
+    })
+  }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,
   enhancementMode: PropTypes.oneOf(['default', 'glow', 'pulse', 'bounce']),

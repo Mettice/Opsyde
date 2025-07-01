@@ -14,7 +14,7 @@ from core.llm_runner import llm_runner
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/llm-mode", tags=["llm-mode"])
+router = APIRouter(tags=["llm-mode"])
 
 class LLMModeToggleRequest(BaseModel):
     enabled: bool

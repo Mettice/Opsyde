@@ -442,7 +442,23 @@ const TriggerNode = memo(({
       }
     } catch (error) {
       console.error('Error registering trigger:', error);
-      toast.error(`Error registering trigger: ${error.message}`, {
+      
+      // Provide specific, helpful error messages
+      let userMessage = "Failed to set up trigger";
+      
+      if (error.message.includes('network') || error.message.includes('fetch')) {
+        userMessage = "Network error. Please check your connection.";
+      } else if (error.message.includes('validation') || error.message.includes('400')) {
+        userMessage = "Please check your trigger configuration.";
+      } else if (error.message.includes('auth') || error.message.includes('401') || error.message.includes('403')) {
+        userMessage = "Authentication error. Please log in again.";
+      } else if (error.message.includes('timeout')) {
+        userMessage = "Request timed out. Please try again.";
+      } else if (error.message.includes('500')) {
+        userMessage = "Server error. Please try again later.";
+      }
+      
+      toast.error(userMessage, {
         duration: 4000,
         position: 'top-right',
       });
@@ -455,24 +471,25 @@ const TriggerNode = memo(({
   const shouldAutoRegister = useCallback(() => {
     if (isRegistered || isRegistering) return false;
     
+    // Only auto-register when user has provided enough info
     if (data.triggerType === 'webhook') {
-      return true;
+      return data.nodeId && data.label; // Ensure basic info is set
     } else if (data.triggerType === 'schedule') {
-      // For scheduled triggers, make sure we have the date and time
-      const runDate = data.runDate || (data.runAt ? data.runAt.split(' ')[0] : '');
-      const runTime = data.runTime || (data.runAt ? data.runAt.split(' ')[1] : '');
-      
-      // Only register if we have both date and time or runAt is already set
-      return (runDate && runTime) || data.runAt;
+      return (data.runDate && data.runTime) || data.runAt;
+    } else if (data.triggerType === 'universal_polling') {
+      return data.apiEndpoint && data.serviceName; // Require essential fields
+    } else if (data.triggerType === 'universal_webhook') {
+      return data.nodeId && data.serviceName; // Require basic info
     }
     
     return false;
-  }, [data.triggerType, data.scheduleType, data.runAt, data.runDate, data.runTime, isRegistered, isRegistering]);
+  }, [data.triggerType, data.scheduleType, data.runAt, data.runDate, data.runTime, data.nodeId, data.label, data.apiEndpoint, data.serviceName, isRegistered, isRegistering]);
 
   // Auto-register trigger when conditions are met
   useEffect(() => {
     if (shouldAutoRegister()) {
       console.log("Auto-registering trigger");
+      toast.info("Setting up your trigger...", { duration: 2000 });
       registerTrigger();
     }
   }, [shouldAutoRegister, registerTrigger]);
@@ -747,10 +764,7 @@ const TriggerNode = memo(({
           type="source" 
           position={Position.Bottom} 
           isConnectable={isConnectable}
-          className="w-4 h-4 bg-gradient-to-r from-purple-400 to-pink-500 border-2 border-white shadow-xl rounded-full hover:scale-125 transition-transform duration-200"
-          style={{ bottom: -8 }}
-          id={`${data.id}-source`}
-          title="Connect to: Agent, Task, Tool"
+          className="w-4 h-4 bg-gradient-to-r from-purple-400 to-pink-500 border-2 border-white shadow-xl rounded-full"
         />
       </div>
 

@@ -29,6 +29,9 @@ const InputNode = memo(({
   const [executionTime, setExecutionTime] = useState(0);
   const [cost, setCost] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
+  const [inputType, setInputType] = useState(data.inputType || 'text');
+  const [file, setFile] = useState(null);
+  const [validationErrors, setValidationErrors] = useState({});
 
   // Extract expected inputs from connected nodes
   const expectedInputs = data.expectedInputs || [];
@@ -105,6 +108,46 @@ const InputNode = memo(({
     setStatus('error');
     setMultimodalResult(null);
   }, []);
+
+  // Schema validation
+  const validateAgainstSchema = useCallback((value, schema) => {
+    const errors = {};
+    
+    if (!schema) return errors;
+
+    // Check required fields
+    Object.entries(schema).forEach(([key, fieldSchema]) => {
+      if (!fieldSchema.optional && !value[key]) {
+        errors[key] = `Field ${key} is required`;
+      }
+    });
+
+    // Type validation
+    Object.entries(schema).forEach(([key, fieldSchema]) => {
+      if (value[key] !== undefined) {
+        const valueType = typeof value[key];
+        if (fieldSchema.type === 'any') return;
+        
+        if (fieldSchema.type === 'object' && valueType !== 'object') {
+          errors[key] = `Field ${key} must be an object`;
+        } else if (fieldSchema.type === 'string' && valueType !== 'string') {
+          errors[key] = `Field ${key} must be a string`;
+        } else if (fieldSchema.type === 'number' && valueType !== 'number') {
+          errors[key] = `Field ${key} must be a number`;
+        }
+      }
+    });
+
+    return errors;
+  }, []);
+
+  // Validate input against schema
+  useEffect(() => {
+    if (data.input_schema) {
+      const errors = validateAgainstSchema(value, data.input_schema);
+      setValidationErrors(errors);
+    }
+  }, [value, data.input_schema, validateAgainstSchema]);
 
   // Beautiful input-specific colors and status system
   const getStatusConfig = () => {
@@ -441,21 +484,10 @@ const InputNode = memo(({
 
   // Handle custom field changes
   const handleCustomFieldChange = (key, value) => {
-    setCustomFields(prev => ({
-      ...prev,
-      [key]: value
-    }));
-
-    if (data.onValueChange) {
-      data.onValueChange({
-        value: value,
-        inputKey: key,
-        type: 'custom',
-        customFields: {
-          ...customFields,
-          [key]: value
-        }
-      });
+    const newCustomFields = { ...customFields, [key]: value };
+    setCustomFields(newCustomFields);
+    if (data.onCustomFieldChange) {
+      data.onCustomFieldChange(newCustomFields);
     }
   };
 
@@ -543,7 +575,6 @@ const InputNode = memo(({
   const handleMouseEnter = () => setShowTooltip(true);
   const handleMouseLeave = () => setShowTooltip(false);
 
-  const inputType = data.inputType || 'text';
   const isRequired = data.isRequired || false;
   
   useEffect(() => {
@@ -724,15 +755,23 @@ const InputNode = memo(({
 
             {/* Compact Input Area based on type */}
             <div className="bg-white/50 backdrop-blur-sm rounded-lg p-3 border border-white/30">
-              {/* Text Input */}
+              {/* Text Input - Enhanced with Textarea and LLM Mode */}
               {safeData.inputType === 'text' && (
                 <div className="space-y-2">
-                  <input
-                    type="text"
+                  {/* LLM Mode Indicator for Text Input */}
+                  {data.llm_context?.llm_mode_enabled && (
+                    <div className="flex items-center gap-1 mb-2">
+                      <span className="text-xs">🧠</span>
+                      <span className="text-xs text-purple-600 font-medium">LLM Enhanced</span>
+                    </div>
+                  )}
+                  
+                  <textarea
                     value={value}
                     onChange={handleInputChange}
-                    placeholder={safeData.placeholder || "Enter text..."}
-                    className="w-full bg-transparent text-sm text-gray-700 placeholder-gray-500 focus:outline-none border-b border-gray-200 focus:border-blue-400 transition-colors pb-1"
+                    placeholder={safeData.placeholder || "Enter your text here..."}
+                    rows={3}
+                    className="w-full bg-transparent text-sm text-gray-700 placeholder-gray-500 focus:outline-none border border-gray-200 focus:border-blue-400 transition-colors p-2 rounded resize-vertical"
                   />
                   {value && (
                     <div className="text-xs text-gray-500 truncate">
@@ -745,6 +784,17 @@ const InputNode = memo(({
               {/* NEW: Multimodal Input with LLM Processing */}
               {safeData.inputType === 'multimodal' && (
                 <div className="space-y-3">
+                  {/* LLM Mode Indicator for Multimodal */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-sm">🎭</span>
+                    <span className="text-sm font-medium text-purple-700">AI-Powered Multimodal Input</span>
+                    {data.llm_context?.smart_mapping_enabled && (
+                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                        ✨ Smart Mapping
+                      </span>
+                    )}
+                  </div>
+                  
                   <MultimodalFileUpload
                     onFileProcessed={handleMultimodalFileProcessed}
                     onError={handleMultimodalError}
@@ -834,9 +884,16 @@ const InputNode = memo(({
                 </div>
               )}
 
-              {/* File Upload */}
+              {/* File Upload - Legacy Support */}
               {safeData.inputType === 'file' && (
                 <div className="space-y-2">
+                  {/* Legacy indicator */}
+                  <div className="flex items-center gap-1 mb-2">
+                    <span className="text-xs">📁</span>
+                    <span className="text-xs text-yellow-600 font-medium">Legacy File Upload</span>
+                    <span className="text-xs text-gray-500">(Consider using Multimodal)</span>
+                  </div>
+                  
                   <div className="flex items-center gap-2">
                     <label className="flex-1 cursor-pointer">
                       <input
@@ -929,11 +986,22 @@ const InputNode = memo(({
         </div>
 
         {/* Connection handles with beautiful styling */}
+        {/* NEW: Target handle for receiving connections from triggers */}
+        <Handle
+          type="target"
+          position={Position.Top}
+          isConnectable={isConnectable}
+          className="w-4 h-4 bg-gradient-to-r from-purple-400 to-indigo-500 border-2 border-white shadow-xl rounded-full"
+          id="input-top"
+        />
+        
+        {/* Source handle for sending processed data downstream */}
         <Handle
           type="source"
-          position={Position.Right}
+          position={Position.Bottom}
           isConnectable={isConnectable}
           className="w-4 h-4 bg-gradient-to-r from-blue-400 to-cyan-500 border-2 border-white shadow-xl rounded-full"
+          id="input-bottom"
         />
       </div>
 
@@ -999,7 +1067,7 @@ InputNode.propTypes = {
   data: PropTypes.shape({
     nodeId: PropTypes.string,
     label: PropTypes.string,
-    inputType: PropTypes.oneOf(['text', 'file', 'url']),
+    inputType: PropTypes.oneOf(['text', 'file', 'url', 'multimodal']),
     inputKey: PropTypes.string,
     value: PropTypes.oneOfType([
       PropTypes.string,
@@ -1013,7 +1081,8 @@ InputNode.propTypes = {
       name: PropTypes.string,
       hint: PropTypes.string
     })),
-    executionState: PropTypes.object
+    executionState: PropTypes.object,
+    input_schema: PropTypes.object
   }).isRequired,
   isConnectable: PropTypes.bool,
   selected: PropTypes.bool,

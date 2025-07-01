@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union, List
 from datetime import datetime
 import os
 from openai import AsyncOpenAI
@@ -10,8 +10,13 @@ from frameworks.openrouter_runner import run_openrouter_chat
 from frameworks.huggingface_runner import run_huggingface_tool
 from frameworks.perplexity_runner import run_perplexity_chat
 from core.llm_runner import llm_runner
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel
+from models.data import NodeData
+from models.schemas import NodeSchema, SchemaType, SchemaField
+from utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Create the router with /api prefix
 router = APIRouter(prefix="/api", tags=["chat"])
@@ -427,3 +432,82 @@ async def run_chat_endpoint(data: Dict[str, Any]) -> Dict[str, Any]:
                 "node_type": "chat"
             }
         }
+
+class ChatNodeConfig(NodeConfig):
+    """Configuration for Chat nodes"""
+    label: str
+    description: str
+    systemPrompt: str = Field(default="How can I assist you?", description="System prompt for the chat")
+    llmConfig: Dict[str, Any] = Field(default_factory=lambda: {
+        "provider": "openai",
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 500
+    }, description="LLM Configuration")
+    
+    # Enhanced input schema for chat
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'message': SchemaField(
+                type=SchemaType.STRING,
+                description='User message',
+                optional=False
+            ),
+            'context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Chat context',
+                optional=True,
+                properties={
+                    'conversation_history': SchemaField(
+                        type=SchemaType.ARRAY,
+                        description='Previous conversation messages',
+                        optional=True,
+                        items=SchemaField(
+                            type=SchemaType.OBJECT,
+                            description='Message object',
+                            properties={
+                                'role': SchemaField(type=SchemaType.STRING, description='Message role'),
+                                'content': SchemaField(type=SchemaType.STRING, description='Message content')
+                            }
+                        )
+                    )
+                }
+            )
+        },
+        required_fields=['message']
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.STRING,
+                description='Chat response',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Node type'),
+                    'processing_mode': SchemaField(type=SchemaType.STRING, description='Processing mode'),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Execution timestamp'),
+                    'model': SchemaField(type=SchemaType.STRING, description='Model used', optional=True),
+                    'framework': SchemaField(type=SchemaType.STRING, description='Framework used', optional=True)
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class ChatNode(BaseNode):
+    """Enhanced Chat Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return ChatNodeConfig
+
+    async def process(self, node, inputs, context):
+        return await super().process(node, inputs, context)

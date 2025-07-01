@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import HelpTooltip from '../HelpTooltip';
+import { ApiKeyNavigator } from '../shared/ApiKeyNavigator';
 
 // Helper function to extract service name from description
 const extractServiceName = (description) => {
@@ -38,6 +40,7 @@ const SmartOutputEditor = ({
   loadingApiKeys = false
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [postProcessingOptions, setPostProcessingOptions] = useState([]);
 
   // Get values from either direct formData or nested config
   const getValue = (fieldName) => {
@@ -113,6 +116,22 @@ const SmartOutputEditor = ({
     }
   };
 
+  // Load post-processing options
+  useEffect(() => {
+    const loadPostProcessingOptions = async () => {
+      try {
+        const response = await fetch('/api/outputs/post-processing-options');
+        const data = await response.json();
+        if (data.success) {
+          setPostProcessingOptions(data.data);
+        }
+      } catch (error) {
+        console.error('Failed to load post-processing options:', error);
+      }
+    };
+    loadPostProcessingOptions();
+  }, []);
+
   return (
     <div className="bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-50 p-6 rounded-xl border border-purple-200 shadow-sm">
       {/* Header */}
@@ -147,23 +166,18 @@ const SmartOutputEditor = ({
               </div>
             </div>
           ) : availableLLMs.length === 0 ? (
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <span className="text-yellow-600 mr-2">🔑</span>
-                  <span className="text-sm text-yellow-700">No valid API keys found in BYOK Manager</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => window.open('/api-keys', '_blank')}
-                  className="bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-3 py-1 rounded text-sm"
+                <span className="text-yellow-700 text-sm">
+                  ⚠️ No API keys configured
+                </span>
+                <ApiKeyNavigator 
+                  variant="button"
+                  className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
                 >
-                  Add API Keys
-                </button>
+                  Add API Key
+                </ApiKeyNavigator>
               </div>
-              <p className="text-xs text-yellow-600 mt-2">
-                Add and validate OpenAI, Anthropic, or OpenRouter API keys in the BYOK Manager to enable AI integration
-              </p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -443,6 +457,42 @@ const SmartOutputEditor = ({
             </div>
           </div>
         </details>
+
+        {/* Post-processing Options */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900">Post-processing</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {postProcessingOptions.map(option => (
+              <div
+                key={option.id}
+                className={`p-4 border rounded-lg cursor-pointer transition-all ${
+                  formData.postProcessing?.includes(option.id)
+                    ? 'border-purple-500 bg-purple-50'
+                    : 'border-gray-200 hover:border-purple-300'
+                }`}
+                onClick={() => {
+                  const current = formData.postProcessing || [];
+                  const newValue = current.includes(option.id)
+                    ? current.filter(id => id !== option.id)
+                    : [...current, option.id];
+                  handleInputChange({
+                    target: { name: 'postProcessing', value: newValue }
+                  });
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium text-gray-800">{option.name}</h4>
+                    <p className="text-sm text-gray-600 mt-1">{option.description}</p>
+                  </div>
+                  {formData.postProcessing?.includes(option.id) && (
+                    <span className="text-purple-500">✓</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

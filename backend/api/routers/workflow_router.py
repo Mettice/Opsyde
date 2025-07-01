@@ -50,7 +50,7 @@ async def get_workflow(
     workflow_id: str,
     workflow_service: WorkflowService = Depends(get_workflow_service)
 ):
-    """Get workflow by ID"""
+    """Get workflow by ID, including input/output schemas for each node"""
     try:
         workflow = await workflow_service.get_workflow(workflow_id)
         if not workflow:
@@ -58,7 +58,20 @@ async def get_workflow(
                 code=ErrorCode.NOT_FOUND,
                 message=f"Workflow {workflow_id} not found"
             )
-        return APIResponse.success_response(WorkflowBase(**workflow.dict()))
+        # Ensure input_schema/output_schema are present in each node
+        workflow_dict = workflow.dict()
+        for node in workflow_dict.get('nodes', []):
+            if 'input_schema' not in node:
+                try:
+                    from models.nodes import Node
+                    config = Node(**node).get_config()
+                    if hasattr(config, 'input_schema'):
+                        node['input_schema'] = config.input_schema
+                    if hasattr(config, 'output_schema'):
+                        node['output_schema'] = config.output_schema
+                except Exception:
+                    pass
+        return APIResponse.success_response(WorkflowBase(**workflow_dict))
     except Exception as e:
         return handle_exception(e)
 
@@ -328,17 +341,32 @@ async def list_workflows(
     owner_id: Optional[str] = None,
     workflow_service: WorkflowService = Depends(get_workflow_service)
 ):
-    """List workflows, optionally filtered by owner"""
+    """List workflows, optionally filtered by owner, with schemas for each node"""
     try:
         if owner_id:
             workflows = await workflow_service.get_workflows_by_owner(owner_id)
         else:
             workflows = await workflow_service.get_all_workflows()
-            
+        # Ensure input_schema/output_schema are present in each node of each workflow
+        workflows_list = []
+        for wf in workflows:
+            wf_dict = wf.dict()
+            for node in wf_dict.get('nodes', []):
+                if 'input_schema' not in node:
+                    try:
+                        from models.nodes import Node
+                        config = Node(**node).get_config()
+                        if hasattr(config, 'input_schema'):
+                            node['input_schema'] = config.input_schema
+                        if hasattr(config, 'output_schema'):
+                            node['output_schema'] = config.output_schema
+                    except Exception:
+                        pass
+            workflows_list.append(wf_dict)
         # Format response properly with data field
         return APIResponse.success_response({
-            "data": workflows,
-            "total_count": len(workflows),
+            "data": workflows_list,
+            "total_count": len(workflows_list),
             "owner_id": owner_id
         })
     except Exception as e:

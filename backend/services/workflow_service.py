@@ -24,8 +24,28 @@ class WorkflowService:
         self.engine = engine or injector.get(WorkflowEngine)
         
     async def get_workflow(self, workflow_id: str) -> Optional[Workflow]:
-        """Get a workflow by ID"""
-        return await self.repository.get_by_id(workflow_id)
+        """Get a workflow by ID, ensuring input/output schemas are included in node dicts"""
+        workflow = await self.repository.get_by_id(workflow_id)
+        if not workflow:
+            return None
+        # Serialize nodes with input/output schemas
+        nodes_with_schemas = []
+        for node in workflow.nodes:
+            node_dict = node.dict()
+            try:
+                config = node.get_config()
+                # Add input_schema/output_schema if present
+                if hasattr(config, 'input_schema'):
+                    node_dict['input_schema'] = config.input_schema
+                if hasattr(config, 'output_schema'):
+                    node_dict['output_schema'] = config.output_schema
+            except Exception:
+                pass
+            nodes_with_schemas.append(node_dict)
+        # Return workflow dict with updated nodes
+        wf_dict = workflow.dict()
+        wf_dict['nodes'] = nodes_with_schemas
+        return Workflow(**wf_dict)
         
     async def get_all_workflows(self) -> List[Workflow]:
         """Get all workflows"""

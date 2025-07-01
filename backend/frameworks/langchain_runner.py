@@ -88,6 +88,32 @@ EXECUTION_MODES = {
     "auto": "Automatically detect based on input"
 }
 
+# Add new memory types
+MEMORY_TYPES = {
+    "buffer": ConversationBufferMemory,
+    "summary": ConversationSummaryMemory,
+    "window": ConversationBufferWindowMemory
+}
+
+# Add tool type detection
+TOOL_TYPES = {
+    "qa": {
+        "type": "qa",
+        "description": "Question Answering with RAG",
+        "required_config": ["retriever", "llm"]
+    },
+    "summarization": {
+        "type": "summarization",
+        "description": "Text summarization with configurable length",
+        "required_config": ["llm", "max_length"]
+    },
+    "llm_chain": {
+        "type": "llm_chain",
+        "description": "Basic LLM chain with prompt template",
+        "required_config": ["llm", "prompt"]
+    }
+}
+
 class EnhancedLangChainRunner:
     """Enhanced LangChain runner with modern LCEL and advanced features"""
     
@@ -1260,6 +1286,178 @@ class EnhancedLangChainRunner:
                 "error": f"Fallback execution failed: {str(e)}",
                 "execution_time": execution_time
             }
+
+    def detect_tool_type(self, config: Dict[str, Any]) -> str:
+        """Detect the type of tool based on configuration"""
+        if "retriever" in config and "llm" in config:
+            return "qa"
+        elif "max_length" in config and "llm" in config:
+            return "summarization"
+        elif "prompt" in config and "llm" in config:
+            return "llm_chain"
+        return "llm_chain"  # Default to basic LLM chain
+
+    def get_memory(self, memory_config: Dict[str, Any]) -> Optional[Any]:
+        """Get memory instance based on configuration"""
+        if not memory_config:
+            return None
+
+        memory_type = memory_config.get("type", "buffer")
+        memory_class = MEMORY_TYPES.get(memory_type)
+        
+        if not memory_class:
+            logger.warning(f"Unknown memory type: {memory_type}, using buffer memory")
+            memory_class = ConversationBufferMemory
+
+        kwargs = {
+            "memory_key": memory_config.get("memory_key", "chat_history"),
+            "return_messages": memory_config.get("return_messages", True)
+        }
+
+        if memory_type == "window":
+            kwargs["k"] = memory_config.get("window_size", 5)
+        elif memory_type == "summary":
+            kwargs["llm"] = self.get_llm(memory_config.get("llm_config", {}))
+
+        return memory_class(**kwargs)
+
+    async def run_chain_of_tools(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a chain of tools in sequence"""
+        try:
+            # Get the tools configuration
+            tools_config = config.get('tools', [])
+            if not tools_config:
+                return {'error': 'No tools configured'}
+
+            # Initialize result with inputs
+            result = inputs.copy()
+            
+            # Run each tool in sequence
+            for tool_config in tools_config:
+                tool_name = tool_config.get('name')
+                if not tool_name:
+                    continue
+                    
+                tool = self.get_tool_by_name(tool_name)
+                if not tool:
+                    continue
+                    
+                # Execute tool with current result
+                try:
+                    tool_result = await tool.arun(result)
+                    result = self._standardize_inputs(tool_result, config)
+                except Exception as e:
+                    logger.error(f"Error executing tool {tool_name}: {str(e)}")
+                    result['error'] = f"Tool {tool_name} failed: {str(e)}"
+                    break
+
+            return result
+        except Exception as e:
+            logger.error(f"Error in run_chain_of_tools: {str(e)}")
+            return {'error': str(e)}
+
+    async def run_summarization_chain(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run a summarization chain"""
+        try:
+            llm = self.get_llm(config)
+            max_length = config.get("max_length", 150)
+            
+            prompt = PromptTemplate.from_template(
+                "Summarize the following text in {max_length} words or less:\n\n{text}"
+            )
+            
+            chain = LLMChain(
+                llm=llm,
+                prompt=prompt,
+                verbose=config.get("verbose", False)
+            )
+            
+            result = await chain.arun(
+                text=inputs.get("text", ""),
+                max_length=max_length
+            )
+            
+            return {
+                "success": True,
+                "output": result,
+                "metadata": {
+                    "type": "summarization",
+                    "max_length": max_length
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error in summarization chain: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def run_with_streaming(self, config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run chain with streaming support"""
+        if not config.get("streaming", False):
+            # Instead of returning, yield the result
+            result = await self.run_chain_of_tools(config, inputs)
+            yield result
+            return
+
+        try:
+            llm = self.get_llm(config)
+            llm.streaming = True
+            
+            # Create appropriate chain based on tool type
+            tool_type = self.detect_tool_type(config)
+            
+            if tool_type == "qa":
+                chain = await self._create_qa_chain(config, llm)
+            elif tool_type == "summarization":
+                chain = await self._create_summarization_chain(config, llm)
+            else:
+                chain = await self._create_simple_chain(config, llm)
+
+            # Execute with streaming
+            async for chunk in chain.astream(inputs):
+                yield {
+                    "success": True,
+                    "chunk": chunk,
+                    "metadata": {
+                        "type": tool_type,
+                        "streaming": True
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Error in streaming execution: {str(e)}")
+            yield {
+                "success": False,
+                "error": str(e)
+            }
+
+    async def _create_qa_chain(self, config: Dict[str, Any], llm: Any) -> Any:
+        """Create a QA chain with RAG"""
+        retriever = config.get("retriever")
+        if not retriever:
+            raise ValueError("Retriever is required for QA chain")
+
+        prompt = ChatPromptTemplate.from_template(
+            "Answer the question based on the context:\n\nContext: {context}\n\nQuestion: {question}"
+        )
+
+        return prompt | llm | StrOutputParser()
+
+    async def _create_summarization_chain(self, config: Dict[str, Any], llm: Any) -> Any:
+        """Create a summarization chain"""
+        max_length = config.get("max_length", 150)
+        
+        prompt = PromptTemplate.from_template(
+            "Summarize the following text in {max_length} words or less:\n\n{text}"
+        )
+        
+        return prompt | llm | StrOutputParser()
+
+    async def _create_simple_chain(self, config: Dict[str, Any], llm: Any) -> Any:
+        """Create a simple LLM chain"""
+        prompt = PromptTemplate.from_template(config.get("prompt", "{input}"))
+        return prompt | llm | StrOutputParser()
 
 # Main execution function
 async def run_langchain_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:

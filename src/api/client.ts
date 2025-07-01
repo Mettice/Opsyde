@@ -14,6 +14,26 @@ interface APIResponse<T> {
   };
 }
 
+interface LLMModeStatusResponse {
+  llm_mode_enabled: boolean;
+  smart_mapping_enabled: boolean;
+  available_providers: string[];
+  current_status: string;
+  statistics: {
+    total_nodes_processed: number;
+    llm_mode_usage: number;
+    traditional_mode_usage: number;
+    average_execution_time: number;
+    success_rate: number;
+    token_usage: {
+      total_tokens: number;
+      prompt_tokens: number;
+      completion_tokens: number;
+    };
+  };
+  timestamp: string;
+}
+
 // Extend Window interface
 declare global {
   interface Window {
@@ -57,70 +77,83 @@ class APIError extends Error {
 }
 
 // Configuration
-const API_URL = window.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = '/api';
 
 async function handleResponse<T>(response: Response): Promise<T> {
-  try {
-    // Log the response status
-    console.log(`Response status: ${response.status} ${response.statusText}`);
-    
-    // Clone the response before reading it, so we can use it again if needed
-    const clonedResponse = response.clone();
-    
-    // Try to parse as JSON
-    let text;
-    try {
-      text = await response.text();
-      console.log("Raw response:", text);
-    } catch (e) {
-      console.error("Error reading response text, trying cloned response:", e);
-      text = await clonedResponse.text();
-    }
-    
-    // Parse response if it's valid JSON
-    let data: APIResponse<T>;
-    try {
-      data = JSON.parse(text);
-      console.log("Parsed response data:", data);
-    } catch (e) {
-      console.error("Failed to parse response as JSON:", e);
-      throw new APIError({
-        code: `PARSE_ERROR`,
-        message: `Failed to parse response: ${text}`,
-        details: { responseText: text }
-      });
-    }
-    
-    if (!response.ok) {
-      console.error("Non-OK response:", response.status, data);
-      throw new APIError({
-        code: `HTTP_${response.status}`,
-        message: data.error?.message || `HTTP Error ${response.status}`,
-        details: data.error?.details || data
-      });
-    }
-    
-    // Check if the response has the expected structure
-    if (data.success === false) {
-      console.error("API reported failure:", data.error);
-      throw new APIError(data.error || { 
-        code: 'API_ERROR', 
-        message: 'API request failed',
-        details: data
-      });
-    }
-    
-    // If we get here and there's no data field in a success response
-    if (data.success === true && data.data === undefined) {
-      console.warn("Success response with no data field:", data);
-      return data as unknown as T;
-    }
-    
-    return data.data as T;
-  } catch (e) {
-    console.error("Error in handleResponse:", e);
-    throw e;
+  console.log("Raw response:", response);
+  
+  // Check if response is empty
+  const text = await response.text();
+  console.log("Raw response text:", text);
+  
+  if (!text || text.trim() === '') {
+    console.warn("Empty response received from server");
+    throw new APIError({
+      code: "EMPTY_RESPONSE",
+      message: "Server returned an empty response. This usually indicates a backend error or missing route.",
+      details: {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url
+      }
+    });
   }
+  
+  try {
+    const data = JSON.parse(text);
+    
+    // Handle API response format
+    if (data && typeof data === 'object') {
+      if (data.success === false) {
+        throw new APIError(data.error || {
+          code: "API_ERROR",
+          message: data.message || "API request failed"
+        });
+      }
+      
+      // Return data directly if it's not wrapped in a response object
+      if (data.data !== undefined) {
+        return data.data;
+      }
+      
+      // If no data property, return the whole object
+      return data;
+    }
+    
+    return data;
+  } catch (error) {
+    if (error instanceof APIError) {
+      throw error;
+    }
+    
+    console.error("Failed to parse response as JSON:", error);
+    throw new APIError({
+      code: "PARSE_ERROR",
+      message: `Failed to parse response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      details: {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        responseText: text.substring(0, 500) // First 500 chars for debugging
+      }
+    });
+  }
+}
+
+// Add streaming workflow execution interface
+interface StreamingWorkflowResponse {
+  type: 'node_start' | 'node_complete' | 'node_error' | 'workflow_complete' | 'workflow_error' | 'llm_processing' | 'smart_mapping';
+  node_id?: string;
+  node_type?: string;
+  data?: any;
+  error?: string;
+  timestamp: string;
+  metadata?: {
+    execution_time?: number;
+    framework?: string;
+    llm_tokens?: number;
+    smart_mapping_applied?: boolean;
+  };
 }
 
 export class APIClient {
@@ -128,7 +161,7 @@ export class APIClient {
   private baseUrl: string;
 
   private constructor() {
-    this.baseUrl = API_URL;
+    this.baseUrl = window.REACT_APP_API_URL || '/api';
   }
 
   static getInstance(): APIClient {
@@ -138,35 +171,26 @@ export class APIClient {
     return APIClient.instance;
   }
 
-  // Create a common request method to reduce duplication
   private async request<T>(url: string, options: RequestInit = {}): Promise<T> {
-    try {
-      console.log(`Sending request to ${url}`);
-      
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
-      
-      return handleResponse<T>(response);
-    } catch (error) {
-      console.error(`Error in request to ${url}:`, error);
-      throw error;
-    }
+    const response = await fetch(`${this.baseUrl}${url}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+      ...options,
+    });
+    return handleResponse<T>(response);
   }
 
   async saveFlow(userId: string, name: string, nodes: any[], edges: any[]): Promise<Flow> {
-    return this.request<Flow>(`${this.baseUrl}/api/workflows`, {
+    return this.request<Flow>(`/workflows`, {
       method: 'POST',
       body: JSON.stringify({ user_id: userId, name, nodes, edges })
     });
   }
 
   async updateFlow(flowId: string, name: string, nodes: any[], edges: any[]): Promise<Flow> {
-    return this.request<Flow>(`${this.baseUrl}/api/workflows/${flowId}`, {
+    return this.request<Flow>(`/workflows/${flowId}`, {
       method: 'PUT',
       body: JSON.stringify({ name, nodes, edges })
     });
@@ -174,14 +198,14 @@ export class APIClient {
 
   async fetchFlows(userId: string): Promise<Flow[]> {
     try {
-      console.log(`Fetching flows for user ${userId} from ${this.baseUrl}/api/workflows`);
+      console.log(`Fetching flows for user ${userId} from ${this.baseUrl}/workflows`);
       
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
       
       try {
-        // Try the /api/workflows endpoint first
-        let response = await fetch(`${this.baseUrl}/api/workflows?owner_id=${userId}`, {
+        // Try the /workflows endpoint first
+        let response = await fetch(`${this.baseUrl}/workflows?owner_id=${userId}`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
@@ -191,10 +215,10 @@ export class APIClient {
           signal: controller.signal
         });
         
-        // If that fails with 404, try the old /api/flows endpoint
+        // If that fails with 404, try the old /flows endpoint
         if (!response.ok && response.status === 404) {
-          console.log(`Falling back to alternate flows endpoint: ${this.baseUrl}/api/flows`);
-          response = await fetch(`${this.baseUrl}/api/flows?owner_id=${userId}`, {
+          console.log(`Falling back to alternate flows endpoint: ${this.baseUrl}/flows`);
+          response = await fetch(`${this.baseUrl}/flows?owner_id=${userId}`, {
             method: 'GET',
             headers: {
               'Content-Type': 'application/json'
@@ -205,142 +229,324 @@ export class APIClient {
           });
         }
         
-        if (!response.ok) {
-          console.error(`Error fetching flows: ${response.status} ${response.statusText}`);
-          return [];
-        }
-        
-        const data = await handleResponse<any>(response);
-        return Array.isArray(data.data) ? data.data : 
-               data.data?.data && Array.isArray(data.data.data) ? data.data.data : [];
-      } finally {
         clearTimeout(timeout);
+        return handleResponse<Flow[]>(response);
+      } catch (error) {
+        clearTimeout(timeout);
+        throw error;
       }
     } catch (error) {
-      console.error("Error fetching flows:", error);
-      // Return empty array for UI to handle gracefully
-      return [];
+      console.error('Error fetching flows:', error);
+      throw error;
     }
   }
 
   async fetchFlowById(flowId: string): Promise<Flow> {
-    const response = await fetch(`${this.baseUrl}/api/workflows/${flowId}`);
+    const response = await fetch(`${this.baseUrl}/workflows/${flowId}`);
     return handleResponse<Flow>(response);
   }
 
   async deleteFlow(flowId: string): Promise<void> {
-    const response = await fetch(`${this.baseUrl}/api/workflows/${flowId}`, {
+    const response = await fetch(`${this.baseUrl}/workflows/${flowId}`, {
       method: 'DELETE'
     });
     return handleResponse<void>(response);
   }
 
+  // Enhanced LLM context injection with comprehensive data
+  private injectLLMContext(payload: any): any {
+    const llmContext = (window as any).LLM_CONTEXT || {};
+    const userKeys = (window as any).USER_API_KEYS || {};
+    
+    return {
+      ...payload,
+      llm_mode_enabled: llmContext.llmModeEnabled || false,
+      smart_mapping_enabled: llmContext.smartMappingEnabled || true,
+      user_keys: userKeys,
+      execution_context: {
+        timestamp: new Date().toISOString(),
+        session_id: this.generateSessionId(),
+        llm_preferences: {
+          prefer_streaming: true,
+          enable_smart_routing: llmContext.smartMappingEnabled || true,
+          enable_multimodal: true
+        }
+      }
+    };
+  }
+
+  private generateSessionId(): string {
+    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  // Enhanced executeNode with comprehensive LLM routing
   async executeNode(nodeData: NodeData, inputs?: any): Promise<any> {
-    // Based on node type, call the appropriate method
     const nodeType = nodeData.type?.toLowerCase();
     
-    if (nodeType === 'tool') {
-      return this.executeTool({
-        id: nodeData.id,
-        inputs: inputs
-      });
-    } else if (nodeType === 'agent') {
-      return this.executeAgentNode(nodeData.id, inputs);
-    } else if (nodeType === 'input') {
-      return this.executeInputNode(nodeData.id, inputs);
-    } else if (nodeType === 'output') {
-      return this.executeOutputNode(nodeData.id, inputs);
-    } else if (nodeType === 'task') {
-      // For task nodes, the agent data should be in inputs.agent
-      const agentData = inputs?.agent || {};
-      return this.executeTaskNode(nodeData.id, agentData, inputs);
-    } else if (nodeType === 'logic') {
-      return this.executeLogicNode(nodeData.id, nodeData.data, inputs);
-    } else if (nodeType === 'delay') {
-      return this.executeDelayNode(nodeData.id, nodeData.data, inputs);
-    } else if (nodeType === 'chat') {
-      return this.executeChatNode(nodeData.id, nodeData.data, inputs);
-    } else {
-      // Default to the general execute endpoint
-      const response = await fetch(`${this.baseUrl}/api/nodes/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ node_data: nodeData, inputs })
-      });
-      return handleResponse(response);
+    // Always inject LLM context for all node executions
+    const enhancedPayload = this.injectLLMContext({
+      node_data: nodeData,
+      inputs: inputs || {},
+      node_type: nodeType
+    });
+
+    // Route based on node type with LLM context
+    switch (nodeType) {
+      case 'tool':
+        return this.executeTool({
+          id: nodeData.id,
+          toolType: nodeData.data?.toolType,
+          framework: nodeData.data?.framework,
+          config: nodeData.data?.config,
+          inputs: inputs
+        });
+      
+      case 'agent':
+        return this.executeAgentNode(nodeData.id, inputs);
+      
+      case 'input':
+        return this.executeInputNode(nodeData.id, inputs);
+      
+      case 'output':
+        return this.executeOutputNode(nodeData.id, inputs);
+      
+      case 'task':
+        const agentData = inputs?.agent || {};
+        return this.executeTaskNode(nodeData.id, agentData, inputs);
+      
+      case 'logic':
+        return this.executeLogicNode(nodeData.id, nodeData.data, inputs);
+      
+      case 'delay':
+        return this.executeDelayNode(nodeData.id, nodeData.data, inputs);
+      
+      case 'chat':
+        return this.executeChatNode(nodeData.id, nodeData.data, inputs);
+      
+      default:
+        // Use the enhanced universal node execution endpoint
+        const response = await fetch(`${this.baseUrl}/nodes/execute-enhanced`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(enhancedPayload)
+        });
+        return handleResponse(response);
     }
   }
 
+  // NEW: Streaming workflow execution with real-time LLM updates
+  async executeWorkflowStream(
+    nodes: any[], 
+    edges: any[], 
+    inputs: any,
+    onUpdate?: (update: StreamingWorkflowResponse) => void
+  ): Promise<ReadableStream<StreamingWorkflowResponse>> {
+    const payload = this.injectLLMContext({
+      nodes,
+      edges,
+      inputs,
+      execution_mode: 'streaming',
+      enable_real_time_updates: true
+    });
+
+    const response = await fetch(`${this.baseUrl}/workflows/execute-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Streaming execution failed: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No readable stream available');
+    }
+
+    const decoder = new TextDecoder();
+    
+    return new ReadableStream<StreamingWorkflowResponse>({
+      start(controller) {
+        function pump(): Promise<void> {
+          return reader!.read().then(({ done, value }) => {
+            if (done) {
+              controller.close();
+              return;
+            }
+
+            // Parse streaming JSON responses
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+              try {
+                const update: StreamingWorkflowResponse = JSON.parse(line);
+                
+                // Call the update callback if provided
+                if (onUpdate) {
+                  onUpdate(update);
+                }
+                
+                controller.enqueue(update);
+              } catch (e) {
+                console.warn('Failed to parse streaming update:', line);
+              }
+            }
+
+            return pump();
+          });
+        }
+
+        return pump();
+      }
+    });
+  }
+
+  // NEW: Enhanced workflow execution with LLM context
+  async executeWorkflowEnhanced(nodes: any[], edges: any[], inputs: any): Promise<any> {
+    const payload = this.injectLLMContext({
+      nodes,
+      edges,
+      inputs,
+      execution_mode: 'enhanced',
+      enable_llm_routing: true,
+      enable_smart_mapping: true
+    });
+
+    const response = await fetch(`${this.baseUrl}/workflows/execute-enhanced`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    return handleResponse(response);
+  }
+
+  // Enhanced tool execution with comprehensive LLM support
   async executeTool(toolData: ToolData): Promise<any> {
-    console.log("Executing tool with URL:", `${this.baseUrl}/api/tools/run-tool`);
-    console.log("Tool data:", JSON.stringify(toolData, null, 2));
+    console.log("🔧 Executing tool with enhanced LLM context:", toolData.id);
     
     try {
-      // Format the data to match what the backend expects
       const formattedData = {
         node_id: toolData.id,
-        toolType: toolData.toolType || "llm", // Default to llm if not specified
+        toolType: toolData.toolType || "llm",
         framework: toolData.framework,
         config: toolData.config || {},
-        inputs: toolData.inputs || {}
+        inputs: toolData.inputs || {},
+        tool_metadata: {
+          execution_timestamp: new Date().toISOString(),
+          requires_llm_processing: true
+        }
       };
       
-      console.log("Formatted tool data:", JSON.stringify(formattedData, null, 2));
+      const payload = this.injectLLMContext(formattedData);
       
-      const response = await fetch(`${this.baseUrl}/api/tools/run-tool`, {
+      console.log("🧠 Enhanced tool payload with LLM context:", {
+        nodeId: payload.node_id,
+        llmEnabled: payload.llm_mode_enabled,
+        smartMapping: payload.smart_mapping_enabled,
+        hasUserKeys: Object.keys(payload.user_keys || {}).length > 0
+      });
+      
+      const response = await fetch(`${this.baseUrl}/tools/run-tool-enhanced`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
-        console.error("Tool execution failed with status:", response.status);
         const errorText = await response.text();
-        console.error("Error response:", errorText);
+        console.error("❌ Enhanced tool execution failed:", errorText);
+        throw new Error(`Tool execution failed: ${response.status} - ${errorText}`);
       }
       
-      return handleResponse(response);
+      const result = await handleResponse<any>(response);
+      console.log("✅ Enhanced tool execution completed:", (result as any).success);
+      return result;
+      
     } catch (error) {
-      console.error("Tool execution error:", error);
+      console.error("❌ Enhanced tool execution error:", error);
       throw error;
     }
   }
 
+  // NEW: Get LLM execution metrics
+  async getLLMExecutionMetrics(): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/llm/metrics`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    return handleResponse(response);
+  }
+
+  // NEW: Test LLM connectivity and performance
+  async testLLMConnectivity(): Promise<any> {
+    const payload = this.injectLLMContext({
+      test_type: 'connectivity',
+      include_performance_metrics: true
+    });
+
+    const response = await fetch(`${this.baseUrl}/llm/test-connectivity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+  }
+
+  // Enhanced input node execution with multimodal support
   async executeInputNode(nodeId: string, inputs: any): Promise<any> {
-    console.log("Executing input node with URL:", `${this.baseUrl}/api/nodes/run-input`);
-    console.log("Input data:", { node_id: nodeId, inputs });
+    console.log("📥 Executing enhanced input node:", nodeId);
     
     try {
-      // Format the data to match what the backend expects
       const formattedData = {
         node_id: nodeId,
-        data: {}, // Include any input-specific data here
-        inputs: inputs || {}
+        data: {
+          input_type: inputs?.inputType || 'text',
+          supports_multimodal: true,
+          enable_smart_processing: true
+        },
+        inputs: inputs || {},
+        processing_options: {
+          enable_llm_enhancement: true,
+          enable_content_extraction: true,
+          enable_entity_recognition: true
+        }
       };
       
-      console.log("Formatted input data:", JSON.stringify(formattedData, null, 2));
+      const payload = this.injectLLMContext(formattedData);
       
-      const response = await fetch(`${this.baseUrl}/api/nodes/run-input`, {
+      console.log("🧠 Enhanced input payload:", {
+        nodeId: payload.node_id,
+        inputType: payload.data.input_type,
+        llmEnabled: payload.llm_mode_enabled
+      });
+      
+      const response = await fetch(`${this.baseUrl}/nodes/run-input-enhanced`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
-        console.error("Input node execution failed with status:", response.status);
         const errorText = await response.text();
-        console.error("Error response:", errorText);
+        console.error("❌ Enhanced input execution failed:", errorText);
+        throw new Error(`Input execution failed: ${response.status} - ${errorText}`);
       }
       
-      return handleResponse(response);
+      const result = await handleResponse<any>(response);
+      console.log("✅ Enhanced input execution completed:", (result as any).success);
+      return result;
+      
     } catch (error) {
-      console.error("Input node execution error:", error);
+      console.error("❌ Enhanced input execution error:", error);
       throw error;
     }
   }
 
   async executeAgentNode(nodeId: string, inputs: any): Promise<any> {
-    console.log("Executing agent node with URL:", `${this.baseUrl}/api/nodes/run-agent`);
+    console.log("Executing agent node with URL:", `${this.baseUrl}/nodes/run-agent`);
     console.log("Agent data:", { node_id: nodeId, inputs });
     
     try {
@@ -351,12 +557,15 @@ export class APIClient {
         inputs: inputs || {}
       };
       
-      console.log("Formatted agent data:", JSON.stringify(formattedData, null, 2));
+      // Inject LLM context
+      const payload = this.injectLLMContext(formattedData);
       
-      const response = await fetch(`${this.baseUrl}/api/nodes/run-agent`, {
+      console.log("Formatted agent data with LLM context:", JSON.stringify(payload, null, 2));
+      
+      const response = await fetch(`${this.baseUrl}/nodes/run-agent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
@@ -390,12 +599,15 @@ export class APIClient {
         inputs: inputs || {}
       };
       
-      console.log("Formatted output data:", JSON.stringify(formattedData, null, 2));
+      // Inject LLM context
+      const payload = this.injectLLMContext(formattedData);
       
-      const response = await fetch(`${this.baseUrl}/api/nodes/run-output`, {
+      console.log("Formatted output data with LLM context:", JSON.stringify(payload, null, 2));
+      
+      const response = await fetch(`${this.baseUrl}/nodes/run-output`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
@@ -413,232 +625,152 @@ export class APIClient {
   }
 
   async executeLogicNode(nodeId: string, data: any, inputs: any): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/nodes/run-logic`, {
+    const formattedData = { node_id: nodeId, data, inputs };
+    const payload = this.injectLLMContext(formattedData);
+    
+    const response = await fetch(`${this.baseUrl}/nodes/run-logic`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node_id: nodeId, data, inputs })
+      body: JSON.stringify(payload)
     });
     return handleResponse(response);
   }
   
   async executeDelayNode(nodeId: string, data: any, inputs: any): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/nodes/run-delay`, {
+    const formattedData = { node_id: nodeId, data, inputs };
+    const payload = this.injectLLMContext(formattedData);
+    
+    const response = await fetch(`${this.baseUrl}/nodes/run-delay`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node_id: nodeId, data, inputs })
+      body: JSON.stringify(payload)
     });
     return handleResponse(response);
   }
   
   async executeChatNode(nodeId: string, data: any, inputs: any): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/nodes/run-chat`, {
+    const formattedData = { node_id: nodeId, data, inputs };
+    const payload = this.injectLLMContext(formattedData);
+    
+    const response = await fetch(`${this.baseUrl}/nodes/run-chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node_id: nodeId, data, inputs })
+      body: JSON.stringify(payload)
     });
     return handleResponse(response);
   }
-  
+
   async executeTaskNode(nodeId: string, agentData: any, inputs: any): Promise<any> {
-    const response = await fetch(`${this.baseUrl}/api/nodes/run-task`, {
+    const formattedData = { node_id: nodeId, agent_data: agentData, inputs };
+    const payload = this.injectLLMContext(formattedData);
+    
+    const response = await fetch(`${this.baseUrl}/nodes/run-task`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        node_id: nodeId, 
-        // Properly format agent connections by adding the agent data to the inputs
-        // under a special 'agent' key that the task node expects
-        inputs: {
-          ...inputs,
-          // Add the connected agent
-          agent: agentData
-        }
-      })
+      body: JSON.stringify(payload)
     });
     return handleResponse(response);
   }
 
   async executeFlow(nodes: any[], edges: any[], inputs: any): Promise<any> {
-    console.log("Executing flow with streaming URL:", `${this.baseUrl}/run-crew`);
+    const formattedData = { nodes, edges, inputs };
+    const payload = this.injectLLMContext(formattedData);
     
+    const response = await fetch(`${this.baseUrl}/workflows/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    return handleResponse(response);
+  }
+
+  async fetchExecutedTriggers(): Promise<any[]> {
+    return this.request<any[]>(`/triggers/executed`);
+  }
+
+  // LLM Mode endpoints
+  async getLLMModeStatus(): Promise<{ llm_mode_enabled: boolean; smart_mapping_enabled: boolean }> {
     try {
-      const formattedData = {
-        nodes,
-        edges,
-        inputs: inputs || {}
+      const response = await this.request<LLMModeStatusResponse>(`/llm-mode/status`);
+      
+      // The backend may return the data directly or wrapped in a response object
+      if (response && typeof response === 'object') {
+        // Check if it's the direct response format
+        if ('llm_mode_enabled' in response && 'smart_mapping_enabled' in response) {
+          return {
+            llm_mode_enabled: response.llm_mode_enabled,
+            smart_mapping_enabled: response.smart_mapping_enabled
+          };
+        }
+        
+        // Check if it's wrapped in a data property
+        const responseWithData = response as any;
+        if ('data' in responseWithData && responseWithData.data) {
+          const data = responseWithData.data;
+          return {
+            llm_mode_enabled: data.llm_mode_enabled || false,
+            smart_mapping_enabled: data.smart_mapping_enabled || false
+          };
+        }
+        
+        // Fallback: try to extract from any property
+        const obj = response as any;
+        return {
+          llm_mode_enabled: obj.llm_mode_enabled || false,
+          smart_mapping_enabled: obj.smart_mapping_enabled || false
+        };
+      }
+      
+      // Fallback to default values if response is unexpected
+      console.warn('Unexpected LLM status response format:', response);
+      return {
+        llm_mode_enabled: false,
+        smart_mapping_enabled: true
       };
-      
-      console.log("Flow execution data:", JSON.stringify({
-        nodeCount: nodes.length,
-        edgeCount: edges.length,
-        inputKeys: Object.keys(inputs || {})
-      }));
-      
-      const response = await fetch(`${this.baseUrl}/run-crew`, {
+    } catch (error) {
+      console.error('Error fetching LLM mode status:', error);
+      // Return default values on error
+      return {
+        llm_mode_enabled: false,
+        smart_mapping_enabled: true
+      };
+    }
+  }
+
+  async toggleLLMMode(enabled: boolean, smart_mapping_enabled: boolean): Promise<{ llm_mode_enabled: boolean; smart_mapping_enabled: boolean }> {
+    try {
+      const response = await this.request<{ llm_mode_enabled: boolean; smart_mapping_enabled: boolean }>(`/llm-mode/toggle`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formattedData)
+        body: JSON.stringify({ enabled, smart_mapping_enabled })
       });
       
-      if (!response.ok) {
-        console.error("Flow execution failed with status:", response.status);
-        const errorText = await response.text();
-        console.error("Error response:", errorText);
-        throw new Error(`Flow execution failed: ${errorText || response.statusText}`);
+      // Handle response format similar to getLLMModeStatus
+      if (response && typeof response === 'object') {
+        const obj = response as any;
+        return {
+          llm_mode_enabled: obj.llm_mode_enabled || enabled,
+          smart_mapping_enabled: obj.smart_mapping_enabled || smart_mapping_enabled
+        };
       }
       
-      // Handle streaming response
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      
-      if (!reader) {
-        throw new Error('No response body reader available');
-      }
-      
-      let logs: any[] = [];
-      let node_results: any = {};
-      let buffer = '';
-      
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          
-          if (done) break;
-          
-          // Decode the chunk and add to buffer
-          buffer += decoder.decode(value, { stream: true });
-          
-          // Process complete lines
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || ''; // Keep incomplete line in buffer
-          
-          for (const line of lines) {
-            if (line.trim()) {
-              try {
-                // Parse JSON line
-                const logEntry = JSON.parse(line);
-                console.log('Received log entry:', logEntry);
-                
-                logs.push(logEntry);
-                
-                // Extract node results
-                if (logEntry.node_id) {
-                  node_results[logEntry.node_id] = {
-                    nodeId: logEntry.node_id,
-                    nodeType: logEntry.node_type,
-                    nodeName: logEntry.node_label,
-                    result: logEntry.result,
-                    status: logEntry.metadata?.has_error ? 'error' : 'completed',
-                    timestamp: logEntry.metadata?.timestamp
-                  };
-                }
-              } catch (parseError) {
-                console.warn('Failed to parse log line:', line, parseError);
-                // Add as text log if JSON parsing fails
-                logs.push({
-                  type: 'text',
-                  message: line,
-                  timestamp: new Date().toISOString()
-                });
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-      
-      // Process any remaining buffer content
-      if (buffer.trim()) {
-        try {
-          const logEntry = JSON.parse(buffer);
-          logs.push(logEntry);
-          
-          if (logEntry.node_id) {
-            node_results[logEntry.node_id] = {
-              nodeId: logEntry.node_id,
-              nodeType: logEntry.node_type,
-              nodeName: logEntry.node_label,
-              result: logEntry.result,
-              status: logEntry.metadata?.has_error ? 'error' : 'completed',
-              timestamp: logEntry.metadata?.timestamp
-            };
-          }
-        } catch (parseError) {
-          console.warn('Failed to parse remaining buffer:', buffer, parseError);
-          logs.push({
-            type: 'text',
-            message: buffer,
-            timestamp: new Date().toISOString()
-          });
-        }
-      }
-      
-      const processedResult = {
-        success: true,
-        logs,
-        node_results,
-        timestamp: new Date().toISOString()
-      };
-      
-      console.log("Processed streaming flow execution result:", processedResult);
-      return processedResult;
+      return { llm_mode_enabled: enabled, smart_mapping_enabled };
     } catch (error) {
-      console.error("Flow execution error:", error);
+      console.error('Error toggling LLM mode:', error);
       throw error;
     }
   }
 
-  async fetchExecutedTriggers(): Promise<any[]> {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
-      
-      try {
-        // Try the first endpoint
-        let response = await fetch(`${this.baseUrl}/api/triggers/executed`, {
-          mode: 'cors',
-          credentials: 'same-origin',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal
-        });
-        
-        // If the first endpoint fails, try the alternate endpoint
-        if (!response.ok && response.status === 404) {
-          console.log("Falling back to alternate trigger endpoint");
-          response = await fetch(`${this.baseUrl}/api/triggers/executed-triggers`, {
-            mode: 'cors',
-            credentials: 'same-origin',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            signal: controller.signal
-          });
-        }
-        
-        if (!response.ok) {
-          console.error(`Trigger endpoint error: ${response.status} ${response.statusText}`);
-          return [];
-        }
-        
-        const data = await handleResponse<any>(response);
-        return data.data?.triggers || [];
-      } finally {
-        clearTimeout(timeout);
-      }
-    } catch (error) {
-      console.error("Error fetching executed triggers:", error instanceof DOMException && error.name === 'AbortError' 
-        ? "Request timed out" : error);
-      return [];
-    }
+  async testLLMMode(): Promise<any> {
+    return this.request<any>(`/llm-mode/test`, {
+      method: 'POST'
+    });
   }
 
   async parseCV(file: File): Promise<any> {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await fetch(`${this.baseUrl}/api/parse-cv`, {
+    const response = await fetch(`${this.baseUrl}/parse-cv`, {
       method: 'POST',
       body: formData
     });

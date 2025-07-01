@@ -4,6 +4,9 @@ from datetime import datetime
 import asyncio
 import json
 
+from models.runner_schemas import CrewAIRunnerConfig
+from models.schemas import NodeSchema, SchemaType, SchemaField
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -260,16 +263,10 @@ class EnhancedCrewAIRunner:
             
         return api_call
     
-    async def run_crewai_agent(self, agent_config: Dict[str, Any], 
-                             task_config: Dict[str, Any],
-                             tools: List[Dict[str, Any]] = None,
-                             inputs: Dict[str, Any] = None,
-                             return_intermediate_steps: bool = True,
-                             chat_mode: bool = False) -> Dict[str, Any]:
-        """Run CrewAI agent with 0.1.21 features support"""
-        
+    async def run_crewai_agent(self, config: CrewAIRunnerConfig, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run CrewAI agent with schema validation"""
         if not CREWAI_AVAILABLE:
-            return await self._fallback_execution(agent_config, task_config, inputs)
+            return await self._fallback_execution(config, inputs)
         
         try:
             # Reset tracking
@@ -277,46 +274,43 @@ class EnhancedCrewAIRunner:
             self.token_usage = {}
             
             # Create LLM with token tracking
-            llm = self.get_llm_for_framework(agent_config.get('frameworkConfig', {}))
+            llm = self.get_llm_for_framework(config.framework_config)
             
             # 🔧 CRITICAL FIX: If LLM is None (e.g., for Perplexity), use fallback execution immediately
-            # This prevents CrewAI from defaulting to OpenAI when we want to use a different provider
             if llm is None:
-                logger.info(f"🔄 LLM is None - using fallback execution for provider: {agent_config.get('frameworkConfig', {}).get('provider')}")
-                return await self._fallback_execution(agent_config, task_config, inputs)
+                logger.info(f"🔄 LLM is None - using fallback execution for provider: {config.provider}")
+                return await self._fallback_execution(config, inputs)
             
             # Create tools (including built-in ones)
             crewai_tools = []
-            if tools:
-                crewai_tools = self.create_crewai_tools(tools)
+            if config.tools:
+                crewai_tools = self.create_crewai_tools(config.tools)
             
             # Create Agent with enhanced config
             agent = Agent(
-                role=agent_config.get('role', 'Assistant'),
-                goal=agent_config.get('goal', 'Help the user'),
-                backstory=agent_config.get('backstory', ''),
-                verbose=agent_config.get('verbose', True),
-                allow_delegation=agent_config.get('allowDelegation', False),
+                role=config.role,
+                goal=config.goal,
+                backstory=config.backstory,
+                verbose=True,
+                allow_delegation=config.allow_delegation,
                 tools=crewai_tools,
                 llm=llm,
-                max_iter=agent_config.get('max_iterations', 3),
-                memory=agent_config.get('enableMemory', False),
-                # New 0.1.21 features
-                step_callback=self._step_callback if return_intermediate_steps else None
+                max_iter=config.max_iterations,
+                memory=config.enable_memory,
+                step_callback=self._step_callback
             )
             
             # Create Task with enhanced output handling
-            task_description = task_config.get('description', '')
-            if inputs:
-                # Inject inputs into task description
-                input_lines = '\n'.join([f'{k}: {v}' for k, v in inputs.items()])
-                task_description = f"{task_description}\n\nInput Data:\n{input_lines}"
+            task_description = inputs.get('task', '')
+            if inputs.get('context'):
+                # Inject context into task description
+                context_lines = '\n'.join([f'{k}: {v}' for k, v in inputs['context'].items()])
+                task_description = f"{task_description}\n\nContext:\n{context_lines}"
             
             task = Task(
                 description=task_description,
-                expected_output=task_config.get('expectedOutput', 'Detailed response'),
+                expected_output="Detailed response",
                 agent=agent,
-                output_file=task_config.get('output_file'),
                 tools=crewai_tools
             )
             
@@ -326,62 +320,37 @@ class EnhancedCrewAIRunner:
                 tasks=[task],
                 process=Process.sequential,
                 verbose=True,
-                memory=agent_config.get('enableMemory', False)
+                memory=config.enable_memory
             )
             
             # Execute with enhanced 0.121.0 methods
-            if chat_mode:
-                try:
-                    result = crew.chat(
-                        message=f"Execute tasks: {[task.get('description') for task in tasks]}",
-                        return_intermediate_steps=return_intermediate_steps
-                    )
-                except AttributeError:
-                    # Fallback if chat method doesn't exist
-                    result = crew.kickoff(inputs=inputs or {})
-            else:
-                # Use kickoff method for 0.121.0 compatibility
-                try:
-                    result = crew.kickoff(inputs=inputs or {})
-                except AttributeError:
-                    # Fallback to run if kickoff doesn't exist
-                    try:
-                        result = crew.run(
-                            inputs=inputs or {},
-                            return_intermediate_steps=return_intermediate_steps
-                        )
-                    except AttributeError:
-                        # Final fallback - simple kickoff without params
-                        result = crew.kickoff()
+            result = crew.kickoff(inputs=inputs or {})
             
-            # Enhanced result with 0.1.21 features
+            # Format response according to schema
             return {
-                "type": "crewai_result",
-                "output": str(result),
-                "framework": "crewai",
-                "version": CREWAI_VERSION,
-                "agent_role": agent_config.get('role'),
-                "task_description": task_config.get('description'),
-                "success": True,
+                "result": str(result),
                 "metadata": {
-                    "tools_used": len(crewai_tools),
-                    "memory_enabled": agent_config.get('enableMemory', False),
-                    "chat_mode": chat_mode,
-                    "timestamp": datetime.now().isoformat()
+                    "framework": "crewai",
+                    "provider": config.provider,
+                    "model": config.model,
+                    "execution_time": self.token_usage.get('execution_time', 0),
+                    "tokens_used": self.token_usage.get('tokens', 0),
+                    "cost": self.token_usage.get('cost', 0)
                 },
-                "token_usage": self.token_usage,
-                "intermediate_steps": self.intermediate_steps if return_intermediate_steps else [],
-                "agent_logs": self._get_agent_logs()
+                "intermediate_steps": self.intermediate_steps
             }
             
         except Exception as e:
             logger.error(f"CrewAI execution failed: {str(e)}")
             return {
-                "type": "error",
-                "error": str(e),
-                "framework": "crewai",
-                "version": CREWAI_VERSION,
-                "success": False
+                "result": None,
+                "metadata": {
+                    "framework": "crewai",
+                    "provider": config.provider,
+                    "model": config.model,
+                    "error": str(e)
+                },
+                "error": str(e)
             }
     
     def _step_callback(self, step_data: Dict[str, Any]):

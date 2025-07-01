@@ -10,9 +10,13 @@ from models.workflow import ExecutionContext
 from models.results import NodeResult, ExecutionStatus
 from core.exceptions import ValidationError, FrameworkError
 from models.data import NodeData
+from models.schemas import NodeSchema, SchemaField, SchemaType
 
 # Import the enhanced framework registry
 from framework_registry import framework_registry
+
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +31,108 @@ class AgentFramework(Enum):
     AUTOGEN = "autogen"
     LANGCHAIN = "langchain"
 
-class AgentNode:
-    """
-    Enhanced Agent Node that supports:
-    - Multi-framework execution (CrewAI, LangChain, AutoGen, etc.)
-    - Agent-to-agent communication
-    - Memory management
-    - Collaborative workflows
-    """
+class AgentNodeConfig(NodeConfig):
+    """Configuration for Agent nodes"""
+    label: str
+    description: str
+    systemMessage: str = Field(default="", description="System message")
+    llmConfig: Dict[str, Any] = Field(default_factory=lambda: {
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.7,
+        "max_tokens": 4000,
+        "framework": "openai"
+    }, description="LLM Configuration")
+    tools: List[str] = Field(default_factory=list, description="Available tools")
+    
+    # Enhanced input schema for agents
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'agent_input': SchemaField(
+                type=SchemaType.ANY,
+                description='Input for the agent',
+                optional=True
+            ),
+            'context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Context for agent',
+                optional=True
+            ),
+            'collaborating_agents': SchemaField(
+                type=SchemaType.ARRAY,
+                description='Other agents collaborating with this agent',
+                optional=True,
+                items=SchemaField(
+                    type=SchemaType.OBJECT,
+                    properties={
+                        'name': SchemaField(type=SchemaType.STRING, description='Agent name'),
+                        'role': SchemaField(type=SchemaType.STRING, description='Agent role'),
+                        'result': SchemaField(type=SchemaType.STRING, description='Agent result'),
+                        'framework': SchemaField(type=SchemaType.STRING, description='Agent framework')
+                    }
+                )
+            )
+        }
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.STRING,
+                description='Agent output',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_id': SchemaField(type=SchemaType.STRING, description='Node ID'),
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of execution'),
+                    'collaborating_agents': SchemaField(
+                        type=SchemaType.ARRAY,
+                        description='Agents that collaborated',
+                        optional=True
+                    ),
+                    'llm': SchemaField(
+                        type=SchemaType.OBJECT,
+                        description='LLM configuration used',
+                        properties={
+                            'provider': SchemaField(type=SchemaType.STRING, description='LLM provider'),
+                            'model': SchemaField(type=SchemaType.STRING, description='LLM model'),
+                            'temperature': SchemaField(type=SchemaType.NUMBER, description='Temperature used'),
+                            'max_tokens': SchemaField(type=SchemaType.NUMBER, description='Max tokens used')
+                        }
+                    )
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            ),
+            'agent_name': SchemaField(
+                type=SchemaType.STRING,
+                description='Name of the agent',
+                optional=True
+            ),
+            'role': SchemaField(
+                type=SchemaType.STRING,
+                description='Role of the agent',
+                optional=True
+            ),
+            'framework': SchemaField(
+                type=SchemaType.STRING,
+                description='Framework used',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class AgentNode(BaseNode):
+    """Enhanced Agent Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return AgentNodeConfig
 
     async def process(self, node: Union[Node, Dict[str, Any]], inputs: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
         """
@@ -580,70 +678,10 @@ class AgentNode:
 
 # Standalone function for backward compatibility
 async def process_agent_node(
-    node_data: Dict[str, Any], 
-    inputs: Dict[str, Any], 
+    node_data: Dict[str, Any],
+    inputs: Dict[str, Any],
     context: Dict[str, Any] = None
-) -> Dict[str, Any]:
-    """
-    Process an agent node with proper error handling and context management
-    """
-    try:
-        logger.info(f"Processing agent node with data: {node_data.get('label', 'Unknown Agent')}")
-        
-        # Create execution context with required fields
-        workflow_id = 'unknown'
-        execution_id = 'direct-execution'
-        
-        if context:
-            # Get workflow_id, but ensure it's not None
-            context_workflow_id = context.get('workflow_id')
-            if context_workflow_id is not None:
-                workflow_id = context_workflow_id
-                
-            # Get execution_id, but ensure it's not None  
-            context_execution_id = context.get('execution_id')
-            if context_execution_id is not None:
-                execution_id = context_execution_id
-        
-        exec_context = ExecutionContext(
-            workflow_id=workflow_id,
-            execution_id=execution_id
-        )
-        
-        # Create Node object from node_data
-        # Extract the actual node data/configuration
-        node_config = node_data.get('data', node_data.copy())
-        
-        # Ensure required fields exist for AgentConfig validation
-        if 'label' not in node_config or not node_config['label']:
-            node_config['label'] = f"Agent {node_data.get('nodeId', node_data.get('id', 'unknown'))}"
-            
-        if 'role' not in node_config or not node_config['role']:
-            node_config['role'] = "AI Assistant"
-            
-        if 'goal' not in node_config or not node_config['goal']:
-            node_config['goal'] = "Complete assigned tasks efficiently"
-            
-        if 'framework' not in node_config or not node_config['framework']:
-            node_config['framework'] = "openrouter"  # Default framework
-        
-        node = Node(
-            id=node_data.get('id', 'agent-node'),
-            type=NodeType.AGENT,
-            data=node_config,  # Use extracted config, not entire node_data
-            position={"x": 0, "y": 0}  # Add default position for single node execution
-        )
-        
-        # Create agent processor and process
-        agent_node = AgentNode()
-        result = await agent_node.process(node, inputs, exec_context)
-        
-        return result
-            
-    except Exception as e:
-        logger.error(f"Error in process_agent_node: {str(e)}")
-        return {
-            "status": "error",
-            "error": str(e),
-            "message": f"Agent processing failed: {str(e)}"
-        }
+) -> NodeData:
+    """Enhanced agent node processor with schema validation"""
+    agent_node = AgentNode()
+    return await agent_node.process(node_data, inputs, context or {})

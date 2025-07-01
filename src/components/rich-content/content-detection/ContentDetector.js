@@ -105,7 +105,7 @@ export const detectContentType = (content) => {
     }
     
     // Check for JSON string
-    if (isJsonString(trimmed)) {
+    if (isJsonContent(trimmed)) {
       return CONTENT_TYPES.JSON;
     }
     

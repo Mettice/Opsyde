@@ -168,6 +168,53 @@ class UnifiedUserSettingsService:
         except Exception as e:
             logger.error(f"Failed to get usage stats: {str(e)}")
             return {}
+    
+    async def get_user_keys_for_execution(self, user_id: str) -> Dict[str, str]:
+        """
+        Get user API keys formatted for execution (decrypted and ready to use)
+        Returns a dictionary mapping provider names to decrypted API keys
+        """
+        try:
+            logger.info(f"🔑 Getting execution keys for user {user_id}")
+            
+            # Get encrypted API keys from storage
+            api_keys = await self.get_user_api_keys(user_id)
+            
+            if not api_keys:
+                logger.warning(f"No API keys found for user {user_id}")
+                return {}
+            
+            # Decrypt keys and format for execution
+            execution_keys = {}
+            service = self._get_service()
+            
+            for key_data in api_keys:
+                try:
+                    provider_id = key_data.get('provider_id')
+                    encrypted_key = key_data.get('encrypted_key')
+                    
+                    if not provider_id or not encrypted_key:
+                        logger.warning(f"Invalid key data: {key_data}")
+                        continue
+                    
+                    # Decrypt the key
+                    decrypted_key = service.key_manager.decrypt_key(encrypted_key)
+                    
+                    # Map provider IDs to execution format
+                    execution_keys[provider_id] = decrypted_key
+                    
+                    logger.info(f"✅ Loaded {provider_id} key for execution")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to decrypt key for provider {key_data.get('provider_id', 'unknown')}: {str(e)}")
+                    continue
+            
+            logger.info(f"🔑 Loaded {len(execution_keys)} keys for execution: {list(execution_keys.keys())}")
+            return execution_keys
+            
+        except Exception as e:
+            logger.error(f"Failed to get user keys for execution: {str(e)}")
+            return {}
 
 # Create global instance
 user_settings_service = UnifiedUserSettingsService() 

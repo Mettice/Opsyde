@@ -1,11 +1,73 @@
 import asyncio
 import re
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Union
 from datetime import datetime
 from core.llm_runner import llm_runner
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel
+from models.data import NodeData
+from models.schemas import NodeSchema, SchemaType, SchemaField
+
+
 
 logger = logging.getLogger(__name__)
+
+class DelayNodeConfig(NodeConfig):
+    """Configuration for Delay nodes"""
+    duration: str = Field(default="5s", description="Delay duration (e.g., '5s', '2m')")
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'input': SchemaField(
+                type=SchemaType.ANY,
+                description='Input to pass through after delay',
+                optional=True
+            ),
+            'llm_mode_enabled': SchemaField(
+                type=SchemaType.BOOLEAN,
+                description='Whether to use LLM-centric processing',
+                optional=True
+            )
+        }
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.ANY,
+                description='Data after delay',
+                optional=True
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'processing_mode': SchemaField(type=SchemaType.STRING, description='Processing mode used'),
+                    'delay_duration': SchemaField(type=SchemaType.STRING, description='Requested delay duration'),
+                    'delay_result': SchemaField(type=SchemaType.OBJECT, description='Actual delay execution result'),
+                    'llm_analysis': SchemaField(type=SchemaType.OBJECT, description='LLM analysis if used', optional=True),
+                    'llm_metadata': SchemaField(type=SchemaType.OBJECT, description='LLM metadata if used', optional=True),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of completion'),
+                    'data_preserved': SchemaField(type=SchemaType.BOOLEAN, description='Whether input data was preserved')
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            )
+        },
+        required_fields=['metadata']
+    ))
+
+class DelayNode(BaseNode):
+    """Enhanced Delay Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return DelayNodeConfig
+
+    async def process(self, node, inputs, context):
+        return await super().process(node, inputs, context)
 
 async def run_delay_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
     """

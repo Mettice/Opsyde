@@ -10,10 +10,11 @@ import TaskEditor from './editmodal/TaskEditor';
 import ToolEditor from './editmodal/ToolEditor';
 import ChatbotEditor from './editmodal/ChatbotEditor';
 import DelayEditor from './editmodal/DelayEditor';
-import TriggerEditor from './editmodal/TriggerEditor/TriggerEditor';
+import TriggerEditor from './editmodal/TriggerEditor';
 import LogicEditor from './editmodal/LogicEditor';
 import InputEditor from './editmodal/InputEditor';
 import OutputEditor from './editmodal/OutputEditor';
+import NodeErrorDisplay from './editmodal/shared/NodeErrorDisplay';
 
 // Framework and LLM constants (separated)
 export const AVAILABLE_FRAMEWORKS = [
@@ -162,6 +163,141 @@ export const ToolType = {
   CUSTOM: 'custom'
 };
 
+function normalizeAgentData(rawData) {
+  // Defensive copy
+  const data = { ...rawData };
+
+  // Normalize LLM config
+  let llmConfig = data.llmConfig || data.llm || null;
+  if (!llmConfig) {
+    // Try to build from flat fields
+    if (data.llmProvider && data.llmModel) {
+      llmConfig = {
+        provider: data.llmProvider,
+        model: data.llmModel,
+        temperature: data.temperature ?? 0.7,
+        max_tokens: data.max_tokens ?? 4000,
+      };
+    }
+  }
+  // If still not found, try frameworkConfig
+  if (!llmConfig && data.frameworkConfig) {
+    llmConfig = {
+      provider: data.frameworkConfig.provider,
+      model: data.frameworkConfig.model,
+      temperature: data.frameworkConfig.temperature ?? 0.7,
+      max_tokens: data.frameworkConfig.max_tokens ?? 4000,
+    };
+  }
+
+  // Normalize framework
+  let framework = data.framework || (data.frameworkConfig && data.frameworkConfig.framework) || null;
+
+  // Return normalized data
+  return {
+    ...data,
+    llmConfig,
+    framework,
+    // Optionally, remove legacy fields to avoid confusion:
+    // llm: undefined, llmProvider: undefined, llmModel: undefined, frameworkConfig: undefined,
+  };
+}
+
+function normalizeTaskData(rawData) {
+  const data = { ...rawData };
+  // Always provide a default llmConfig object
+  let llmConfig = data.llmConfig || data.llm || {};
+  if (!llmConfig.provider && data.llmProvider) llmConfig.provider = data.llmProvider;
+  if (!llmConfig.model && data.llmModel) llmConfig.model = data.llmModel;
+  llmConfig.temperature = llmConfig.temperature ?? data.temperature ?? 0.7;
+  llmConfig.max_tokens = llmConfig.max_tokens ?? data.max_tokens ?? 4000;
+  llmConfig.framework = llmConfig.framework ?? data.framework ?? 'openai';
+
+  // Ensure all required fields are present
+  llmConfig = {
+    provider: llmConfig.provider || '',
+    model: llmConfig.model || '',
+    temperature: llmConfig.temperature,
+    max_tokens: llmConfig.max_tokens,
+    framework: llmConfig.framework,
+  };
+
+  return {
+    ...data,
+    llmConfig,
+    description: data.description || '',
+    expected_output: data.expected_output || data.expectedOutput || '',
+    agent_ref: data.agent_ref || data.agentRef || '',
+  };
+}
+
+function normalizeToolData(rawData) {
+  const data = { ...rawData };
+  
+  // Normalize tool type field (backend uses tool_type)
+  const toolType = data.tool_type || data.toolType || 'api';
+  
+  // Normalize config mode and AI prompt
+  const configMode = data.config_mode || data.configMode || 'schema';
+  const aiPrompt = data.ai_prompt || data.aiPrompt || '';
+  
+  // Normalize LLM config for LLM tools
+  let llmConfig = data.llmConfig || data.llm || null;
+  if (!llmConfig && data.llmProvider && data.llmModel) {
+    llmConfig = {
+      provider: data.llmProvider,
+      model: data.llmModel,
+      temperature: data.temperature ?? 0.7,
+      max_tokens: data.max_tokens ?? 4000,
+    };
+  }
+  
+  // Normalize config object
+  const config = data.config || {};
+  
+  // Normalize parameters (backend expects top-level parameters)
+  const parameters = data.parameters || {};
+  
+  // Normalize advanced options
+  const retryCount = data.retry_count || data.retryCount || 3;
+  const timeout = data.timeout || 30;
+  const isAsync = data.is_async || data.isAsync || false;
+  
+  return {
+    ...data,
+    tool_type: toolType,
+    framework: data.framework || 'api',
+    config: config,
+    config_mode: configMode,
+    ai_prompt: aiPrompt,
+    parameters: parameters,
+    retry_count: retryCount,
+    timeout: timeout,
+    is_async: isAsync,
+    llmConfig: llmConfig,
+  };
+}
+
+function normalizeOutputData(rawData) {
+  const data = { ...rawData };
+  // Normalize LLM config for smart outputs
+  let llmConfig = data.llmConfig || data.llm || null;
+  if (!llmConfig && data.llmProvider && data.llmModel) {
+    llmConfig = {
+      provider: data.llmProvider,
+      model: data.llmModel,
+      temperature: data.temperature ?? 0.7,
+      max_tokens: data.max_tokens ?? 4000,
+    };
+  }
+  return {
+    ...data,
+    llmConfig,
+    output_type: data.output_type || data.outputType || 'text',
+    config: data.config || {},
+  };
+}
+
 const EnhancedEditModal = ({ 
   isOpen, 
   onClose, 
@@ -213,6 +349,7 @@ const EnhancedEditModal = ({
   const [availableLLMs, setAvailableLLMs] = useState([]);
   const [availableModels, setAvailableModels] = useState([]);
   const [frameworkMetadata, setFrameworkMetadata] = useState({});
+  const [nodeErrors, setNodeErrors] = useState([]);
 
   // NEW: Add missing state for ToolEditor
   const [testInput, setTestInput] = useState('');
@@ -245,7 +382,12 @@ const EnhancedEditModal = ({
       // Handle both old and new data structures
       const migratedData = migrateNodeData(nodeData);
       
-      setFormData(migratedData);
+      let normalizedData = migratedData;
+      if (currentNodeType === 'agent') {
+        normalizedData = normalizeAgentData(migratedData);
+      }
+      
+      setFormData(normalizedData);
       setIsModified(false);
     }
   }, [nodeData]);
@@ -503,6 +645,14 @@ const EnhancedEditModal = ({
           .filter(([_, value]) => value !== '' && value !== undefined)
       );
       
+      // Ensure LlamaIndex provider is set from BYOK if agent and llamaindex
+      if (currentNodeType === 'agent' && cleanedData.framework === 'llamaindex') {
+        cleanedData.frameworkConfig = {
+          ...cleanedData.frameworkConfig,
+          provider: cleanedData.llm.provider
+        };
+      }
+      
       // Special handling for tool nodes
       if (currentNodeType === 'tool') {
         // Ensure tool_type is set (map from toolType if needed)
@@ -580,37 +730,32 @@ const EnhancedEditModal = ({
       migrated.label = migrated.name;
     }
     
-    // Then apply the enhanced data structure
+    // Then apply the enhanced data structure with standardized field names
     const cleanData = {
       label: migrated.label || '',
       description: migrated.description || '',
       framework: migrated.framework || '',
       
-      // Enhanced LLM configuration
-      llm: {
-        provider: migrated.llm?.provider || migrated.llmProvider || '',
-        model: migrated.llm?.model || migrated.llmModel || migrated.model || '',
-        temperature: migrated.llm?.temperature || migrated.temperature || 0.7,
-        max_tokens: migrated.llm?.max_tokens || migrated.max_tokens || 1000,
-        api_key: migrated.llm?.api_key || migrated.apiKey || '',
-        base_url: migrated.llm?.base_url || migrated.baseUrl || ''
-      },
+      // Enhanced LLM configuration with standardized field names
+      llm_model: migrated.llm_model || migrated.llm?.model || migrated.llmModel || migrated.model || '',
+      temperature: migrated.temperature || migrated.llm?.temperature || 0.7,
+      max_tokens: migrated.max_tokens || migrated.llm?.max_tokens || 1000,
       
       // Framework-specific configuration
-      frameworkConfig: migrated.frameworkConfig || {},
+      framework_config: migrated.framework_config || migrated.frameworkConfig || {},
       
-      // Legacy fields for backward compatibility
+      // Standardized field names for backward compatibility
       role: migrated.role || '',
       goal: migrated.goal || '',
       backstory: migrated.backstory || '',
-      systemMessage: migrated.systemMessage || '',
-      chainType: migrated.chainType || '',
-      agentType: migrated.agentType || '',
-      modelName: migrated.modelName || '',
-      taskType: migrated.taskType || '',
-      indexType: migrated.indexType || '',
-      documentsSource: migrated.documentsSource || '',
-      queryMode: migrated.queryMode || '',
+      system_prompt: migrated.system_prompt || migrated.systemMessage || '',
+      expected_output: migrated.expected_output || migrated.expectedOutput || '',
+      agent_ref: migrated.agent_ref || migrated.agentRef || '',
+      tool_type: migrated.tool_type || migrated.toolType || '',
+      trigger_type: migrated.trigger_type || migrated.triggerType || '',
+      output_type: migrated.output_type || migrated.outputType || '',
+      input_type: migrated.input_type || migrated.inputType || '',
+      duration: migrated.duration || '',
       
       // Copy all other fields
       ...migrated
@@ -618,19 +763,14 @@ const EnhancedEditModal = ({
     
     // Handle tool node migration
     if (currentNodeType === 'tool') {
-      // Ensure tool_type is set
-      if (!cleanData.tool_type && !cleanData.toolType) {
-        cleanData.toolType = 'api'; // default
-        cleanData.tool_type = 'api';
-      } else if (cleanData.toolType && !cleanData.tool_type) {
-        cleanData.tool_type = cleanData.toolType;
-      } else if (cleanData.tool_type && !cleanData.toolType) {
-        cleanData.toolType = cleanData.tool_type;
+      // Ensure tool_type is set (standardized)
+      if (!cleanData.tool_type) {
+        cleanData.tool_type = 'api'; // default
       }
       
       // Ensure framework is set
       if (!cleanData.framework) {
-        cleanData.framework = cleanData.tool_type || cleanData.toolType || 'api';
+        cleanData.framework = cleanData.tool_type || 'api';
       }
       
       // Ensure parameters is an object
@@ -655,9 +795,9 @@ const EnhancedEditModal = ({
         }
       }
       
-      // Ensure frameworkConfig exists
-      if (!cleanData.frameworkConfig) {
-        cleanData.frameworkConfig = {};
+      // Ensure framework_config exists (standardized)
+      if (!cleanData.framework_config) {
+        cleanData.framework_config = {};
       }
     }
     
@@ -709,21 +849,41 @@ const EnhancedEditModal = ({
       case 'agent':
         return <AgentEditor {...editorProps} />;
       case 'task':
-        return <TaskEditor {...editorProps} availableDependencies={availableDependencies} />;
+        return <TaskEditor 
+          {...editorProps} 
+          node={nodeData} 
+          availableDependencies={availableDependencies} 
+          onClose={onClose} 
+          onSave={handleSave} 
+        />;
       case 'tool':
         return <ToolEditor {...testEditorProps} />;
+      case 'chat':  // This case is already added
+        return <ChatbotEditor {...editorProps} onSave={handleSave} onClose={onClose} />;
       case 'chatbot':
-        return <ChatbotEditor {...editorProps} />;
+        return <ChatbotEditor {...editorProps} onSave={handleSave} onClose={onClose} />;
       case 'delay':
-        return <DelayEditor {...editorProps} />;
+        return <DelayEditor {...editorProps} onSave={handleSave} onClose={onClose} />;
       case 'trigger':
-        return <TriggerEditor {...editorProps} />;
+        return <TriggerEditor {...editorProps} onSave={handleSave} onClose={onClose} />;
       case 'logic':
-        return <LogicEditor {...testEditorProps} />;
+        return (
+          <LogicEditor
+            {...editorProps}
+            onSave={handleSave}
+            onClose={onClose}
+          />
+        );
       case 'input':
-        return <InputEditor {...editorProps} />;
+        return <InputEditor {...editorProps} onSave={handleSave} onClose={onClose} />;
       case 'output':
-        return <OutputEditor {...editorProps} />;
+        return <OutputEditor
+          formData={formData}
+          handleInputChange={handleInputChange}
+          onSave={handleSave}
+          onClose={onClose}
+        />;
+        
       default:
         return <div>Unknown node type: {currentNodeType}</div>;
     }
@@ -756,6 +916,13 @@ const EnhancedEditModal = ({
           <HelpTooltip type={currentNodeType} />
         </h2>
 
+        {/* Display Node Errors */}
+        <NodeErrorDisplay 
+          nodeId={nodeData?.id}
+          errors={nodeErrors}
+          onClose={() => setNodeErrors([])}
+        />
+
         {/* Common fields */}
         <CommonFields formData={formData} handleInputChange={handleInputChange} nodeType={currentNodeType} />
         
@@ -785,3 +952,5 @@ EnhancedEditModal.propTypes = {
 };
 
 export default EnhancedEditModal;
+
+export { normalizeAgentData, normalizeTaskData, normalizeToolData, normalizeOutputData };

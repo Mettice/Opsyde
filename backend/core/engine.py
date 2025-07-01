@@ -87,19 +87,38 @@ class WorkflowEngine:
                 try:
                     start_time = datetime.now()
                     
-                    # Create execution context with framework registry access
+                    # Create execution context with framework registry access and LLM support
                     context = {
                         "workflow_id": workflow.id,
                         "execution_order": execution_order,
-                        "framework_registry": framework_registry
+                        "framework_registry": framework_registry,
+                        # Auto-inject LLM context
+                        "llm_mode_enabled": inputs.get("llm_mode_enabled", True),
+                        "smart_mapping_enabled": inputs.get("smart_mapping_enabled", True),
+                        "user_keys": inputs.get("user_keys", {}),
+                        # Support multimodal processing
+                        "multimodal_support": True,
+                        "output_formatting": True
                     }
                     
-                    result = await node_processor.process_node(node.dict(), node_inputs, context)
+                    # Check if this is a multimodal input
+                    if self._has_multimodal_input(node_inputs):
+                        logger.info(f"🎯 Multimodal input detected for node {node_id}")
+                        # Process multimodal inputs first
+                        processed_inputs = await self._process_multimodal_inputs(node_inputs, context)
+                        result = await node_processor.process_node(node.dict(), processed_inputs, context)
+                    else:
+                        result = await node_processor.process_node(node.dict(), node_inputs, context)
+                    
                     execution_time = (datetime.now() - start_time).total_seconds()
                     
-                    # Store result with enhanced metadata
+                    # Store result with enhanced metadata and output formatting
                     enhanced_result = self._enhance_result_metadata(result, node, execution_time)
-                    self.node_results[node_id] = enhanced_result
+                    
+                    # Apply output formatting based on result type
+                    formatted_result = self._format_output_by_type(enhanced_result, node)
+                    
+                    self.node_results[node_id] = formatted_result
                     self.executed_nodes.add(node_id)
                     
                     yield {
@@ -107,8 +126,9 @@ class WorkflowEngine:
                         "node_id": node_id,
                         "node_type": node.type,
                         "status": "completed",
-                        "result": enhanced_result,
+                        "result": formatted_result,
                         "execution_time": execution_time,
+                        "format_type": formatted_result.get("format_type", "json"),
                         "timestamp": datetime.now().isoformat()
                     }
                     
@@ -245,6 +265,35 @@ class WorkflowEngine:
         })
         
         return enhanced_result
+
+    def _format_output_by_type(self, result: Dict, node: Node) -> Dict:
+        """Apply output formatting based on result type"""
+        if hasattr(result, 'dict'):
+            formatted_result = result.dict()
+        elif isinstance(result, dict):
+            formatted_result = result.copy()
+        else:
+            formatted_result = {"value": result}
+        
+        # Add format type
+        formatted_result["format_type"] = node.data.get('format_type', 'json')
+        
+        return formatted_result
+
+    def _has_multimodal_input(self, node_inputs: Dict) -> bool:
+        """Check if the node inputs are multimodal"""
+        return any(isinstance(value, dict) for value in node_inputs.values())
+
+    async def _process_multimodal_inputs(self, node_inputs: Dict, context: Dict) -> Dict:
+        """Process multimodal inputs"""
+        processed_inputs = {}
+        for key, value in node_inputs.items():
+            if isinstance(value, dict):
+                processed_inputs[key] = value
+            else:
+                processed_inputs[key] = value
+        
+        return processed_inputs
 
 # Create and register workflow engine instance
 workflow_engine = WorkflowEngine()

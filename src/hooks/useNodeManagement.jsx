@@ -117,7 +117,7 @@ export const useNodeManagement = () => {
     const id = `chat-${Date.now()}`;
     const newNode = {
       id,
-      type: 'chatbot',
+      type: 'chat',
       position: getSafeNodePosition(nodes),
       data: {
         label: 'Chat',
@@ -126,7 +126,7 @@ export const useNodeManagement = () => {
         temperature: 0.7,
         max_tokens: 500,
         nodeId: id,
-        nodeType: 'chatbot',
+        nodeType: 'chat',
         // Add event handlers
         onEdit: () => handleNodeEdit(id),
         onDelete: () => handleNodeDelete(id)

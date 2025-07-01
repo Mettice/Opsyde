@@ -1,14 +1,17 @@
 # backend/nodes/tool_node.py - Enhanced with Framework Registry Integration
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Union
 import logging
 from datetime import datetime
 import aiohttp
 import json
+import os
+from pydantic import BaseModel, Field
 
 from models.nodes import Node, NodeType, ToolType, ToolConfig
 from models.workflow import ExecutionContext
 from models.results import NodeResult, ExecutionStatus
 from models.data import NodeData
+from models.schemas import NodeSchema, SchemaField, SchemaType
 
 # Import the enhanced framework registry
 from framework_registry import framework_registry
@@ -22,10 +25,90 @@ from tools.custom_tools import run_custom_tool
 # NEW: Import universal API runner
 from frameworks.universal_api_runner import run_universal_api_tool
 
-logger = logging.getLogger(__name__)
+from core.llm_runner import llm_runner
+from nodes.base_node import BaseNode, NodeConfig
+from utils.logging import get_logger
 
-class ToolNode:
+logger = get_logger(__name__)
+
+class ToolNodeConfig(NodeConfig):
+    """Configuration for Tool nodes"""
+    label: str
+    description: str
+    toolType: str = Field(..., description="Type of tool")
+    framework: str = Field(default="api", description="Framework to use")
+    config: Dict[str, Any] = Field(default_factory=dict)
+    is_async: bool = Field(default=False, description="Execute asynchronously")
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    retry_count: int = Field(default=3, ge=0)
+    timeout: int = Field(default=30, gt=0)
+    
+    # Enhanced input schema for tools
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'input_data': SchemaField(
+                type=SchemaType.ANY,
+                description='Data to be processed by the tool',
+                optional=False
+            ),
+            'parameters': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Tool-specific parameters',
+                optional=True
+            ),
+            'query': SchemaField(
+                type=SchemaType.STRING,
+                description='Query or request for the tool',
+                optional=True
+            ),
+            'context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Context for tool execution',
+                optional=True
+            ),
+            'config': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Tool configuration parameters',
+                optional=True
+            )
+        },
+        required_fields=['input_data']
+    ))
+    
+    # Enhanced output schema for tools
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.ANY,
+                description='Tool execution result',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'tool_type': SchemaField(type=SchemaType.STRING, description='Type of tool used'),
+                    'framework': SchemaField(type=SchemaType.STRING, description='Framework used'),
+                    'execution_time': SchemaField(type=SchemaType.NUMBER, description='Execution time in seconds'),
+                    'status': SchemaField(type=SchemaType.STRING, description='Execution status'),
+                    'cost': SchemaField(type=SchemaType.NUMBER, description='Execution cost', optional=True)
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message if tool execution failed',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class ToolNode(BaseNode):
     """Enhanced tool node with framework registry integration"""
+
+    def get_config_model(self) -> type[BaseModel]:
+        return ToolNodeConfig
 
     async def process(self, node: Node, inputs: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
         """Process tool node with enhanced framework registry integration"""
@@ -333,7 +416,6 @@ class ToolNode:
                 return user_keys
             
             # Fallback to environment variables
-            import os
             return {
                 "openai_key": os.getenv("OPENAI_API_KEY"),
                 "anthropic_key": os.getenv("ANTHROPIC_API_KEY"),

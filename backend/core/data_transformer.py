@@ -10,8 +10,12 @@ from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
 import re
+import os
 
 logger = logging.getLogger(__name__)
+
+# TEMPORARY: Disable UniversalDataTransformer to use simple mapping instead
+DISABLE_UNIVERSAL_TRANSFORMER = True
 
 class DataType(Enum):
     """Standard data types in our system"""
@@ -915,6 +919,13 @@ class UniversalDataTransformer:
             Transformed data compatible with target node
         """
         try:
+            # TEMPORARY: If UniversalDataTransformer is disabled, return data as-is
+            if DISABLE_UNIVERSAL_TRANSFORMER:
+                logger.info(f"🔄 UniversalDataTransformer disabled - returning data as-is for {source_type} → {target_type}")
+                if hasattr(source_output, 'value'):
+                    return source_output.value
+                return source_output
+            
             logger.info(f"🔄 Transforming {source_type} → {target_type}")
             
             # Handle NodeData wrapper

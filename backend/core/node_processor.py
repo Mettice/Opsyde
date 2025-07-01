@@ -1,16 +1,18 @@
 # backend/core/node_processor.py - Enhanced Version (Corrected)
 import logging
-from typing import Dict, Any, Optional, Union, Callable
+from typing import Dict, Any, Optional, Union, Callable, List
 from datetime import datetime
 import importlib
 import asyncio
 import json
 import sys
+from pydantic import BaseModel
 
 from models.data import NodeData
 from models.results import NodeResult, ExecutionStatus, ResultType
 from core.exceptions import NodeError
 from utils.logging import get_logger
+from config.settings import get_settings
 
 # NEW: Import enhanced framework registry for validation
 from framework_registry import framework_registry, validate_framework_llm_combination
@@ -28,17 +30,58 @@ except ImportError:
 # Import the smart mapper
 from .smart_mapper import smart_map_inputs
 
+from models.schemas import NodeSchema
+from models.runner_schemas import BaseRunnerConfig
+
+# --- Runner Registry ---
+from frameworks.crewai_runner import EnhancedCrewAIRunner
+from frameworks.langchain_runner import EnhancedLangChainRunner
+from frameworks.huggingface_runner import EnhancedHuggingFaceRunner
+from frameworks.autogen_runner import EnhancedAutoGenRunner
+from frameworks.llamaindex_runner import EnhancedLlamaIndexRunner
+
+RUNTIME_REGISTRY = {
+    "CrewAI": EnhancedCrewAIRunner,
+    "LangChain": EnhancedLangChainRunner,
+    "HuggingFace": EnhancedHuggingFaceRunner,
+    "AutoGen": EnhancedAutoGenRunner,
+    "LlamaIndex": EnhancedLlamaIndexRunner,
+}
+
 logger = get_logger(__name__)
+settings = get_settings()
 
 class NodeProcessor:
     """Enhanced node processor with intelligent input mapping and LLM-centric mode"""
     
     def __init__(self):
-        self.handlers = {}
-        self.lazy_handlers = {}
-        self.smart_mapping_enabled = True  # Toggle for smart mapping
-        self.llm_mode_enabled = False  # NEW: Toggle for LLM-centric processing
+        self._handlers = {}
+        self._framework_runners = {}
+        self._metrics = {}
+        self.llm_runner = llm_runner
+        self.smart_mapping_enabled = True
+        self.llm_mode_enabled = False
         
+        # NEW: Enhanced type validators
+        self.type_validators = {
+            'string': lambda x: isinstance(x, str),
+            'number': lambda x: isinstance(x, (int, float)) and not isinstance(x, bool),
+            'boolean': lambda x: isinstance(x, bool),
+            'object': lambda x: isinstance(x, dict) and x is not None,
+            'array': lambda x: isinstance(x, (list, tuple)),
+            'any': lambda x: True
+        }
+        
+        # NEW: Field similarity patterns
+        self.field_patterns = {
+            'input': ['input', 'data', 'query', 'request', 'prompt', 'message'],
+            'output': ['output', 'result', 'response', 'answer', 'solution'],
+            'content': ['content', 'text', 'message', 'body', 'data'],
+            'context': ['context', 'background', 'info', 'details'],
+            'parameters': ['parameters', 'config', 'settings', 'options'],
+            'metadata': ['metadata', 'info', 'details', 'attributes']
+        }
+
     def enable_smart_mapping(self, enabled: bool = True):
         """Enable or disable smart input mapping"""
         self.smart_mapping_enabled = enabled
@@ -51,22 +94,22 @@ class NodeProcessor:
 
     def register_handler(self, node_type: str, handler_func):
         """Register a handler function for a specific node type"""
-        self.handlers[node_type] = handler_func
+        self._handlers[node_type] = handler_func
 
     def register_lazy_handler(self, node_type: str, module_path: str, function_name: str):
         """Register a lazy-loaded handler for a specific node type"""
-        self.lazy_handlers[node_type] = (module_path, function_name)
+        self._framework_runners[node_type] = (module_path, function_name)
 
     def _get_handler(self, node_type: str) -> Optional[Callable]:
         """Get handler for a node type, loading lazily if needed"""
         # Check direct handlers first
-        if node_type in self.handlers:
-            return self.handlers[node_type]
+        if node_type in self._handlers:
+            return self._handlers[node_type]
         
         # Check lazy handlers
-        if node_type in self.lazy_handlers:
+        if node_type in self._framework_runners:
             try:
-                module_path, function_name = self.lazy_handlers[node_type]
+                module_path, function_name = self._framework_runners[node_type]
                 
                 # Import the module
                 if module_path.startswith('.'):
@@ -82,7 +125,7 @@ class NodeProcessor:
                 handler = getattr(module, function_name)
                 
                 # Cache it for future use
-                self.handlers[node_type] = handler
+                self._handlers[node_type] = handler
                 return handler
                 
             except Exception as e:
@@ -402,145 +445,620 @@ class NodeProcessor:
         # Execute the node
         logger.info(f"🔄 Executing traditional {node_type} handler for {node_id}")
         
-        if asyncio.iscoroutinefunction(handler):
-            result = await handler(node, nodedata_inputs, context)
-        else:
-            result = handler(node, nodedata_inputs, context)
+        try:
+            if asyncio.iscoroutinefunction(handler):
+                result = await handler(node, nodedata_inputs, context)
+            else:
+                result = handler(node, nodedata_inputs, context)
 
-        # Ensure result is NodeData
-        if not isinstance(result, NodeData):
-            result = NodeData(value=result)
+            # Ensure result is NodeData
+            if not isinstance(result, NodeData):
+                result = NodeData(value=result)
+                
+            return result
             
-        return result
+        except Exception as e:
+            error_msg = f"Traditional handler failed: {str(e)}"
+            logger.error(error_msg)
+            return NodeData(error=error_msg)
 
     async def process_node(
         self, 
         node: Dict[str, Any], 
         inputs: Dict[str, Any], 
         context: Optional[Any] = None
-    ) -> NodeData:
-        """
-        Enhanced node processing with smart configuration fixing and LLM-centric mode
-        """
-        node_id = node.get("id", "unknown")
-        node_type = node.get("type", "unknown")
-        start_time = datetime.now()
-        
-        logger.info(f"🔧 Processing node {node_id} (type: {node_type}) - LLM Mode: {self.llm_mode_enabled}")
-        
+    ) -> Dict[str, Any]:
+        """Enhanced node processing with robust schema validation and standardized returns"""
         try:
-            # 🧠 SMART CONFIGURATION FIXING: Fix missing required fields
-            if self.smart_mapping_enabled:
-                try:
-                    fixed_node = self._smart_fix_node_config(node)
-                    if fixed_node != node:
-                        logger.info(f"🧠 Smart config fix applied to {node_id}")
-                        node = fixed_node
-                except Exception as config_error:
-                    logger.warning(f"⚠️ Smart config fix failed for {node_id}: {str(config_error)}")
-
-            # 🧠 SMART MAPPING: Intelligently map inputs before execution
-            processed_inputs = inputs
-            if self.smart_mapping_enabled:
-                try:
-                    # Convert context to dictionary format for smart mapping
-                    context_dict = {}
-                    if context is None:
-                        context_dict = {'variables': inputs}
-                    elif isinstance(context, dict):
-                        context_dict = context
-                    elif hasattr(context, 'variables'):
-                        # WorkflowExecutionContext object
-                        context_dict = {
-                            'variables': getattr(context, 'variables', {}),
-                            'execution_id': getattr(context, 'execution_id', ''),
-                            'workflow_id': getattr(context, 'workflow_id', ''),
-                            'user_id': getattr(context, 'user_id', '')
-                        }
-                    else:
-                        # Fallback - create basic context
-                        context_dict = {'variables': inputs}
-                    
-                    # Apply smart mapping
-                    mapped_inputs = await smart_map_inputs(node, context_dict, inputs)
-                    
-                    logger.info(f"🧠 Smart mapping completed for {node_id}")
-                    logger.info(f"   📥 Original inputs: {list(inputs.keys())}")
-                    logger.info(f"   🎯 Mapped inputs: {list(mapped_inputs.keys())}")
-                    
-                    # Use mapped inputs for processing
-                    processed_inputs = mapped_inputs
-                    
-                    # Store mapping info in context for debugging
-                    if hasattr(context, 'variables'):
-                        context.variables[f"{node_id}_mapping_info"] = {
-                            'original_inputs': list(inputs.keys()),
-                            'mapped_inputs': list(mapped_inputs.keys()),
-                            'mapping_timestamp': start_time.isoformat()
-                        }
-                    
-                except Exception as mapping_error:
-                    logger.warning(f"⚠️ Smart mapping failed for {node_id}: {str(mapping_error)}")
-                    # Fallback to original inputs
-                    processed_inputs = inputs
-
-            # Validate inputs
-            validation_error = self._validate_node_inputs(processed_inputs)
-            if validation_error:
-                error_msg = f"Input validation failed for node {node_id}: {validation_error}"
-                logger.error(error_msg)
-                return NodeData(error=error_msg)
-
-            # 🤖 NEW: Choose processing mode - LLM-centric or traditional
-            if self.llm_mode_enabled:
-                # Use LLM-centric processing
-                result = await self._process_with_llm(node, processed_inputs, context)
-            else:
-                # Use traditional handler-based processing
-                result = await self._process_with_traditional_handler(node, processed_inputs, context)
-
-            # Calculate execution time
-            execution_time = (datetime.now() - start_time).total_seconds()
+            # 1. Get schemas
+            input_schema = self._get_input_schema(node)
+            output_schema = self._get_output_schema(node)
             
-            # 📊 ENHANCED LOGGING: Store execution info in context
-            if context and hasattr(context, 'variables'):
-                context.variables[f"{node_id}_execution_info"] = {
-                    'node_type': node_type,
-                    'execution_time': execution_time,
-                    'success': not result.is_error(),
-                    'processing_mode': 'llm' if self.llm_mode_enabled else 'traditional',
-                    'timestamp': datetime.now().isoformat()
+            # 2. Validate input schema
+            validation_result = self._validate_with_schema(inputs, input_schema)
+            if not validation_result["valid"]:
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": validation_result["errors"],
+                    "debug": validation_result["debug"]
                 }
+            
+            # 3. Map inputs using simple mapping (preferred) or smart mapping (fallback)
+            try:
+                # Check if node has explicit field mappings
+                node_data = node.get('data', {})
+                field_mappings = node_data.get('field_mappings', {})
                 
-                # Store node output in context variables for next nodes
-                output_key = f"{node_id}_output"
-                context.variables[output_key] = result.get_value() if not result.is_error() else None
-                
-                # Also store with simpler naming for easier access
-                simple_key = node_id.replace('-', '_')
-                context.variables[simple_key] = result.get_value() if not result.is_error() else None
+                if field_mappings:
+                    # Use simple mapping with explicit field mappings
+                    logger.info(f"Using simple mapping with explicit field mappings for {node.get('type')} node")
+                    mapped_inputs = await self._simple_map_inputs(
+                        node, 
+                        validation_result["output"],
+                        context
+                    )
+                elif self.smart_mapping_enabled:
+                    # Fall back to smart mapping if no explicit mappings
+                    logger.info(f"Using smart mapping for {node.get('type')} node (no explicit mappings)")
+                    mapped_inputs = await self._smart_map_inputs(
+                        node, 
+                        validation_result["output"],
+                        context
+                    )
+                else:
+                    # Use inputs as-is if no mapping is configured
+                    logger.info(f"Using inputs as-is for {node.get('type')} node (no mapping configured)")
+                    mapped_inputs = validation_result["output"]
+                    
+            except Exception as e:
+                logger.error(f"Input mapping failed: {str(e)}")
+                # Continue with original inputs on mapping failure
+                mapped_inputs = validation_result["output"]
+            
+            # 4. Get appropriate runner
+            framework = node.get('data', {}).get('framework', node.get('type', 'unknown'))
+            runner = self._get_framework_runner(framework)
+            if isinstance(runner, NodeData) and runner.is_error():
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": [runner.get_error()],
+                    "debug": {
+                        "node_id": node.get("id", "unknown"),
+                        "node_type": node.get("type", "unknown")
+                    }
+                }
+            
+            # 5. Execute node
+            try:
+                result = await self._execute_with_runner(runner, node, mapped_inputs, context)
+            except Exception as e:
+                logger.error(f"Node execution failed: {str(e)}")
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": [f"Node execution failed: {str(e)}"],
+                    "debug": {
+                        "exception": str(e),
+                        "node_id": node.get("id", "unknown"),
+                        "node_type": node.get("type", "unknown")
+                    }
+                }
+            
+            # 6. Validate output schema
+            output_validation = self._validate_with_schema(result, output_schema)
+            if not output_validation["valid"]:
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": output_validation["errors"],
+                    "debug": output_validation["debug"]
+                }
+            
+            return {
+                "valid": True,
+                "output": output_validation["output"],
+                "errors": [],
+                "debug": {
+                    "input_validation": validation_result["debug"],
+                    "output_validation": output_validation["debug"],
+                    "node_id": node.get("id", "unknown"),
+                    "node_type": node.get("type", "unknown"),
+                    "execution_time": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Node processing failed: {str(e)}")
+            return {
+                "valid": False,
+                "output": None,
+                "errors": [str(e)],
+                "debug": {
+                    "exception": str(e),
+                    "node_id": node.get("id", "unknown"),
+                    "node_type": node.get("type", "unknown"),
+                    "execution_time": datetime.now().isoformat()
+                }
+            }
 
-            mode_icon = "🤖" if self.llm_mode_enabled else "🔄"
-            logger.info(f"✅ {mode_icon} Node {node_id} completed in {execution_time:.2f}s")
-            return result
+    def _validate_with_schema(
+        self, 
+        data: Dict[str, Any], 
+        schema: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Validate data against schema with standardized return format"""
+        try:
+            # Ensure schema has required fields
+            if not schema:
+                schema = {
+                    'fields': {},
+                    'required_fields': []
+                }
+            
+            if 'fields' not in schema:
+                schema['fields'] = {}
+            
+            if 'required_fields' not in schema:
+                schema['required_fields'] = []
+            
+            # Ensure data has required fields for NodeData
+            if 'value' not in data:
+                data['value'] = data.get('data', {})
+            
+            if 'node_schema' not in data:
+                data['node_schema'] = schema
+            
+            # Create NodeData instance with schema
+            node_data = NodeData(
+                node_type=data.get('type', 'unknown'),
+                value=data.get('value', {}),
+                node_schema=schema
+            )
+            
+            validation_result = {
+                "valid": True,
+                "output": data,
+                "errors": [],
+                "debug": {
+                    "schema_used": schema,
+                    "validation_time": datetime.now().isoformat()
+                }
+            }
+            
+            # Validate required fields
+            required_fields = schema.get('required_fields', [])
+            for field in required_fields:
+                if field not in data.get('value', {}):
+                    validation_result["valid"] = False
+                    validation_result["errors"].append(f"Missing required field: {field}")
+                    logger.warning(f"Missing required field: {field}")
+            
+            # Validate field types
+            fields = schema.get('fields', {})
+            for field_name, field_schema in fields.items():
+                if field_name in data.get('value', {}):
+                    if not self._validate_field_type(data['value'][field_name], field_schema):
+                        validation_result["valid"] = False
+                        error_msg = f"Invalid type for field {field_name}: expected {field_schema.get('type')}"
+                        validation_result["errors"].append(error_msg)
+                        logger.warning(error_msg)
+            
+            # Add validation metadata
+            validation_result["debug"]["validation_details"] = {
+                "required_fields_validated": len(required_fields),
+                "fields_validated": len(fields),
+                "errors_found": len(validation_result["errors"])
+            }
+            
+            return validation_result
+            
+        except Exception as e:
+            error_msg = f"Error validating schema: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "valid": True,  # Default to valid if validation fails
+                "output": data,
+                "errors": [error_msg],
+                "debug": {
+                    "exception": str(e),
+                    "validation_time": datetime.now().isoformat()
+                }
+            }
+
+    def _validate_field_type(self, value: Any, field_schema: Dict[str, Any]) -> bool:
+        """Validate field type with enhanced type checking"""
+        try:
+            expected_type = field_schema.get('type', 'any')
+            validator = self.type_validators.get(expected_type)
+            
+            if not validator:
+                logger.warning(f"Unknown type validator for {expected_type}")
+                return True
+            
+            # Special handling for LLMConfig
+            if expected_type == 'object' and field_schema.get('properties', {}).get('provider'):
+                # This is likely an LLMConfig object
+                return self._validate_llm_config(value)
+            
+            # Special handling for ToolConfig
+            if expected_type == 'object' and field_schema.get('properties', {}).get('toolType'):
+                # This is likely a ToolConfig object
+                return self._validate_tool_config(value)
+            
+            return validator(value)
+            
+        except Exception as e:
+            logger.error(f"Error validating field type: {str(e)}")
+            return False
+
+    def _validate_llm_config(self, config: Dict[str, Any]) -> bool:
+        """Validate LLM configuration"""
+        try:
+            required_fields = ['provider', 'model', 'framework']
+            for field in required_fields:
+                if field not in config:
+                    logger.warning(f"Missing required LLM config field: {field}")
+                    return False
+            
+            # Validate numeric fields
+            if 'temperature' in config:
+                temp = float(config['temperature'])
+                if not (0.0 <= temp <= 2.0):
+                    logger.warning(f"Invalid temperature value: {temp}")
+                    return False
+            
+            if 'max_tokens' in config:
+                tokens = int(config['max_tokens'])
+                if not (0 < tokens <= 32000):
+                    logger.warning(f"Invalid max_tokens value: {tokens}")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating LLM config: {str(e)}")
+            return False
+
+    def _validate_tool_config(self, config: Dict[str, Any]) -> bool:
+        """Validate tool configuration"""
+        try:
+            required_fields = ['toolType', 'framework']
+            for field in required_fields:
+                if field not in config:
+                    logger.warning(f"Missing required tool config field: {field}")
+                    return False
+            
+            # Validate tool type
+            valid_tool_types = ['api', 'webhook', 'database', 'file', 'custom', 'llm']
+            if config['toolType'] not in valid_tool_types:
+                logger.warning(f"Invalid tool type: {config['toolType']}")
+                return False
+            
+            # Validate numeric fields
+            if 'retry_count' in config:
+                retries = int(config['retry_count'])
+                if not (0 <= retries <= 5):
+                    logger.warning(f"Invalid retry_count value: {retries}")
+                    return False
+            
+            if 'timeout' in config:
+                timeout = int(config['timeout'])
+                if not (timeout > 0):
+                    logger.warning(f"Invalid timeout value: {timeout}")
+                    return False
+            
+            # Validate LLM config if present
+            if config.get('toolType') == 'llm' and 'llmConfig' in config:
+                if not self._validate_llm_config(config['llmConfig']):
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error validating tool config: {str(e)}")
+            return False
+
+    async def _execute_with_runner(
+        self,
+        runner: Any,
+        node: Dict[str, Any],
+        inputs: Dict[str, Any],
+        context: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """Execute node with selected runner using standardized return format"""
+        if not runner:
+            # Fallback to traditional handler
+            try:
+                result = await self._process_with_traditional_handler(node, inputs, context)
+                return {
+                    "valid": True,
+                    "output": result,
+                    "errors": [],
+                    "debug": {
+                        "handler": "traditional",
+                        "node_id": node.get("id", "unknown"),
+                        "node_type": node.get("type", "unknown")
+                    }
+                }
+            except Exception as e:
+                error_msg = f"Traditional handler failed: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": [error_msg],
+                    "debug": {
+                        "exception": str(e),
+                        "handler": "traditional",
+                        "node_id": node.get("id", "unknown"),
+                        "node_type": node.get("type", "unknown")
+                    }
+                }
+
+        try:
+            # Get schemas for validation
+            input_schema = self._get_input_schema(node)
+            output_schema = self._get_output_schema(node)
+            
+            # 1. Validate input before running
+            if input_schema and hasattr(input_schema, 'validate_data'):
+                input_validation = self._validate_with_schema(inputs, input_schema)
+                if not input_validation["valid"]:
+                    logger.warning(f"⚠️ Input validation failed for node {node.get('id', 'unknown')}")
+                    return {
+                        "valid": False,
+                        "output": None,
+                        "errors": input_validation["errors"],
+                        "debug": input_validation["debug"]
+                    }
+                logger.info(f"✅ Input validation passed for node {node.get('id', 'unknown')}")
+            
+            # Build config
+            config = {**node.get('data', {}), **getattr(runner, 'config', {})}
+
+            # 2. Run the node
+            if hasattr(runner, 'run'):
+                result = await runner.run(config, inputs)
+            elif hasattr(runner, 'run_tool'):
+                result = await runner.run_tool(config, inputs)
+            elif hasattr(runner, 'run_agent'):
+                result = await runner.run_agent(config, inputs)
+            else:
+                error_msg = f"Runner {runner.__class__.__name__} has no valid run method"
+                logger.error(error_msg)
+                return {
+                    "valid": False,
+                    "output": None,
+                    "errors": [error_msg],
+                    "debug": {
+                        "runner_type": runner.__class__.__name__,
+                        "node_id": node.get("id", "unknown"),
+                        "node_type": node.get("type", "unknown")
+                    }
+                }
+            
+            # 3. Validate output against schema
+            if output_schema and hasattr(output_schema, 'validate_data'):
+                output_data = result.value if isinstance(result, NodeData) else result
+                if isinstance(output_data, dict):
+                    output_validation = self._validate_with_schema(output_data, output_schema)
+                    if not output_validation["valid"]:
+                        logger.warning(f"⚠️ Output validation failed for node {node.get('id', 'unknown')}")
+                        # Log but don't fail - allow data to flow with warning
+                        logger.info(f"📤 Output data: {output_data}")
+                    else:
+                        logger.info(f"✅ Output validation passed for node {node.get('id', 'unknown')}")
+                        result = output_validation["output"]
+            
+            return {
+                "valid": True,
+                "output": result,
+                "errors": [],
+                "debug": {
+                    "runner_type": runner.__class__.__name__,
+                    "node_id": node.get("id", "unknown"),
+                    "node_type": node.get("type", "unknown"),
+                    "execution_time": datetime.now().isoformat()
+                }
+            }
 
         except Exception as e:
-            execution_time = (datetime.now() - start_time).total_seconds()
-            error_msg = f"Node {node_id} failed after {execution_time:.2f}s: {str(e)}"
+            error_msg = f"Runner execution failed: {str(e)}"
             logger.error(error_msg)
-            
-            # Store error info in context
-            if context and hasattr(context, 'variables'):
-                context.variables[f"{node_id}_execution_info"] = {
-                    'node_type': node_type,
-                    'execution_time': execution_time,
-                    'success': False,
-                    'error': str(e),
-                    'processing_mode': 'llm' if self.llm_mode_enabled else 'traditional',
-                    'timestamp': datetime.now().isoformat()
+            return {
+                "valid": False,
+                "output": None,
+                "errors": [error_msg],
+                "debug": {
+                    "exception": str(e),
+                    "runner_type": runner.__class__.__name__ if runner else None,
+                    "node_id": node.get("id", "unknown"),
+                    "node_type": node.get("type", "unknown"),
+                    "execution_time": datetime.now().isoformat()
                 }
+            }
+
+    def _validate_and_format_result(self, result: NodeData, schema: Dict[str, Any]) -> NodeData:
+        """Validate and format result against schema"""
+        if result.is_error():
+            return result
+
+        try:
+            if hasattr(schema, 'validate'):
+                validated = schema.validate(result.value)
+                return NodeData.from_value(validated, schema=schema)
+            return result
+        except Exception as e:
+            return NodeData.from_error(f"Result validation failed: {str(e)}")
+
+    def _get_schema_dict(self, config_class: Any, schema_field: str) -> Dict[str, Any]:
+        """Safely get schema dictionary from a Pydantic model field."""
+        try:
+            # Handle Pydantic v2
+            if hasattr(config_class, 'model_fields'):
+                field = config_class.model_fields.get(schema_field)
+                if not field:
+                    return {}
+                    
+                # Get default value
+                default_value = getattr(field, 'default', None)
+                if default_value is None:
+                    return {}
+                
+                # Handle both model_dump (v2) and dict (v1)
+                if hasattr(default_value, 'model_dump'):
+                    return default_value.model_dump()
+                elif hasattr(default_value, 'dict'):
+                    return default_value.dict()
+                return {}
             
-            return NodeData(error=error_msg)
+            # Handle Pydantic v1
+            elif hasattr(config_class, '__fields__'):
+                field = config_class.__fields__.get(schema_field)
+                if not field or not field.default:
+                    return {}
+                    
+                if hasattr(field.default, 'dict'):
+                    return field.default.dict()
+                return {}
+                
+            return {}
+            
+        except Exception as e:
+            logger.error(f"Error getting schema dict: {str(e)}")
+            return {
+                'fields': {},
+                'required_fields': []
+            }
+
+    def _get_input_schema(self, node: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the input schema for the node type."""
+        node_type = node.get("type", "unknown").lower()
+        from models.runner_schemas import (
+            BaseRunnerConfig, CrewAIRunnerConfig, LangChainRunnerConfig, HuggingFaceRunnerConfig,
+            AutoGenRunnerConfig, LlamaIndexRunnerConfig
+        )
+        
+        # Map node types to runner config input schemas
+        schema_map = {
+            "task": self._get_schema_dict(CrewAIRunnerConfig, "input_schema"),
+            "agent": self._get_schema_dict(CrewAIRunnerConfig, "input_schema"),
+            "tool": self._get_schema_dict(LangChainRunnerConfig, "input_schema"),
+            "chat": self._get_schema_dict(AutoGenRunnerConfig, "input_schema"),
+            "output": self._get_schema_dict(BaseRunnerConfig, "input_schema"),
+            "delay": self._get_schema_dict(BaseRunnerConfig, "input_schema"),
+            "logic": self._get_schema_dict(BaseRunnerConfig, "input_schema"),
+            "input": self._get_schema_dict(BaseRunnerConfig, "input_schema"),
+            "trigger": self._get_schema_dict(BaseRunnerConfig, "input_schema")
+        }
+        
+        return schema_map.get(node_type, {})
+
+    def _get_output_schema(self, node: Dict[str, Any]) -> Dict[str, Any]:
+        """Return the output schema for the node type."""
+        node_type = node.get("type", "unknown").lower()
+        from models.runner_schemas import (
+            BaseRunnerConfig, CrewAIRunnerConfig, LangChainRunnerConfig, HuggingFaceRunnerConfig,
+            AutoGenRunnerConfig, LlamaIndexRunnerConfig
+        )
+        
+        # Map node types to runner config output schemas
+        schema_map = {
+            "task": self._get_schema_dict(CrewAIRunnerConfig, "output_schema"),
+            "agent": self._get_schema_dict(CrewAIRunnerConfig, "output_schema"),
+            "tool": self._get_schema_dict(LangChainRunnerConfig, "output_schema"),
+            "chat": self._get_schema_dict(AutoGenRunnerConfig, "output_schema"),
+            "output": self._get_schema_dict(BaseRunnerConfig, "output_schema"),
+            "delay": self._get_schema_dict(BaseRunnerConfig, "output_schema"),
+            "logic": self._get_schema_dict(BaseRunnerConfig, "output_schema"),
+            "input": self._get_schema_dict(BaseRunnerConfig, "output_schema"),
+            "trigger": self._get_schema_dict(BaseRunnerConfig, "output_schema")
+        }
+        
+        return schema_map.get(node_type, {})
+
+    async def _smart_map_inputs(
+        self,
+        node: Dict[str, Any],
+        inputs: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Smart map inputs using semantic matching and type checking"""
+        try:
+            from .smart_mapper import smart_map_inputs
+            return await smart_map_inputs(node, inputs, context)
+        except Exception as e:
+            logger.error(f"Smart mapping failed: {str(e)}")
+            return inputs
+
+    async def _simple_map_inputs(
+        self,
+        node: Dict[str, Any],
+        inputs: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Simple mapping using explicit field mappings instead of smart guessing.
+        This is the new preferred method for data mapping.
+        """
+        try:
+            from .simple_mapper import map_fields_simple
+            
+            # Get field mappings from node configuration
+            node_data = node.get('data', {})
+            field_mappings = node_data.get('field_mappings', {})
+            node_type = node.get('type', 'unknown')
+            
+            # If no explicit mappings, return inputs as-is
+            if not field_mappings:
+                logger.info(f"No field mappings found for {node_type} node, using inputs as-is")
+                return inputs
+            
+            # Use simple mapper with explicit field mappings
+            mapped_data = map_fields_simple(inputs, field_mappings, node_type)
+            
+            logger.info(f"Simple mapping completed for {node_type} node: {list(mapped_data.keys())}")
+            return mapped_data
+            
+        except Exception as e:
+            logger.error(f"Simple mapping failed: {str(e)}")
+            # Fall back to original inputs on error
+            return inputs
+
+    def _get_framework_runner(self, framework: str) -> Optional[Any]:
+        """Get the appropriate framework runner for the given framework"""
+        try:
+            # Use absolute import to avoid relative import issues
+            import sys
+            import os
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+            
+            from framework_registry import framework_registry
+            
+            # Get runner from registry
+            runner = framework_registry.get_runner(framework)
+            if runner:
+                return runner
+                
+            # Handle special cases
+            if framework in ["trigger", "input", "output", "logic", "delay", "task"]:
+                return None  # These are handled by the node processor directly
+                
+            # Try to get runner from framework module
+            try:
+                module_name = f"frameworks.{framework}_runner"
+                runner_module = __import__(module_name, fromlist=['run_' + framework + '_tool'])
+                runner_func = getattr(runner_module, 'run_' + framework + '_tool')
+                return runner_func
+            except (ImportError, AttributeError):
+                logger.warning(f"No runner found for framework: {framework}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting framework runner: {str(e)}")
+            return None
 
 # Create global instance with lazy loading
 node_processor = NodeProcessor()

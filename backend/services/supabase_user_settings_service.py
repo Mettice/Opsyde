@@ -33,8 +33,8 @@ class SupabaseUserSettingsService:
     
     def __init__(self):
         self.api_key_manager = UserAPIKeyManager()
-        self.supabase_url = os.getenv("VITE_SUPABASE_URL")
-        self.supabase_key = os.getenv("VITE_SUPABASE_ANON_KEY")
+        self.supabase_url = os.getenv("SUPABASE_URL")
+        self.supabase_key = os.getenv("SUPABASE_ANON_KEY")
         self.service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
         # Use service key if available, otherwise anon key

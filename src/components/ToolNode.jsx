@@ -522,14 +522,16 @@ const ToolNode = memo(({
         <Handle 
           type="target" 
           position={Position.Top} 
+          id="tool-top"
           isConnectable={isConnectable} 
-          className="w-4 h-4 bg-gradient-to-r from-orange-400 to-red-500 border-2 border-white shadow-xl rounded-full"
+          className="w-4 h-4 bg-gradient-to-t from-pink-400 to-pink-600 border-2 border-white shadow-xl rounded-full"
         />
         <Handle 
           type="source" 
           position={Position.Bottom} 
+          id="tool-bottom"
           isConnectable={isConnectable}
-          className="w-4 h-4 bg-gradient-to-r from-orange-600 to-red-600 border-2 border-white shadow-xl rounded-full"
+          className="w-4 h-4 bg-gradient-to-b from-pink-400 to-pink-600 border-2 border-white shadow-xl rounded-full"
         />
       </div>
 

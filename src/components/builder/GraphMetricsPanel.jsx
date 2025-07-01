@@ -79,6 +79,7 @@ const GraphMetricsPanel = ({
     ['trigger', 'tool'],
     ['trigger', 'chatbot'],
     ['trigger', 'logic'],
+    ['trigger', 'input'],
     ['logic', 'agent'],
     ['logic', 'task'],
     ['logic', 'tool'],
@@ -97,6 +98,8 @@ const GraphMetricsPanel = ({
     ['input', 'agent'],
     ['input', 'task'],
     ['input', 'tool'],
+    ['input', 'logic'],
+    ['input', 'chatbot'],
     ['agent', 'output'],
     ['task', 'output'],
     ['tool', 'output']

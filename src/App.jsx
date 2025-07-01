@@ -16,6 +16,7 @@ import './App.css';
 import { Toaster } from 'react-hot-toast';
 import HelpPanel from './components/HelpPanel';
 import { LLMProvider } from './contexts/LLMContext';
+import TestFlowRunner from './components/TestFlowRunner';
 
 // Protected route component
 function ProtectedRoute({ children }) {
@@ -127,6 +128,11 @@ function App() {
             <Route path="/integration-demo" element={
               <AppLayout>
                 <IntegrationDemo />
+              </AppLayout>
+            } />
+            <Route path="/test-flow" element={
+              <AppLayout>
+                <TestFlowRunner />
               </AppLayout>
             } />
           </Routes>

@@ -17,6 +17,7 @@ from backend.api.routers.tools import router as tools_router
 from backend.api.routers.auth_router import router as auth_router
 from backend.api.routers.trigger_router import router as trigger_router
 from backend.api.routers.output_router import router as output_router
+from backend.api.routers import node_schema_router
 from backend.database import init_db
 from backend.utils.logging import setup_logging
 from backend.utils.security import security_manager
@@ -67,7 +68,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 # Create FastAPI app
 app = FastAPI(
-    title="CrewFlow API",
+    title="Nodai API",
     description="API for managing AI workflows and automation",
     version="1.0.0",
     docs_url="/docs",
@@ -109,6 +110,7 @@ app.include_router(node_router, prefix="/api/nodes")
 app.include_router(tools_router, prefix="/api/tools")
 app.include_router(trigger_router, prefix="/api/triggers")
 app.include_router(output_router, prefix="/api/outputs")
+app.include_router(node_schema_router.router, prefix="/api/nodes/schema", tags=["Node Schemas"])
 
 # NEW: Add framework metadata routes
 framework_routes = create_framework_routes()
@@ -213,3 +215,11 @@ def custom_openapi():
     return app.openapi_schema
 
 app.openapi = custom_openapi
+
+
+@app.get("/api/llm/mode/status")
+async def get_llm_mode_status():
+    return {
+        "success": True,
+        "data": {"llm_mode_enabled": True, "smart_mapping_enabled": True}
+    }

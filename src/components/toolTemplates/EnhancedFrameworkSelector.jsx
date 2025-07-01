@@ -7,6 +7,7 @@ import {
   getProviderSupport,
   isModelNativelySupported 
 } from '../../data/frameworkModels';
+import { ApiKeyNavigator } from '../shared/ApiKeyNavigator';
 
 const EnhancedFrameworkSelector = ({ 
   selectedFramework, 
@@ -160,21 +161,17 @@ const EnhancedFrameworkSelector = ({
 
   if (availableApiKeys.length === 0) {
     return (
-      <div className={`p-4 bg-yellow-50 border border-yellow-200 rounded-lg ${className}`}>
+      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="flex items-center justify-between">
-          <div>
-            <span className="text-yellow-700 text-sm font-medium">🔑 No API keys configured</span>
-            <p className="text-yellow-600 text-xs mt-1">
-              Add API keys in BYOK Manager to enable AI frameworks
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => window.open('/api-keys', '_blank')}
-            className="bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-3 py-1 rounded text-sm"
+          <span className="text-yellow-700 text-sm">
+            ⚠️ No API keys configured
+          </span>
+          <ApiKeyNavigator 
+            variant="button"
+            className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm"
           >
-            Add Keys
-          </button>
+            Add API Key
+          </ApiKeyNavigator>
         </div>
       </div>
     );

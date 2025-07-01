@@ -2,7 +2,20 @@ import axios from 'axios';
 import { apiClient } from '../api/client';
 import { useLLMMode } from '../contexts/LLMContext';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = '/api';
+
+// NEW: Enhanced LLM Context Helper
+function getLLMContext() {
+  const llmContext = window.LLM_CONTEXT || {};
+  const userKeys = window.USER_API_KEYS || {};
+  
+  return {
+    llm_mode_enabled: llmContext.llmModeEnabled || false,
+    smart_mapping_enabled: llmContext.smartMappingEnabled || true,
+    user_keys: userKeys,
+    execution_timestamp: new Date().toISOString()
+  };
+}
 
 // NEW: Enhanced Input Node Execution with LLM-centric processing
 async function executeInputNodeEnhanced(node, inputs, workflowContext) {
@@ -14,11 +27,15 @@ async function executeInputNodeEnhanced(node, inputs, workflowContext) {
     nodeId,
     inputType,
     hasMultimodalData: !!nodeData.multimodalResult,
-    inputKeys: Object.keys(inputs)
+    inputKeys: Object.keys(inputs),
+    llmModeEnabled: getLLMContext().llm_mode_enabled
   });
 
   try {
-    // Prepare the request payload for backend processing
+    // Get LLM context
+    const llmContext = getLLMContext();
+    
+    // Prepare the request payload for backend processing with LLM context
     const payload = {
       node: {
         id: nodeId,
@@ -33,12 +50,13 @@ async function executeInputNodeEnhanced(node, inputs, workflowContext) {
       context: {
         execution_timestamp: new Date().toISOString(),
         workflow_context: workflowContext,
-        node_id: nodeId
+        node_id: nodeId,
+        ...llmContext
       }
     };
 
-    // Call backend input node processor
-    const response = await fetch(`${BACKEND_URL}/api/nodes/input`, {
+    // Call enhanced backend input node processor
+    const response = await fetch(`${BACKEND_URL}/nodes/input-enhanced`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -52,13 +70,18 @@ async function executeInputNodeEnhanced(node, inputs, workflowContext) {
     }
 
     const result = await response.json();
-    console.log("✅ Input node processing result:", result);
+    console.log("✅ Enhanced input node processing result:", result);
 
     // Return standardized result format
     return {
       success: result.success || false,
       data: result.data || result.value || {},
-      metadata: result.metadata || {},
+      metadata: {
+        ...result.metadata || {},
+        llm_processed: llmContext.llm_mode_enabled,
+        smart_mapping_applied: result.metadata?.smart_mapping_applied || false,
+        execution_time: result.metadata?.execution_time || 0
+      },
       error: result.error || null
     };
 
@@ -153,19 +176,153 @@ function cleanDataForBackend(obj) {
   return obj;
 }
 
-// Unified node executor
-export async function executeNode(node, connectedAgentData, inputs = {}, workflowContext = null) {
+// NEW: Enhanced Universal Node Executor with LLM Integration
+export async function executeNodeEnhanced(node, connectedAgentData, inputs = {}, workflowContext = null) {
   try {
-
     const resolvedNode = resolveInheritance(node, workflowContext);
-    // Prefer node.data.nodeType over node.type
     const nodeType = resolvedNode.data?.nodeType || resolvedNode.type;
     const nodeData = resolvedNode.data || {};
     const nodeId = resolvedNode.id || nodeData.nodeId || "unknown";
 
+    // Get LLM context for all executions
+    const llmContext = getLLMContext();
+    
+    console.log("🧠 Enhanced node execution:", {
+      nodeId,
+      nodeType,
+      llmModeEnabled: llmContext.llm_mode_enabled,
+      smartMappingEnabled: llmContext.smart_mapping_enabled
+    });
 
-    // For task nodes, ensure we have a connected agent with proper data
-    if (nodeType === "task") {
+    // Enhanced context with LLM integration
+    const enhancedContext = {
+      ...workflowContext,
+      ...llmContext,
+      node_metadata: {
+        node_id: nodeId,
+        node_type: nodeType,
+        execution_timestamp: new Date().toISOString()
+      }
+    };
+
+    // Route through LLM processor if enabled
+    if (llmContext.llm_mode_enabled) {
+      console.log("🚀 Routing through LLM processor for node:", nodeId);
+      return await executeNodeWithLLMMode(nodeType, nodeData, inputs, connectedAgentData, enhancedContext);
+    }
+
+    // Traditional execution with enhanced context
+    return await executeNodeTraditional(nodeType, nodeData, inputs, connectedAgentData, enhancedContext);
+
+  } catch (error) {
+    console.error("❌ Enhanced node execution failed:", error);
+    return {
+      success: false,
+      data: null,
+      error: error.message,
+      metadata: {
+        node_type: nodeType,
+        execution_timestamp: new Date().toISOString(),
+        llm_processed: false,
+        error_type: error.constructor.name
+      }
+    };
+  }
+}
+
+// NEW: LLM-Centric Node Execution
+async function executeNodeWithLLMMode(nodeType, nodeData, inputs, connectedAgentData, context) {
+  console.log("🧠 LLM-centric execution for:", nodeType);
+  
+  try {
+    const payload = {
+      node_type: nodeType,
+      node_data: nodeData,
+      inputs: inputs,
+      agent_data: connectedAgentData,
+      context: context,
+      execution_mode: 'llm_centric',
+      enable_smart_mapping: context.smart_mapping_enabled,
+      enable_multimodal: true
+    };
+
+    const response = await fetch(`${BACKEND_URL}/nodes/execute-llm`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || errorData.error || "LLM execution failed");
+    }
+
+    const result = await response.json();
+    console.log("✅ LLM execution completed:", result.success);
+
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        llm_processed: true,
+        smart_mapping_applied: result.metadata?.smart_mapping_applied || false,
+        framework_used: result.metadata?.framework || 'unknown',
+        execution_time: result.metadata?.execution_time || 0,
+        token_usage: result.metadata?.token_usage || {}
+      },
+      error: result.error || null
+    };
+
+  } catch (error) {
+    console.error("❌ LLM execution failed, falling back to traditional:", error);
+    // Fallback to traditional execution
+    return await executeNodeTraditional(nodeType, nodeData, inputs, connectedAgentData, context);
+  }
+}
+
+// Enhanced Traditional Node Execution
+async function executeNodeTraditional(nodeType, nodeData, inputs, connectedAgentData, context) {
+  console.log("⚙️ Traditional execution for:", nodeType);
+  
+  // Route to specific node type handlers
+  switch (nodeType) {
+    case "input":
+      return await executeInputNodeEnhanced({ data: nodeData, id: context.node_metadata?.node_id }, inputs, context);
+    
+    case "task":
+      return await executeTaskNodeEnhanced(nodeData, inputs, connectedAgentData, context);
+    
+    case "tool":
+      return await executeToolNodeEnhanced(nodeData, inputs, context);
+    
+    case "chat":
+      return await executeChatNodeEnhanced(nodeData, inputs, context);
+    
+    case "agent":
+      return await executeAgentNodeEnhanced(nodeData, inputs, context);
+    
+    case "output":
+      return await executeOutputNodeEnhanced(nodeData, inputs, context);
+    
+    case "logic":
+      return await executeLogicNodeEnhanced(nodeData, inputs, context);
+    
+    case "delay":
+      return await executeDelayNodeEnhanced(nodeData, inputs, context);
+    
+    default:
+      console.warn("⚠️ Unknown node type, using generic execution:", nodeType);
+      return await executeGenericNodeEnhanced(nodeType, nodeData, inputs, context);
+  }
+}
+
+// NEW: Enhanced Task Node Execution
+async function executeTaskNodeEnhanced(nodeData, inputs, connectedAgentData, context) {
+  console.log("📋 Enhanced task execution");
+  
       if (!connectedAgentData || !Object.keys(connectedAgentData).length) {
         throw new Error("Task execution requires a connected agent with valid data");
       }
@@ -175,515 +332,384 @@ export async function executeNode(node, connectedAgentData, inputs = {}, workflo
       const missingFields = requiredFields.filter(field => !connectedAgentData[field]);
       if (missingFields.length > 0) {
         throw new Error(`Missing required agent fields: ${missingFields.join(", ")}`);
-      }
+  }
 
-      // Sanitize and structure agent data
-      const sanitizedAgent = {
-        id: connectedAgentData.id || connectedAgentData.nodeId || "unknown-agent",
-        agent_id: connectedAgentData.id || connectedAgentData.nodeId || "unknown-agent",
-        framework: (connectedAgentData.framework || "openai").toLowerCase().trim(),
-        llmModel: connectedAgentData.llmModel || "gpt-4",
+  const payload = {
+    task_data: {
+      id: context.node_metadata?.node_id || "unknown-task",
+      description: nodeData.description || "",
+      prompt: nodeData.prompt || "",
+      expected_output: nodeData.expectedOutput || "",
+      async: nodeData.async || false
+    },
+    agent_data: {
+      id: connectedAgentData.id || "unknown-agent",
+      framework: connectedAgentData.framework.toLowerCase().trim(),
+      llmModel: connectedAgentData.llmModel,
         temperature: Math.min(Math.max(parseFloat(connectedAgentData.temperature || 0.7), 0), 1),
         max_tokens: Math.min(Math.max(parseInt(connectedAgentData.max_tokens || 4000), 1), 8000),
-        memoryEnabled: Boolean(connectedAgentData.memoryEnabled),
         role: connectedAgentData.role || "",
         goal: connectedAgentData.goal || "",
-        backstory: connectedAgentData.backstory || "",
-        frameworkConfig: connectedAgentData.frameworkConfig || {}
-      };
+      backstory: connectedAgentData.backstory || ""
+    },
+    inputs: inputs,
+    context: context
+  };
 
-      // Sanitize and structure task data
-      const sanitizedTask = {
-        id: node.id || nodeData.nodeId || "unknown-task",
-        task_id: node.id || nodeData.nodeId || "unknown-task",
-        prompt: nodeData.prompt || "",
-        description: nodeData.description || "",
-        expectedOutput: nodeData.expectedOutput || "",
-        isAsync: Boolean(nodeData.async),
-        ...nodeData
-      };
-
-      // Call the agent-task endpoint
-      const response = await fetch(`${BACKEND_URL}/api/nodes/run-task`, {
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/run-task-enhanced`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          node_id: nodeId,
-          agent: sanitizedAgent,
-          inputs: cleanDataForBackend(inputs)
-        })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || "Failed to execute task");
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Task execution failed");
       }
 
       const result = await response.json();
-      return result;
-    }
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "task",
+        agent_framework: connectedAgentData.framework,
+        llm_processed: context.llm_mode_enabled
+      },
+      error: result.error || null
+    };
 
-    // Handle other node types (chat, tool, etc.)
-    const cleanedInputs = cleanDataForBackend(inputs);
-    
-    // Use the client API instead of direct axios calls
-    let response;
-    
-    switch(nodeType) {
-      case "tool":
-        // Make sure to send all required tool data
-        const toolData = {
-          id: nodeId,
-          toolType: nodeData?.toolType || "llm",
-          framework: nodeData?.framework,
-          config: nodeData?.config || {},
-          inputs: cleanedInputs
-        };
-        console.log("Executing tool with data:", toolData);
-        
-        try {
-          response = await apiClient.executeTool(toolData);
-        } catch (error) {
-          console.error("Error executing tool node:", error, toolData);
-          throw error;
-        }
-        break;
-      case "input":
-        try {
-          console.log("🎯 Executing input node:", nodeId, "Type:", nodeData.inputType, cleanedInputs);
-          
-          // NEW: Enhanced input processing with context chaining
-          const inputNodeResult = await executeInputNodeEnhanced(node, cleanedInputs, workflowContext);
-          
-          // Return standardized format for downstream nodes
-          return {
-            nodeId: nodeId,
-            nodeType: "input",
-            success: inputNodeResult.success,
-            data: inputNodeResult.data,
-            
-            // NEW: Provide standardized outputs for easy downstream consumption
-            processed_content: inputNodeResult.data?.processed_content || inputNodeResult.data?.text_content || inputNodeResult.data?.value,
-            extracted_entities: inputNodeResult.data?.extracted_entities || [],
-            file_info: inputNodeResult.data?.filename ? {
-              filename: inputNodeResult.data.filename,
-              type: inputNodeResult.data.file_type,
-              size: inputNodeResult.data.file_size
-            } : null,
-            
-            // Context for chaining
-            context: {
-              input_type: inputNodeResult.data?.input_type,
-              llm_processed: inputNodeResult.metadata?.llm_processed || false,
-              api_used: inputNodeResult.metadata?.api_used,
-              processing_timestamp: inputNodeResult.metadata?.processing_timestamp || new Date().toISOString()
-            },
-            
-            // Full result for debugging
-            raw_result: inputNodeResult,
-            timestamp: new Date().toISOString()
-          };
-        } catch (error) {
-          console.error("❌ Error executing input node:", error, nodeId, cleanedInputs);
-          return {
-            nodeId: nodeId,
-            nodeType: "input",
-            success: false,
-            error: error.message,
-            data: null,
-            timestamp: new Date().toISOString()
-          };
-        }
-        break;
-      case "agent":
-        try {
-          console.log("Executing agent node:", nodeId, cleanedInputs);
-          response = await apiClient.executeAgentNode(nodeId, cleanedInputs);
-          
-          // Format the agent data for consumption by task nodes
-          // Ensure it includes all required fields
-          return {
-            nodeId: nodeId,
-            id: nodeId,
-            agent_id: nodeId,
-            framework: nodeData.framework || "openai",
-            llmModel: nodeData.llmModel || "gpt-4",
-            temperature: nodeData.temperature || 0.7,
-            max_tokens: nodeData.max_tokens || 4000,
-            memoryEnabled: nodeData.memoryEnabled || false,
-            role: nodeData.role || "",
-            goal: nodeData.goal || "",
-            backstory: nodeData.backstory || "",
-            ...response
-          };
-        } catch (error) {
-          console.error("Error executing agent node:", error);
-          throw error;
-        }
-        break;
-      case "output":
-        response = await apiClient.executeOutputNode(nodeId, cleanedInputs);
-        break;
-      case "logic":
-        response = await apiClient.executeLogicNode(nodeId, nodeData, cleanedInputs);
-        break;
-      case "delay":
-        response = await apiClient.executeDelayNode(nodeId, nodeData, cleanedInputs);
-        break;
-      case "chat":
-      case "chatbot":
-        response = await apiClient.executeChatNode(nodeId, nodeData, cleanedInputs);
-        break;
-      case "task":
-        response = await apiClient.executeTaskNode(nodeId, connectedAgentData, cleanedInputs);
-        break;
-      default:
-        // For all other node types, use the general execute endpoint
-        response = await apiClient.executeNode({
-          id: nodeId,
-          type: nodeType,
-          data: nodeData
-        }, cleanedInputs);
-    }
-    
-    // Handle error responses
-    if (response && response.type === "error") {
-      const error = response.error || {};
-      return {
-        type: "error",
-        error: {
-          type: error.type || "unknown",
-          message: error.message || "Unknown error",
-          nodeId: error.node_id || (node && node.id) || "unknown",
-          nodeType: error.node_type || nodeType || "unknown",
-          details: error.details || {},
-          timestamp: error.timestamp || new Date().toISOString()
-        }
-      };
-    }
-
-    return response || { type: "unknown", value: null };
-    
   } catch (error) {
-    console.error("Error executing node:", error);
+    console.error("❌ Enhanced task execution failed:", error);
     throw error;
   }
 }
 
-// Map node types to the unified executor
-export const nodeExecutors = {
-  tool: (node, inputs) => executeNode(node, null, inputs),
-  task: (node, inputs) => {
-    // Look for agent data in the inputs
-    let agentData = inputs.agent;
-    console.log("Task node inputs:", inputs);
-    
-    // Fallback: Check if agent data is in one of the input fields with a specific prefix
-    if (!agentData) {
-      // Find any field that might contain agent data
-      for (const [key, value] of Object.entries(inputs)) {
-        if (key.startsWith('input_from_agent')) {
-          console.log(`Found potential agent data in ${key}`, value);
-          agentData = value;
-          // Add it to the agent key for proper handling
-          inputs.agent = value;
-          break;
+// NEW: Enhanced Tool Node Execution
+async function executeToolNodeEnhanced(nodeData, inputs, context) {
+  console.log("🔧 Enhanced tool execution");
+  
+  const payload = {
+    tool_data: {
+      id: context.node_metadata?.node_id || "unknown-tool",
+      toolType: nodeData.toolType || "llm",
+      framework: nodeData.framework || "openai",
+      config: nodeData.config || {},
+      api_service_name: nodeData.api_service_name
+    },
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/tools/run-tool-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Tool execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "tool",
+        tool_type: nodeData.toolType,
+        framework_used: nodeData.framework
+      },
+      error: result.error || null
+    };
+
+        } catch (error) {
+    console.error("❌ Enhanced tool execution failed:", error);
+          throw error;
         }
-      }
-    }
-    
-    if (!agentData) {
-      console.error("Task node requires a connected agent, but none was found in inputs:", inputs);
-      throw new Error("Task execution requires a connected agent with valid data");
-    }
-    
-    // Ensure the agent data has all the required fields
-    const requiredFields = ["framework", "llmModel", "temperature", "max_tokens"];
-    const missingFields = requiredFields.filter(field => !agentData[field]);
-    
-    if (missingFields.length > 0) {
-      console.error(`Missing required agent fields: ${missingFields.join(", ")}`, agentData);
-      
-      // Try to supplement missing fields from the node.data if available
-      const agentNode = agentData.nodeId ? 
-        document.querySelector(`[data-id="${agentData.nodeId}"]`) : null;
-      
-      if (agentNode) {
-        console.log("Found agent node in DOM, trying to extract data");
-        // Use node.data to populate missing fields if possible
-        const nodeData = node.data || {};
-        
-        agentData = {
-          ...agentData,
-          framework: agentData.framework || nodeData.framework || "openai",
-          llmModel: agentData.llmModel || nodeData.llmModel || "gpt-4",
-          temperature: agentData.temperature || nodeData.temperature || 0.7,
-          max_tokens: agentData.max_tokens || nodeData.max_tokens || 4000,
-        };
-      } else {
-        // Provide defaults for missing fields
-        agentData = {
-          ...agentData,
-          framework: agentData.framework || "openai",
-          llmModel: agentData.llmModel || "gpt-4",
-          temperature: agentData.temperature || 0.7,
-          max_tokens: agentData.max_tokens || 4000,
-        };
-      }
-      
-      console.log("Updated agent data:", agentData);
-    }
-    
-    return executeNode(node, agentData, inputs);
-  },
-  input: (node, inputs) => executeNode(node, null, inputs),
-  output: (node, inputs) => executeNode(node, null, inputs),
-  chat: (node, inputs) => executeNode(node, null, inputs),
-  chatbot: (node, inputs) => executeNode(node, null, inputs), 
-  logic: (node, inputs) => executeNode(node, null, inputs),
-  delay: (node, inputs) => executeNode(node, null, inputs),
-  agent: (node, inputs) => executeNode(node, null, inputs)
-};
+}
 
-// Enhanced execute function that includes LLM mode
-export const executeNodeWithLLMMode = async (nodeType, nodeData, inputs, llmModeEnabled = false, smartMappingEnabled = true) => {
+// NEW: Enhanced Chat Node Execution
+async function executeChatNodeEnhanced(nodeData, inputs, context) {
+  console.log("💬 Enhanced chat execution");
+  
+  const payload = {
+    chat_data: {
+      id: context.node_metadata?.node_id || "unknown-chat",
+      prompt: nodeData.prompt || "",
+      model: nodeData.model || "gpt-4",
+      temperature: nodeData.temperature || 0.7,
+      max_tokens: nodeData.max_tokens || 1000,
+      system_message: nodeData.systemMessage || ""
+    },
+    inputs: inputs,
+    context: context
+  };
+
   try {
-    console.log(`🚀 Executing ${nodeType} node with LLM mode: ${llmModeEnabled}`);
-    
-    // Add LLM mode configuration to node data
-    const enhancedNodeData = {
-      ...nodeData,
-      llm_mode_enabled: llmModeEnabled,
-      smart_mapping_enabled: smartMappingEnabled
+    const response = await fetch(`${BACKEND_URL}/nodes/run-chat-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Chat execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "chat",
+        model_used: nodeData.model
+      },
+      error: result.error || null
+    };
+
+        } catch (error) {
+    console.error("❌ Enhanced chat execution failed:", error);
+          throw error;
+        }
+}
+
+// NEW: Enhanced Agent Node Execution
+async function executeAgentNodeEnhanced(nodeData, inputs, context) {
+  console.log("🤖 Enhanced agent execution");
+  
+  const payload = {
+    agent_data: {
+      id: context.node_metadata?.node_id || "unknown-agent",
+      role: nodeData.role || "",
+      goal: nodeData.goal || "",
+      backstory: nodeData.backstory || "",
+            framework: nodeData.framework || "openai",
+            llmModel: nodeData.llmModel || "gpt-4",
+            temperature: nodeData.temperature || 0.7,
+      max_tokens: nodeData.max_tokens || 4000
+    },
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/run-agent-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Agent execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "agent",
+        framework_used: nodeData.framework
+      },
+      error: result.error || null
+    };
+
+        } catch (error) {
+    console.error("❌ Enhanced agent execution failed:", error);
+          throw error;
+        }
+}
+
+// NEW: Enhanced Output Node Execution
+async function executeOutputNodeEnhanced(nodeData, inputs, context) {
+  console.log("📤 Enhanced output execution");
+  
+  const payload = {
+    output_data: {
+      id: context.node_metadata?.node_id || "unknown-output",
+      outputType: nodeData.outputType || "email",
+      destination: nodeData.destination || "",
+      template: nodeData.template || "",
+      config: nodeData.config || {}
+    },
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/run-output-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Output execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "output",
+        output_type: nodeData.outputType
+      },
+      error: result.error || null
     };
     
-    switch (nodeType) {
-      case 'input':
-        return await executeInputNodeEnhanced(enhancedNodeData, inputs);
-      case 'chat':
-        return await executeChatNode(enhancedNodeData, inputs);
-      case 'task':
-        return await executeTaskNode(enhancedNodeData, inputs);
-      case 'logic':
-        return await executeLogicNode(enhancedNodeData, inputs);
-      case 'delay':
-        return await executeDelayNode(enhancedNodeData, inputs);
-      case 'agent':
-        return await executeAgentNode(enhancedNodeData, inputs);
-      case 'tool':
-        return await executeToolNode(enhancedNodeData, inputs);
-      case 'output':
-        return await executeOutputNode(enhancedNodeData, inputs);
-      default:
-        throw new Error(`Unsupported node type: ${nodeType}`);
-    }
   } catch (error) {
-    console.error(`❌ Error executing ${nodeType} node:`, error);
+    console.error("❌ Enhanced output execution failed:", error);
+    throw error;
+  }
+}
+
+// NEW: Enhanced Logic Node Execution
+async function executeLogicNodeEnhanced(nodeData, inputs, context) {
+  console.log("🔀 Enhanced logic execution");
+  
+  const payload = {
+    logic_data: {
+      id: context.node_metadata?.node_id || "unknown-logic",
+      condition: nodeData.condition || "",
+      operator: nodeData.operator || "equals",
+      value: nodeData.value || ""
+    },
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/run-logic-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Logic execution failed");
+    }
+
+    const result = await response.json();
     return {
-      success: false,
-      error: error.message,
-      data: null,
+      success: result.success || false,
+      data: result.data || result.output || {},
       metadata: {
+        ...result.metadata || {},
+        node_type: "logic",
+        condition_result: result.data?.condition_result
+      },
+      error: result.error || null
+    };
+
+  } catch (error) {
+    console.error("❌ Enhanced logic execution failed:", error);
+    throw error;
+  }
+}
+
+// NEW: Enhanced Delay Node Execution
+async function executeDelayNodeEnhanced(nodeData, inputs, context) {
+  console.log("⏱️ Enhanced delay execution");
+  
+  const payload = {
+    delay_data: {
+      id: context.node_metadata?.node_id || "unknown-delay",
+      duration: nodeData.duration || "1s",
+      unit: nodeData.unit || "seconds"
+    },
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/run-delay-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Delay execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
+        node_type: "delay",
+        delay_duration: nodeData.duration
+      },
+      error: result.error || null
+    };
+
+  } catch (error) {
+    console.error("❌ Enhanced delay execution failed:", error);
+    throw error;
+  }
+}
+
+// NEW: Generic Enhanced Node Execution
+async function executeGenericNodeEnhanced(nodeType, nodeData, inputs, context) {
+  console.log("🔧 Generic enhanced execution for:", nodeType);
+  
+  const payload = {
+    node_type: nodeType,
+    node_data: nodeData,
+    inputs: inputs,
+    context: context
+  };
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/nodes/execute-generic-enhanced`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || "Generic execution failed");
+    }
+
+    const result = await response.json();
+    return {
+      success: result.success || false,
+      data: result.data || result.output || {},
+      metadata: {
+        ...result.metadata || {},
         node_type: nodeType,
-        llm_mode_enabled: llmModeEnabled,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-};
-
-// Enhanced chat node executor with LLM mode support
-export const executeChatNode = async (nodeData, inputs) => {
-  try {
-    console.log('🗣️ Executing chat node with data:', nodeData);
-    
-    const response = await fetch('/api/nodes/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+        execution_mode: "generic"
       },
-      body: JSON.stringify({
-        node_data: nodeData,
-        inputs: inputs
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Chat node execution failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Chat node result:', result);
-    
-    return {
-      success: result.success || true,
-      data: result.data || result,
-      error: result.error || null,
-      metadata: {
-        ...result.metadata,
-        node_type: 'chat',
-        llm_mode_processed: nodeData.llm_mode_enabled
-      }
+      error: result.error || null
     };
+
   } catch (error) {
-    console.error('❌ Chat node execution error:', error);
-    return {
-      success: false,
-      error: error.message,
-      data: null,
-      metadata: {
-        node_type: 'chat',
-        llm_mode_enabled: nodeData.llm_mode_enabled,
-        timestamp: new Date().toISOString()
-      }
-    };
+    console.error("❌ Generic enhanced execution failed:", error);
+    throw error;
   }
-};
+}
 
-// Enhanced task node executor with LLM mode support
-export const executeTaskNode = async (nodeData, inputs) => {
-  try {
-    console.log('📋 Executing task node with data:', nodeData);
-    
-    const response = await fetch('/api/nodes/task', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        node_data: nodeData,
-        inputs: inputs
-      })
-    });
+// Unified node executor (backward compatibility)
+export async function executeNode(node, connectedAgentData, inputs = {}, workflowContext = null) {
+  // Use the enhanced version by default
+  return await executeNodeEnhanced(node, connectedAgentData, inputs, workflowContext);
+}
 
-    if (!response.ok) {
-      throw new Error(`Task node execution failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Task node result:', result);
-    
-    return {
-      success: result.success || true,
-      data: result.data || result,
-      error: result.error || null,
-      metadata: {
-        ...result.metadata,
-        node_type: 'task',
-        llm_mode_processed: nodeData.llm_mode_enabled
-      }
-    };
-  } catch (error) {
-    console.error('❌ Task node execution error:', error);
-    return {
-      success: false,
-      error: error.message,
-      data: null,
-      metadata: {
-        node_type: 'task',
-        llm_mode_enabled: nodeData.llm_mode_enabled,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-};
-
-// Enhanced logic node executor with LLM mode support
-export const executeLogicNode = async (nodeData, inputs) => {
-  try {
-    console.log('🧠 Executing logic node with data:', nodeData);
-    
-    const response = await fetch('/api/nodes/logic', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        node_data: nodeData,
-        inputs: inputs
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Logic node execution failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Logic node result:', result);
-    
-    return {
-      success: result.success || true,
-      data: result.data || result,
-      error: result.error || null,
-      metadata: {
-        ...result.metadata,
-        node_type: 'logic',
-        llm_mode_processed: nodeData.llm_mode_enabled
-      }
-    };
-  } catch (error) {
-    console.error('❌ Logic node execution error:', error);
-    return {
-      success: false,
-      error: error.message,
-      data: null,
-      metadata: {
-        node_type: 'logic',
-        llm_mode_enabled: nodeData.llm_mode_enabled,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-};
-
-// Enhanced delay node executor with LLM mode support
-export const executeDelayNode = async (nodeData, inputs) => {
-  try {
-    console.log('⏱️ Executing delay node with data:', nodeData);
-    
-    const response = await fetch('/api/nodes/delay', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        node_data: nodeData,
-        inputs: inputs
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Delay node execution failed: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Delay node result:', result);
-    
-    return {
-      success: result.success || true,
-      data: result.data || result,
-      error: result.error || null,
-      metadata: {
-        ...result.metadata,
-        node_type: 'delay',
-        llm_mode_processed: nodeData.llm_mode_enabled
-      }
-    };
-  } catch (error) {
-    console.error('❌ Delay node execution error:', error);
-    return {
-      success: false,
-      error: error.message,
-      data: null,
-      metadata: {
-        node_type: 'delay',
-        llm_mode_enabled: nodeData.llm_mode_enabled,
-        timestamp: new Date().toISOString()
-      }
-    };
-  }
-};
-
-// ... keep all existing functions ... 
+// ... existing legacy functions for backward compatibility ... 

@@ -26,7 +26,9 @@ from core.exceptions import CrewFlowError, ValidationError, ExecutionError
 # API routers
 from api.routers.workflow_router import router as workflow_router
 from api.routers.node_router import router as node_router
+from api.routers.node_schema_router import router as node_schema_router
 from api.routers.tools import router as tools_router
+from api.routers.tool_router import router as tool_router
 from api.routers.auth_router import router as auth_router
 from api.routers.trigger_router import router as trigger_router, root_router as trigger_root_router
 from api.routers.output_router import router as output_router
@@ -34,10 +36,12 @@ from api.routers.user_settings import router as user_settings_router
 from api.routers.export_router import router as export_router
 from api.routers.framework_models import router as framework_models_router
 from api.routers.integration_router import router as integration_router
-from backend.api.routers import crew, social_media
-from backend.api.routers.multimodal import router as multimodal_router
+from api.routers.crew import router as crew_router
+from api.routers.social_media import router as social_media_router
+from api.routers.multimodal import router as multimodal_router
 from api.routers.smart_mapping_router import router as smart_mapping_router
 from api.routers.llm_mode_router import router as llm_mode_router
+from routes.runner_schemas import router as runner_schema_router
 
 # Models
 from backend.models.data import NodeData
@@ -145,11 +149,32 @@ unified_runner = UnifiedRunner()
 # Configure CORS with more explicit settings
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # React dev servers
+    allow_origins=["*"],  # Allow all origins during development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(workflow_router, prefix="/api")
+app.include_router(node_router, prefix="/api")
+app.include_router(node_schema_router, prefix="/api/nodes/schema")
+app.include_router(tools_router, prefix="/api/tools")
+app.include_router(tool_router, prefix="/api")
+app.include_router(auth_router, prefix="/api")
+app.include_router(trigger_router, prefix="/api/triggers")
+app.include_router(trigger_root_router)  # No prefix for backward compatibility
+app.include_router(output_router, prefix="/api")
+app.include_router(user_settings_router, prefix="/api/user-settings")
+app.include_router(export_router, prefix="/api")
+app.include_router(framework_models_router)  # No prefix - router has its own prefix
+app.include_router(integration_router, prefix="/api")
+app.include_router(crew_router, prefix="/api")
+app.include_router(social_media_router, prefix="/api")
+app.include_router(multimodal_router, prefix="/api")
+app.include_router(smart_mapping_router)  # Remove prefix - router has its own prefix="/api/smart-mapping"
+app.include_router(llm_mode_router, prefix="/api/llm-mode")
+app.include_router(runner_schema_router, prefix="/api")
 
 # Add unified runner to app state
 @app.on_event("startup")
@@ -165,6 +190,15 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"⚠️ Database initialization failed (continuing without database): {str(e)}")
         # Continue without database for development
+    
+    # Initialize node processor
+    try:
+        from core.node_processor import node_processor
+        node_processor.enable_llm_mode(False)  # Start with LLM mode disabled
+        node_processor.enable_smart_mapping(True)  # Start with smart mapping enabled
+        logger.info("✅ Node processor initialized")
+    except Exception as e:
+        logger.error(f"❌ Node processor initialization failed: {str(e)}")
     
     # Initialize scheduler PROPERLY in async context
     try:
@@ -251,24 +285,6 @@ async def shutdown_event():
         logger.info("Application shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {str(e)}")
-
-# Register routers with dependencies
-app.include_router(auth_router, prefix="/api/auth")
-app.include_router(workflow_router, prefix="/api/workflows")
-app.include_router(node_router, prefix="/api/nodes")
-app.include_router(tools_router, prefix="/api/tools")
-app.include_router(trigger_router, prefix="/api/triggers")
-app.include_router(trigger_root_router)
-app.include_router(output_router, prefix="/api/outputs")
-app.include_router(user_settings_router, prefix="/api/user-settings")
-app.include_router(export_router)
-app.include_router(framework_models_router)
-app.include_router(integration_router, prefix="/api/integrations")
-app.include_router(crew.router, prefix="/api")
-app.include_router(social_media.router, prefix="/api")
-app.include_router(multimodal_router, prefix="/api")
-app.include_router(smart_mapping_router)
-app.include_router(llm_mode_router)
 
 # Error handlers
 @app.exception_handler(CrewFlowError)
@@ -619,10 +635,23 @@ async def execute_node(
         raise HTTPException(status_code=500, detail="Node execution failed")
 
 # Health check endpoint
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0"
+    }
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "healthy", "service": "Nodai_api"}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "1.0"
+    }
 
 # Debug endpoint to list all routes
 @app.get("/debug/routes")
@@ -965,7 +994,56 @@ async def legacy_executed_triggers():
         from backend.core.di import get_trigger_service
         
         # Get trigger service instance
-        trigger_service = get_trigger_service()
+        trigger_service = await get_trigger_service()
+        
+        # Get all triggers
+        triggers = await trigger_service.list_triggers()
+        
+        # Filter to only executed triggers (those with trigger_count > 0)
+        executed_triggers = [
+            trigger for trigger in triggers 
+            if trigger.get("trigger_count", 0) > 0 or trigger.get("execution_count", 0) > 0
+        ]
+        
+        # Format response to match expected structure
+        response_data = {
+            "triggers": executed_triggers,
+            "total_count": len(executed_triggers)
+        }
+        
+        return {
+            "success": True,
+            "data": response_data,
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0"
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching executed triggers: {str(e)}")
+        return {
+            "success": False,
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": f"Failed to fetch executed triggers: {str(e)}"
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0"
+            }
+        }
+
+# Add fallback route for frontend compatibility
+@app.get("/triggers/executed")
+async def frontend_executed_triggers():
+    """Fallback endpoint for frontend compatibility"""
+    try:
+        from backend.services.trigger_service import TriggerService
+        from backend.core.di import get_trigger_service
+        
+        # Get trigger service instance
+        trigger_service = await get_trigger_service()
         
         # Get all triggers
         triggers = await trigger_service.list_triggers()
@@ -1232,22 +1310,26 @@ async def root():
         }
     }
 
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint."""
+# Add a simple test endpoint for debugging
+@app.get("/api/test")
+async def test_endpoint():
+    """Simple test endpoint for debugging"""
     return {
-        "status": "healthy",
+        "success": True,
+        "message": "Backend is working!",
         "timestamp": datetime.now().isoformat(),
-        "services": {
-            "api": "running",
-            "crew_engine": "ready",
-            "multimodal_processor": "ready"
+        "endpoints": {
+            "triggers_executed": "/api/triggers/executed",
+            "triggers_executed_legacy": "/triggers/executed",
+            "health": "/api/health"
         }
     }
 
 if __name__ == "__main__":
     import uvicorn
     logger.info("🚀 Starting Nodai API server...")
+    print("SUPABASE_URL:", os.environ.get("SUPABASE_URL"))
+    print("SUPABASE_ANON_KEY:", os.environ.get("SUPABASE_ANON_KEY"))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

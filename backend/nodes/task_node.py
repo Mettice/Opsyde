@@ -4,17 +4,189 @@ from datetime import datetime
 import asyncio
 import json
 import os
+from pydantic import BaseModel, Field
 
 from models.nodes import Node, NodeType
 from models.workflow import ExecutionContext
 from models.results import NodeResult, ExecutionStatus
 from models.data import NodeData
 from core.llm_runner import llm_runner
+from nodes.base_node import BaseNode, NodeConfig
+from models.schemas import NodeSchema, SchemaField, SchemaType
 
 logger = logging.getLogger(__name__)
 
-class TaskNode:
+class TaskNodeConfig(NodeConfig):
+    """Configuration for Task nodes"""
+    label: str
+    description: str
+    prompt: str
+    goal: Optional[str] = None
+    constraints: List[str] = Field(default_factory=list)
+    examples: List[Dict[str, Any]] = Field(default_factory=list)
+    expected_output: Optional[str] = None
+    async_execution: bool = False
+    dependencies: List[str] = Field(default_factory=list)
+    agent_ref: Optional[str] = Field(None, description="Reference to associated agent")
+    llmConfig: Optional[Dict[str, Any]] = Field(default_factory=lambda: {
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "max_tokens": 4000,
+        "framework": "openai"
+    })
+    
+    # Enhanced input schema for tasks
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'task_input': SchemaField(
+                type=SchemaType.ANY,
+                description='Input data for the task',
+                optional=False
+            ),
+            'agent_output': SchemaField(
+                type=SchemaType.ANY,
+                description='Output from associated agent',
+                optional=True
+            ),
+            'instructions': SchemaField(
+                type=SchemaType.STRING,
+                description='Task instructions or description',
+                optional=True
+            ),
+            'context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Context for task execution',
+                optional=True
+            ),
+            'data': SchemaField(
+                type=SchemaType.ANY,
+                description='Any data required for task completion',
+                optional=True
+            ),
+            'agent': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Connected agent configuration',
+                optional=True,
+                properties={
+                    'role': SchemaField(type=SchemaType.STRING, description='Agent role'),
+                    'goal': SchemaField(type=SchemaType.STRING, description='Agent goal'),
+                    'backstory': SchemaField(type=SchemaType.STRING, description='Agent backstory'),
+                    'framework': SchemaField(type=SchemaType.STRING, description='Agent framework'),
+                    'llmModel': SchemaField(type=SchemaType.STRING, description='LLM model'),
+                    'llmProvider': SchemaField(type=SchemaType.STRING, description='LLM provider'),
+                    'temperature': SchemaField(type=SchemaType.NUMBER, description='Temperature'),
+                    'max_tokens': SchemaField(type=SchemaType.NUMBER, description='Max tokens'),
+                    'allowDelegation': SchemaField(type=SchemaType.BOOLEAN, description='Allow delegation')
+                }
+            )
+        },
+        required_fields=['task_input']
+    ))
+    
+    # Enhanced output schema for tasks
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.ANY,
+                description='Task execution result',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'execution_time': SchemaField(type=SchemaType.NUMBER, description='Execution time in seconds'),
+                    'status': SchemaField(type=SchemaType.STRING, description='Execution status'),
+                    'cost': SchemaField(type=SchemaType.NUMBER, description='Execution cost', optional=True),
+                    'tokens_used': SchemaField(type=SchemaType.NUMBER, description='Tokens used', optional=True),
+                    'node_id': SchemaField(type=SchemaType.STRING, description='Node ID'),
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of execution'),
+                    'connected_agents': SchemaField(
+                        type=SchemaType.ARRAY,
+                        description='Agents connected to this task',
+                        optional=True
+                    )
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message if task failed',
+                optional=True
+            ),
+            'task_name': SchemaField(
+                type=SchemaType.STRING,
+                description='Name of the task',
+                optional=True
+            ),
+            'description': SchemaField(
+                type=SchemaType.STRING,
+                description='Task description',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class TaskNode(BaseNode):
     """Handles execution of task nodes"""
+
+    def get_config_model(self) -> type[BaseModel]:
+        return TaskNodeConfig
+
+    def get_input_schema(self) -> NodeSchema:
+        """Get the input schema for task nodes"""
+        return TaskNodeConfig().input_schema
+
+    def get_output_schema(self) -> NodeSchema:
+        """Get the output schema for task nodes"""
+        return TaskNodeConfig().output_schema
+
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute task node logic"""
+        try:
+            # Extract task configuration
+            task_config = config
+            task_name = task_config.label or "Unnamed Task"
+            description = task_config.description or ""
+            expected_output = task_config.expected_output or ""
+            is_async = task_config.async_execution
+            dependencies = task_config.dependencies
+
+            # Format input data
+            formatted_inputs = {}
+            if inputs:
+                for key, value in inputs.items():
+                    if isinstance(value.value, dict):
+                        formatted_inputs[key] = value.value
+                    else:
+                        formatted_inputs[key] = value.value
+
+            # Process the task
+            result = await self._process_data_task(
+                task_name=task_name,
+                description=description,
+                inputs=formatted_inputs,
+                expected_output=expected_output
+            )
+
+            return {
+                "result": result,
+                "metadata": {
+                    "task_name": task_name,
+                    "description": description,
+                    "execution_time": 0,  # TODO: Add actual execution time
+                    "status": "completed",
+                    "node_id": context.get("node_id", "unknown"),
+                    "node_type": "task",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error executing task node: {str(e)}")
+            raise
 
     async def process(self, node: Union[Node, Dict[str, Any]], inputs: Dict[str, Any], context: ExecutionContext) -> Dict[str, Any]:
         """Process a task node"""

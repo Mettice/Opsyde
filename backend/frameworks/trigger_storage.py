@@ -6,27 +6,21 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Try multiple locations for the triggers directory
-TRIGGERS_DIRS = [
-    Path("./triggers"),  # From backend directory - THIS IS WHERE YOUR TRIGGERS ARE!
-    Path("../triggers"), # From backend directory going up
-    Path("./backend/triggers"),  # From root directory
-    Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "triggers")),  # Relative to this file
-    Path(os.path.expanduser("~/triggers")),
-    Path("../../triggers")
-]
+# Define the triggers directory relative to the backend directory
+BACKEND_DIR = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TRIGGERS_DIR = BACKEND_DIR / "triggers"
 
-# Try to create each directory
-for dir_path in TRIGGERS_DIRS:
-    try:
-        dir_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Created triggers directory at: {dir_path.absolute()}")
-    except Exception as e:
-        logger.error(f"Error creating triggers directory at {dir_path}: {str(e)}")
-
-# Use the first directory that exists
-TRIGGERS_DIR = next((d for d in TRIGGERS_DIRS if d.exists()), Path("./triggers"))
-logger.info(f"Using triggers directory: {TRIGGERS_DIR.absolute()}")
+# Ensure the triggers directory exists
+try:
+    TRIGGERS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Using triggers directory: {TRIGGERS_DIR.absolute()}")
+except Exception as e:
+    logger.error(f"Error creating triggers directory: {str(e)}")
+    # Fallback to a temporary directory if we can't create the main one
+    import tempfile
+    TRIGGERS_DIR = Path(tempfile.gettempdir()) / "crewflow_triggers"
+    TRIGGERS_DIR.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Using fallback triggers directory: {TRIGGERS_DIR.absolute()}")
 
 # In-memory storage as a fallback
 IN_MEMORY_TRIGGERS = {}

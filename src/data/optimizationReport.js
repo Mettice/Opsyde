@@ -296,4 +296,21 @@ export const successMetrics = {
   }
 };
 
-export default optimizationReport; 
+// QA Checklist for Optimized Templates
+
+const qaChecklist = [
+  {
+    name: "AI-Powered Email Summarizer",
+    checklist: [
+      "Trigger node is configured with correct webhook settings.",
+      "Input node accepts raw email content and is marked as required.",
+      "Chat node is set up with the correct prompt and LLM settings.",
+      "Output node is configured to display the final summary.",
+      "Edges are correctly connected from trigger to input, input to chat, and chat to output.",
+      "Template metadata (tags, complexity, estimatedTime, agentCount, nodeCount) is accurate."
+    ]
+  },
+  // Add more templates as needed
+];
+
+export default qaChecklist; 

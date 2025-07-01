@@ -1,7 +1,10 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
+import json
+from pydantic import BaseModel
 
 from models.nodes import Node
 from models.data import NodeData
@@ -9,15 +12,38 @@ from models.api_models import (
     APIResponse, NodeExecutionResponse, NodeValidationResponse,
     NodeTypesResponse, FrameworksResponse, ErrorCode
 )
-from core.node_processor import node_processor
-from utils.security import security_manager
+from core.node_processor import node_processor, NodeProcessor
+from utils.security import security_manager, get_current_user, get_current_user_optional
 from utils.logging import get_logger
 from utils.api_utils import handle_exception
 from core.runner import UnifiedRunner
-from auth.dependencies import get_current_user
+from core.execution_strategies import SequentialStrategy
+from core.workflow_execution_context import WorkflowExecutionContext
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["nodes"])
+
+class NodeExecutionRequest(BaseModel):
+    node_data: Dict[str, Any]
+    inputs: Dict[str, Any] = {}
+    context: Optional[Dict[str, Any]] = None
+
+class EnhancedNodeExecutionRequest(BaseModel):
+    node_type: str
+    node_data: Dict[str, Any]
+    inputs: Dict[str, Any] = {}
+    agent_data: Optional[Dict[str, Any]] = None
+    context: Optional[Dict[str, Any]] = None
+    execution_mode: str = "enhanced"
+    enable_smart_mapping: bool = True
+    enable_multimodal: bool = True
+
+class StreamingWorkflowRequest(BaseModel):
+    nodes: List[Dict[str, Any]]
+    edges: List[Dict[str, Any]]
+    inputs: Dict[str, Any] = {}
+    execution_mode: str = "streaming"
+    enable_real_time_updates: bool = True
 
 @router.post("/execute", response_model=APIResponse[NodeExecutionResponse])
 async def execute_node(
@@ -851,4 +877,613 @@ async def run_input_enhanced(
                 "timestamp": datetime.now().isoformat(),
                 "error_type": type(e).__name__
             }
+        }
+
+@router.post("/execute-enhanced")
+async def execute_node_enhanced(
+    request: NodeExecutionRequest,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced node execution with LLM context and smart mapping"""
+    try:
+        logger.info(f"🧠 Enhanced node execution request for: {request.node_data.get('type', 'unknown')}")
+        
+        # Initialize enhanced node processor
+        processor = NodeProcessor(
+            llm_mode_enabled=request.context.get("llm_mode_enabled", True),
+            smart_mapping_enabled=request.context.get("smart_mapping_enabled", True)
+        )
+        
+        # Create execution context
+        context = WorkflowExecutionContext(
+            user_id=current_user.get("user_id") if current_user else "anonymous",
+            workflow_id=request.context.get("workflow_id", "single_node"),
+            user_api_keys=request.context.get("user_keys", {})
+        )
+        
+        # Process node with enhanced context
+        result = await processor.process_node(
+            node=request.node_data,
+            inputs=request.inputs,
+            context=context.to_dict()
+        )
+        
+        logger.info(f"✅ Enhanced node execution completed successfully")
+        
+        return {
+            "success": True,
+            "data": result.data if hasattr(result, 'data') else result,
+            "metadata": {
+                "node_type": request.node_data.get("type"),
+                "execution_mode": "enhanced",
+                "llm_processed": True,
+                "smart_mapping_enabled": request.context.get("smart_mapping_enabled", True),
+                "execution_timestamp": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced node execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Enhanced execution failed: {str(e)}")
+
+@router.post("/execute-llm")
+async def execute_node_llm_centric(
+    request: EnhancedNodeExecutionRequest,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """LLM-centric node execution with intelligent routing"""
+    try:
+        logger.info(f"🧠 LLM-centric execution for {request.node_type} node")
+        
+        # Initialize LLM-centric processor
+        processor = NodeProcessor(
+            llm_mode_enabled=True,
+            smart_mapping_enabled=request.enable_smart_mapping
+        )
+        
+        # Create enhanced execution context
+        context = WorkflowExecutionContext(
+            user_id=current_user.get("user_id") if current_user else "anonymous",
+            workflow_id=request.context.get("workflow_id", "llm_single_node"),
+            user_api_keys=request.context.get("user_keys", {})
+        )
+        
+        # Enhance context with LLM-specific data
+        enhanced_context = context.to_dict()
+        enhanced_context.update({
+            "execution_mode": "llm_centric",
+            "enable_smart_mapping": request.enable_smart_mapping,
+            "enable_multimodal": request.enable_multimodal,
+            "agent_data": request.agent_data,
+            "node_metadata": {
+                "node_type": request.node_type,
+                "execution_strategy": "llm_centric"
+            }
+        })
+        
+        # Process with LLM routing
+        result = await processor.process_node(
+            node={
+                "id": request.context.get("node_id", "llm_node"),
+                "type": request.node_type,
+                "data": request.node_data
+            },
+            inputs=request.inputs,
+            context=enhanced_context
+        )
+        
+        logger.info(f"✅ LLM-centric execution completed")
+        
+        return {
+            "success": True,
+            "data": result.data if hasattr(result, 'data') else result,
+            "output": result.data if hasattr(result, 'data') else result,
+            "metadata": {
+                "node_type": request.node_type,
+                "execution_mode": "llm_centric",
+                "llm_processed": True,
+                "smart_mapping_applied": request.enable_smart_mapping,
+                "framework": enhanced_context.get("framework_used", "unknown"),
+                "execution_time": enhanced_context.get("execution_time", 0),
+                "token_usage": enhanced_context.get("token_usage", {}),
+                "execution_timestamp": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ LLM-centric execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"LLM execution failed: {str(e)}")
+
+@router.post("/input-enhanced")
+async def execute_input_node_enhanced(
+    request: NodeExecutionRequest,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced input node execution with multimodal support"""
+    try:
+        logger.info("📥 Enhanced input node execution")
+        
+        # Initialize processor with multimodal support
+        processor = NodeProcessor(
+            llm_mode_enabled=request.context.get("llm_mode_enabled", True),
+            smart_mapping_enabled=request.context.get("smart_mapping_enabled", True)
+        )
+        
+        # Create context with multimodal processing options
+        context = WorkflowExecutionContext(
+            user_id=current_user.get("user_id") if current_user else "anonymous",
+            workflow_id=request.context.get("workflow_id", "input_processing"),
+            user_api_keys=request.context.get("user_keys", {})
+        )
+        
+        # Add input-specific processing options
+        enhanced_context = context.to_dict()
+        enhanced_context.update({
+            "processing_options": request.context.get("processing_options", {}),
+            "enable_multimodal": True,
+            "enable_content_extraction": True,
+            "enable_entity_recognition": True
+        })
+        
+        # Process input node
+        result = await processor.process_node(
+            node=request.node_data,
+            inputs=request.inputs,
+            context=enhanced_context
+        )
+        
+        logger.info("✅ Enhanced input processing completed")
+        
+        return {
+            "success": True,
+            "data": result.data if hasattr(result, 'data') else result,
+            "value": result.data if hasattr(result, 'data') else result,
+            "metadata": {
+                "node_type": "input",
+                "input_type": request.node_data.get("data", {}).get("input_type", "text"),
+                "llm_processed": True,
+                "multimodal_supported": True,
+                "smart_mapping_applied": request.context.get("smart_mapping_enabled", True),
+                "execution_timestamp": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced input execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Input processing failed: {str(e)}")
+
+@router.post("/workflows/execute-stream")
+async def execute_workflow_stream(
+    request: StreamingWorkflowRequest,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Streaming workflow execution with real-time LLM processing updates"""
+    try:
+        logger.info(f"🚀 Starting streaming workflow execution with {len(request.nodes)} nodes")
+        
+        # Initialize LLM-centric strategy
+        strategy = SequentialStrategy(
+            max_concurrency=5,
+            enable_streaming=True
+        )
+        
+        # Prepare execution inputs with LLM context
+        execution_inputs = {
+            **request.inputs,
+            "execution_context": {
+                "user_id": current_user.get("user_id") if current_user else "anonymous",
+                "execution_mode": "streaming",
+                "timestamp": datetime.now().isoformat()
+            },
+            "llm_mode_enabled": True,
+            "smart_mapping_enabled": True,
+            "enable_real_time_updates": request.enable_real_time_updates,
+            "user_keys": request.inputs.get("user_keys", {})
+        }
+        
+        async def stream_generator():
+            """Generate streaming updates"""
+            try:
+                async for update in strategy.execute(request.nodes, request.edges, execution_inputs):
+                    # Format update as JSON line
+                    json_line = json.dumps(update) + "\n"
+                    yield json_line.encode('utf-8')
+                    
+            except Exception as e:
+                logger.error(f"❌ Streaming execution error: {str(e)}")
+                error_update = {
+                    "type": "workflow_error",
+                    "status": "error",
+                    "error": str(e),
+                    "timestamp": datetime.now().isoformat()
+                }
+                yield (json.dumps(error_update) + "\n").encode('utf-8')
+        
+        return StreamingResponse(
+            stream_generator(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Streaming workflow setup failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Streaming setup failed: {str(e)}")
+
+@router.post("/workflows/execute-enhanced")
+async def execute_workflow_enhanced(
+    request: StreamingWorkflowRequest,
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced workflow execution with LLM context and smart mapping"""
+    try:
+        logger.info(f"🧠 Enhanced workflow execution with {len(request.nodes)} nodes")
+        
+        # Initialize hybrid strategy with LLM support
+        strategy = SequentialStrategy(max_concurrency=10)
+        
+        # Prepare execution inputs
+        execution_inputs = {
+            **request.inputs,
+            "execution_context": {
+                "user_id": current_user.get("user_id") if current_user else "anonymous",
+                "execution_mode": "enhanced",
+                "timestamp": datetime.now().isoformat()
+            },
+            "llm_mode_enabled": True,
+            "smart_mapping_enabled": True,
+            "enable_llm_routing": True,
+            "user_keys": request.inputs.get("user_keys", {})
+        }
+        
+        # Collect all results
+        results = []
+        async for update in strategy.execute(request.nodes, request.edges, execution_inputs):
+            results.append(update)
+        
+        # Process final results
+        successful_nodes = [r for r in results if r.get("status") == "completed"]
+        failed_nodes = [r for r in results if r.get("status") == "error"]
+        
+        logger.info(f"✅ Enhanced workflow completed: {len(successful_nodes)} successful, {len(failed_nodes)} failed")
+        
+        return {
+            "success": len(failed_nodes) == 0,
+            "results": results,
+            "summary": {
+                "total_nodes": len(request.nodes),
+                "successful": len(successful_nodes),
+                "failed": len(failed_nodes),
+                "execution_mode": "enhanced",
+                "llm_processed": True
+            },
+            "metadata": {
+                "execution_timestamp": datetime.now().isoformat(),
+                "strategy": "hybrid_with_llm",
+                "smart_mapping_enabled": True
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced workflow execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Enhanced workflow failed: {str(e)}")
+
+# Enhanced individual node type endpoints
+@router.post("/run-task-enhanced")
+async def run_task_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced task node execution"""
+    try:
+        logger.info("📋 Enhanced task execution")
+        
+        task_data = request.get("task_data", {})
+        agent_data = request.get("agent_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        # Create enhanced task execution request
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="task",
+            node_data=task_data,
+            inputs=inputs,
+            agent_data=agent_data,
+            context=context,
+            execution_mode="llm_centric"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced task execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Task execution failed: {str(e)}")
+
+@router.post("/run-chat-enhanced")
+async def run_chat_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced chat node execution"""
+    try:
+        logger.info("💬 Enhanced chat execution")
+        
+        chat_data = request.get("chat_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="chat",
+            node_data=chat_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="llm_centric"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced chat execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Chat execution failed: {str(e)}")
+
+@router.post("/run-agent-enhanced")
+async def run_agent_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced agent node execution"""
+    try:
+        logger.info("🤖 Enhanced agent execution")
+        
+        agent_data = request.get("agent_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="agent",
+            node_data=agent_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="llm_centric"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced agent execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Agent execution failed: {str(e)}")
+
+@router.post("/run-output-enhanced")
+async def run_output_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced output node execution"""
+    try:
+        logger.info("📤 Enhanced output execution")
+        
+        output_data = request.get("output_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="output",
+            node_data=output_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="llm_centric"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced output execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Output execution failed: {str(e)}")
+
+@router.post("/run-logic-enhanced")
+async def run_logic_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced logic node execution"""
+    try:
+        logger.info("🔀 Enhanced logic execution")
+        
+        logic_data = request.get("logic_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="logic",
+            node_data=logic_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="llm_centric"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced logic execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Logic execution failed: {str(e)}")
+
+@router.post("/run-delay-enhanced")
+async def run_delay_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Enhanced delay node execution"""
+    try:
+        logger.info("⏱️ Enhanced delay execution")
+        
+        delay_data = request.get("delay_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type="delay",
+            node_data=delay_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="standard"  # Delay doesn't need LLM processing
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Enhanced delay execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Delay execution failed: {str(e)}")
+
+@router.post("/execute-generic-enhanced")
+async def execute_generic_enhanced(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user)
+):
+    """Generic enhanced node execution"""
+    try:
+        node_type = request.get("node_type", "unknown")
+        logger.info(f"🔧 Generic enhanced execution for: {node_type}")
+        
+        node_data = request.get("node_data", {})
+        inputs = request.get("inputs", {})
+        context = request.get("context", {})
+        
+        enhanced_request = EnhancedNodeExecutionRequest(
+            node_type=node_type,
+            node_data=node_data,
+            inputs=inputs,
+            context=context,
+            execution_mode="enhanced"
+        )
+        
+        return await execute_node_llm_centric(enhanced_request, current_user)
+        
+    except Exception as e:
+        logger.error(f"❌ Generic enhanced execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Generic execution failed: {str(e)}")
+
+@router.post("/workflows/validate")
+async def validate_workflow(request: Request):
+    """Validate a complete workflow"""
+    try:
+        data = await request.json()
+        nodes = data.get("nodes", [])
+        edges = data.get("edges", [])
+        
+        # Basic validation
+        if not nodes:
+            return {
+                "valid": False,
+                "errors": ["No nodes found in workflow"]
+            }
+        
+        # Validate each node
+        errors = []
+        for node in nodes:
+            node_type = node.get("type")
+            if not node_type:
+                errors.append(f"Node {node.get('id', 'unknown')} missing type")
+        
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors,
+            "node_count": len(nodes),
+            "edge_count": len(edges)
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "errors": [f"Validation failed: {str(e)}"]
+        }
+
+@router.post("/field-mapping/map")
+async def map_fields(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+):
+    """
+    Map fields using explicit field mappings instead of smart guessing.
+    This is the new preferred method for data mapping.
+    """
+    try:
+        source_data = request.get('source_data', {})
+        field_mappings = request.get('field_mappings', {})
+        node_type = request.get('node_type', 'unknown')
+        
+        from backend.core.simple_mapper import map_fields_simple
+        
+        mapped_data = map_fields_simple(source_data, field_mappings, node_type)
+        
+        return {
+            "success": True,
+            "mapped_data": mapped_data,
+            "mapping_count": len(field_mappings),
+            "mapped_fields": list(mapped_data.keys())
+        }
+        
+    except Exception as e:
+        logger.error(f"Field mapping failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@router.post("/field-mapping/available-fields")
+async def get_available_fields(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+):
+    """
+    Get available fields from data for UI display.
+    """
+    try:
+        data = request.get('data', {})
+        
+        from backend.core.simple_mapper import get_available_fields_simple
+        
+        available_fields = get_available_fields_simple(data)
+        
+        return {
+            "success": True,
+            "available_fields": available_fields,
+            "field_count": len(available_fields)
+        }
+        
+    except Exception as e:
+        logger.error(f"Getting available fields failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@router.post("/field-mapping/validate")
+async def validate_field_mappings(
+    request: Dict[str, Any],
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+):
+    """
+    Validate field mappings against available fields.
+    """
+    try:
+        field_mappings = request.get('field_mappings', {})
+        available_fields = request.get('available_fields', [])
+        
+        from backend.core.simple_mapper import simple_mapper
+        
+        validation_result = simple_mapper.validate_mapping(field_mappings, available_fields)
+        
+        return {
+            "success": True,
+            "validation": validation_result
+        }
+        
+    except Exception as e:
+        logger.error(f"Field mapping validation failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
         }

@@ -15,6 +15,11 @@ from services.data_state_manager import data_state_manager
 # Import the universal data transformer (the real one, not hardcoded)
 from core.data_transformer import data_transformer
 
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel, validator
+from core.smart_mapper import SmartMapper
+from models.schemas import NodeSchema, SchemaField, SchemaType
+
 logger = logging.getLogger(__name__)
 
 def run_trigger_node(data=None):
@@ -149,170 +154,16 @@ def run_trigger_node(data=None):
             "trigger_id": trigger_id
         }
 
-async def process_trigger_node(node_data: Dict[str, Any], inputs: Dict[str, Any], context: Dict[str, Any] = None) -> NodeData:
-    """Enhanced trigger node processor with standardized output format for all trigger types"""
-    
-    if not node_data:
-        logger.error("No node data provided to trigger processor")
-        return NodeData.from_error("No node data provided")
-    
-    # Fix: Handle both camelCase and snake_case trigger type fields
-    trigger_type = node_data.get('triggerType') or node_data.get('trigger_type', 'manual')
-    trigger_id = node_data.get('nodeId') or node_data.get('id', 'unknown')
-    
-    logger.info(f"Processing trigger node with type: {trigger_type}")
-    
-    try:
-        if trigger_type == 'manual':
-            # 🚀 STANDARDIZED MANUAL TRIGGER
-            standardized_result = {
-                "success": True,
-                "data": {
-                    "type": "trigger_activation",
-                    "trigger_type": "manual",
-                    "message": "Manual trigger activated",
-                    "trigger_id": trigger_id
-                },
-                "error": None,
-                "metadata": {
-                    "node_type": "trigger",
-                    "trigger_type": "manual",
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-            return NodeData.from_value(standardized_result)
-        
-        elif trigger_type == 'webhook':
-            # 🚀 STANDARDIZED WEBHOOK TRIGGER
-            webhook_data = node_data.get('webhookData', {})
-            service_name = webhook_data.get('service', 'unknown service')
-            
-            standardized_result = {
-                "success": True,
-                "data": {
-                    "type": "webhook_activation",
-                    "trigger_type": "webhook",
-                    "message": f"Webhook trigger activated for {service_name}",
-                    "service": service_name,
-                    "webhook_data": webhook_data,
-                    "trigger_id": trigger_id
-                },
-                "error": None,
-                "metadata": {
-                    "node_type": "trigger",
-                    "trigger_type": "webhook",
-                    "service": service_name,
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-            return NodeData.from_value(standardized_result)
-        
-        elif trigger_type == 'schedule':
-            # 🚀 STANDARDIZED SCHEDULE TRIGGER
-            schedule_type = node_data.get('scheduleType', 'once')
-            schedule_time = node_data.get('scheduleTime')
-            
-            standardized_result = {
-                "success": True,
-                "data": {
-                    "type": "schedule_activation",
-                    "trigger_type": "schedule",
-                    "message": f"Schedule trigger activated ({schedule_type})",
-                    "schedule_type": schedule_type,
-                    "schedule_time": schedule_time,
-                    "trigger_id": trigger_id
-                },
-                "error": None,
-                "metadata": {
-                    "node_type": "trigger",
-                    "trigger_type": "schedule",
-                    "schedule_type": schedule_type,
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-            return NodeData.from_value(standardized_result)
-        
-        elif trigger_type == 'universal_polling':
-            # 🚀 ENHANCED UNIVERSAL POLLING TRIGGER with data transformation
-            service_name = node_data.get('serviceName', 'Unknown Service')
-            api_endpoint = node_data.get('apiEndpoint')
-            polling_interval = node_data.get('pollingInterval', 300)
-            change_detection_method = node_data.get('changeDetectionMethod', 'array_length')
-            
-            if not api_endpoint:
-                return NodeData.from_error("API endpoint is required for universal polling")
-            
-            try:
-                # Fetch API data
-                api_data = await fetch_api_data(node_data)
-                
-                if api_data:
-                    # Transform using universal data transformer
-                    standard_records = await data_transformer.transform_api_response(
-                        api_data, 
-                        service_name,
-                        context={
-                            "trigger_type": "universal_polling", 
-                            "node_data": node_data
-                        }
-                    )
-                    
-                    # Convert to agent format
-                    agent_data = data_transformer.to_agent_format(standard_records)
-                    
-                    standardized_result = {
-                        "success": True,
-                        "data": {
-                            "type": "api_data",
-                            "trigger_type": "universal_polling",
-                            "service_name": service_name,
-                            "api_data": agent_data,
-                            "standard_records": standard_records,
-                            "data_summary": f"Processed {len(standard_records)} records from {service_name}",
-                            "transformation_confidence": agent_data.get("transformation_summary", {}).get("avg_confidence", 0),
-                            "trigger_id": trigger_id
-                        },
-                        "error": None,
-                        "metadata": {
-                            "node_type": "trigger",
-                            "trigger_type": "universal_polling",
-                            "service_name": service_name,
-                            "api_endpoint": api_endpoint,
-                            "record_count": len(standard_records),
-                            "timestamp": datetime.now().isoformat()
-                        }
-                    }
-                    return NodeData.from_value(standardized_result)
-                else:
-                    return NodeData.from_error(f"Failed to fetch data from {service_name}")
-                    
-            except Exception as api_error:
-                logger.error(f"Universal polling API error: {str(api_error)}")
-                return NodeData.from_error(f"Universal polling failed: {str(api_error)}")
-        
-        elif trigger_type == 'universal_webhook':
-            service_name = node_data.get('serviceName', 'Unknown Service')
-            webhook_service = node_data.get('webhookService', 'generic')
-            
-            return {
-                "status": "success",
-                "message": f"Universal webhook trigger activated for {service_name}",
-                "trigger_type": "universal_webhook",
-                "service_name": service_name,
-                "webhook_service": webhook_service,
-                "timestamp": datetime.now().isoformat(),
-                "ready_for_webhooks": True
-            }
-        
-        else:
-            # 🚀 UNKNOWN TRIGGER TYPE - STANDARDIZED ERROR
-            error_msg = f"Unknown trigger type: {trigger_type}"
-            logger.warning(error_msg)
-            return NodeData.from_error(error_msg)
-            
-    except Exception as e:
-        logger.error(f"Error processing trigger node: {str(e)}")
-        return NodeData.from_error(f"Trigger processing failed: {str(e)}")
+async def process_trigger_node(
+    node_data: Dict[str, Any],
+    inputs: Dict[str, Any],
+    context: Dict[str, Any] = None
+) -> NodeData:
+    """Enhanced trigger node processor with schema validation and smart mapping"""
+    smart_mapper = SmartMapper()
+    mapped_inputs = await smart_mapper.smart_map_inputs(node_data, context or {}, inputs)
+    trigger_node = TriggerNode()
+    return await trigger_node.process(node_data, mapped_inputs, context or {})
 
 async def fetch_api_data(node_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
@@ -468,5 +319,100 @@ def _remove_nested_field(data: Dict, path: str):
     
     if isinstance(current, dict) and keys[-1] in current:
         del current[keys[-1]]
+
+class TriggerNodeConfig(NodeConfig):
+    """Configuration for Trigger nodes"""
+    label: str
+    description: str
+    triggerType: str = Field(default="manual", description="Type of trigger (manual, webhook, schedule, etc.)")
+    schedule: Dict[str, Any] = Field(default_factory=dict, description="Schedule configuration")
+    webhook: Dict[str, Any] = Field(default_factory=dict, description="Webhook configuration")
+    
+    # Add validation methods
+    @validator('label')
+    def validate_label(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Trigger label is required")
+        return v.strip()
+    
+    @validator('triggerType')
+    def validate_trigger_type(cls, v):
+        valid_types = ['manual', 'webhook', 'schedule', 'universal_polling', 'universal_webhook']
+        if v not in valid_types:
+            raise ValueError(f"Invalid trigger type. Must be one of: {', '.join(valid_types)}")
+        return v
+    
+    # Enhanced input schema for triggers
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'trigger_data': SchemaField(
+                type=SchemaType.ANY,
+                description='Trigger data',
+                optional=True
+            ),
+            'api_data': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Data from API polling',
+                optional=True
+            ),
+            'webhook_data': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Data from webhook',
+                optional=True
+            ),
+            'schedule_data': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Data from scheduled trigger',
+                optional=True
+            )
+        }
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.ANY,
+                description='Trigger result',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'trigger_type': SchemaField(type=SchemaType.STRING, description='Type of trigger'),
+                    'trigger_id': SchemaField(type=SchemaType.STRING, description='ID of trigger'),
+                    'service_name': SchemaField(type=SchemaType.STRING, description='Service name if applicable', optional=True),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of trigger'),
+                    'data_summary': SchemaField(type=SchemaType.STRING, description='Summary of data', optional=True),
+                    'transformation_confidence': SchemaField(type=SchemaType.NUMBER, description='Confidence of data transformation', optional=True)
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            ),
+            'api_data': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Data from API if applicable',
+                optional=True
+            ),
+            'standard_records': SchemaField(
+                type=SchemaType.ARRAY,
+                description='Standardized records if applicable',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class TriggerNode(BaseNode):
+    """Enhanced Trigger Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return TriggerNodeConfig
+
+    async def process(self, node, inputs, context):
+        return await super().process(node, inputs, context)
 
 

@@ -337,22 +337,19 @@ const LogicNode = React.memo(({
 
         {/* Connection handles with beautiful styling and labels */}
         {/* Input handle */}
-        <Handle 
-          type="target" 
-          position={Position.Left} 
+        <Handle
+          type="target"
+          position={Position.Top}
           isConnectable={isConnectable}
-          className="w-4 h-4 bg-gradient-to-r from-gray-400 to-gray-600 border-2 border-white shadow-xl rounded-full"
-          id="input"
+          className="w-4 h-4 bg-gradient-to-r from-indigo-400 to-indigo-600 border-2 border-white shadow-xl rounded-full"
         />
         
         {/* True output handle */}
-        <Handle 
-          type="source" 
-          position={Position.Right} 
+        <Handle
+          type="source"
+          position={Position.Bottom}
           isConnectable={isConnectable}
-          className="w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 border-2 border-white shadow-xl rounded-full"
-          style={{ top: '35%' }}
-          id="true"
+          className="w-4 h-4 bg-gradient-to-r from-indigo-400 to-indigo-600 border-2 border-white shadow-xl rounded-full"
         >
           <div className="absolute -right-14 -top-1 text-xs text-green-600 whitespace-nowrap font-medium bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg border border-green-200/40">
             True →
@@ -360,13 +357,11 @@ const LogicNode = React.memo(({
         </Handle>
         
         {/* False output handle */}
-        <Handle 
-          type="source" 
-          position={Position.Right} 
+        <Handle
+          type="source"
+          position={Position.Bottom}
           isConnectable={isConnectable}
-          className="w-4 h-4 bg-gradient-to-r from-red-500 to-red-600 border-2 border-white shadow-xl rounded-full"
-          style={{ top: '65%' }}
-          id="false"
+          className="w-4 h-4 bg-gradient-to-r from-indigo-400 to-indigo-600 border-2 border-white shadow-xl rounded-full"
         >
           <div className="absolute -right-14 -top-1 text-xs text-red-600 whitespace-nowrap font-medium bg-white/80 backdrop-blur-sm px-2 py-1 rounded-lg border border-red-200/40">
             False →

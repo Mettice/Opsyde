@@ -26,8 +26,8 @@ def _initialize_database():
     load_dotenv('.env')
     
     # Supabase connection settings
-    SUPABASE_URL = os.getenv("VITE_SUPABASE_URL")
-    SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY")
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
     SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD")
 
     print(f"🔧 SUPABASE_URL: {SUPABASE_URL}")

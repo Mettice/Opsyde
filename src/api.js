@@ -1,6 +1,6 @@
 import { apiClient } from './api/client';
 
-const API_URL = window.REACT_APP_API_URL || 'http://localhost:8000';
+const API_URL = '/api';
 
 // Re-export all API functions using the TypeScript client
 export const saveFlow = (userId, name, nodes, edges) => 

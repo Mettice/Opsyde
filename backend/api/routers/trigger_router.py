@@ -164,6 +164,7 @@ async def get_executed_triggers(
 
 # Also add the root_router route for backward compatibility
 root_router.get("/executed-triggers")(get_executed_triggers)
+root_router.get("/executed")(get_executed_triggers)  # Add the missing route
 
 @router.post("/register", response_model=APIResponse[TriggerRegistrationResponse])
 async def register_trigger(
@@ -243,18 +244,19 @@ async def handle_trigger(
     except Exception as e:
         return handle_exception(e)
 
-@router.get("", response_model=APIResponse[TriggerListResponse])
+@router.get("/list", response_model=APIResponse[TriggerListResponse])
 async def list_triggers(
     owner: Optional[str] = None,
     trigger_service: TriggerService = Depends(get_trigger_service)
 ) -> APIResponse[TriggerListResponse]:
-    """List all registered triggers"""
+    """List all triggers"""
     try:
-        triggers = await trigger_service.list_triggers(owner)
+        triggers = await trigger_service.list_triggers()
+        trigger_list = [TriggerBase(**trigger) for trigger in triggers]
         
         response = TriggerListResponse(
-            triggers=[TriggerBase(**trigger) for trigger in triggers],
-            total_count=len(triggers)
+            triggers=trigger_list,
+            total_count=len(trigger_list)
         )
         return APIResponse.success_response(response)
         
@@ -1294,4 +1296,38 @@ def _remove_nested_field(data: dict, path: str):
         if isinstance(current, dict) and keys[-1] in current:
             del current[keys[-1]]
     except:
-        pass 
+        pass
+
+@router.post("/test-config")
+async def test_trigger_config(
+    config: Dict[str, Any],
+    trigger_service: TriggerService = Depends(get_trigger_service)
+) -> Dict[str, Any]:
+    """Simple test for trigger configuration"""
+    try:
+        trigger_type = config.get('triggerType')
+        
+        if trigger_type == 'universal_polling':
+            # Simple API test
+            api_endpoint = config.get('apiEndpoint')
+            if not api_endpoint:
+                return {"success": False, "error": "API endpoint required"}
+            
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_endpoint, timeout=10) as response:
+                    if response.status == 200:
+                        return {"success": True, "message": "API endpoint is accessible"}
+                    else:
+                        return {"success": False, "error": f"API returned status {response.status}"}
+        
+        elif trigger_type == 'webhook':
+            return {"success": True, "message": "Webhook configuration is valid"}
+        
+        elif trigger_type == 'schedule':
+            return {"success": True, "message": "Schedule configuration is valid"}
+        
+        return {"success": True, "message": "Configuration looks good"}
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)} 

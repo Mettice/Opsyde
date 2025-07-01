@@ -1,9 +1,13 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List
 from datetime import datetime
 
 from models.data import NodeData
 from core.llm_runner import llm_runner
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel
+from core.smart_mapper import SmartMapper
+from models.schemas import NodeSchema, SchemaField, SchemaType
 
 logger = logging.getLogger(__name__)
 
@@ -149,164 +153,81 @@ async def process_logic_node(
     inputs: Dict[str, Any], 
     context: Dict[str, Any] = None
 ) -> NodeData:
-    """Enhanced logic node processor with LLM-centric processing support"""
+    """Enhanced logic node processor with LLM-centric processing support and schema validation"""
+    smart_mapper = SmartMapper()
+    mapped_inputs = await smart_mapper.smart_map_inputs(node_data, context or {}, inputs)
+    logic_node = LogicNode()
+    return await logic_node.process(node_data, mapped_inputs, context or {})
+
+class LogicNodeConfig(NodeConfig):
+    """Configuration for Logic nodes"""
+    label: str
+    description: str
+    conditions: List[str] = Field(default_factory=list, description="Logic conditions")
+    operator: str = Field(default="AND", description="Logic operator (AND/OR)")
     
-    try:
-        # 🚀 CHECK FOR LLM-CENTRIC MODE
-        llm_mode_enabled = node_data.get('llm_mode_enabled', False)
-        
-        # If LLM-centric mode is enabled, use LLM Runner for intelligent logic evaluation
-        if llm_mode_enabled:
-            logger.info(f"🤖 Using LLM-centric processing for logic node")
-            
-            # Prepare input data for LLM logic evaluation
-            llm_input_data = {
-                'node_id': node_data.get('nodeId', node_data.get('id', 'unknown')),
-                'node_type': 'logic',
-                'node_config': node_data,
-                'condition': node_data.get('condition', 'True'),
-                'inputs': {key: value.value if isinstance(value, NodeData) else value for key, value in inputs.items()},
-                'description': f"Evaluate the logic condition '{node_data.get('condition', 'True')}' based on the provided inputs"
-            }
-            
-            # Get user ID from context
-            user_id = None
-            if context and isinstance(context, dict):
-                user_id = context.get('user_id')
-            
-            # Execute LLM task for logic reasoning
-            llm_result = await llm_runner.execute_llm_task(
-                task_type='agent_reasoning',
-                input_data=llm_input_data,
-                context=context or {},
-                user_id=user_id,
-                stream=False
+    # Enhanced input schema for logic
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'input': SchemaField(
+                type=SchemaType.ANY,
+                description='Input to evaluate',
+                optional=False
+            ),
+            'context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Context for logic',
+                optional=True
+            ),
+            'task_output': SchemaField(
+                type=SchemaType.ANY,
+                description='Output from task nodes',
+                optional=True
+            ),
+            'agent_output': SchemaField(
+                type=SchemaType.ANY,
+                description='Output from agent nodes',
+                optional=True
             )
-            
-            if llm_result.get('success'):
-                # LLM processing successful - return standardized result
-                llm_output = llm_result.get('output', {})
-                
-                # Extract boolean result from LLM reasoning
-                reasoning = llm_output.get('reasoning', '')
-                llm_decision = llm_output.get('output', 'false').lower()
-                logic_result = 'true' in llm_decision or 'yes' in llm_decision or llm_decision == '1'
-                
-                # Get main input data for preservation
-                main_input_data = None
-                for key, value in inputs.items():
-                    if isinstance(value, NodeData) and not value.is_error():
-                        main_input_data = value.value
-                        break
-                    elif not isinstance(value, NodeData):
-                        main_input_data = value
-                        break
-                
-                standardized_result = {
-                    "success": True,
-                    "data": main_input_data,  # 🔑 PRESERVE INPUT DATA FOR DOWNSTREAM FLOW
-                    "error": None,
-                    "metadata": {
-                        "node_type": "logic",
-                        "processing_mode": "llm_centric",
-                        "condition": node_data.get('condition', 'True'),
-                        "logic_result": logic_result,
-                        "path": "true" if logic_result else "false",
-                        "llm_reasoning": reasoning,
-                        "llm_confidence": llm_output.get('confidence', 0.8),
-                        "llm_metadata": llm_result.get('metadata', {}),
-                        "timestamp": datetime.now().isoformat(),
-                        "data_preserved": main_input_data is not None
-                    }
+        },
+        required_fields=['input']
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.BOOLEAN,
+                description='Logic evaluation result',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'condition_evaluated': SchemaField(type=SchemaType.STRING, description='Condition that was evaluated'),
+                    'data_passed_through': SchemaField(type=SchemaType.BOOLEAN, description='Whether input data was preserved'),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of evaluation')
                 }
-                
-                logger.info(f"✅ LLM-centric logic evaluation: {logic_result} (condition: {node_data.get('condition')})")
-                return NodeData.from_value(standardized_result)
-            else:
-                # LLM processing failed, fall back to traditional processing
-                logger.warning(f"LLM-centric logic processing failed, falling back to traditional processing: {llm_result.get('error')}")
-        
-        # 🚀 TRADITIONAL PROCESSING WITH ENHANCED DATA PRESERVATION
-        preserved_data = {}
-        main_input_data = None
-        all_input_values = {}
-        
-        for key, value in inputs.items():
-            if isinstance(value, NodeData):
-                if value.is_error():
-                    return NodeData.from_error(f"Input '{key}' has error: {value.error}")
-                # Extract clean data from NodeData
-                actual_value = value.value
-            else:
-                actual_value = value
-            
-            # Handle standardized format data extraction for logic evaluation
-            if isinstance(actual_value, dict):
-                if "success" in actual_value and "data" in actual_value:
-                    if actual_value["success"]:
-                        clean_data = actual_value["data"]
-                        preserved_data[key] = clean_data
-                        # For logic evaluation, also extract comparable values
-                        if isinstance(clean_data, dict):
-                            # Extract simple values for logic conditions
-                            for sub_key, sub_value in clean_data.items():
-                                all_input_values[f"{key}_{sub_key}"] = sub_value
-                            all_input_values[key] = clean_data
-                        else:
-                            all_input_values[key] = clean_data
-                        # Use first successful input as main data to preserve
-                        if main_input_data is None:
-                            main_input_data = clean_data
-                    else:
-                        return NodeData.from_error(f"Input '{key}' failed: {actual_value.get('error')}")
-                elif "_clean_data" in actual_value:
-                    clean_data = actual_value["_clean_data"]
-                    preserved_data[key] = clean_data
-                    all_input_values[key] = clean_data
-                    if main_input_data is None:
-                        main_input_data = clean_data
-                else:
-                    preserved_data[key] = actual_value
-                    all_input_values.update(actual_value)
-                    if main_input_data is None:
-                        main_input_data = actual_value
-            else:
-                preserved_data[key] = actual_value
-                all_input_values[key] = actual_value
-                if main_input_data is None:
-                    main_input_data = actual_value
-        
-        # Extract condition and evaluate
-        condition = node_data.get("condition", "True")
-        if not condition:
-            condition = "True"
-            
-        logger.info(f"Evaluating logic condition: {condition}")
-        logger.debug(f"With evaluation data: {all_input_values}")
-        
-        # Evaluate the condition using traditional logic
-        result = evaluate_condition(condition, all_input_values)
-        
-        # 🚀 STANDARDIZE OUTPUT FORMAT WITH PRESERVED DATA
-        standardized_result = {
-            "success": True,
-            "data": main_input_data,  # 🔑 CRITICAL: Pass through the main input data
-            "error": None,
-            "metadata": {
-                "node_type": "logic",
-                "processing_mode": "traditional",
-                "condition_evaluated": condition,
-                "logic_result": result,
-                "path": "true" if result else "false",
-                "preserved_inputs": preserved_data,  # Keep all inputs for debugging
-                "evaluation_data": all_input_values,  # Keep evaluation context
-                "timestamp": datetime.now().isoformat(),
-                "data_preserved": main_input_data is not None
-            }
-        }
-        
-        return NodeData.from_value(standardized_result)
-            
-    except Exception as e:
-        logger.error(f"Error in logic node processor: {str(e)}")
-        return NodeData.from_error(f"Logic node processing failed: {str(e)}") 
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            ),
+            'value': SchemaField(
+                type=SchemaType.ANY,
+                description='Original input data passed through',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class LogicNode(BaseNode):
+    """Enhanced Logic Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return LogicNodeConfig
+
+    async def process(self, node, inputs, context):
+        return await super().process(node, inputs, context) 

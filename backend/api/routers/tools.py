@@ -199,7 +199,8 @@ async def research_api(
             service_name=request.service_name,
             description=request.description,
             endpoint_hint=request.endpoint_hint,
-            user_keys=user_keys
+            user_keys=user_keys,
+            selected_llm=request.selected_llm
         )
         
         logger.info(f"API research completed for {request.service_name}: {research_result.get('success')}")
@@ -263,7 +264,8 @@ async def research_output_api(
             service_name=request.service_name,
             description=request.description,
             endpoint_hint=request.endpoint_hint,
-            user_id=current_user.get('user_id') if current_user else "anonymous"
+            user_id=current_user.get('user_id') if current_user else "anonymous",
+            selected_llm=request.selected_llm
         )
         
         logger.info(f"Output API research completed for {request.service_name}: {result.get('success')}")
@@ -332,7 +334,8 @@ async def research_email_format(
             service_name="Email Service",
             description=email_description,
             endpoint_hint=request.endpoint_hint,
-            user_id=current_user.get('user_id') if current_user else "anonymous"
+            user_id=current_user.get('user_id') if current_user else "anonymous",
+            selected_llm=request.selected_llm
         )
         
         # Enhance result for email-specific use case
@@ -1408,3 +1411,45 @@ async def get_all_framework_capabilities():
 
 # Add missing import for datetime
 from datetime import datetime
+
+@router.get("/debug/byok-keys")
+async def debug_byok_keys(
+    current_user: Optional[Dict] = Depends(get_current_user_optional)
+):
+    """Debug endpoint to test BYOK key retrieval and LLM selection"""
+    try:
+        user_id = current_user.get('user_id') if current_user else "anonymous"
+        
+        # Get user keys from BYOK system
+        from services.user_settings_service import user_settings_service
+        execution_keys = await user_settings_service.get_user_keys_for_execution(user_id)
+        
+        # Test LLM selection
+        from frameworks.shared_api_research import shared_api_research
+        llm_config = await shared_api_research._select_best_llm(user_id, {})
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "execution_keys": {
+                "available_providers": list(execution_keys.keys()),
+                "key_count": len(execution_keys)
+            },
+            "llm_selection": {
+                "selected_provider": llm_config.get("provider") if llm_config else None,
+                "selected_model": llm_config.get("model") if llm_config else None,
+                "has_key": bool(llm_config)
+            },
+            "debug_info": {
+                "user_settings_service_type": "unified",
+                "timestamp": datetime.now().isoformat()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"BYOK debug failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "user_id": current_user.get('user_id') if current_user else "anonymous"
+        }

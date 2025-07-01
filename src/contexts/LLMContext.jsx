@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { APIClient } from '../api/client';
 
 const LLMContext = createContext();
+
+// Export the context for direct use
+export { LLMContext };
 
 export const useLLMMode = () => {
   const context = useContext(LLMContext);
@@ -16,95 +20,85 @@ export const LLMProvider = ({ children }) => {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const apiClient = APIClient.getInstance();
 
   // Fetch current status on component mount
   useEffect(() => {
     fetchStatus();
   }, []);
 
+  // Expose LLM context to window for API client access
+  useEffect(() => {
+    updateGlobalContext();
+  }, [llmModeEnabled, smartMappingEnabled, status]);
+
+  const updateGlobalContext = () => {
+    window.LLM_CONTEXT = {
+      llmModeEnabled,
+      smartMappingEnabled,
+      status
+    };
+    
+    // Also expose user API keys for BYOK support
+    // In a real implementation, these would come from your BYOK system
+    // For now, they can be empty and will be populated by your BYOK implementation
+    window.USER_API_KEYS = {
+      // These would be loaded from your user settings/BYOK system
+      // For now, they can be empty and will be populated by your BYOK implementation
+    };
+  };
+
   const fetchStatus = async () => {
     try {
-      const response = await fetch('/api/llm-mode/status');
-      if (response.ok) {
-        const data = await response.json();
-        setLlmModeEnabled(data.llm_mode_enabled);
-        setSmartMappingEnabled(data.smart_mapping_enabled);
-        setStatus(data);
-        setError(null);
-      } else {
-        throw new Error('Failed to fetch LLM mode status');
-      }
-    } catch (err) {
-      setError(err.message);
-      console.error('Error fetching LLM mode status:', err);
+      console.log('🔄 Fetching LLM mode status...');
+      const status = await apiClient.getLLMModeStatus();
+      console.log('✅ LLM status received:', status);
+      
+      setLlmModeEnabled(status.llm_mode_enabled);
+      setSmartMappingEnabled(status.smart_mapping_enabled);
+      setStatus('connected');
+    } catch (error) {
+      console.error('❌ Error fetching LLM mode status:', error);
+      setStatus('error');
+      // Set default values on error
+      setLlmModeEnabled(false);
+      setSmartMappingEnabled(true);
     }
   };
 
   const toggleLLMMode = async (enabled) => {
-    setLoading(true);
-    setError(null);
-    
     try {
-      const response = await fetch('/api/llm-mode/toggle', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          enabled,
-          smart_mapping_enabled: smartMappingEnabled
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setLlmModeEnabled(data.llm_mode_enabled);
-        setSmartMappingEnabled(data.smart_mapping_enabled);
-        
-        // Refresh status
-        await fetchStatus();
-      } else {
-        throw new Error('Failed to toggle LLM mode');
-      }
-    } catch (err) {
-      setError(err.message);
-      console.error('Error toggling LLM mode:', err);
-    } finally {
-      setLoading(false);
+      console.log(`🤖 Toggling LLM mode: ${enabled}, Smart mapping: ${smartMappingEnabled}`);
+      const result = await apiClient.toggleLLMMode(enabled, smartMappingEnabled);
+      console.log('✅ LLM mode toggle result:', result);
+      
+      setLlmModeEnabled(result.llm_mode_enabled);
+      setSmartMappingEnabled(result.smart_mapping_enabled);
+      
+      // Update global context
+      updateGlobalContext();
+    } catch (error) {
+      console.error('❌ Error toggling LLM mode:', error);
+      // Revert the state on error
+      setLlmModeEnabled(!enabled);
     }
   };
 
   const toggleSmartMapping = async (enabled) => {
-    setLoading(true);
-    setError(null);
-    
     try {
-      const response = await fetch('/api/llm-mode/toggle', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          enabled: llmModeEnabled,
-          smart_mapping_enabled: enabled
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setLlmModeEnabled(data.llm_mode_enabled);
-        setSmartMappingEnabled(data.smart_mapping_enabled);
-        
-        // Refresh status
-        await fetchStatus();
-      } else {
-        throw new Error('Failed to toggle smart mapping');
-      }
-    } catch (err) {
-      setError(err.message);
-      console.error('Error toggling smart mapping:', err);
-    } finally {
-      setLoading(false);
+      console.log(`🧠 Toggling Smart mapping: ${enabled}, LLM mode: ${llmModeEnabled}`);
+      const result = await apiClient.toggleLLMMode(llmModeEnabled, enabled);
+      console.log('✅ Smart mapping toggle result:', result);
+      
+      setLlmModeEnabled(result.llm_mode_enabled);
+      setSmartMappingEnabled(result.smart_mapping_enabled);
+      
+      // Update global context
+      updateGlobalContext();
+    } catch (error) {
+      console.error('❌ Error toggling smart mapping:', error);
+      // Revert the state on error
+      setSmartMappingEnabled(!enabled);
     }
   };
 
@@ -113,19 +107,8 @@ export const LLMProvider = ({ children }) => {
     setError(null);
     
     try {
-      const response = await fetch('/api/llm-mode/test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        return data;
-      } else {
-        throw new Error('Failed to test LLM mode');
-      }
+      const data = await apiClient.testLLMMode();
+      return data;
     } catch (err) {
       setError(err.message);
       console.error('Error testing LLM mode:', err);

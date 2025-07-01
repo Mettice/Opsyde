@@ -8,9 +8,10 @@ import logging
 import asyncio
 import aiohttp
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from datetime import datetime
 import os 
+import time
 
 from .huggingface_utils import (
     get_supported_tasks,
@@ -22,6 +23,16 @@ from .huggingface_utils import (
     format_input_for_task
 )
 from .huggingface_auto_router import route_huggingface_task
+from models.runner_schemas import HuggingFaceRunnerConfig
+from models.schemas import NodeSchema, SchemaType, SchemaField
+
+try:
+    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+    from transformers import TextGenerationPipeline, Text2TextGenerationPipeline
+    HUGGINGFACE_AVAILABLE = True
+except ImportError:
+    logger.warning("HuggingFace transformers not installed - using fallback implementation")
+    HUGGINGFACE_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +76,122 @@ INFERENCE_PROVIDERS = {
         "supported_tasks": list(VERIFIED_WORKING_MODELS.keys())
     }
 }
+
+class EnhancedHuggingFaceRunner:
+    """Enhanced HuggingFace runner with schema support"""
+    
+    def __init__(self):
+        self.model_cache = {}
+        self.tokenizer_cache = {}
+        self.pipeline_cache = {}
+        self.token_usage = {}
+    
+    async def run_huggingface_model(self, config: HuggingFaceRunnerConfig, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Run HuggingFace model with schema validation"""
+        if not HUGGINGFACE_AVAILABLE:
+            return await self._fallback_execution(config, inputs)
+        
+        try:
+            start_time = time.time()
+            
+            # Get or create pipeline
+            pipeline = self._get_pipeline(config)
+            
+            # Prepare input text
+            input_text = self._prepare_input(config, inputs)
+            
+            # Generate response
+            response = pipeline(
+                input_text,
+                max_length=config.max_tokens,
+                temperature=config.temperature,
+                do_sample=True,
+                num_return_sequences=1
+            )
+            
+            # Calculate execution time and tokens
+            execution_time = time.time() - start_time
+            tokens = len(input_text.split()) + len(response[0]['generated_text'].split())
+            
+            # Format response according to schema
+            return {
+                "result": response[0]['generated_text'],
+                "metadata": {
+                    "framework": "huggingface",
+                    "provider": config.provider,
+                    "model": config.model_name,
+                    "task_type": config.task_type,
+                    "execution_time": execution_time,
+                    "tokens_used": tokens
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"HuggingFace execution failed: {str(e)}")
+            return {
+                "result": None,
+                "metadata": {
+                    "framework": "huggingface",
+                    "provider": config.provider,
+                    "model": config.model_name,
+                    "task_type": config.task_type,
+                    "error": str(e)
+                },
+                "error": str(e)
+            }
+    
+    def _get_pipeline(self, config: HuggingFaceRunnerConfig):
+        """Get or create HuggingFace pipeline"""
+        cache_key = f"{config.model_name}_{config.task_type}"
+        
+        if cache_key in self.pipeline_cache:
+            return self.pipeline_cache[cache_key]
+        
+        # Create pipeline based on task type
+        if config.task_type == "text-generation":
+            pipeline = TextGenerationPipeline(
+                model=config.model_name,
+                tokenizer=config.model_name,
+                device=0 if config.use_gpu else -1
+            )
+        elif config.task_type == "text2text-generation":
+            pipeline = Text2TextGenerationPipeline(
+                model=config.model_name,
+                tokenizer=config.model_name,
+                device=0 if config.use_gpu else -1
+            )
+        else:
+            pipeline = pipeline(
+                task=config.task_type,
+                model=config.model_name,
+                device=0 if config.use_gpu else -1
+            )
+        
+        self.pipeline_cache[cache_key] = pipeline
+        return pipeline
+    
+    def _prepare_input(self, config: HuggingFaceRunnerConfig, inputs: Dict[str, Any]) -> str:
+        """Prepare input text based on task type"""
+        if config.task_type == "text-generation":
+            return inputs.get('prompt', '')
+        elif config.task_type == "text2text-generation":
+            return inputs.get('input_text', '')
+        else:
+            return str(inputs)
+    
+    async def _fallback_execution(self, config: HuggingFaceRunnerConfig, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Fallback execution when HuggingFace is not available"""
+        return {
+            "result": "HuggingFace transformers not installed",
+            "metadata": {
+                "framework": "huggingface",
+                "provider": config.provider,
+                "model": config.model_name,
+                "task_type": config.task_type,
+                "error": "HuggingFace transformers not installed"
+            },
+            "error": "HuggingFace transformers not installed"
+        }
 
 async def run_huggingface_tool_frontend(
     config: Dict[str, Any], 

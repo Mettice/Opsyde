@@ -7,6 +7,7 @@ import asyncio
 from functools import lru_cache
 
 from utils.logging import get_logger
+from services.user_settings_service import user_settings_service
 
 logger = get_logger(__name__)
 
@@ -14,6 +15,9 @@ class SharedAPIResearch:
     """Unified AI research service for both Tool and Output nodes"""
     
     def __init__(self):
+        # Initialize the user settings service
+        self.user_settings_service = user_settings_service
+        
         # Protocol detection patterns
         self.protocol_indicators = {
             "graphql": ["/graphql", "query", "mutation", "GraphQL", "schema"],
@@ -52,45 +56,48 @@ class SharedAPIResearch:
             
             logger.info(f"🔑 Getting API keys from BYOK system for user: {user_id}")
             
-            # Use the correct method name
-            api_keys_data = await self.user_settings_service.get_user_api_keys(user_id)
+            # Use the execution keys method which returns already decrypted keys
+            user_keys = await self.user_settings_service.get_user_keys_for_execution(user_id)
             
-            if not api_keys_data:
+            if not user_keys:
                 logger.info("No API keys found in BYOK system")
                 return {}
             
-            # Convert to the format expected by this function
-            user_keys = {}
-            for key_data in api_keys_data:
-                provider_id = key_data.get('provider_id', '')
-                if key_data.get('validation_status') == 'valid' and key_data.get('is_active', False):
-                    try:
-                        encrypted_key = key_data.get('encrypted_key', '')
-                        if encrypted_key:
-                            # Use the unified service's key manager to decrypt
-                            key_manager = self.user_settings_service.get_key_manager()
-                            decrypted_key = key_manager.decrypt_key(encrypted_key)
-                            user_keys[provider_id] = decrypted_key
-                            logger.debug(f"🔑 Loaded API key for provider: {provider_id}")
-                    except Exception as e:
-                        logger.error(f"❌ Failed to decrypt API key for {provider_id}: {str(e)}")
-                        continue
-            
+            logger.info(f"🔑 Loaded {len(user_keys)} keys from BYOK system: {list(user_keys.keys())}")
             return user_keys
             
         except Exception as e:
             logger.error(f"Failed to get keys from BYOK system for user {user_id}: {str(e)}")
             return {}
 
-    async def _select_best_llm(self, user_id: str, ai_config: Dict[str, Any]) -> Optional[Dict]:
+    async def _select_best_llm(self, user_id: str, ai_config: Dict[str, Any], selected_llm: Optional[Dict[str, str]] = None) -> Optional[Dict]:
         """
         🔑 FIXED: BYOK-Integrated LLM Selection with proper error handling
         """
         try:
             logger.info("🔑 Selecting LLM using BYOK system...")
+            logger.info(f"User selected LLM: {selected_llm}")
             
             # FIX 5: Use centralized key retrieval
             user_keys = await self._get_user_keys_from_byok(user_id)
+            
+            # If user selected a specific LLM, try to use it
+            if selected_llm and selected_llm.get('provider'):
+                selected_provider = selected_llm.get('provider')
+                selected_model = selected_llm.get('model', 'default')
+                
+                logger.info(f"User selected {selected_provider} with model {selected_model}")
+                
+                # Check if the selected provider is available in user keys
+                if selected_provider in user_keys:
+                    logger.info(f"✅ Using user-selected {selected_provider} with model {selected_model}")
+                    return {
+                        "provider": selected_provider,
+                        "model": selected_model,
+                        "key": user_keys[selected_provider]
+                    }
+                else:
+                    logger.warning(f"User selected {selected_provider} but no key available, falling back to available keys")
             
             # FIX 6: Better fallback chain with proper error handling
             if not user_keys:
@@ -98,14 +105,17 @@ class SharedAPIResearch:
                 env_keys = []
                 
                 if os.getenv("OPENAI_API_KEY"):
-                    user_keys['openai_key'] = os.getenv("OPENAI_API_KEY")
+                    user_keys['openai'] = os.getenv("OPENAI_API_KEY")
                     env_keys.append("OpenAI")
                 if os.getenv("ANTHROPIC_API_KEY"):
-                    user_keys['anthropic_key'] = os.getenv("ANTHROPIC_API_KEY")
+                    user_keys['anthropic'] = os.getenv("ANTHROPIC_API_KEY")
                     env_keys.append("Anthropic")
                 if os.getenv("OPENROUTER_API_KEY"):
-                    user_keys['openrouter_key'] = os.getenv("OPENROUTER_API_KEY")
+                    user_keys['openrouter'] = os.getenv("OPENROUTER_API_KEY")
                     env_keys.append("OpenRouter")
+                if os.getenv("PERPLEXITY_API_KEY"):
+                    user_keys['perplexity'] = os.getenv("PERPLEXITY_API_KEY")
+                    env_keys.append("Perplexity")
                 
                 if env_keys:
                     logger.info(f"Environment keys available: {env_keys}")
@@ -117,24 +127,30 @@ class SharedAPIResearch:
                 logger.error("No LLM keys available - cannot perform AI research")
                 return None
             
-            # Priority order: OpenAI (most reliable) > Anthropic > OpenRouter
-            if user_keys.get('openai_key'):
+            # Priority order: Perplexity (best for research) > OpenAI > Anthropic > OpenRouter
+            if user_keys.get('perplexity'):
+                return {
+                    "provider": "perplexity",
+                    "model": "sonar-pro",  # Best for research
+                    "key": user_keys['perplexity']
+                }
+            elif user_keys.get('openai'):
                 return {
                     "provider": "openai",
                     "model": "gpt-4o",
-                    "key": user_keys['openai_key']
+                    "key": user_keys['openai']
                 }
-            elif user_keys.get('anthropic_key'):
+            elif user_keys.get('anthropic'):
                 return {
                     "provider": "anthropic", 
                     "model": "claude-3-sonnet-20240229",
-                    "key": user_keys['anthropic_key']
+                    "key": user_keys['anthropic']
                 }
-            elif user_keys.get('openrouter_key'):
+            elif user_keys.get('openrouter'):
                 return {
                     "provider": "openrouter",
                     "model": "anthropic/claude-3-sonnet",
-                    "key": user_keys['openrouter_key']
+                    "key": user_keys['openrouter']
                 }
             else:
                 logger.error("No compatible LLM keys found")
@@ -147,6 +163,7 @@ class SharedAPIResearch:
     async def _call_ai_provider(self, prompt: str, llm_config: Dict[str, str]) -> str:
         """
         🔧 FIXED: Unified AI provider calling with better error handling
+        Now supports Perplexity for better research capabilities
         """
         try:
             provider = llm_config["provider"]
@@ -158,8 +175,11 @@ class SharedAPIResearch:
             if not api_key:
                 raise ValueError(f"No API key provided for {provider}")
             
-            # FIX 7: Better timeout and error handling
-            timeout = 30  # Reduced from 60 seconds
+            # Use longer timeout for Perplexity since it does web search
+            if provider == "perplexity":
+                timeout = 60  # Extended timeout for web search
+            else:
+                timeout = 30  # Standard timeout for other providers
             
             if provider == "openai":
                 return await self._call_openai_api(prompt, model, api_key, timeout)
@@ -167,6 +187,8 @@ class SharedAPIResearch:
                 return await self._call_anthropic_api(prompt, model, api_key, timeout)
             elif provider == "openrouter":
                 return await self._call_openrouter_api(prompt, model, api_key, timeout)
+            elif provider == "perplexity":
+                return await self._call_perplexity_api(prompt, model, api_key, timeout)
             else:
                 raise ValueError(f"Unsupported provider: {provider}")
                 
@@ -262,6 +284,8 @@ class SharedAPIResearch:
         try:
             import aiohttp
             
+            logger.info(f"Calling OpenRouter API with model {model}")
+            
             headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -284,17 +308,72 @@ class SharedAPIResearch:
                     timeout=aiohttp.ClientTimeout(total=timeout)
                 ) as response:
                     if response.status != 200:
+                        error_text = await response.text()
                         logger.error(f"OpenRouter API error: {response.status}")
-                        raise Exception(f"OpenRouter API error: {response.status}")
+                        logger.error(f"OpenRouter API error details: {error_text[:500]}")
+                        raise Exception(f"OpenRouter API error: {response.status} - {error_text[:100]}")
                     
                     result = await response.json()
-                    return result["choices"][0]["message"]["content"]
+                    content = result["choices"][0]["message"]["content"]
+                    logger.info(f"OpenRouter API response received (length: {len(content)})")
+                    return content
                     
         except asyncio.TimeoutError:
             logger.error(f"OpenRouter API call timed out after {timeout}s")
             raise Exception("OpenRouter API call timed out")
         except Exception as e:
             logger.error(f"OpenRouter API call failed: {str(e)}")
+            raise
+
+    async def _call_perplexity_api(self, prompt: str, model: str, api_key: str, timeout: int = 60) -> str:
+        """FIX 12: Perplexity API integration for enhanced research capabilities with extended timeout"""
+        try:
+            import aiohttp
+            
+            logger.info(f"Calling Perplexity API with model {model} (timeout: {timeout}s)")
+            logger.info(f"Prompt length: {len(prompt)} characters")
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            data = {
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+                "stream": False
+            }
+            
+            # Use a longer timeout for Perplexity since it does web search
+            timeout_obj = aiohttp.ClientTimeout(total=timeout, connect=10)
+            
+            async with aiohttp.ClientSession(timeout=timeout_obj) as session:
+                logger.info("Sending request to Perplexity API...")
+                async with session.post(
+                    "https://api.perplexity.ai/chat/completions",
+                    headers=headers,
+                    json=data
+                ) as response:
+                    logger.info(f"Perplexity API response status: {response.status}")
+                    
+                    if response.status != 200:
+                        error_text = await response.text()
+                        logger.error(f"Perplexity API error: {response.status}")
+                        logger.error(f"Perplexity API error details: {error_text[:500]}")
+                        raise Exception(f"Perplexity API error: {response.status} - {error_text[:100]}")
+                    
+                    result = await response.json()
+                    content = result["choices"][0]["message"]["content"]
+                    logger.info(f"Perplexity API response received (length: {len(content)})")
+                    return content
+                    
+        except asyncio.TimeoutError:
+            logger.error(f"Perplexity API call timed out after {timeout}s")
+            raise Exception(f"Perplexity API call timed out after {timeout} seconds. Try again or use a different provider.")
+        except Exception as e:
+            logger.error(f"Perplexity API call failed: {str(e)}")
             raise
     
     def _parse_ai_response_improved(self, ai_response: str) -> Dict[str, Any]:
@@ -440,49 +519,128 @@ class SharedAPIResearch:
         description: str,
         purpose: Literal["data_input", "data_output"],
         endpoint_hint: Optional[str] = None,
-        user_id: str = "anonymous"
+        user_id: str = "anonymous",
+        selected_llm: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
-        🤖 FIXED: Universal AI-Powered API Research with proper BYOK integration
+        🤖 Universal AI-Powered API Research with robust clarification loop and error handling
         """
+        import json
         try:
-            # FIX 20: Validate user_id
             if not user_id or user_id == "anonymous":
                 logger.warning("Using anonymous user - consider passing actual user context")
-            
             logger.info(f"Starting unified API research: {service_name} ({purpose}) for user: {user_id}")
-            
-            # Get the best available LLM for this user
-            llm_config = await self._select_best_llm(user_id, {})
-            
+            logger.info(f"Selected LLM: {selected_llm}")
+
+            llm_config = await self._select_best_llm(user_id, {}, selected_llm)
             if not llm_config:
                 return {
                     "success": False,
                     "error": "No AI model available for research. Please add OpenAI, Anthropic, or OpenRouter API keys to your BYOK Manager.",
                     "suggestion": "Visit the API Key Manager to add your AI provider keys"
                 }
+
+            # Build a comprehensive research prompt
+            research_prompt = self._build_research_prompt(service_name, description, purpose, endpoint_hint)
             
-            # Build comprehensive research prompt
-            prompt = self._build_research_prompt(service_name, description, purpose, endpoint_hint)
+            # Try the selected LLM first, with fallback to other available providers
+            ai_response = None
+            providers_tried = []
             
-            # Call AI provider
-            ai_response = await self._call_ai_provider(prompt, llm_config)
+            # Get all available keys for fallback
+            user_keys = await self._get_user_keys_from_byok(user_id)
+            available_providers = list(user_keys.keys())
+            
+            # Start with the selected provider
+            if selected_llm and selected_llm.get('provider') in available_providers:
+                providers_to_try = [selected_llm.get('provider')] + [p for p in available_providers if p != selected_llm.get('provider')]
+            else:
+                providers_to_try = available_providers
+            
+            for provider in providers_to_try:
+                try:
+                    logger.info(f"Trying provider: {provider}")
+                    providers_tried.append(provider)
+                    
+                    # Use the correct model for each provider
+                    if provider == "perplexity":
+                        model = "sonar-pro"  # Best for research
+                    elif provider == "openai":
+                        model = "gpt-4o"
+                    elif provider == "anthropic":
+                        model = "claude-3-sonnet-20240229"
+                    elif provider == "openrouter":
+                        model = "anthropic/claude-3-sonnet"
+                    else:
+                        model = "default"
+                    
+                    fallback_llm_config = {
+                        "provider": provider,
+                        "model": model,
+                        "key": user_keys[provider]
+                    }
+                    
+                    ai_response = await self._call_ai_provider(research_prompt, fallback_llm_config)
+                    logger.info(f"✅ Successfully got response from {provider}")
+                    break
+                    
+                except Exception as e:
+                    logger.warning(f"Provider {provider} failed: {str(e)}")
+                    continue
             
             if not ai_response:
                 return {
                     "success": False,
-                    "error": "AI research failed - no response from AI provider",
+                    "error": f"All AI providers failed. Tried: {providers_tried}",
+                    "suggestion": "Check your API keys and network connection. Try again later."
+                }
+            
+            if not isinstance(ai_response, str) or len(ai_response.strip()) < 10:
+                logger.error(f"AI provider returned invalid response: {ai_response}")
+                return {
+                    "success": False,
+                    "error": "AI research failed - no valid response from AI provider",
                     "suggestion": "Check your API keys and try again"
                 }
             
-            # Parse and validate response
-            result = self._parse_ai_response_improved(ai_response)
+            # Parse AI response
+            ai_plan = self._parse_ai_response_improved(ai_response)
             
-            if result.get('success'):
-                result['analysis_method'] = f"{llm_config['provider']}_research"
-                result['auto_configured'] = True
-                
-            return result
+            # Validate the plan
+            validated_plan = self._validate_ai_plan(ai_plan)
+            
+            # If AI failed to provide a proper response, create a fallback
+            if not validated_plan.get('success', False):
+                logger.warning(f"AI failed to provide proper response for {service_name}, creating fallback")
+                validated_plan = {
+                    "success": True,
+                    "service_name": service_name,
+                    "api_type": "custom",
+                    "base_url": f"https://api.{service_name.lower().replace(' ', '')}.com",
+                    "auth_type": "bearer_token",
+                    "primary_method": "POST",
+                    "endpoints": [
+                        {
+                            "path": "/api/v1/data",
+                            "method": "POST",
+                            "description": "Main data endpoint",
+                            "parameters": ["data", "format"]
+                        }
+                    ],
+                    "default_headers": {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    "sample_input": {
+                        "data": "sample_data",
+                        "format": "json"
+                    },
+                    "confidence": 0.5,
+                    "suggestion": f"This is a custom integration for {service_name}. Please provide the actual API documentation or endpoint details for more accurate configuration."
+                }
+            
+            logger.info(f"✅ API research completed for {service_name} with confidence {validated_plan.get('confidence', 0)}")
+            return validated_plan
                 
         except Exception as e:
             logger.error(f"API research failed: {str(e)}")
@@ -493,84 +651,37 @@ class SharedAPIResearch:
             }
     
     def _build_research_prompt(self, service_name: str, description: str, purpose: str, endpoint_hint: Optional[str] = None) -> str:
-        """Enhanced universal research prompt - detects authentication automatically without hardcoding"""
-        
-        endpoint_context = f"\nEndpoint hint provided: {endpoint_hint}" if endpoint_hint else ""
-        
+        endpoint_context = f"\nEndpoint hint: {endpoint_hint}" if endpoint_hint else ""
         return f"""
-You are an expert API researcher. Research the {service_name} API and provide COMPLETE integration details including authentication.
+You are an expert API researcher. Your job is to research ONLY the API for the service named exactly: '{service_name}'.
 
-SERVICE: {service_name}
-TASK: {description}
-PURPOSE: {purpose}
-{endpoint_context}
+- If the user intent or description mentions a specific service (like Gmail, Airtable, etc), ONLY return endpoints for that service. Do NOT return endpoints for similar or competing services.
+- If you cannot find an official API for the exact service '{service_name}', respond with a clarifying question and do NOT suggest a different service.
+- If the user's intent is ambiguous, ask a clarifying question.
 
-Research and provide COMPLETE JSON configuration including authentication details:
+Service: {service_name}
+Task: {description}
+Purpose: {purpose}{endpoint_context}
 
+Respond in this JSON structure:
 {{
-    "success": true,
-    "service_name": "{service_name}",
-    "base_url": "https://api.service.com",
-    "auth_required": true/false,
-    "auth_type": "api_key|bearer_token|oauth2|basic_auth|custom|none",
-    "auth_location": "header|query|body",
-    "auth_header_name": "Authorization|X-API-Key|Custom-Header",
-    "auth_format": "Bearer {{token}}|{{key}}|Custom format",
-    "credential_format": "What the actual credential looks like (e.g., 'sk-...', 'xoxb-...', UUID format)",
-    "auth_setup_instructions": [
-        "Step 1: Detailed instructions for this specific service",
-        "Step 2: How to find API settings for THIS service",
-        "Step 3: How to generate credentials for THIS service",
-        "Step 4: How to get required permissions for THIS service"
-    ],
-    "required_permissions": ["List of specific permissions needed"],
-    "developer_portal_url": "https://developer.service.com or settings URL",
-    "documentation_url": "Official auth docs URL",
-    "test_endpoint": {{
-        "url": "/endpoint/to/test/auth",
-        "method": "GET|POST",
-        "description": "Simple endpoint to verify credentials work"
+  "service_name": "{service_name}",
+  "base_url": "...",
+  "auth_type": "...",
+  "auth_docs_url": "...",
+  "endpoints": [
+    {{
+      "path": "...",
+      "method": "...",
+      "description": "...",
+      "required_params": [...],
+      "sample_payload": {{}}
     }},
-    "common_errors": [
-        "Common auth error 1 and how to fix",
-        "Common auth error 2 and how to fix"
-    ],
-    "endpoints": [
-        {{
-            "path": "/api/endpoint",
-            "method": "GET|POST|PUT|DELETE",
-            "description": "What this endpoint does",
-            "parameters": {{"param": "description"}},
-            "auth_required": true/false
-        }}
-    ],
-    "integration_type": "rest_api|webhook|database|file_system",
-    "confidence": 0.9,
-    "rate_limits": "API rate limiting information if known",
-    "data_format": "json|xml|csv|custom",
-    "webhook_support": true/false,
-    "real_time_updates": true/false
+    ...
+  ],
+  "confidence": 0.9
 }}
-
-RESEARCH REQUIREMENTS:
-- Find the ACTUAL authentication method for {service_name}
-- Provide REAL step-by-step instructions for THIS specific service
-- Include the EXACT URL where users get credentials
-- Specify the REAL credential format for this service
-- Include a simple test endpoint to verify auth works
-- Be accurate about required permissions and scopes
-- Research actual API endpoints and their purposes
-- Determine if the service supports webhooks or real-time updates
-
-If you don't know {service_name}, return:
-{{
-    "success": false,
-    "error": "Unknown service: {service_name}",
-    "suggestion": "Please provide more details or check the official documentation",
-    "confidence": 0.0
-}}
-
-Research the actual service and be precise. Focus on providing actionable, accurate information.
+If there are multiple relevant endpoints for '{service_name}', list them all. Be concise and accurate. If you cannot find endpoints for '{service_name}', ask a clarifying question instead of guessing or suggesting another service.
 """
 
     async def validate_universal_credentials(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -812,11 +923,12 @@ async def research_for_tool(
     service_name: str,
     description: str,
     endpoint_hint: Optional[str] = None,
-    user_keys: Optional[Dict[str, str]] = None
+    user_keys: Optional[Dict[str, str]] = None,
+    selected_llm: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
     """
     Research API for tool creation with enhanced AI analysis
-    Enhanced with user API keys support
+    Enhanced with user API keys support and selected LLM
     """
     # Extract user ID from user_keys or use anonymous
     user_id = "anonymous"
@@ -846,20 +958,23 @@ async def research_for_tool(
         description=description,
         purpose="data_input",
         endpoint_hint=endpoint_hint,
-        user_id=user_id
+        user_id=user_id,
+        selected_llm=selected_llm
     )
 
 async def research_for_output(
     service_name: str,
     description: str,
     endpoint_hint: Optional[str] = None,
-    user_id: str = "anonymous"
+    user_id: str = "anonymous",
+    selected_llm: Optional[Dict[str, str]] = None
 ) -> Dict[str, Any]:
-    """Research API for Output nodes with BYOK integration"""
+    """Research API for Output nodes with BYOK integration and selected LLM support"""
     return await shared_api_research.research_api(
         service_name=service_name,
         description=description,
         purpose="data_output",
         endpoint_hint=endpoint_hint,
-        user_id=user_id
+        user_id=user_id,
+        selected_llm=selected_llm
     )

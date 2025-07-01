@@ -29,6 +29,8 @@ chromadb
 langchain-community
 litellm==1.68.0 
 instructor>=1.3.3
+llama-index-vector-stores-faiss 
+llama-index-readers-web
 
 # Vector DB
 faiss-cpu

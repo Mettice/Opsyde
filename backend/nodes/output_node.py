@@ -7,6 +7,9 @@ import json
 import re
 import os
 import aiohttp
+from nodes.base_node import BaseNode, NodeConfig
+from pydantic import Field, BaseModel
+from models.schemas import NodeSchema, SchemaField, SchemaType
 
 # Import the new rich output schema
 try:
@@ -28,11 +31,75 @@ from core.workflow_data_manager import get_workflow_context
 # Import the universal data transformer for output formatting
 from core.data_transformer import data_transformer
 
+from core.smart_mapper import SmartMapper
+
 logger = get_logger(__name__)
 
-class OutputNode:
-    """Enhanced output node with AI-powered integrations"""
+class OutputNodeConfig(NodeConfig):
+    """Configuration for Output nodes"""
+    label: str
+    description: str
+    outputType: str = Field(default="webhook", description="Type of output (webhook, email, etc.)")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Output configuration")
     
+    # Enhanced input schema for outputs
+    input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'input': SchemaField(
+                type=SchemaType.ANY,
+                description='Input to output',
+                optional=False
+            ),
+            'rich_outputs': SchemaField(
+                type=SchemaType.ARRAY,
+                description='Rich formatted outputs',
+                optional=True
+            ),
+            'template_context': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Context for template variables',
+                optional=True
+            )
+        },
+        required_fields=['input']
+    ))
+    output_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
+        fields={
+            'result': SchemaField(
+                type=SchemaType.ANY,
+                description='Output result',
+                optional=False
+            ),
+            'metadata': SchemaField(
+                type=SchemaType.OBJECT,
+                description='Execution metadata',
+                optional=False,
+                properties={
+                    'node_type': SchemaField(type=SchemaType.STRING, description='Type of node'),
+                    'output_type': SchemaField(type=SchemaType.STRING, description='Type of output'),
+                    'service_used': SchemaField(type=SchemaType.STRING, description='Service used for output', optional=True),
+                    'recipient': SchemaField(type=SchemaType.STRING, description='Recipient of output', optional=True),
+                    'timestamp': SchemaField(type=SchemaType.STRING, description='Timestamp of output'),
+                    'success': SchemaField(type=SchemaType.BOOLEAN, description='Whether output was successful')
+                }
+            ),
+            'error': SchemaField(
+                type=SchemaType.STRING,
+                description='Error message',
+                optional=True
+            )
+        },
+        required_fields=['result', 'metadata']
+    ))
+
+class OutputNode(BaseNode):
+    """Enhanced Output Node with schema support"""
+    def get_config_model(self) -> type[BaseModel]:
+        return OutputNodeConfig
+
+    async def process(self, node, inputs, context):
+        return await super().process(node, inputs, context)
+
     def __init__(self):
         """Initialize the OutputNode with AI integration support"""
         self.logger = logging.getLogger(__name__)
@@ -201,7 +268,7 @@ class OutputNode:
                 except:
                     pass
                     
-            return NodeData.from_value(error_result)
+            return NodeData.from_error(str(e))
 
     async def _process_smart_email(
         self, 
@@ -1190,42 +1257,13 @@ class OutputNode:
 
 # Register the handler function
 async def process_output_node(
-    node_data: Dict[str, Any], 
-    inputs: Dict[str, NodeData], 
+    node_data: Dict[str, Any],
+    inputs: Dict[str, Any],
     context: Dict[str, Any] = None
 ) -> NodeData:
-    """
-    Process output node with enhanced template variable resolution and standardized data handling
-    """
-    try:
-        output_type = node_data.get('outputType', 'webhook')
-        logger.info(f"Processing output node with type: {output_type}")
-        
-        # Collect all available data for template variables
-        template_context = _build_template_context(inputs, context)
-        
-        if output_type == 'webhook':
-            return await _process_webhook_output(node_data, template_context)
-        elif output_type == 'file':
-            return await _process_file_output(node_data, template_context)
-        elif output_type == 'email':
-            return await _process_email_output(node_data, template_context)
-        elif output_type == 'database':
-            return await _process_database_output(node_data, template_context)
-        else:
-            return {
-                "status": "error",
-                "message": f"Unsupported output type: {output_type}",
-                "output_type": output_type
-            }
-            
-    except Exception as e:
-        logger.error(f"Error processing output node: {str(e)}")
-        return {
-            "status": "error",
-            "message": f"Output processing failed: {str(e)}",
-            "error": str(e)
-        }
+    """Enhanced output node processor with schema validation"""
+    output_node = OutputNode()
+    return await output_node.process(node_data, inputs, context or {})
 
 def _build_template_context(inputs: Dict[str, Any], context: Dict[str, Any] = None) -> Dict[str, Any]:
     """

@@ -42,7 +42,7 @@ class SmartMapper:
         
         try:
             # 1. Get expected inputs for this node type
-            expected_inputs = self._get_expected_inputs(node)
+            expected_inputs = self._get_expected_inputs(node, context)
             
             # 2. Map from context variables and previous outputs
             mapped_inputs = self._map_from_context(expected_inputs, context, previous_outputs)
@@ -65,49 +65,38 @@ class SmartMapper:
             # Fallback: return context variables as-is
             return context.get('variables', {})
     
-    def _get_expected_inputs(self, node: Dict[str, Any]) -> Dict[str, Any]:
-        """Get expected inputs for a node based on its type and schema"""
-        node_type = node.get('type', 'unknown')
+    def _get_expected_inputs(self, node: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Get expected inputs for a node, prioritizing schema-based definitions"""
         node_data = node.get('data', {})
+        node_type = node.get('type', 'unknown')
+        node_id = node.get('id', 'unknown')
         
-        # Check for explicit input schema first
-        if 'input_schema' in node_data:
-            return node_data['input_schema']
+        # 🔥 NEW: Use schema-based field definitions if available
+        if 'input_schema' in node_data and hasattr(node_data['input_schema'], 'fields'):
+            schema_fields = {}
+            input_schema = node_data['input_schema']
+            
+            for field_name, field_def in input_schema.fields.items():
+                schema_fields[field_name] = {
+                    'type': field_def.type.value if hasattr(field_def.type, 'value') else str(field_def.type),
+                    'description': field_def.description,
+                    'required': field_name in input_schema.required_fields,
+                    'default': field_def.default,
+                    'source': 'schema_definition'
+                }
+            
+            logger.info(f"🎯 Using schema-based inputs for {node_id}: {list(schema_fields.keys())}")
+            return schema_fields
         
-        # Default schemas based on node type
-        default_schemas = {
-            'agent': {
-                'query': {'type': 'string', 'description': 'Main query or task for the agent'},
-                'context': {'type': 'string', 'description': 'Background context and information'},
-                'user_input': {'type': 'string', 'description': 'Direct user input or message'}
-            },
-            'task': {
-                'task_input': {'type': 'string', 'description': 'Input data for the task'},
-                'agent_output': {'type': 'string', 'description': 'Output from associated agent'}
-            },
-            'tool': {
-                'input_data': {'type': 'any', 'description': 'Data to be processed by the tool'},
-                'parameters': {'type': 'object', 'description': 'Tool configuration parameters'}
-            },
-            'chat': {
-                'message': {'type': 'string', 'description': 'User message or input'},
-                'conversation_history': {'type': 'array', 'description': 'Previous conversation messages'}
-            },
-            'output': {
-                'data': {'type': 'any', 'description': 'Data to be output'},
-                'content': {'type': 'string', 'description': 'Content to be sent/saved'}
-            },
-            'logic': {
-                'input_value': {'type': 'any', 'description': 'Value to evaluate in logic condition'}
-            },
-            'delay': {
-                'trigger_data': {'type': 'any', 'description': 'Data that triggered the delay'}
-            }
-        }
-        
-        return default_schemas.get(node_type, {
-            'input': {'type': 'any', 'description': 'Generic input data'}
-        })
+        # 2. Use node-specific input definitions
+        if 'inputs' in node_data:
+            logger.info(f"🎯 Using node-specific inputs for {node_id}: {list(node_data['inputs'].keys())}")
+            return node_data['inputs']
+
+        # 3. Fallback: use context variables as inputs
+        logger.info(f"🎯 Using context variables as inputs for {node_id}: {list(context.get('variables', {}).keys())}")
+        return context.get('variables', {})
+
     
     def _map_from_context(
         self, 
@@ -115,47 +104,49 @@ class SmartMapper:
         context: Dict[str, Any],
         previous_outputs: Dict[str, Any] = None
     ) -> Dict[str, Any]:
-        """Map expected inputs from context variables"""
+        """Map inputs from execution context and previous outputs"""
         mapped_inputs = {}
         variables = context.get('variables', {})
         
-        # Include previous outputs in variables
+        # 🔥 NEW: Try schema-based matching first if previous outputs available
         if previous_outputs:
-            variables.update(previous_outputs)
+            for input_name, input_config in expected_inputs.items():
+                if input_name in mapped_inputs:
+                    continue  # Already mapped
+                    
+                # Call _schema_based_match for each input individually
+                best_match, confidence = self._schema_based_match(input_name, input_config, previous_outputs)
+                if best_match and confidence > 0.7:  # Only use high-confidence matches
+                    mapped_inputs[input_name] = {
+                        'value': best_match,
+                        'source': f"schema_match:{input_name}",
+                        'confidence': confidence
+                    }
         
+        # Continue with existing mapping logic for unmapped fields
         for input_name, input_config in expected_inputs.items():
-            mapped_value = None
-            source = None
-            confidence = 0.0
+            if input_name in mapped_inputs:
+                continue  # Already mapped via schema
             
-            # 1. Direct exact match (highest priority)
-            if input_name in variables:
-                mapped_value = variables[input_name]
-                source = f"exact_match:{input_name}"
-                confidence = 1.0
+            # Try semantic matching first
+            best_match, confidence = self._semantic_match(input_name, variables)
+            if best_match and confidence > 0.6:
+                mapped_inputs[input_name] = {
+                    'value': variables[best_match],
+                    'source': f"semantic_match:{best_match}",
+                    'confidence': confidence
+                }
+                continue
             
-            # 2. Semantic matching if no exact match
-            if mapped_value is None:
-                match_var, match_score = self._semantic_match(input_name, variables)
-                if match_var and match_score > 0.5:  # Only accept good matches
-                    mapped_value = variables[match_var]
-                    source = f"semantic_match:{match_var}->{input_name}"
-                    confidence = match_score
-            
-            # 3. Type-based matching
-            if mapped_value is None:
-                type_match, type_source = self._type_match(input_config, variables)
-                if type_match is not None:
-                    mapped_value = type_match
-                    source = type_source
-                    confidence = 0.4
-            
-            # Store mapping with metadata
-            if mapped_value is not None:
-                mapped_inputs[input_name] = mapped_value
-                
-                # Log mapping decision
-                logger.info(f"   📥 {input_name}: {source} (confidence: {confidence:.2f})")
+            # Try type matching if semantic matching failed
+            type_match, type_source = self._type_match(input_config, variables)
+            if type_match is not None:
+                mapped_inputs[input_name] = {
+                    'value': type_match,
+                    'source': type_source,
+                    'confidence': 0.5
+                }
+                continue
         
         return mapped_inputs
     
@@ -438,15 +429,115 @@ class SmartMapper:
         logger.info(f"   📋 Expected: {list(expected_inputs.keys())}")
         logger.info(f"   ✅ Mapped: {list(mapped_inputs.keys())}")
         
-        # Store in context for frontend debugging
-        if 'debug_info' not in context:
-            context['debug_info'] = {}
+        # Store in context for frontend debugging (only if context supports item assignment)
+        try:
+            if hasattr(context, '__setitem__'):
+                if 'debug_info' not in context:
+                    context['debug_info'] = {}
+                    
+                context['debug_info'][node_id] = {
+                    'expected_inputs': expected_inputs,
+                    'mapped_inputs': mapped_inputs,
+                    'mapping_timestamp': datetime.now().isoformat()
+                }
+        except (TypeError, AttributeError):
+            # Context doesn't support item assignment (e.g., WorkflowExecutionContext)
+            logger.debug(f"Context doesn't support item assignment, skipping debug info storage for {node_id}")
+
+    def _schema_based_match(self, input_name: str, input_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> tuple:
+        """Match inputs based on schema compatibility"""
+        best_match = None
+        best_score = 0.0
+        
+        for var_name, var_value in previous_outputs.items():
+            # Skip if variable is None
+            if var_value is None:
+                continue
+                
+            # Calculate type compatibility score
+            type_score = self._calculate_type_compatibility(var_value, input_config)
             
-        context['debug_info'][node_id] = {
-            'expected_inputs': expected_inputs,
-            'mapped_inputs': mapped_inputs,
-            'mapping_timestamp': datetime.now().isoformat()
-        }
+            # Calculate semantic similarity score
+            semantic_score = self._calculate_semantic_similarity(input_name, var_name)
+            
+            # Combine scores with weights
+            total_score = (0.7 * type_score) + (0.3 * semantic_score)
+            
+            if total_score > best_score:
+                best_score = total_score
+                best_match = (var_name, var_value)
+        
+        return best_match, best_score
+
+    def _calculate_type_compatibility(self, value: Any, schema: Dict[str, Any]) -> float:
+        """Calculate type compatibility score between value and schema"""
+        try:
+            expected_type = schema.get('type', 'any')
+            
+            # Handle basic types
+            if expected_type == 'any':
+                return 1.0
+                
+            if expected_type == 'string' and isinstance(value, str):
+                return 1.0
+                
+            if expected_type == 'number' and isinstance(value, (int, float)):
+                return 1.0
+                
+            if expected_type == 'boolean' and isinstance(value, bool):
+                return 1.0
+                
+            if expected_type == 'array' and isinstance(value, (list, tuple)):
+                return 1.0
+                
+            if expected_type == 'object' and isinstance(value, dict):
+                return 1.0
+                
+            # Handle nested types
+            if expected_type.startswith('array<') and isinstance(value, (list, tuple)):
+                inner_type = expected_type[6:-1]
+                if value and all(self._calculate_type_compatibility(v, {'type': inner_type}) > 0.5 for v in value):
+                    return 0.8
+                    
+            if expected_type.startswith('object<') and isinstance(value, dict):
+                inner_type = expected_type[7:-1]
+                if value and all(self._calculate_type_compatibility(v, {'type': inner_type}) > 0.5 for v in value.values()):
+                    return 0.8
+                    
+            return 0.0
+            
+        except Exception as e:
+            logger.error(f"Error calculating type compatibility: {str(e)}")
+            return 0.0
+
+    def _calculate_semantic_similarity(self, name1: str, name2: str) -> float:
+        """Calculate semantic similarity between two names"""
+        try:
+            # Convert to lowercase and remove special characters
+            name1 = ''.join(c.lower() for c in name1 if c.isalnum())
+            name2 = ''.join(c.lower() for c in name2 if c.isalnum())
+            
+            # Exact match
+            if name1 == name2:
+                return 1.0
+                
+            # One contains the other
+            if name1 in name2 or name2 in name1:
+                return 0.8
+                
+            # Common words
+            words1 = set(name1.split('_'))
+            words2 = set(name2.split('_'))
+            common = words1.intersection(words2)
+            
+            if common:
+                return len(common) / max(len(words1), len(words2))
+                
+            return 0.0
+            
+        except Exception as e:
+            logger.error(f"Error calculating semantic similarity: {str(e)}")
+            return 0.0
 
 # Global instance
 smart_mapper = SmartMapper()
@@ -485,4 +576,4 @@ async def smart_map_inputs(node: Dict[str, Any], context: Dict[str, Any], previo
         raise ValueError("Context must be a dictionary")
     
     mapper = SmartMapper()
-    return await mapper.smart_map_inputs(node, context, previous_outputs) 
+    return await mapper.smart_map_inputs(node, context, previous_outputs)

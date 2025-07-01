@@ -1,6 +1,9 @@
 // components/execution-panel/UnifiedExecutionPanel.jsx
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useContext } from 'react';
 import PropTypes from 'prop-types';
+import { Play, Square, RotateCcw, Zap, Brain, Sparkles, Activity, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { LLMContext } from '../../contexts/LLMContext';
+import { apiClient } from '../../api/client';
 
 // Import existing hooks
 import { useLogProcessing } from './hooks/useLogProcessing';
@@ -12,6 +15,7 @@ import { useLogExport } from './hooks/useLogExport';
 import LogsTab from './components/LogsTab';
 import StatsTab from './components/StatsTab';
 import ExportTab from './components/ExportTab';
+import './UnifiedExecutionPanel.css';
 
 /**
  * Expandable Dock System - UnifiedExecutionPanel
@@ -30,11 +34,39 @@ export default function UnifiedExecutionPanel({
   nodes = [],
   executionId = null,
   workflowId = null,
-  onDataRefresh = null
+  onDataRefresh = null,
+  edges = [],
+  onExecutionUpdate
 }) {
+  // LLM Context
+  const { llmModeEnabled, smartMappingEnabled, status: llmStatus } = useContext(LLMContext);
+  
+  // Execution State
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [executionResults, setExecutionResults] = useState([]);
+  const [currentNodeId, setCurrentNodeId] = useState(null);
+  const [executionStats, setExecutionStats] = useState({
+    totalNodes: 0,
+    completedNodes: 0,
+    failedNodes: 0,
+    executionTime: 0,
+    llmProcessedNodes: 0,
+    smartMappingApplied: 0
+  });
+  
+  // UI State
+  const [activeTab, setActiveTab] = useState('logs');
+  const [streamingEnabled, setStreamingEnabled] = useState(true);
+  const [realTimeUpdates, setRealTimeUpdates] = useState(true);
+  
+  // Streaming State
+  const [streamingConnection, setStreamingConnection] = useState(null);
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const abortControllerRef = useRef(null);
+  const executionStartTime = useRef(null);
+  
   // Enhanced state management for expandable dock
   const [dockMode, setDockMode] = useState('compact'); // 'compact', 'expanded', 'fullscreen'
-  const [activeTab, setActiveTab] = useState('results');
   const [viewMode, setViewMode] = useState('structured');
   const [debugMode, setDebugMode] = useState(false);
   const [pollingActive, setPollingActive] = useState(false);
@@ -206,6 +238,383 @@ export default function UnifiedExecutionPanel({
 
   const dockConfig = getDockConfig();
 
+  // Enhanced execution with LLM integration
+  const executeWorkflow = async () => {
+    if (isExecuting) return;
+    
+    try {
+      setIsExecuting(true);
+      setExecutionResults([]);
+      setCurrentNodeId(null);
+      setConnectionStatus('connecting');
+      executionStartTime.current = Date.now();
+      
+      // Reset stats
+      setExecutionStats({
+        totalNodes: nodes.length,
+        completedNodes: 0,
+        failedNodes: 0,
+        executionTime: 0,
+        llmProcessedNodes: 0,
+        smartMappingApplied: 0
+      });
+      
+      // Add initial log entry
+      const initialLog = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        type: 'workflow_start',
+        message: `🚀 Starting ${streamingEnabled ? 'streaming' : 'enhanced'} workflow execution`,
+        level: 'info',
+        metadata: {
+          totalNodes: nodes.length,
+          llmModeEnabled,
+          smartMappingEnabled,
+          streamingEnabled,
+          realTimeUpdates
+        }
+      };
+      
+      setExecutionResults([initialLog]);
+      
+      if (streamingEnabled && realTimeUpdates) {
+        await executeWithStreaming();
+      } else {
+        await executeWithoutStreaming();
+      }
+      
+    } catch (error) {
+      console.error('❌ Workflow execution failed:', error);
+      
+      const errorLog = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        type: 'workflow_error',
+        message: `❌ Workflow execution failed: ${error.message}`,
+        level: 'error',
+        error: error.message
+      };
+      
+      setExecutionResults(prev => [...prev, errorLog]);
+      
+    } finally {
+      setIsExecuting(false);
+      setCurrentNodeId(null);
+      setConnectionStatus('disconnected');
+      
+      // Calculate final execution time
+      if (executionStartTime.current) {
+        const totalTime = (Date.now() - executionStartTime.current) / 1000;
+        setExecutionStats(prev => ({ ...prev, executionTime: totalTime }));
+      }
+    }
+  };
+  
+  // Streaming execution with real-time updates
+  const executeWithStreaming = async () => {
+    try {
+      setConnectionStatus('connected');
+      
+      // Create abort controller for cancellation
+      abortControllerRef.current = new AbortController();
+      
+      // Get user keys for BYOK
+      const userKeys = window.USER_API_KEYS || {};
+      
+      // Execute streaming workflow
+      const stream = await apiClient.executeWorkflowStream(
+        nodes,
+        edges,
+        { 
+          workflow_id: workflowId,
+          user_keys: userKeys,
+          execution_preferences: {
+            streaming_enabled: true,
+            real_time_updates: realTimeUpdates,
+            llm_mode_enabled: llmModeEnabled,
+            smart_mapping_enabled: smartMappingEnabled
+          }
+        },
+        (update) => handleStreamingUpdate(update)
+      );
+      
+      setStreamingConnection(stream);
+      
+      // Process streaming updates
+      const reader = stream.getReader();
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            console.log('✅ Streaming execution completed');
+            break;
+          }
+          
+          // Process the streaming update
+          handleStreamingUpdate(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('🛑 Streaming execution cancelled');
+        
+        const cancelLog = {
+          id: Date.now(),
+          timestamp: new Date().toISOString(),
+          type: 'workflow_cancelled',
+          message: '🛑 Workflow execution cancelled by user',
+          level: 'warning'
+        };
+        
+        setExecutionResults(prev => [...prev, cancelLog]);
+      } else {
+        throw error;
+      }
+    } finally {
+      setConnectionStatus('disconnected');
+      setStreamingConnection(null);
+    }
+  };
+  
+  // Non-streaming execution
+  const executeWithoutStreaming = async () => {
+    try {
+      const userKeys = window.USER_API_KEYS || {};
+      
+      const result = await apiClient.executeWorkflowEnhanced(
+        nodes,
+        edges,
+        {
+          workflow_id: workflowId,
+          user_keys: userKeys,
+          execution_preferences: {
+            llm_mode_enabled: llmModeEnabled,
+            smart_mapping_enabled: smartMappingEnabled
+          }
+        }
+      );
+      
+      // Process batch results
+      if (result.results) {
+        result.results.forEach(update => handleStreamingUpdate(update));
+      }
+      
+      // Add completion log
+      const completionLog = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        type: 'workflow_complete',
+        message: `✅ Enhanced workflow execution completed`,
+        level: 'success',
+        metadata: result.summary
+      };
+      
+      setExecutionResults(prev => [...prev, completionLog]);
+      
+    } catch (error) {
+      throw error;
+    }
+  };
+  
+  // Handle streaming updates
+  const handleStreamingUpdate = (update) => {
+    if (!update) return;
+    
+    console.log('📡 Streaming update:', update);
+    
+    // Update current node
+    if (update.node_id) {
+      setCurrentNodeId(update.node_id);
+    }
+    
+    // Update stats based on update type
+    setExecutionStats(prev => {
+      const newStats = { ...prev };
+      
+      switch (update.type) {
+        case 'node_complete':
+          newStats.completedNodes += 1;
+          if (update.metadata?.llm_processed) {
+            newStats.llmProcessedNodes += 1;
+          }
+          if (update.metadata?.smart_mapping_applied) {
+            newStats.smartMappingApplied += 1;
+          }
+          break;
+          
+        case 'node_error':
+          newStats.failedNodes += 1;
+          break;
+          
+        case 'workflow_complete':
+          if (executionStartTime.current) {
+            newStats.executionTime = (Date.now() - executionStartTime.current) / 1000;
+          }
+          break;
+      }
+      
+      return newStats;
+    });
+    
+    // Create log entry
+    const logEntry = {
+      id: Date.now() + Math.random(),
+      timestamp: update.timestamp || new Date().toISOString(),
+      type: update.type || 'info',
+      message: formatUpdateMessage(update),
+      level: getLogLevel(update),
+      nodeId: update.node_id,
+      nodeType: update.node_type,
+      metadata: update.metadata,
+      error: update.error,
+      result: update.result
+    };
+    
+    setExecutionResults(prev => [...prev, logEntry]);
+    
+    // Notify parent component
+    if (onExecutionUpdate) {
+      onExecutionUpdate(update);
+    }
+  };
+  
+  // Format update message for display
+  const formatUpdateMessage = (update) => {
+    const nodeInfo = update.node_id ? `[${update.node_id}]` : '';
+    const nodeType = update.node_type ? `(${update.node_type})` : '';
+    
+    switch (update.type) {
+      case 'workflow_start':
+        return `🚀 ${update.message || 'Starting workflow execution'}`;
+        
+      case 'node_start':
+        return `▶️ ${nodeInfo} ${nodeType} Starting node execution`;
+        
+      case 'llm_processing':
+        return `🧠 ${nodeInfo} ${nodeType} ${update.message || 'Processing with LLM'}`;
+        
+      case 'smart_mapping':
+        return `✨ ${nodeInfo} ${nodeType} ${update.message || 'Smart mapping applied'}`;
+        
+      case 'node_complete':
+        const execTime = update.metadata?.execution_time ? ` (${update.metadata.execution_time.toFixed(2)}s)` : '';
+        return `✅ ${nodeInfo} ${nodeType} Node completed successfully${execTime}`;
+        
+      case 'node_error':
+        return `❌ ${nodeInfo} ${nodeType} Node failed: ${update.error || 'Unknown error'}`;
+        
+      case 'workflow_complete':
+        return `🎉 ${update.message || 'Workflow execution completed successfully'}`;
+        
+      case 'workflow_error':
+        return `💥 ${update.message || 'Workflow execution failed'}`;
+        
+      default:
+        return update.message || `${update.type}: ${JSON.stringify(update)}`;
+    }
+  };
+  
+  // Get log level for styling
+  const getLogLevel = (update) => {
+    switch (update.type) {
+      case 'workflow_start':
+      case 'node_start':
+      case 'llm_processing':
+        return 'info';
+        
+      case 'smart_mapping':
+        return 'success';
+        
+      case 'node_complete':
+      case 'workflow_complete':
+        return 'success';
+        
+      case 'node_error':
+      case 'workflow_error':
+        return 'error';
+        
+      default:
+        return 'info';
+    }
+  };
+  
+  // Stop execution
+  const stopExecution = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    if (streamingConnection) {
+      try {
+        streamingConnection.cancel();
+      } catch (error) {
+        console.warn('Failed to cancel streaming connection:', error);
+      }
+    }
+    
+    setIsExecuting(false);
+    setCurrentNodeId(null);
+    setConnectionStatus('disconnected');
+  };
+  
+  // Clear results
+  const clearResults = () => {
+    setExecutionResults([]);
+    setExecutionStats({
+      totalNodes: nodes.length,
+      completedNodes: 0,
+      failedNodes: 0,
+      executionTime: 0,
+      llmProcessedNodes: 0,
+      smartMappingApplied: 0
+    });
+  };
+  
+  // Get execution status
+  const getExecutionStatus = () => {
+    if (isExecuting) {
+      return {
+        status: 'running',
+        icon: Activity,
+        color: 'text-blue-500',
+        message: `Executing... (${executionStats.completedNodes}/${executionStats.totalNodes})`
+      };
+    }
+    
+    if (executionStats.failedNodes > 0) {
+      return {
+        status: 'error',
+        icon: XCircle,
+        color: 'text-red-500',
+        message: `Failed (${executionStats.failedNodes} errors)`
+      };
+    }
+    
+    if (executionStats.completedNodes > 0) {
+      return {
+        status: 'success',
+        icon: CheckCircle,
+        color: 'text-green-500',
+        message: `Completed (${executionStats.completedNodes} nodes)`
+      };
+    }
+    
+    return {
+      status: 'idle',
+      icon: Clock,
+      color: 'text-gray-500',
+      message: 'Ready to execute'
+    };
+  };
+  
+  const executionStatus = getExecutionStatus();
+  const StatusIcon = executionStatus.icon;
+
   // Minimized state (unchanged)
   if (isMinimized) {
     return (
@@ -352,7 +761,7 @@ export default function UnifiedExecutionPanel({
             // Compact Mode - Focus on recent results
             <div className="flex-1 overflow-y-auto p-4" ref={scrollRef}>
               <div className="space-y-3">
-                {processedResults.length === 0 ? (
+                {executionResults.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-2xl flex items-center justify-center">
                       <span className="text-2xl opacity-50">📊</span>
@@ -361,7 +770,7 @@ export default function UnifiedExecutionPanel({
                     <p className="text-gray-500 text-sm">Run your workflow to see results</p>
                   </div>
                 ) : (
-                  processedResults.slice(0, 3).map((result) => (
+                  executionResults.slice(0, 3).map((result) => (
                     <div key={result.id} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -388,12 +797,12 @@ export default function UnifiedExecutionPanel({
                   ))
                 )}
                 
-                {processedResults.length > 3 && (
+                {executionResults.length > 3 && (
                   <button
                     onClick={() => setDockMode('expanded')}
                     className="w-full py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl font-medium transition-colors"
                   >
-                    View all {processedResults.length} results →
+                    View all {executionResults.length} results →
                   </button>
                 )}
               </div>
@@ -430,7 +839,7 @@ export default function UnifiedExecutionPanel({
               {/* Results Grid */}
               <div className="flex-1 overflow-y-auto p-6" ref={scrollRef}>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {processedResults.length === 0 ? (
+                  {executionResults.length === 0 ? (
                     <div className="col-span-full text-center py-12">
                       <div className="w-20 h-20 mx-auto mb-4 bg-gray-100 rounded-3xl flex items-center justify-center">
                         <span className="text-3xl opacity-50">📊</span>
@@ -439,7 +848,7 @@ export default function UnifiedExecutionPanel({
                       <p className="text-gray-500">Execute your workflow to see detailed results</p>
                     </div>
                   ) : (
-                    processedResults.map((result) => (
+                    executionResults.map((result) => (
                       <div key={result.id} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-lg transition-all duration-200">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
@@ -516,7 +925,7 @@ export default function UnifiedExecutionPanel({
                 {activeTab === 'results' && (
                   <div className="h-full overflow-y-auto p-6" ref={scrollRef}>
                     <div className="max-w-4xl mx-auto space-y-6">
-                      {processedResults.map((result) => (
+                      {executionResults.map((result) => (
                         <div key={result.id} className="bg-white rounded-2xl border border-gray-200 p-8 shadow-sm">
                           <div className="flex items-start justify-between mb-6">
                             <div className="flex items-center gap-4">
@@ -585,7 +994,7 @@ export default function UnifiedExecutionPanel({
                     </div>
                   </div>
                   
-                  {processedResults.length === 0 ? (
+                  {executionResults.length === 0 ? (
                     <div className="text-center py-12">
                       <div className="text-6xl mb-4">🧠</div>
                       <div className="text-lg font-medium mb-2">No Smart Mapping Data</div>
@@ -595,7 +1004,7 @@ export default function UnifiedExecutionPanel({
                     <div className="space-y-4">
                       <div className="grid grid-cols-3 gap-4 mb-6">
                         <div className="bg-blue-50 p-4 rounded-lg text-center">
-                          <div className="text-2xl font-bold text-blue-600">{processedResults.length}</div>
+                          <div className="text-2xl font-bold text-blue-600">{executionResults.length}</div>
                           <div className="text-sm text-blue-600">Total Nodes</div>
                         </div>
                         <div className="bg-green-50 p-4 rounded-lg text-center">
@@ -609,7 +1018,7 @@ export default function UnifiedExecutionPanel({
                       </div>
                       
                       <div className="space-y-3">
-                        {processedResults.map((result) => (
+                        {executionResults.map((result) => (
                           <div key={result.id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-3">
@@ -664,5 +1073,7 @@ UnifiedExecutionPanel.propTypes = {
   nodes: PropTypes.array,
   executionId: PropTypes.string,
   workflowId: PropTypes.string,
-  onDataRefresh: PropTypes.func
+  onDataRefresh: PropTypes.func,
+  edges: PropTypes.array,
+  onExecutionUpdate: PropTypes.func
 };

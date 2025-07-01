@@ -1,0 +1,11 @@
+{"timestamp": "2025-06-30 12:28:28,423", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:32:28,767", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:34:43,804", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:35:02,026", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:40:28,786", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:46:29,756", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:46:45,511", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:47:40,589", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:48:31,724", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'confidence', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:48:42,007", "level": "INFO", "name": "backend.core.simple_mapper", "message": "Simple mapping completed for task node: ['query', 'context', 'agent_output', 'parameters']"}
+{"timestamp": "2025-06-30 12:48:42,007", "level": "INFO", "name": "backend.core.node_processor", "message": "Simple mapping completed for task node: ['query', 'context', 'agent_output', 'parameters']"}

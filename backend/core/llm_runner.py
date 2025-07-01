@@ -23,6 +23,14 @@ class LLMRunner:
     def __init__(self):
         self.execution_cache = {}
         self.token_usage = {}
+        self.model_type_cache = {}
+        self.provider_patterns = {
+            'openai': ['gpt-', 'text-'],
+            'anthropic': ['claude-'],
+            'huggingface': ['meta-llama/', 'microsoft/', 'mistralai/', 'google/'],
+            'perplexity': ['sonar-', 'r1-'],
+            'gemini': ['gemini-']
+        }
         
     async def execute_llm_task(
         self,
@@ -212,6 +220,57 @@ Return JSON with:
 2. metadata: Any metadata about the formatting
 3. ready_to_send: boolean indicating if it's ready
 """
+            },
+            
+            "execution_order_optimization": {
+                "system": "You are a workflow optimization expert. Analyze node dependencies and optimize execution order for performance.",
+                "task": f"""
+{base_context}Optimize the execution order for this workflow:
+
+Workflow Analysis:
+{json.dumps(input_data, indent=2)}
+
+Consider:
+1. Node dependencies (must be respected)
+2. Resource requirements (CPU, memory, API calls)
+3. Parallelization opportunities
+4. Critical path optimization
+5. Resource contention minimization
+
+Return JSON with:
+1. optimized_order: Array of node IDs in optimal execution order
+2. reasoning: Detailed explanation of optimization decisions
+3. performance_gains: Expected improvements over base order
+4. parallel_groups: Groups of nodes that can run in parallel
+5. confidence: Confidence level (0-1) in the optimization
+6. critical_path: Nodes on the critical path
+"""
+            },
+            
+            "smart_input_mapping": {
+                "system": "You are an intelligent data mapper. Analyze available data and map it optimally to target node inputs.",
+                "task": f"""
+{base_context}Perform smart input mapping for this node:
+
+Mapping Request:
+{json.dumps(input_data, indent=2)}
+
+Analyze:
+1. Target node requirements and expected input schema
+2. Available data from previous nodes and workflow context
+3. Data type compatibility and transformation needs
+4. Semantic relationships between data fields
+5. Context preservation and data flow optimization
+
+Return JSON with:
+1. mapped_inputs: Object with optimally mapped input data
+2. reasoning: Explanation of mapping decisions
+3. confidence: Confidence level (0-1) in the mapping
+4. transformations_applied: List of data transformations performed
+5. data_quality_score: Assessment of input data quality (0-1)
+6. missing_data: Any required inputs that couldn't be mapped
+7. suggestions: Recommendations for improving data flow
+"""
             }
         }
         
@@ -370,6 +429,72 @@ Return JSON with:
             "completion_tokens": int(response_tokens),
             "total_tokens": int(prompt_tokens + response_tokens)
         }
+
+    def detect_model_type(self, model_name: str) -> str:
+        """Auto-detect if a model is chat or completion based"""
+        if model_name in self.model_type_cache:
+            return self.model_type_cache[model_name]
+
+        # Chat models typically have these patterns
+        chat_patterns = ['chat', 'instruct', 'turbo', 'claude', 'sonar']
+        is_chat = any(pattern in model_name.lower() for pattern in chat_patterns)
+        
+        model_type = 'chat' if is_chat else 'completion'
+        self.model_type_cache[model_name] = model_type
+        return model_type
+
+    def detect_provider(self, model_name: str) -> str:
+        """Detect the provider based on model name patterns"""
+        for provider, patterns in self.provider_patterns.items():
+            if any(model_name.startswith(pattern) for pattern in patterns):
+                return provider
+        return 'unknown'
+
+    async def route_to_provider(self, model_name: str, config: dict, inputs: dict) -> dict:
+        """Route the request to the appropriate provider"""
+        provider = self.detect_provider(model_name)
+        model_type = self.detect_model_type(model_name)
+
+        if provider == 'huggingface':
+            return await self._route_to_huggingface(model_name, config, inputs)
+        elif provider == 'openai':
+            return await self._route_to_openai(model_name, config, inputs)
+        else:
+            raise ValueError(f"Unsupported provider: {provider}")
+
+    async def _route_to_huggingface(self, model_name: str, config: dict, inputs: dict) -> dict:
+        """Route to HuggingFace pipeline"""
+        from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+        
+        model_type = self.detect_model_type(model_name)
+        if model_type == 'chat':
+            pipe = pipeline("text-generation", model=model_name)
+            response = pipe(inputs['prompt'], **config)
+            return {"text": response[0]['generated_text']}
+        else:
+            pipe = pipeline("text2text-generation", model=model_name)
+            response = pipe(inputs['prompt'], **config)
+            return {"text": response[0]['generated_text']}
+
+    async def _route_to_openai(self, model_name: str, config: dict, inputs: dict) -> dict:
+        """Route to OpenAI API"""
+        import openai
+        
+        model_type = self.detect_model_type(model_name)
+        if model_type == 'chat':
+            response = await openai.ChatCompletion.acreate(
+                model=model_name,
+                messages=[{"role": "user", "content": inputs['prompt']}],
+                **config
+            )
+            return {"text": response.choices[0].message.content}
+        else:
+            response = await openai.Completion.acreate(
+                model=model_name,
+                prompt=inputs['prompt'],
+                **config
+            )
+            return {"text": response.choices[0].text}
 
 # Global instance
 llm_runner = LLMRunner() 

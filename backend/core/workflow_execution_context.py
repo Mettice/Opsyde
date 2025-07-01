@@ -12,6 +12,7 @@ import asyncio
 import os
 from dataclasses import dataclass, field
 from collections.abc import Mapping
+from backend.framework_registry import framework_registry
 
 # UPDATED: Import the new Supabase service
 from services.user_settings_service import user_settings_service
@@ -28,6 +29,13 @@ class WorkflowExecutionContext(Mapping):
         self.user_api_keys: Dict[str, str] = {}
         self.context_key = f"user:{self.user_id}"
         self.execution_start_time = datetime.now()
+        self.node_errors = {}  # Track errors per node
+        self.execution_log = []  # Track execution flow
+        self.start_time = datetime.now()
+        self.end_time = None
+        self.status = "pending"
+        self.results = {}
+        self.metadata = {}
         
         # UPDATED: Use the new Supabase service
         self.user_settings_service = user_settings_service
@@ -109,191 +117,105 @@ class WorkflowExecutionContext(Mapping):
             # Continue with empty keys rather than failing
             self.user_api_keys = {}
 
-    def get_api_key_for_framework(self, framework: str, model: Optional[str] = None) -> Optional[str]:
-        """
-        Get the appropriate API key for a framework/model combination
-        Enhanced with better provider matching and fallback logic
-        """
+    def get_api_keys_for_user(self) -> Dict[str, str]:
+        """Get all API keys for the current user."""
         try:
-            # Direct framework match
-            if framework in self.user_api_keys:
-                logger.debug(f"🔑 Found direct API key for framework: {framework}")
-                return self.user_api_keys[framework]
-            
-            # Try to find provider by model if specified
-            if model:
-                provider = provider_registry.get_provider_for_model(model)
-                if provider and provider.id in self.user_api_keys:
-                    logger.debug(f"🔑 Found API key for model {model} via provider: {provider.id}")
-                    return self.user_api_keys[provider.id]
-            
-            # Framework-specific fallback logic
-            fallback_mapping = {
-                "openai": ["openai", "azure_openai"],
-                "anthropic": ["anthropic", "claude"],
-                "perplexity": ["perplexity", "pplx"],
-                "google": ["google", "gemini", "palm"],
-                "cohere": ["cohere"],
-                "huggingface": ["huggingface", "hf"],
-                "ollama": ["ollama", "local"],
-                "openrouter": ["openrouter"],
-                "groq": ["groq"],
-                "together": ["together"],
-                "replicate": ["replicate"],
-                "mistral": ["mistral"],
-                "deepseek": ["deepseek"],
-                "xai": ["xai", "grok"]
-            }
-            
-            framework_lower = framework.lower()
-            for primary, alternatives in fallback_mapping.items():
-                if framework_lower in alternatives:
-                    for alt in alternatives:
-                        if alt in self.user_api_keys:
-                            logger.debug(f"🔑 Found fallback API key for {framework} using {alt}")
-                            return self.user_api_keys[alt]
-            
-            # Log available keys for debugging (without exposing values)
-            available_keys = list(self.user_api_keys.keys())
-            logger.warning(f"⚠️ No API key found for framework: {framework}, model: {model}")
-            logger.debug(f"📋 Available API keys: {available_keys}")
-            
-            return None
-            
+            # Return all API keys stored in context
+            return self.user_api_keys if hasattr(self, 'user_api_keys') else {}
         except Exception as e:
-            logger.error(f"❌ Error getting API key for framework {framework}: {str(e)}")
+            logger.error(f"Error getting API keys: {str(e)}")
+            return {}
+
+    def get_api_key_for_framework(self, framework: str, model: Optional[str] = None) -> Optional[str]:
+        """Get API key for a specific framework/provider."""
+        try:
+            # Map framework to provider if needed
+            provider = self._map_framework_to_provider(framework, model)
+            
+            # Get from api_keys dict
+            if hasattr(self, 'user_api_keys') and provider in self.user_api_keys:
+                return self.user_api_keys.get(provider)
+                
             return None
+        except Exception as e:
+            logger.error(f"Error getting API key for {framework}: {str(e)}")
+            return None
+            
+    def _map_framework_to_provider(self, framework: str, model: Optional[str] = None) -> str:
+        """Map framework name to provider name."""
+        framework = framework.lower()
+        
+        # Direct mappings
+        if framework in ['openai', 'anthropic', 'cohere', 'perplexity', 'google']:
+            return framework
+            
+        # Framework-specific mappings
+        framework_provider_map = {
+            'crewai': 'openai',
+            'langchain': 'openai',
+            'autogen': 'openai',
+            'llamaindex': 'openai',
+            'huggingface': 'huggingface'
+        }
+        
+        # Check model name for provider hints
+        if model:
+            model = model.lower()
+            if 'gpt' in model or 'text-davinci' in model:
+                return 'openai'
+            elif 'claude' in model:
+                return 'anthropic'
+            elif 'command' in model:
+                return 'cohere'
+            elif 'palm' in model or 'gemini' in model:
+                return 'google'
+                
+        return framework_provider_map.get(framework, framework)
 
     def enhance_node_config(self, node_config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Enhance node configuration with user API keys
-        Enhanced with better error handling and logging
-        """
+        """Enhance node configuration with API keys and other context"""
         try:
+            # Create a copy to avoid modifying the original
             enhanced_config = node_config.copy()
             
-            # DEBUG: Log the original configuration
-            logger.info(f"🔧 ORIGINAL node config: {json.dumps(node_config, indent=2)}")
-            
-            # Extract framework and model information
+            # Get framework and provider info
             framework = enhanced_config.get("framework", "").lower()
-            model = enhanced_config.get("model", "")
+            llm_provider = enhanced_config.get("llmConfig", {}).get("provider", "").lower()
             
-            # ALSO check frameworkConfig for LLM provider
-            framework_config = enhanced_config.get("frameworkConfig", {})
-            llm_provider = framework_config.get("provider", "").lower()
-            llm_model = framework_config.get("model", "")
-            
-            # NEW: Check nested llm object for provider and model
-            llm_config = enhanced_config.get("llm", {})
-            if llm_config:
-                llm_provider = llm_provider or llm_config.get("provider", "").lower()
-                llm_model = llm_model or llm_config.get("model", "")
-            
-            # Determine which framework/provider needs API key
-            # For agent frameworks like CrewAI, use the LLM provider, not the framework
-            if framework in ["crewai", "langchain", "autogen", "llamaindex"] and llm_provider:
-                target_framework = llm_provider
-            else:
-                target_framework = llm_provider if llm_provider else framework
+            # Skip enhancement for structural nodes
+            if framework in ["trigger", "input", "output", "logic", "delay"]:
+                return enhanced_config
                 
-            target_model = llm_model if llm_model else model
+            # Get API keys from context
+            api_keys = {}
+            if self.user_id:
+                # Get user's API keys from your storage
+                user_keys = self.get_api_keys_for_user()
+                api_keys = {k: v for k, v in user_keys.items() if v}  # Only include non-empty keys
             
-            logger.info(f"🔧 FRAMEWORK DETECTION: framework='{framework}', llm_provider='{llm_provider}', target_framework='{target_framework}'")
+            # Validate framework-LLM combination with BYOK support
+            validation_context = {"api_keys": api_keys}
+            validation_result = framework_registry.validate_framework_llm_combination(
+                framework, 
+                llm_provider,
+                context=validation_context
+            )
             
-            if not target_framework:
-                logger.debug("🔧 No framework or LLM provider specified in node config")
+            if not validation_result["valid"]:
+                logger.warning(f"Framework validation failed: {validation_result['error']}")
                 return enhanced_config
             
-            logger.debug(f"🔧 Looking for API key for framework: {target_framework}, model: {target_model}")
-            
-            # Get the appropriate API key
-            api_key = self.get_api_key_for_framework(target_framework, target_model)
-            
-            logger.info(f"🔧 API KEY LOOKUP: target_framework='{target_framework}' -> api_key={'[FOUND]' if api_key else '[NOT FOUND]'}")
-            
-            if api_key:
-                # CRITICAL FIX: Ensure frameworkConfig exists and inject API key there
-                if "frameworkConfig" not in enhanced_config:
-                    enhanced_config["frameworkConfig"] = {}
-                
-                # Build the frameworkConfig with all necessary info
-                enhanced_config["frameworkConfig"].update({
-                    "provider": target_framework,
-                    "model": target_model,
-                    "api_key": api_key,
-                    "temperature": enhanced_config.get("temperature", 0.7),
-                    "max_tokens": enhanced_config.get("max_tokens", 4000)
-                })
-                
-                # ALSO inject API key into both top-level and frameworkConfig for compatibility
-                if target_framework in ["openai", "azure_openai"]:
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["openai_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["openai_api_key"] = api_key
-                elif target_framework == "anthropic":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["anthropic_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["anthropic_api_key"] = api_key
-                elif target_framework == "perplexity":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["perplexity_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["perplexity_api_key"] = api_key
-                elif target_framework in ["google", "gemini"]:
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["google_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["google_api_key"] = api_key
-                elif target_framework == "cohere":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["cohere_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["cohere_api_key"] = api_key
-                elif target_framework in ["huggingface", "hf"]:
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["huggingface_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["huggingface_api_key"] = api_key
-                elif target_framework == "openrouter":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["openrouter_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["openrouter_api_key"] = api_key
-                elif target_framework == "groq":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["groq_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["groq_api_key"] = api_key
-                elif target_framework == "together":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["together_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["together_api_key"] = api_key
-                elif target_framework == "replicate":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["replicate_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["replicate_api_key"] = api_key
-                elif target_framework == "mistral":
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["mistral_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["mistral_api_key"] = api_key
-                elif target_framework in ["xai", "grok"]:
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["xai_api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["xai_api_key"] = api_key
-                else:
-                    # Generic fallback
-                    enhanced_config["api_key"] = api_key
-                    enhanced_config["frameworkConfig"]["api_key"] = api_key
-                
-                logger.info(f"✅ Enhanced node config with {target_framework} API key")
-                logger.info(f"🔧 ENHANCED config frameworkConfig: {enhanced_config.get('frameworkConfig', {})}")
-            else:
-                logger.warning(f"⚠️ No API key available for framework: {target_framework}, model: {target_model}")
-                
-                # Check if this is a critical failure
-                provider = provider_registry.get_provider(target_framework)
-                if provider and provider.requires_api_key:
-                    logger.error(f"❌ Framework {target_framework} requires API key but none found")
+            # If we have an API key for the provider, add it to the config
+            if llm_provider and llm_provider in api_keys:
+                if "llmConfig" not in enhanced_config:
+                    enhanced_config["llmConfig"] = {}
+                enhanced_config["llmConfig"]["api_key"] = api_keys[llm_provider]
+                logger.info(f"✅ Enhanced node config with {llm_provider} API key")
             
             return enhanced_config
             
         except Exception as e:
-            logger.error(f"❌ Error enhancing node config: {str(e)}")
+            logger.error(f"Error enhancing node config: {str(e)}")
             return node_config
 
     def get_context_info(self) -> Dict[str, Any]:
@@ -321,17 +243,48 @@ class WorkflowExecutionContext(Mapping):
         }
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert context to dictionary format for compatibility with .get() calls"""
+        """Convert context to dictionary format with LLM context auto-injection"""
         return {
             "user_id": self.user_id,
             "workflow_id": self.workflow_id,
-            "execution_id": f"exec_{int(self.execution_start_time.timestamp())}",
-            "execution_timestamp": self.execution_start_time.isoformat(),
-            "user_keys": self.user_api_keys,
+            "user_api_keys": self.user_api_keys,
             "context_key": self.context_key,
-            "available_providers": list(self.user_api_keys.keys()),
-            "total_api_keys": len(self.user_api_keys)
+            "execution_start_time": self.execution_start_time.isoformat(),
+            # Auto-inject LLM context for all nodes
+            "llm_mode_enabled": True,  # Default to True for LLM-centric architecture
+            "smart_mapping_enabled": True,  # Default to True for smart mapping
+            "user_keys": self.user_api_keys,  # Alias for easier access
+            "execution_metadata": self.get_execution_metadata(),
+            "node_errors": self.node_errors,
+            "execution_log": self.execution_log,
+            "start_time": self.start_time.isoformat(),
+            "end_time": self.end_time.isoformat() if self.end_time else None,
+            "status": self.status,
+            "results": self.results,
+            "metadata": self.metadata
         }
+
+    def build_node_context(self, node: Dict[str, Any], parent_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Build context for a specific node with auto-injected LLM settings"""
+        base_context = self.to_dict()
+        
+        # Merge with parent context if provided
+        if parent_context:
+            base_context.update(parent_context)
+        
+        # Add node-specific context
+        node_context = {
+            **base_context,
+            "node_id": node.get("id"),
+            "node_type": node.get("type"),
+            "node_data": node.get("data", {}),
+            # Ensure LLM context is always available
+            "llm_mode_enabled": parent_context.get("llm_mode_enabled", True) if parent_context else True,
+            "smart_mapping_enabled": parent_context.get("smart_mapping_enabled", True) if parent_context else True,
+            "user_keys": self.user_api_keys,
+        }
+        
+        return node_context
 
     def get(self, key: str, default=None):
         """Dictionary-style get method for backward compatibility"""
@@ -349,6 +302,46 @@ class WorkflowExecutionContext(Mapping):
             
         except Exception as e:
             logger.error(f"❌ Error during context cleanup: {str(e)}")
+
+    def log_error(self, node_id: str, message: str, error_type: str = "execution_error", details: dict = None):
+        """Log an error for a specific node with metadata"""
+        if node_id not in self.node_errors:
+            self.node_errors[node_id] = []
+            
+        error_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "message": message,
+            "type": error_type,
+            "details": details or {}
+        }
+        
+        self.node_errors[node_id].append(error_entry)
+        self.execution_log.append({
+            "type": "error",
+            "node_id": node_id,
+            "data": error_entry
+        })
+        
+        # Update node status in results if it exists
+        if node_id in self.results:
+            self.results[node_id]["status"] = "error"
+            self.results[node_id]["error"] = error_entry
+
+    def get_node_errors(self, node_id: str) -> List[dict]:
+        """Get all errors for a specific node"""
+        return self.node_errors.get(node_id, [])
+
+    def has_node_errors(self, node_id: str) -> bool:
+        """Check if a node has any errors"""
+        return node_id in self.node_errors and len(self.node_errors[node_id]) > 0
+
+    def get_error_summary(self) -> dict:
+        """Get a summary of all errors in the workflow"""
+        return {
+            "total_errors": sum(len(errors) for errors in self.node_errors.values()),
+            "nodes_with_errors": list(self.node_errors.keys()),
+            "error_details": self.node_errors
+        }
 
 # Global context factory function
 async def create_execution_context(user_id: Optional[str] = None, workflow_id: Optional[str] = None) -> WorkflowExecutionContext:

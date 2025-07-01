@@ -5,6 +5,7 @@ import aiohttp
 import os
 from typing import Dict, Any, List, Optional, Union
 from datetime import datetime
+from models.schemas import NodeSchema, SchemaType, SchemaField
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,52 @@ LLAMAINDEX_FEATURES = {
     "memory": True,
     "multi_modal": True
 }
+
+# LlamaIndex input/output schema definitions
+LLAMAINDEX_INPUT_SCHEMA = NodeSchema(
+    fields={
+        'documentContent': SchemaField(
+            type=SchemaType.STRING,
+            description='Document content as text or base64 (for file uploads)'
+        ),
+        'query': SchemaField(
+            type=SchemaType.STRING,
+            description='Query to run against the index',
+            optional=True
+        ),
+        'context': SchemaField(
+            type=SchemaType.OBJECT,
+            description='Additional context for the query',
+            optional=True
+        ),
+        'documentsSource': SchemaField(
+            type=SchemaType.STRING,
+            description='Source of the document (text, file, url, etc.)',
+            optional=True
+        )
+    },
+    required_fields=['documentContent']
+)
+
+LLAMAINDEX_OUTPUT_SCHEMA = NodeSchema(
+    fields={
+        'output': SchemaField(
+            type=SchemaType.STRING,
+            description='LlamaIndex output/result'
+        ),
+        'metadata': SchemaField(
+            type=SchemaType.OBJECT,
+            description='Execution metadata',
+            optional=True
+        ),
+        'error': SchemaField(
+            type=SchemaType.STRING,
+            description='Error message',
+            optional=True
+        )
+    },
+    required_fields=['output']
+)
 
 class EnhancedLlamaIndexRunner:
     """Enhanced LlamaIndex runner with modern features matching LangChain quality"""
@@ -531,6 +578,10 @@ def get_llamaindex_capabilities() -> Dict[str, Any]:
             "pdf_reader": "pip install llama-index-readers-file"
         }
     }
+
+# Attach schemas to runner for validation and documentation
+EnhancedLlamaIndexRunner.input_schema = LLAMAINDEX_INPUT_SCHEMA
+EnhancedLlamaIndexRunner.output_schema = LLAMAINDEX_OUTPUT_SCHEMA
 
 # Export main functions
 __all__ = [

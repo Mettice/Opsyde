@@ -2,6 +2,8 @@ import logging
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import asyncio
+from backend.frameworks.base_runner import BaseFrameworkRunner
+from backend.frameworks.langchain_runner import run_langchain_tool
 
 logger = logging.getLogger(__name__)
 
@@ -9,39 +11,51 @@ logger = logging.getLogger(__name__)
 FRAMEWORK_METADATA = {
     "crewai": {
         "name": "CrewAI",
+        "version": "1.0",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": True,
         "supports_multi_agent": True,
-        "required_fields": ["systemMessage", "agentType"],
-        "optional_fields": ["tools", "memory", "maxIterations"]
+        "required_fields": ["role", "goal"],
+        "optional_fields": ["backstory", "allow_delegation", "tools", "memory", "max_iterations"],
+        "supported_llm_providers": ["openai", "anthropic", "perplexity", "google", "mistral", "cohere", "openrouter", "huggingface"],
+        "description": "Multi-agent framework for complex task orchestration"
     },
     "langchain": {
         "name": "LangChain",
+        "version": "1.0",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": True,
         "supports_multi_agent": False,
-        "required_fields": ["chainType"],
-        "optional_fields": ["memory", "tools", "temperature", "maxTokens"]
+        "required_fields": ["chain_type"],
+        "optional_fields": ["memory", "tools", "temperature", "max_tokens"],
+        "supported_llm_providers": ["openai", "anthropic", "perplexity", "google", "huggingface", "openrouter", "cohere", "mistral"],
+        "description": "Framework for building LLM-powered applications"
     },
     "autogen": {
         "name": "AutoGen",
+        "version": "1.0",
         "requires_llm": True,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": True,
-        "required_fields": ["agentType"],
-        "optional_fields": ["tools", "maxMessages", "temperature", "maxTokens"]
+        "required_fields": ["agent_type"],
+        "optional_fields": ["tools", "max_messages", "temperature", "max_tokens"],
+        "supported_llm_providers": ["openai", "azure", "openrouter", "perplexity", "anthropic", "google"],
+        "description": "Conversational AI framework for multi-agent systems"
     },
     "llamaindex": {
         "name": "LlamaIndex",
+        "version": "1.0",
         "requires_llm": True,
         "supports_tools": False,
         "supports_memory": True,
         "supports_multi_agent": False,
-        "required_fields": ["indexType", "documentsSource"],
-        "optional_fields": ["queryMode", "temperature", "maxTokens", "chunkSize"]
+        "required_fields": ["index_type", "chunk_size"],
+        "optional_fields": ["query_mode", "temperature", "max_tokens", "chunk_overlap"],
+        "supported_llm_providers": ["openai", "anthropic", "huggingface", "perplexity", "cohere"],
+        "description": "Data framework for LLM applications"
     },
     "openai": {
         "name": "OpenAI",
@@ -81,12 +95,15 @@ FRAMEWORK_METADATA = {
     },
     "huggingface": {
         "name": "Hugging Face",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "required_fields": ["model", "task"],
-        "optional_fields": ["temperature", "maxTokens", "use_cache"]
+        "required_fields": ["task_type", "model_name"],
+        "optional_fields": ["temperature", "max_tokens", "use_cache"],
+        "supported_llm_providers": ["huggingface", "openai", "anthropic", "perplexity"],
+        "description": "Open-source ML model framework"
     },
     "universal_api": {
         "name": "Universal API",
@@ -100,26 +117,31 @@ FRAMEWORK_METADATA = {
     },
     "api": {
         "name": "Generic API",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["endpoint"],
         "optional_fields": ["method", "headers", "auth_token", "api_key"],
+        "supported_llm_providers": [],
         "description": "Generic API tool for REST calls"
     },
     "webhook": {
         "name": "Webhook",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["url"],
         "optional_fields": ["method", "headers", "auth_token"],
+        "supported_llm_providers": [],
         "description": "HTTP webhook calls and notifications"
     },
     "communication": {
         "name": "Communication",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -127,10 +149,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "channel_id", "user_id", "platform"],
         "supported_platforms": ["slack", "discord", "teams"],
+        "supported_llm_providers": [],
         "description": "Communication platforms integration"
     },
     "productivity": {
         "name": "Productivity",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -138,10 +162,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "workspace_id", "database_id", "platform"],
         "supported_platforms": ["notion", "airtable", "googlesheets"],
+        "supported_llm_providers": [],
         "description": "Productivity and workspace tools"
     },
     "developer": {
         "name": "Developer Tools",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -149,10 +175,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "repo_name", "org_name", "platform"],
         "supported_platforms": ["github", "gitlab", "webhook"],
+        "supported_llm_providers": [],
         "description": "Developer tools and version control"
     },
     "marketing": {
         "name": "Marketing",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -160,10 +188,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "list_id", "campaign_id", "platform"],
         "supported_platforms": ["mailchimp", "sendgrid"],
+        "supported_llm_providers": [],
         "description": "Marketing automation and email campaigns"
     },
     "crm": {
         "name": "CRM",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -171,10 +201,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "contact_id", "deal_id", "platform"],
         "supported_platforms": ["hubspot", "salesforce"],
+        "supported_llm_providers": [],
         "description": "Customer relationship management"
     },
     "social_media": {
         "name": "Social Media",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -182,10 +214,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "page_id", "user_id", "platform"],
         "supported_platforms": ["linkedin", "facebook", "whatsapp", "telegram"],
+        "supported_llm_providers": [],
         "description": "Social media platforms integration"
     },
     "ecommerce": {
         "name": "E-commerce",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -193,10 +227,12 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "shop_name", "product_id", "platform"],
         "supported_platforms": ["shopify", "stripe"],
+        "supported_llm_providers": [],
         "description": "Online store and payment processing"
     },
     "storage": {
         "name": "Storage",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": True,
         "supports_memory": False,
@@ -204,128 +240,165 @@ FRAMEWORK_METADATA = {
         "required_fields": ["api_service_name"],
         "optional_fields": ["auth_token", "folder_id", "file_path", "platform"],
         "supported_platforms": ["google_drive", "dropbox"],
+        "supported_llm_providers": [],
         "description": "Cloud storage and file management"
     },
     "task": {
         "name": "Task",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["description"],
-        "optional_fields": ["expectedOutput", "agentId"],
+        "optional_fields": ["expected_output", "agent_id"],
+        "supported_llm_providers": [],
         "description": "Task execution node"
     },
     "logic": {
         "name": "Logic",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["condition"],
         "optional_fields": [],
+        "supported_llm_providers": [],
         "description": "Logic gate and conditional routing"
     },
     "trigger": {
         "name": "Trigger",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "required_fields": ["triggerType"],
-        "optional_fields": ["scheduleType", "runAt", "interval"],
+        "required_fields": ["trigger_type"],
+        "optional_fields": ["schedule_type", "run_at", "interval"],
+        "supported_llm_providers": [],
         "description": "Workflow trigger and scheduling"
     },
     "input": {
         "name": "Input",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": [],
-        "optional_fields": ["defaultValue", "inputType"],
+        "optional_fields": ["default_value", "input_type"],
+        "supported_llm_providers": [],
         "description": "Input data collection"
     },
     "output": {
         "name": "Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
-        "required_fields": ["outputType"],
+        "required_fields": ["output_type"],
         "optional_fields": ["destination", "template"],
+        "supported_llm_providers": [],
         "description": "Output data routing"
     },
     "output_webhook": {
         "name": "Webhook Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["webhook_url"],
         "optional_fields": ["method", "headers"],
+        "supported_llm_providers": [],
         "description": "Webhook output destination"
     },
     "output_email": {
         "name": "Email Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["to", "subject"],
         "optional_fields": ["cc", "bcc", "template"],
+        "supported_llm_providers": [],
         "description": "Email output destination"
     },
     "output_file": {
         "name": "File Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["file_path"],
         "optional_fields": ["format", "encoding"],
+        "supported_llm_providers": [],
         "description": "File output destination"
     },
     "output_database": {
         "name": "Database Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["connection_string", "table"],
         "optional_fields": ["schema", "batch_size"],
+        "supported_llm_providers": [],
         "description": "Database output destination"
     },
     "output_cms": {
         "name": "CMS Output",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["cms_type"],
         "optional_fields": ["api_key", "content_type"],
+        "supported_llm_providers": [],
         "description": "Content management system output"
     },
     "delay": {
         "name": "Delay",
+        "version": "1.0",
         "requires_llm": False,
         "supports_tools": False,
         "supports_memory": False,
         "supports_multi_agent": False,
         "required_fields": ["duration"],
         "optional_fields": ["unit"],
+        "supported_llm_providers": [],
         "description": "Workflow delay and timing"
     },
     "chat": {
         "name": "Chat",
+        "version": "1.0",
         "requires_llm": True,
         "supports_tools": False,
         "supports_memory": True,
         "supports_multi_agent": False,
         "required_fields": ["prompt"],
         "optional_fields": ["model", "temperature", "max_tokens"],
+        "supported_llm_providers": ["openai", "anthropic", "perplexity", "openrouter", "huggingface"],
         "description": "Chat and conversational AI"
-    }
+    },
+    "gemini": {
+        "name": "Google Gemini",
+        "version": "1.0",
+        "requires_llm": True,
+        "supports_tools": True,
+        "supports_memory": False,
+        "supports_multi_agent": False,
+        "required_fields": ["model"],
+        "optional_fields": ["temperature", "maxTokens", "systemMessage"],
+        "supported_llm_providers": ["gemini"],
+        "description": "Google's Gemini AI framework"
+    },
 }
 
 # LLM provider metadata (separate from frameworks)
@@ -436,208 +509,167 @@ def get_available_llm_providers() -> List[str]:
     """Get list of available LLM providers"""
     return list(LLM_METADATA.keys())
 
-def validate_framework_llm_combination(framework: str, llm_provider: str) -> Dict[str, Any]:
-    """Validate if framework supports the LLM provider"""
-    framework_meta = get_framework_requirements(framework)
-    
-    # If framework is not found, check if it's actually an LLM provider being used as a framework
-    if not framework_meta:
-        llm_meta = get_llm_requirements(framework)
-        if llm_meta:
-            # It's an LLM provider being used directly as a framework (like OpenRouter)
-            return {"valid": True, "note": f"{framework} is being used as both framework and LLM provider"}
-        else:
-            return {"valid": False, "error": f"Unknown framework: {framework}"}
-    
-    # Check if framework requires LLM
-    if framework_meta.get("requires_llm", False):
-        if not llm_provider:
-            return {"valid": False, "error": f"Framework {framework} requires an LLM provider"}
-        
-        supported_llms = framework_meta.get("supported_llms", [])
-        if supported_llms and llm_provider not in supported_llms:
-            return {
-                "valid": False, 
-                "error": f"Framework {framework} doesn't support {llm_provider}. Supported: {supported_llms}"
-            }
-    
-    return {"valid": True}
+def validate_framework_llm_combination(framework: str, llm_provider: str, context: Optional[Dict[str, Any]] = None) -> dict:
+    """Validate if the LLM provider is compatible with the framework. Always return a dict."""
+    try:
+        # Use the EnhancedFrameworkRegistry method if available
+        if hasattr(framework_registry, 'validate_framework_llm_combination'):
+            return framework_registry.validate_framework_llm_combination(framework, llm_provider, context)
+        # Fallback: always return a dict
+        return {"valid": True, "error": None}
+    except Exception as e:
+        logger.error(f"Error validating framework-LLM combination: {str(e)}")
+        return {"valid": False, "error": str(e)}
+
+def get_node_schema(node_type: str) -> Optional[Dict[str, Any]]:
+    """Get the schema for a node type"""
+    try:
+        # Get the node schema from the registry
+        node_schema = framework_registry.get_node_schema(node_type)
+        if not node_schema:
+            return None
+
+        # Update schema field name
+        if 'schema' in node_schema:
+            node_schema['node_schema'] = node_schema.pop('schema')
+
+        return node_schema
+    except Exception as e:
+        logger.error(f"Error getting node schema: {str(e)}")
+        return None
 
 class EnhancedFrameworkRegistry:
-    """Enhanced framework registry with LLM/Framework separation"""
+    """Enhanced framework registry with improved validation and metrics"""
     
     def __init__(self):
         self._frameworks = {}
         self._metrics = {}
-        self.register_all_frameworks()
+        self._framework_requirements = {}
+        self._llm_requirements = {}
+        self._framework_llm_compatibility = {}
+        self._initialize_requirements()
+        self._register_default_runners()
     
-    def register_all_frameworks(self):
-        """Register all available frameworks"""
-        logger.info("🔧 Starting framework registration...")
-        
+    def _register_default_runners(self):
+        """Register default framework runners"""
         try:
-            logger.info("🔧 Attempting to import CrewAI runner...")
-            from frameworks.crewai_runner import run_crewai_tool
-            self.register("crewai", run_crewai_tool)
-            logger.info("✅ CrewAI runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ CrewAI runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ CrewAI runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import LangChain runner...")
-            from frameworks.langchain_runner import run_langchain_tool
+            # Register LangChain runner (use the async function, not a class instance)
             self.register("langchain", run_langchain_tool)
             logger.info("✅ LangChain runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ LangChain runner not available: {e}")
         except Exception as e:
-            logger.error(f"❌ LangChain runner failed with unexpected error: {e}")
+            logger.error(f"❌ Failed to register LangChain runner: {e}")
+    
+    def _initialize_requirements(self):
+        """Initialize framework and LLM requirements"""
+        # Framework requirements
+        self._framework_requirements = {
+            "crewai": {
+                "required_fields": ["role", "goal"],
+                "optional_fields": ["backstory", "allow_delegation"],
+                "capabilities": ["agents", "tasks", "tools", "memory"]
+            },
+            "langchain": {
+                "required_fields": ["chain_type"],
+                "optional_fields": ["memory", "tools"],
+                "capabilities": ["chains", "agents", "memory", "tools"]
+            },
+            "autogen": {
+                "required_fields": ["agent_type"],
+                "optional_fields": ["system_message", "max_messages"],
+                "capabilities": ["agents", "conversations", "tools"]
+            },
+            "llamaindex": {
+                "required_fields": ["index_type"],
+                "optional_fields": ["chunk_size", "chunk_overlap"],
+                "capabilities": ["indexing", "querying", "retrieval"]
+            },
+            "huggingface": {
+                "required_fields": ["task_type", "model_name"],
+                "optional_fields": ["pipeline_config", "postprocess_config"],
+                "capabilities": ["inference", "text-generation", "summarization"]
+            },
+            "api": {
+                "required_fields": ["endpoint"],
+                "optional_fields": ["method", "headers", "body"],
+                "capabilities": ["http", "rest", "graphql"]
+            },
+            # Add structural nodes that don't need framework validation
+            "trigger": {"required_fields": [], "optional_fields": [], "capabilities": []},
+            "input": {"required_fields": [], "optional_fields": [], "capabilities": []},
+            "output": {"required_fields": [], "optional_fields": [], "capabilities": []},
+            "logic": {"required_fields": [], "optional_fields": [], "capabilities": []},
+            "delay": {"required_fields": [], "optional_fields": [], "capabilities": []}
+        }
         
-        try:
-            logger.info("🔧 Attempting to import AutoGen runner...")
-            from frameworks.autogen_runner import run_autogen_tool
-            self.register("autogen", run_autogen_tool)
-            logger.info("✅ AutoGen runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ AutoGen runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ AutoGen runner failed with unexpected error: {e}")
+        # LLM provider requirements
+        self._llm_requirements = {
+            "openai": {
+                "required_fields": ["api_key"],
+                "models": ["gpt-3.5-turbo", "gpt-4", "gpt-4-turbo"],
+                "capabilities": ["chat", "completion", "embedding"]
+            },
+            "anthropic": {
+                "required_fields": ["api_key"],
+                "models": ["claude-2", "claude-instant"],
+                "capabilities": ["chat", "completion"]
+            },
+            "perplexity": {
+                "required_fields": ["api_key"],
+                "models": ["sonar-small", "sonar-medium", "sonar-large"],
+                "capabilities": ["chat", "completion"]
+            },
+            "google": {
+                "required_fields": ["api_key"],
+                "models": ["gemini-pro", "gemini-ultra"],
+                "capabilities": ["chat", "completion"]
+            },
+            "mistral": {
+                "required_fields": ["api_key"],
+                "models": ["mistral-small", "mistral-medium", "mistral-large"],
+                "capabilities": ["chat", "completion"]
+            },
+            "cohere": {
+                "required_fields": ["api_key"],
+                "models": ["command", "command-light"],
+                "capabilities": ["chat", "completion", "embedding"]
+            },
+            "openrouter": {
+                "required_fields": ["api_key"],
+                "models": ["*"],  # Supports multiple models
+                "capabilities": ["chat", "completion"]
+            },
+            "huggingface": {
+                "required_fields": ["api_key"],
+                "models": ["*"],  # Supports multiple models
+                "capabilities": ["inference", "text-generation"]
+            }
+        }
         
-        try:
-            logger.info("🔧 Attempting to import LlamaIndex runner...")
-            from frameworks.llamaindex_runner import run_llamaindex_tool
-            self.register("llamaindex", run_llamaindex_tool)
-            logger.info("✅ LlamaIndex runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ LlamaIndex runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ LlamaIndex runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import HuggingFace runner...")
-            from frameworks.huggingface_runner import run_huggingface_tool
-            self.register("huggingface", run_huggingface_tool)
-            logger.info("✅ HuggingFace runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ HuggingFace runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ HuggingFace runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import OpenRouter runner...")
-            from frameworks.openrouter_runner import run_openrouter_tool
-            self.register("openrouter", run_openrouter_tool)
-            logger.info("✅ OpenRouter runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ OpenRouter runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ OpenRouter runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import Universal API runner...")
-            from frameworks.universal_api_runner import run_universal_api_tool
-            self.register("universal_api", run_universal_api_tool)
-            logger.info("✅ Universal API runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ Universal API runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ Universal API runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import Social Media runner...")
-            from frameworks.social_media_runner import run_social_media_tool
-            self.register("social_media", run_social_media_tool)
-            logger.info("✅ Social Media runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ Social Media runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ Social Media runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import Integration Manager...")
-            from frameworks.integration_manager import run_integration_tool
-            self.register("integration_manager", run_integration_tool)
-            logger.info("✅ Integration Manager registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ Integration Manager not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ Integration Manager failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to import Communication runner...")
-            from frameworks.integration_runners.communication_runner import run_communication_tool
-            self.register("communication", run_communication_tool)
-            logger.info("✅ Communication runner registered successfully")
-        except ImportError as e:
-            logger.warning(f"❌ Communication runner not available: {e}")
-        except Exception as e:
-            logger.error(f"❌ Communication runner failed with unexpected error: {e}")
-        
-        try:
-            logger.info("🔧 Attempting to register Generic API handler...")
-            # Register generic API handler that routes to appropriate tool runner
-            async def run_generic_api_tool(config, inputs, context=None):
-                """Generic API tool handler that routes to appropriate backend"""
-                try:
-                    # Convert NodeData objects to serializable format
-                    if hasattr(inputs, '__dict__'):
-                        # If inputs is a NodeData object, extract the actual data
-                        if hasattr(inputs, 'data'):
-                            inputs = inputs.data
-                        elif hasattr(inputs, 'content'):
-                            inputs = {'inputs': inputs.content}
-                        else:
-                            inputs = {'inputs': str(inputs)}
-                    elif not isinstance(inputs, dict):
-                        inputs = {'inputs': inputs}
-                    
-                    # Check if this is actually a HuggingFace tool misclassified as API
-                    if config.get('hfTask') or config.get('hfModel') or config.get('toolType') == 'huggingface':
-                        logger.info("🤗 Detected HuggingFace tool misclassified as API, routing to HuggingFace handler")
-                        from frameworks.huggingface_runner import run_huggingface_tool
-                        return await run_huggingface_tool(config, inputs, context)
-                    
-                    # Check if this is a Universal API tool
-                    elif config.get('toolType') == 'universal_api' or config.get('api_service_name'):
-                        logger.info("🌐 Routing to Universal API handler")
-                        from frameworks.universal_api_runner import run_universal_api_tool
-                        return await run_universal_api_tool(config, inputs)
-                    
-                    # Otherwise treat as generic API tool
-                    else:
-                        logger.info("🔗 Treating as generic API tool")
-                        return {
-                            "success": True,
-                            "output": f"Generic API tool executed with inputs: {inputs}",
-                            "framework": "api"
-                        }
-                        
-                except Exception as e:
-                    logger.error(f"❌ Generic API tool error: {str(e)}")
-                    return {
-                        "success": False,
-                        "error": f"Generic API tool failed: {str(e)}",
-                        "framework": "api"
-                    }
-            
-            self.register("api", run_generic_api_tool)
-            logger.info("✅ Generic API handler registered successfully")
-        except Exception as e:
-            logger.error(f"❌ Generic API handler registration failed: {e}")
-        
-        logger.info(f"🔧 Framework registration complete. Registered {len(self._frameworks)} frameworks: {list(self._frameworks.keys())}")
+        # Framework-LLM compatibility with BYOK support
+        self._framework_llm_compatibility = {
+            "crewai": ["openai", "anthropic", "perplexity", "google", "mistral", "cohere", "openrouter", "huggingface"],
+            "langchain": ["openai", "anthropic", "perplexity", "google", "huggingface", "openrouter", "cohere", "mistral"],
+            "autogen": ["openai", "azure", "openrouter", "perplexity", "anthropic", "google"],
+            "llamaindex": ["openai", "anthropic", "huggingface", "perplexity", "cohere"],
+            "huggingface": ["huggingface", "openai", "anthropic", "perplexity"],
+            "api": []  # API nodes don't need LLM validation
+        }
     
     def register(self, name: str, runner_func: Callable):
-        """Register a framework runner"""
+        """Register a framework runner function"""
+        if name in self._frameworks:
+            logger.warning(f"Overwriting existing runner for {name}")
+        
+        # Remove the required fields check since we handle validation in validate_configuration
         self._frameworks[name] = runner_func
         self._metrics[name] = {
-            "total_executions": 0,
-            "total_errors": 0,
-            "avg_execution_time": 0.0
+            "executions": 0,
+            "successes": 0,
+            "failures": 0,
+            "total_time": 0,
+            "avg_time": 0
         }
-        logger.info(f"Registered framework: {name}")
+        logger.info(f"✅ Registered runner for {name}")
     
     async def execute_framework(
         self, 
@@ -646,177 +678,266 @@ class EnhancedFrameworkRegistry:
         input_data: Any,
         timeout: Optional[int] = 300
     ) -> Dict[str, Any]:
-        """Execute framework with enhanced error handling and metrics"""
-        
-        # Validate framework exists
+        """Execute a framework with enhanced validation and error handling"""
         if framework not in self._frameworks:
-            available = ", ".join(self.get_available_frameworks())
-            return {
-                "success": False,
-                "error": f"Unsupported framework: {framework}. Available: {available}",
-                "framework_used": framework
-            }
-        
-        # Validate framework/LLM combination
-        llm_config = config.get('llm', {})
-        llm_provider = llm_config.get('provider')
-        
-        validation = validate_framework_llm_combination(framework, llm_provider)
-        if not validation["valid"]:
-            return {
-                "success": False,
-                "error": validation["error"],
-                "framework_used": framework
-            }
-        
-        runner_func = self._frameworks[framework]
-        start_time = datetime.now()
-        
-        try:
-            # Execute with timeout if it's an async function
-            if asyncio.iscoroutinefunction(runner_func):
-                if timeout:
-                    result = await asyncio.wait_for(
-                        runner_func(config=config, inputs=input_data),
-                        timeout=timeout
-                    )
-                else:
-                    result = await runner_func(config=config, inputs=input_data)
-            else:
-                # Sync function
-                result = runner_func(config=config, inputs=input_data)
+            raise ValueError(f"Framework {framework} not registered")
             
+        # Validate configuration
+        validation_result = self.validate_configuration(framework, config)
+        if not validation_result["valid"]:
+            raise ValueError(f"Invalid configuration for {framework}: {validation_result['errors']}")
+            
+        start_time = datetime.now()
+        try:
+            # Execute with timeout
+            async with asyncio.timeout(timeout):
+                result = await self._frameworks[framework](config, input_data)
+                
             # Update metrics
             execution_time = (datetime.now() - start_time).total_seconds()
-            self._update_metrics(framework, execution_time, success=True)
+            self._update_metrics(framework, execution_time, True)
             
-            # Ensure result is properly formatted
-            if not isinstance(result, dict):
-                result = {"result": result}
-            
-            result.update({
-                "framework_used": framework,
+            return {
+                "success": True,
+                "result": result,
                 "execution_time": execution_time,
-                "success": True
-            })
-            
-            return result
+                "framework": framework,
+                "timestamp": datetime.now().isoformat()
+            }
             
         except asyncio.TimeoutError:
-            self._update_metrics(framework, 0, success=False)
-            return {
-                "success": False,
-                "error": f"Framework {framework} execution timed out after {timeout}s",
-                "framework_used": framework
-            }
+            self._update_metrics(framework, timeout, False)
+            raise TimeoutError(f"Framework {framework} execution timed out after {timeout}s")
             
         except Exception as e:
             execution_time = (datetime.now() - start_time).total_seconds()
-            self._update_metrics(framework, execution_time, success=False)
-            
-            logger.error(f"Framework {framework} execution failed: {str(e)}")
-            
-            return {
-                "framework_used": framework,
-                "execution_time": execution_time,
-                "success": False,
-                "error": str(e),
-                "error_type": type(e).__name__
-            }
+            self._update_metrics(framework, execution_time, False)
+            raise RuntimeError(f"Framework {framework} execution failed: {str(e)}")
     
-    def get_available_frameworks(self):
-        """Get list of available frameworks with their status"""
-        availability = self._check_framework_availability()
+    def validate_configuration(self, framework: str, config: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate framework configuration"""
+        if framework not in self._framework_requirements:
+            return {
+                "valid": False,
+                "errors": [f"Unknown framework: {framework}"]
+            }
+            
+        requirements = self._framework_requirements[framework]
+        errors = []
         
-        frameworks = []
-        for name, runner_func in self._frameworks.items():
-            try:
-                is_available = availability.get(name, False)
+        # Check required fields
+        for field in requirements["required_fields"]:
+            if field not in config:
+                errors.append(f"Missing required field: {field}")
                 
-                frameworks.append({
-                    "name": name,
-                    "available": is_available,
-                    "runner": runner_func.__name__ if hasattr(runner_func, '__name__') else "Function",
-                    "status": "Available" if is_available else "Not installed"
-                })
-            except Exception as e:
-                frameworks.append({
-                    "name": name,
-                    "available": False,
-                    "runner": "Error",
-                    "status": f"Error: {str(e)}"
-                })
+        # Validate field values
+        if "api_key" in requirements["required_fields"] and "api_key" in config:
+            if not config["api_key"] or not isinstance(config["api_key"], str):
+                errors.append("Invalid API key format")
+                
+        if "model" in requirements["required_fields"] and "model" in config:
+            if not config["model"] or not isinstance(config["model"], str):
+                errors.append("Invalid model format")
+                
+        return {
+            "valid": len(errors) == 0,
+            "errors": errors
+        }
+    
+    def _has_api_key(self, provider: str, context: Optional[Dict[str, Any]] = None) -> bool:
+        """Check if an API key exists for the given provider"""
+        try:
+            if context and "api_keys" in context:
+                return provider in context["api_keys"]
+            return False
+        except Exception as e:
+            logger.warning(f"Error checking API key for {provider}: {str(e)}")
+            return False
+
+    def _normalize_provider_name(self, provider: str) -> str:
+        """Normalize provider name to handle variations and typos"""
+        if not provider:
+            return provider
+            
+        provider = provider.lower().strip()
         
-        return frameworks
+        # Enhanced provider mapping with common typos and variations
+        provider_map = {
+            # OpenAI variations
+            "openai": "openai",
+            "open-ai": "openai",
+            "gpt": "openai",
+            "gpt4": "openai",
+            "gpt-4": "openai",
+            
+            # Anthropic variations
+            "anthropic": "anthropic",
+            "claude": "anthropic",
+            "claude-v1": "anthropic",
+            "claude-v2": "anthropic",
+            "claude-3": "anthropic",
+            
+            # Perplexity variations (fix the typo)
+            "perplexity": "perplexity",
+            "perplexitty": "perplexity",  # Fix common typo
+            "perplexity-ai": "perplexity",
+            "perplexityai": "perplexity",
+            
+            # Google variations
+            "google": "google",
+            "gemini": "google",
+            "google-gemini": "google",
+            "googleai": "google",
+            
+            # HuggingFace variations
+            "huggingface": "huggingface",
+            "hugging-face": "huggingface",
+            "hf": "huggingface",
+            "huggingfaceai": "huggingface",
+            
+            # OpenRouter variations
+            "openrouter": "openrouter",
+            "open-router": "openrouter",
+            "openrouterai": "openrouter",
+            
+            # Mistral variations
+            "mistral": "mistral",
+            "mistralai": "mistral",
+            
+            # Cohere variations
+            "cohere": "cohere",
+            "cohereai": "cohere",
+            
+            # Azure variations
+            "azure": "azure",
+            "azure-openai": "azure",
+            "microsoft": "azure"
+        }
+        
+        return provider_map.get(provider, provider)
+
+    def validate_framework_llm_combination(self, framework: str, llm_provider: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Validate if a framework and LLM provider combination is supported"""
+        try:
+            # Skip validation for structural nodes
+            if framework in ["trigger", "input", "output", "logic", "delay", "task"]:
+                return {
+                    "valid": True,
+                    "framework": framework,
+                    "llm_provider": llm_provider,
+                    "details": {"is_structural_node": True}
+                }
+
+            # Handle empty values
+            if not framework or not llm_provider:
+                return {
+                    "valid": False,
+                    "error": "Framework and LLM provider must be specified",
+                    "details": {
+                        "framework": framework or "not specified",
+                        "llm_provider": llm_provider or "not specified"
+                    }
+                }
+
+            # Normalize provider name
+            llm_provider = self._normalize_provider_name(llm_provider)
+            
+            # Get framework requirements
+            framework_reqs = self.get_framework_requirements(framework)
+            if not framework_reqs:
+                return {
+                    "valid": False,
+                    "error": f"Framework '{framework}' not found in registry",
+                    "details": {"available_frameworks": self.get_available_frameworks()}
+                }
+
+            # Check if LLM provider is supported
+            supported_providers = framework_reqs.get("supported_llm_providers", [])
+            
+            # BYOK: If provider has an API key, allow it regardless of support list
+            if self._has_api_key(llm_provider, context):
+                logger.info(f"BYOK: Allowing {llm_provider} for {framework} (API key present)")
+                return {
+                    "valid": True,
+                    "framework": framework,
+                    "llm_provider": llm_provider,
+                    "details": {
+                        "supported_providers": supported_providers,
+                        "has_api_key": True,
+                        "is_byok": True
+                    }
+                }
+
+            # Check against supported providers list
+            if llm_provider not in supported_providers:
+                return {
+                    "valid": False,
+                    "error": f"LLM provider '{llm_provider}' not supported by framework '{framework}'",
+                    "details": {
+                        "supported_providers": supported_providers,
+                        "provider": llm_provider,
+                        "requires_key": True
+                    }
+                }
+
+            return {
+                "valid": True,
+                "framework": framework,
+                "llm_provider": llm_provider,
+                "details": {
+                    "supported_providers": supported_providers,
+                    "has_api_key": False,
+                    "is_byok": False
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Error validating framework-LLM combination: {str(e)}")
+            return {
+                "valid": False,
+                "error": str(e),
+                "details": {
+                    "framework": framework,
+                    "llm_provider": llm_provider,
+                    "exception": str(e)
+                }
+            }
     
     def get_framework_metrics(self, framework: str) -> Dict[str, Any]:
         """Get execution metrics for a framework"""
-        return self._metrics.get(framework, {})
+        if framework not in self._metrics:
+            return {
+                "executions": 0,
+                "successes": 0,
+                "failures": 0,
+                "total_time": 0,
+                "avg_time": 0
+            }
+        return self._metrics[framework]
     
     def _update_metrics(self, framework: str, execution_time: float, success: bool):
-        """Update execution metrics for a framework"""
+        """Update framework execution metrics"""
         metrics = self._metrics[framework]
-        metrics["total_executions"] += 1
+        metrics["executions"] += 1
+        metrics["total_time"] += execution_time
+        metrics["avg_time"] = metrics["total_time"] / metrics["executions"]
         
-        if not success:
-            metrics["total_errors"] += 1
-        
-        # Update average execution time
-        total_time = metrics["avg_execution_time"] * (metrics["total_executions"] - 1)
-        metrics["avg_execution_time"] = (total_time + execution_time) / metrics["total_executions"]
-
-    def _get_universal_api_runner(self):
-        """Get Universal API runner"""
-        try:
-            from frameworks.universal_api_runner import run_universal_api_tool
-            return run_universal_api_tool
-        except ImportError as e:
-            logger.warning(f"Universal API runner not available: {e}")
-            return None
-
-    def _check_framework_availability(self):
-        """Check which frameworks are available"""
-        availability = {}
-        
-        # Check each framework
-        for framework in self._frameworks.keys():
-            try:
-                if framework == "crewai":
-                    import crewai
-                    availability[framework] = True
-                elif framework == "langchain":
-                    import langchain
-                    availability[framework] = True
-                elif framework == "autogen":
-                    import autogen
-                    availability[framework] = True
-                elif framework == "llamaindex":
-                    import llama_index.core
-                    availability[framework] = True
-                elif framework == "huggingface":
-                    import transformers
-                    availability[framework] = True
-                elif framework == "openrouter":
-                    # OpenRouter is always available as it's built-in
-                    availability[framework] = True
-                elif framework == "universal_api":
-                    # Universal API is always available as it's built-in
-                    availability[framework] = True
-                elif framework == "api":
-                    # Generic API is always available as it's built-in
-                    availability[framework] = True
-                elif framework == "social_media":
-                    # Social Media is always available as it's built-in
-                    availability[framework] = True
-                else:
-                    availability[framework] = False
-            except ImportError:
-                availability[framework] = False
-            except Exception as e:
-                logger.warning(f"Error checking {framework} availability: {e}")
-                availability[framework] = False
-        
-        return availability
+        if success:
+            metrics["successes"] += 1
+        else:
+            metrics["failures"] += 1
+    
+    def get_available_frameworks(self) -> List[str]:
+        """Get list of available frameworks"""
+        return list(self._frameworks.keys())
+    
+    def get_framework_requirements(self, framework: str) -> Dict[str, Any]:
+        """Get requirements for a framework"""
+        return self._framework_requirements.get(framework, {})
+    
+    def get_llm_requirements(self, provider: str) -> Dict[str, Any]:
+        """Get requirements for an LLM provider"""
+        return self._llm_requirements.get(provider, {})
 
 # Global registry instance
 framework_registry = EnhancedFrameworkRegistry()

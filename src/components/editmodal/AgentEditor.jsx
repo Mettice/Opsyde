@@ -3,6 +3,12 @@ import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
 import HelpTooltip from '../HelpTooltip';
 import EnhancedFrameworkSelector from '../toolTemplates/EnhancedFrameworkSelector';
+import { ApiKeyNavigator } from '../shared/ApiKeyNavigator';
+import DynamicSchemaForm from './shared/DynamicSchemaForm';
+import { agentNodeSchema } from './shared/nodeSchemas';
+import FieldMapper from './shared/FieldMapper';
+import NodeOutputPreview from '../NodeOutputPreview';
+import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch, Chip, Slider, Checkbox, Radio, RadioGroup } from '@mui/material';
 
 // Framework and LLM constants
 const AVAILABLE_FRAMEWORKS = [
@@ -70,7 +76,10 @@ const FRAMEWORK_LLM_COMPATIBILITY = {
 const EnhancedAgentEditor = ({ 
   formData, 
   handleInputChange, 
-  handleFrameworkChange
+  handleFrameworkChange,
+  connectedNodes = [],
+  previousNodeOutputs = {},
+  nodeId
 }) => {
   
   // 🔑 BYOK State Management
@@ -108,6 +117,192 @@ const EnhancedAgentEditor = ({
   const [enhancedFramework, setEnhancedFramework] = useState('');
   const [enhancedProvider, setEnhancedProvider] = useState('');
   const [enhancedModel, setEnhancedModel] = useState('');
+
+  // LlamaIndex state
+  const [llamaIndexValidationStatus, setLlamaIndexValidationStatus] = React.useState(null);
+  const [llamaIndexValidationError, setLlamaIndexValidationError] = React.useState("");
+
+  // Controlled values for LlamaIndex
+  const provider = formData.frameworkConfig?.provider || formData.llm?.provider || 'openai';
+
+  // State for schema-driven core agent config
+  const [agentCoreConfig, setAgentCoreConfig] = useState({
+    role: formData.role || '',
+    goal: formData.goal || '',
+    backstory: formData.backstory || '',
+    llmModel: formData.llmModel || '',
+    llmProvider: formData.llmProvider || '',
+    temperature: formData.temperature || 0.7,
+    max_tokens: formData.max_tokens || 4000
+  });
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Field mapping state
+  const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
+
+  // UI state for collapsible sections
+  const [showLLMConfig, setShowLLMConfig] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Keep fieldMappings in sync with formData
+  useEffect(() => {
+    setFieldMappings(formData.field_mappings || {});
+  }, [formData.field_mappings]);
+
+  // Handler for field mapping changes
+  const handleFieldMappingChange = (newMappings) => {
+    setFieldMappings(newMappings);
+    handleInputChange({ target: { name: 'field_mappings', value: newMappings } });
+  };
+
+  // 🔄 Sync data between enhanced and traditional modes
+  useEffect(() => {
+    // Initialize enhanced mode state from form data
+    if (formData.framework) {
+      setEnhancedFramework(formData.framework);
+      setEnhancedProvider(formData.llm?.provider || formData.llmProvider || '');
+      setEnhancedModel(formData.llm?.model || formData.llmModel || '');
+    }
+  }, [formData.framework, formData.llm?.provider, formData.llm?.model, formData.llmProvider, formData.llmModel]);
+
+  // 🔄 Handle mode switching with data synchronization
+  const handleModeSwitch = (newMode) => {
+    setUseEnhancedMode(newMode);
+    
+    if (newMode) {
+      // Switching to enhanced mode - sync data to enhanced state
+      setEnhancedFramework(formData.framework || '');
+      setEnhancedProvider(formData.llm?.provider || formData.llmProvider || '');
+      setEnhancedModel(formData.llm?.model || formData.llmModel || '');
+    } else {
+      // Switching to traditional mode - sync data from enhanced state
+      if (enhancedFramework) {
+        handleFrameworkChange({ target: { name: 'framework', value: enhancedFramework } });
+      }
+      if (enhancedProvider) {
+        handleLocalInputChange({ target: { name: 'llmProvider', value: enhancedProvider } });
+      }
+      if (enhancedModel) {
+        handleLocalInputChange({ target: { name: 'llmModel', value: enhancedModel } });
+      }
+    }
+  };
+
+  // 🔄 Sync enhanced framework selector changes back to form data
+  useEffect(() => {
+    if (useEnhancedMode && enhancedFramework) {
+      // Update framework in form data
+      handleFrameworkChange({ target: { name: 'framework', value: enhancedFramework } });
+    }
+  }, [useEnhancedMode, enhancedFramework]);
+
+  useEffect(() => {
+    if (useEnhancedMode && enhancedProvider) {
+      // Update provider in form data
+      handleLocalInputChange({ target: { name: 'llmProvider', value: enhancedProvider } });
+    }
+  }, [useEnhancedMode, enhancedProvider]);
+
+  useEffect(() => {
+    if (useEnhancedMode && enhancedModel) {
+      // Update model in form data
+      handleLocalInputChange({ target: { name: 'llmModel', value: enhancedModel } });
+    }
+  }, [useEnhancedMode, enhancedModel]);
+
+  // Handler for schema form changes
+  const handleCoreConfigChange = (newConfig) => {
+    setAgentCoreConfig(newConfig);
+  };
+
+  // Handler for schema validation
+  const handleValidationError = (hasErrors) => {
+    setValidationErrors(hasErrors);
+  };
+
+  // On save, merge core config and framework config
+  const handleSave = () => {
+    if (validationErrors) return;
+    const mergedConfig = {
+      ...formData,
+      ...agentCoreConfig,
+      // Framework-specific config stays as-is
+    };
+    handleInputChange({ target: { name: 'frameworkConfig', value: mergedConfig.frameworkConfig } });
+    handleInputChange({ target: { name: 'llm', value: mergedConfig.llm } });
+    handleInputChange({ target: { name: 'framework', value: mergedConfig.framework } });
+    handleInputChange({ target: { name: 'llmProvider', value: mergedConfig.llmProvider } });
+    handleInputChange({ target: { name: 'llmModel', value: mergedConfig.llmModel } });
+    handleInputChange({ target: { name: 'temperature', value: mergedConfig.temperature } });
+    handleInputChange({ target: { name: 'max_tokens', value: mergedConfig.max_tokens } });
+  };
+
+  // Handler for backend validation
+  const handleLlamaIndexValidate = async () => {
+    setLlamaIndexValidationStatus('loading');
+    setLlamaIndexValidationError("");
+    try {
+      // Always use BYOK model for LlamaIndex config
+      const configToSend = {
+        ...formData.frameworkConfig,
+        model: formData.llm?.model || '',
+        provider: provider,
+      };
+      const res = await fetch('/api/tools/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          framework: 'llamaindex',
+          config: configToSend,
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLlamaIndexValidationStatus('success');
+        setLlamaIndexValidationError("");
+      } else {
+        setLlamaIndexValidationStatus('error');
+        setLlamaIndexValidationError(data.error || 'Validation failed.');
+      }
+    } catch (e) {
+      setLlamaIndexValidationStatus('error');
+      setLlamaIndexValidationError(e.message || 'Validation failed.');
+    }
+  };
+
+  // Handler for all LlamaIndex config field changes
+  const handleLlamaIndexInputChange = async (e) => {
+    const { name, value, type, checked, files } = e.target;
+    const key = name.startsWith('frameworkConfig.') ? name.replace('frameworkConfig.', '') : name;
+    let newConfig = { ...formData.frameworkConfig };
+
+    if (key === 'documentContent' && formData.frameworkConfig?.documentsSource === 'file' && files && files[0]) {
+      // Handle file upload: read as base64
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        newConfig.documentContent = event.target.result;
+        handleInputChange({
+          target: {
+            name: 'frameworkConfig',
+            value: newConfig,
+          }
+        });
+      };
+      reader.readAsDataURL(file);
+      return;
+    } else if (key === 'documentContent') {
+      newConfig.documentContent = value;
+    } else {
+      newConfig[key] = type === 'checkbox' ? checked : value;
+    }
+    handleInputChange({
+      target: {
+        name: 'frameworkConfig',
+        value: newConfig,
+      }
+    });
+  };
 
   // 🔑 Load API Keys from BYOK Manager
   useEffect(() => {
@@ -361,9 +556,17 @@ const EnhancedAgentEditor = ({
     if (apiKeyError) {
       return (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <div className="flex items-center">
-            <span className="text-red-600 mr-2">⚠️</span>
-            <span className="text-sm text-red-700">{apiKeyError}</span>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-red-700 mb-1">No LLM providers available</p>
+              <p className="text-xs text-red-600">Add API keys in the BYOK Manager to use LLM providers</p>
+            </div>
+            <ApiKeyNavigator 
+              variant="button"
+              className="bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded text-sm"
+            >
+              Add API Keys
+            </ApiKeyNavigator>
           </div>
         </div>
       );
@@ -379,13 +582,12 @@ const EnhancedAgentEditor = ({
               <span className="text-yellow-600 mr-2">🔑</span>
               <span className="text-sm text-yellow-700">No API keys configured</span>
             </div>
-            <button
-              type="button"
-              onClick={() => window.open('/api-keys', '_blank')}
+            <ApiKeyNavigator
+              openInNewTab={true}
               className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-800 px-2 py-1 rounded"
             >
               Add API Keys
-            </button>
+            </ApiKeyNavigator>
           </div>
         </div>
       );
@@ -400,13 +602,12 @@ const EnhancedAgentEditor = ({
               {validKeys.length} API key{validKeys.length > 1 ? 's' : ''} available: {validKeys.map(k => k.provider_name).join(', ')}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={() => window.open('/api-keys', '_blank')}
+          <ApiKeyNavigator
+            openInNewTab={true}
             className="text-xs bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded"
           >
             Manage Keys
-          </button>
+          </ApiKeyNavigator>
         </div>
       </div>
     );
@@ -427,7 +628,7 @@ const EnhancedAgentEditor = ({
             </span>
             <button
               type="button"
-              onClick={() => setUseEnhancedMode(!useEnhancedMode)}
+              onClick={() => handleModeSwitch(!useEnhancedMode)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                 useEnhancedMode ? 'bg-purple-600' : 'bg-gray-200'
               }`}
@@ -467,7 +668,7 @@ const EnhancedAgentEditor = ({
           />
         </div>
       ) : (
-        /* Traditional Framework Selection */
+        /* Traditional Framework Selection - SIMPLIFIED */
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-3">
             AI Framework *
@@ -1420,6 +1621,216 @@ const EnhancedAgentEditor = ({
     </div>
   );
 
+  const renderLlamaIndexFields = () => {
+    // --- Controlled values from formData ---
+    const indexTypes = llamaIndexCapabilities.index_types || [
+      'vector', 'list', 'tree', 'keyword', 'knowledge_graph'
+    ];
+    const docSources = llamaIndexCapabilities.document_sources || [
+      'text', 'url', 'file', 'database', 'api'
+    ];
+    const queryModes = llamaIndexCapabilities.query_modes || [
+      'default', 'embedding', 'hybrid', 'tree_select', 'summarize'
+    ];
+    const providers = llamaIndexCapabilities.supported_providers || [
+      'openai', 'anthropic', 'openrouter', 'huggingface', 'local'
+    ];
+
+    const indexType = formData.frameworkConfig?.indexType || 'vector';
+    const documentsSource = formData.frameworkConfig?.documentsSource || 'text';
+    const queryMode = formData.frameworkConfig?.queryMode || 'default';
+    const chunkSize = formData.frameworkConfig?.chunkSize || 512;
+    const chunkOverlap = formData.frameworkConfig?.chunkOverlap || 50;
+    const similarityTopK = formData.frameworkConfig?.similarityTopK || 5;
+    const streaming = formData.frameworkConfig?.streaming || false;
+    const documentContent = formData.frameworkConfig?.documentContent || '';
+
+    // --- Helper for advanced fields ---
+    const renderAdvancedFields = () => (
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Chunk Size</label>
+          <input
+            type="number"
+            name="frameworkConfig.chunkSize"
+            value={chunkSize}
+            min={64}
+            max={4096}
+            onChange={handleLlamaIndexInputChange}
+            className="w-full border rounded-md px-2 py-1 text-sm"
+          />
+          <div className="text-xs text-gray-400">How many tokens per chunk (default: 512)</div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Chunk Overlap</label>
+          <input
+            type="number"
+            name="frameworkConfig.chunkOverlap"
+            value={chunkOverlap}
+            min={0}
+            max={chunkSize}
+            onChange={handleLlamaIndexInputChange}
+            className="w-full border rounded-md px-2 py-1 text-sm"
+          />
+          <div className="text-xs text-gray-400">Overlap between chunks (default: 50)</div>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">Similarity Top K</label>
+          <input
+            type="number"
+            name="frameworkConfig.similarityTopK"
+            value={similarityTopK}
+            min={1}
+            max={100}
+            onChange={handleLlamaIndexInputChange}
+            className="w-full border rounded-md px-2 py-1 text-sm"
+          />
+          <div className="text-xs text-gray-400">How many results to return (default: 5)</div>
+        </div>
+        <div className="flex items-center mt-6">
+          <input
+            type="checkbox"
+            name="frameworkConfig.streaming"
+            checked={!!streaming}
+            onChange={handleLlamaIndexInputChange}
+            className="mr-2"
+          />
+          <span className="text-xs text-gray-700">Enable Streaming</span>
+        </div>
+      </div>
+    );
+
+    // --- Main UI ---
+    return (
+      <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+        <h4 className="text-sm font-medium text-blue-800 mb-4">🦙 LlamaIndex Configuration</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Index Type</label>
+            <select
+              name="frameworkConfig.indexType"
+              value={indexType}
+              onChange={handleLlamaIndexInputChange}
+              className="w-full border rounded-md px-2 py-1 text-sm"
+            >
+              {indexTypes.map(type => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Document Source</label>
+            <select
+              name="frameworkConfig.documentsSource"
+              value={documentsSource}
+              onChange={handleLlamaIndexInputChange}
+              className="w-full border rounded-md px-2 py-1 text-sm"
+            >
+              {docSources.map(src => (
+                <option key={src} value={src}>{src}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Query Mode</label>
+            <select
+              name="frameworkConfig.queryMode"
+              value={queryMode}
+              onChange={handleLlamaIndexInputChange}
+              className="w-full border rounded-md px-2 py-1 text-sm"
+            >
+              {queryModes.map(mode => (
+                <option key={mode} value={mode}>{mode}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Provider</label>
+            <select
+              name="frameworkConfig.provider"
+              value={provider}
+              onChange={handleLlamaIndexInputChange}
+              className="w-full border rounded-md px-2 py-1 text-sm"
+              disabled={!!(formData.llm?.provider || formData.llmProvider)} // Disable if BYOK is active
+            >
+              {providers.map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+            { (formData.llm?.provider || formData.llmProvider) && (
+              <div className="text-xs text-blue-600 mt-1">Provider is set by BYOK LLM selection above.</div>
+            )}
+          </div>
+          {/* Conditional document input */}
+          <div className="mt-4">
+            {documentsSource === 'file' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Upload Document</label>
+                <input
+                  type="file"
+                  name="frameworkConfig.documentContent"
+                  accept=".txt,.pdf,.md,.docx,.json,.csv"
+                  onChange={handleLlamaIndexInputChange}
+                  className="block w-full text-sm text-gray-700 border border-gray-300 rounded-md"
+                />
+                {documentContent && (
+                  <div className="text-xs text-green-700 mt-1">File selected</div>
+                )}
+              </div>
+            )}
+            {documentsSource === 'text' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Paste or Type Text</label>
+                <textarea
+                  name="frameworkConfig.documentContent"
+                  value={documentContent}
+                  onChange={handleLlamaIndexInputChange}
+                  rows={5}
+                  className="w-full border rounded-md px-2 py-1 text-sm"
+                  placeholder="Paste or type your document text here..."
+                />
+              </div>
+            )}
+            {documentsSource === 'url' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Document URL</label>
+                <input
+                  type="url"
+                  name="frameworkConfig.url"
+                  value={formData.frameworkConfig?.url || ''}
+                  onChange={handleLlamaIndexInputChange}
+                  className="w-full border rounded-md px-2 py-1 text-sm"
+                  placeholder="https://example.com/document"
+                  required
+                />
+                <div className="text-xs text-gray-500 mt-1">Enter a valid URL to fetch the document for indexing.</div>
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Advanced fields */}
+        {renderAdvancedFields()}
+        {/* Validation UI */}
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+            onClick={handleLlamaIndexValidate}
+            disabled={llamaIndexValidationStatus === 'loading'}
+          >
+            {llamaIndexValidationStatus === 'loading' ? 'Validating...' : 'Validate'}
+          </button>
+          {llamaIndexValidationStatus === 'success' && (
+            <span className="text-green-700 text-sm font-medium">✔️ Valid configuration</span>
+          )}
+          {llamaIndexValidationStatus === 'error' && (
+            <span className="text-red-700 text-sm font-medium">❌ {llamaIndexValidationError}</span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const handleLocalInputChange = (e) => {
     const { name, value, type, checked } = e.target;
     
@@ -1497,18 +1908,133 @@ const EnhancedAgentEditor = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* 🔑 BYOK Status Indicator */}
+    <div className="space-y-6 p-6">
+      {/* BYOK Status */}
       {renderBYOKStatus()}
-      
+
+      {/* Enhanced Mode Toggle */}
+      <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <div>
+          <h3 className="text-lg font-medium text-gray-900">Configuration Mode</h3>
+          <p className="text-sm text-gray-600">
+            {useEnhancedMode 
+              ? "Enhanced mode: Simplified framework selection with auto-configuration"
+              : "Traditional mode: Full framework-specific configuration options"
+            }
+          </p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className="text-sm text-gray-600">Traditional</span>
+          <button
+            onClick={() => handleModeSwitch(!useEnhancedMode)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+              useEnhancedMode ? 'bg-blue-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                useEnhancedMode ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+          <span className="text-sm text-gray-600">Enhanced</span>
+        </div>
+      </div>
+
+      {/* Core Agent Configuration */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium text-gray-900">Agent Configuration</h3>
+        
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Agent Name *
+          </label>
+          <input
+            type="text"
+            name="label"
+            value={formData.label || ''}
+            onChange={handleInputChange}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="e.g., Data Analyst Agent"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Role *
+          </label>
+          <input
+            type="text"
+            name="role"
+            value={formData.role || ''}
+            onChange={handleInputChange}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="e.g., Data Analyst, Customer Support Agent"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Goal *
+          </label>
+          <textarea
+            name="goal"
+            value={formData.goal || ''}
+            onChange={handleInputChange}
+            rows={3}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="What should this agent accomplish?"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Backstory (Optional)
+          </label>
+          <textarea
+            name="backstory"
+            value={formData.backstory || ''}
+            onChange={handleInputChange}
+            rows={2}
+            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Agent's background, personality, or context"
+          />
+        </div>
+      </div>
+
+      {/* Field Mapper for explicit mapping */}
+      <FieldMapper
+        nodeId={nodeId || formData.id || formData.nodeId || ''}
+        nodeType="agent"
+        currentMappings={fieldMappings}
+        onMappingChange={handleFieldMappingChange}
+        connectedNodes={connectedNodes}
+        previousNodeOutputs={previousNodeOutputs}
+      />
+
       {/* Framework Selection */}
       {renderFrameworkSelector()}
-      
+
       {/* LLM Configuration */}
       {formData.framework && renderLLMSelector()}
-      
-      {/* Framework-Specific Fields */}
+
+      {/* Framework-Specific Configuration */}
       {formData.framework && renderFrameworkSpecificFields()}
+
+      {/* Validation Errors */}
+      {Object.keys(validationErrors).length > 0 && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+          <h4 className="text-sm font-medium text-red-800 mb-2">Validation Errors:</h4>
+          {Object.entries(validationErrors).map(([field, error]) => (
+            <p key={field} className="text-sm text-red-600">
+              {field}: {error}
+            </p>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -1516,7 +2042,10 @@ const EnhancedAgentEditor = ({
 EnhancedAgentEditor.propTypes = {
   formData: PropTypes.object.isRequired,
   handleInputChange: PropTypes.func.isRequired,
-  handleFrameworkChange: PropTypes.func.isRequired
+  handleFrameworkChange: PropTypes.func.isRequired,
+  connectedNodes: PropTypes.array,
+  previousNodeOutputs: PropTypes.object,
+  nodeId: PropTypes.string
 };
 
 export default EnhancedAgentEditor;

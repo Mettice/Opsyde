@@ -1,5 +1,6 @@
 import React from 'react';
 import PropTypes from 'prop-types';
+import { ApiKeyNavigator } from '../../../../shared/ApiKeyNavigator';
 
 const BYOKStatusSection = ({ loadingApiKeys, apiKeyError, availableApiKeys }) => {
   if (loadingApiKeys) {
@@ -18,13 +19,12 @@ const BYOKStatusSection = ({ loadingApiKeys, apiKeyError, availableApiKeys }) =>
       <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
         <div className="flex items-center justify-between">
           <span className="text-red-700 text-sm">⚠️ {apiKeyError}</span>
-          <button
-            type="button"
-            onClick={() => window.open('/api-keys', '_blank')}
+          <ApiKeyNavigator
+            openInNewTab={true}
             className="text-xs bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 rounded"
           >
             Manage Keys
-          </button>
+          </ApiKeyNavigator>
         </div>
       </div>
     );
@@ -38,13 +38,12 @@ const BYOKStatusSection = ({ loadingApiKeys, apiKeyError, availableApiKeys }) =>
       <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
         <div className="flex items-center justify-between">
           <span className="text-yellow-700 text-sm">🔑 No API keys configured for external APIs</span>
-          <button
-            type="button"
-            onClick={() => window.open('/api-keys', '_blank')}
+          <ApiKeyNavigator
+            openInNewTab={true}
             className="text-xs bg-yellow-100 hover:bg-yellow-200 text-yellow-700 px-2 py-1 rounded"
           >
             Add Keys
-          </button>
+          </ApiKeyNavigator>
         </div>
       </div>
     );
@@ -56,13 +55,12 @@ const BYOKStatusSection = ({ loadingApiKeys, apiKeyError, availableApiKeys }) =>
         <span className="text-green-700 text-sm">
           ✅ {validKeys.length}/{totalKeys} API keys ready for external services
         </span>
-        <button
-          type="button"
-          onClick={() => window.open('/api-keys', '_blank')}
+        <ApiKeyNavigator
+          openInNewTab={true}
           className="text-xs bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
         >
           Manage Keys
-        </button>
+        </ApiKeyNavigator>
       </div>
     </div>
   );

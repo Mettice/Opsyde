@@ -188,6 +188,134 @@ export const validateConnection = (params, nodes, edges, toast) => {
     }
   }
   
+  // NEW: Special handling for trigger-to-input connections
+  if (from === 'trigger' && to === 'input') {
+    console.log('🔗 Trigger-to-input connection established for data flow');
+    
+    // Check if input node is multimodal type
+    const isMultimodalInput = targetNode.data?.inputType === 'multimodal';
+    
+    // Update input node with trigger information
+    const inputNodeIndex = nodes.findIndex(n => n.id === target);
+    if (inputNodeIndex !== -1) {
+      nodes[inputNodeIndex] = {
+        ...nodes[inputNodeIndex],
+        data: {
+          ...nodes[inputNodeIndex].data,
+          connectedTrigger: {
+            id: sourceNode.id,
+            type: sourceNode.data?.triggerType || 'webhook',
+            label: sourceNode.data?.label || 'Unknown Trigger',
+            isMultimodalCompatible: isMultimodalInput,
+            dataExpected: sourceNode.data?.triggerType === 'webhook' ? 
+              ['files', 'urls', 'attachments', 'json_data'] : 
+              ['api_data', 'structured_data']
+          },
+          triggerDataProcessing: isMultimodalInput ? {
+            enabled: true,
+            autoProcess: true,
+            supportedFormats: ['images', 'audio', 'documents', 'csv', 'json', 'zip'],
+            urlExtraction: true,
+            fileDownload: true
+          } : {
+            enabled: true,
+            autoProcess: false,
+            textProcessing: true
+          }
+        }
+      };
+      
+      console.log(`🎭 ${isMultimodalInput ? 'Multimodal' : 'Standard'} input node enhanced for trigger data`);
+    }
+    
+    // Update trigger node with target input information
+    const triggerNodeIndex = nodes.findIndex(n => n.id === source);
+    if (triggerNodeIndex !== -1) {
+      nodes[triggerNodeIndex] = {
+        ...nodes[triggerNodeIndex],
+        data: {
+          ...nodes[triggerNodeIndex].data,
+          connectedInputs: [
+            ...(nodes[triggerNodeIndex].data?.connectedInputs || []),
+            {
+              id: targetNode.id,
+              type: targetNode.data?.inputType || 'text',
+              label: targetNode.data?.label || 'Input Node',
+              isMultimodal: isMultimodalInput,
+              expectedDataTypes: isMultimodalInput ? 
+                ['file_urls', 'attachments', 'multimodal_data'] : 
+                ['text', 'json', 'structured_data']
+            }
+          ]
+        }
+      };
+    }
+    
+    // Set specific connection parameters for trigger-input data flow
+    if (isMultimodalInput) {
+      params.label = '🎭 Multimodal Data Flow';
+      params.data = {
+        flowType: 'multimodal_trigger',
+        supportedTypes: ['files', 'urls', 'attachments'],
+        autoProcess: true
+      };
+    } else {
+      params.label = '📤 Trigger Data';
+      params.data = {
+        flowType: 'trigger_data',
+        supportedTypes: ['text', 'json'],
+        autoProcess: false
+      };
+    }
+  }
+  
+  // NEW: Special handling for input-to-downstream connections
+  if (from === 'input') {
+    console.log('📥 Input node connecting to downstream processing');
+    
+    const isMultimodalInput = sourceNode.data?.inputType === 'multimodal';
+    
+    // Update the connection to indicate data type flow
+    if (isMultimodalInput) {
+      params.label = '🎭 Multimodal Output';
+      params.data = {
+        flowType: 'multimodal_output',
+        dataTypes: ['extracted_text', 'structured_data', 'entities', 'file_metadata'],
+        llmProcessed: true
+      };
+    } else {
+      params.label = '📤 Input Data';
+      params.data = {
+        flowType: 'input_data',
+        dataTypes: ['text', 'user_input'],
+        llmProcessed: false
+      };
+    }
+    
+    // Update target node with input source information
+    const targetNodeIndex = nodes.findIndex(n => n.id === target);
+    if (targetNodeIndex !== -1) {
+      nodes[targetNodeIndex] = {
+        ...nodes[targetNodeIndex],
+        data: {
+          ...nodes[targetNodeIndex].data,
+          inputSources: [
+            ...(nodes[targetNodeIndex].data?.inputSources || []),
+            {
+              id: sourceNode.id,
+              type: sourceNode.data?.inputType || 'text',
+              label: sourceNode.data?.label || 'Input Node',
+              isMultimodal: isMultimodalInput,
+              processingCapabilities: isMultimodalInput ? 
+                ['ai_analysis', 'content_extraction', 'entity_recognition'] : 
+                ['text_processing']
+            }
+          ]
+        }
+      };
+    }
+  }
+  
   console.log('✅ Connection validated successfully:', { from, to });
   return true;
 };

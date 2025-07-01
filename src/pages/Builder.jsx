@@ -1087,7 +1087,7 @@ const BuilderPageContent = () => {
           isOpen={showEditModal}
           onClose={closeEditModal}
           onSave={onSaveEdit}
-          nodeData={selectedNode.data}
+          nodeData={selectedNode}
           nodeType={selectedNode.type}
           connectedNodes={globalFieldAccess ? getAllPreviousNodes(selectedNode.id) : getConnectedNodes(selectedNode.id)}
         />

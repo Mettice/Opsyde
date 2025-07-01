@@ -10,7 +10,7 @@ import ChangeDetectionSection from './ChangeDetectionSection';
 import DataFilteringSection from './DataFilteringSection';
 import TestingSection from './TestingSection';
 import ConfigurationSummary from './ConfigurationSummary';
-import LLMConfigSection from '../../../shared/LLMConfigSection';
+import { LLMConfigSection } from '../../../shared/LLMConfigSection';
 import VisualServiceExplorer from './VisualServiceExplorer';
 
 const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {

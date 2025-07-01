@@ -21,6 +21,7 @@ import ContextMenu from './ContextMenu';
 import SaveTemplateModal from './SaveTemplateModal';
 import TemplateManager from './TemplateManager';
 import LLMModeToggle from './LLMModeToggle';
+import ConnectionLine from './builder/ConnectionLine';
 
 // Utilities
 import { validateConnection } from '../utils/validateConnection';
@@ -862,6 +863,7 @@ const FlowCanvasBase = forwardRef(({
         fitView
         attributionPosition="bottom-left"
         proOptions={{ hideAttribution: true }}
+        connectionLineComponent={ConnectionLine}
         {...reactFlowProps}
       >
         <Background 

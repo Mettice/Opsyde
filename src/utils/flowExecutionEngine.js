@@ -61,9 +61,10 @@ export const topologicalSort = (nodes, edges) => {
  * @param {Array} edges - Array of edge objects
  * @param {Object} executionState - Current execution state with node outputs
  * @param {Object} globalInputs - Global inputs for the flow
+ * @param {Array} nodes - Array of node objects
  * @returns {Object} - Collected input data
  */
-export const collectInputData = (nodeId, edges, executionState, globalInputs = {}) => {
+export const collectInputData = (nodeId, edges, executionState, globalInputs = {}, nodes = []) => {
   console.log(`🌐 Collecting input data for node: ${nodeId}`);
   
   const inputs = { ...globalInputs };
@@ -73,67 +74,97 @@ export const collectInputData = (nodeId, edges, executionState, globalInputs = {
   
   console.log(`🔗 Found ${incomingEdges.length} incoming connections for ${nodeId}`);
   
+  // Find the node object to get its schema
+  let nodeObj = null;
+  if (Array.isArray(nodes) && nodes.length > 0) {
+    nodeObj = nodes.find(n => n.id === nodeId);
+  }
+  // Fallback: try to get from executionState if not found
+  if (!nodeObj && executionState[nodeId]?.node) {
+    nodeObj = executionState[nodeId].node;
+  }
+  const inputSchema = nodeObj?.data?.input_schema || null;
+  const expectedKeys = inputSchema ? Object.keys(inputSchema) : [];
+  
   incomingEdges.forEach(edge => {
     const sourceNodeId = edge.source;
     const sourceResult = executionState[sourceNodeId];
     
-    if (sourceResult) {
-      const outputHandle = edge.sourceHandle || 'output';
-      let processedData = sourceResult;
+    if (!sourceResult) {
+      console.log(`⚠️ No result found for source node: ${sourceNodeId}`);
+      return;
+    }
+    
+    const outputHandle = edge.sourceHandle || 'output';
+    let processedData = sourceResult;
+    
+    // 🚀 NEW: Preprocess Airtable data for agent consumption
+    if (sourceResult.metadata?.serviceName === 'Airtable' || 
+        sourceResult.metadata?.source_api === 'Airtable' ||
+        (sourceResult.content && typeof sourceResult.content === 'object' && 
+         (sourceResult.content.api_data || sourceResult.content.records))) {
       
-      // 🚀 NEW: Preprocess Airtable data for agent consumption
-      if (sourceResult.metadata?.serviceName === 'Airtable' || 
-          sourceResult.metadata?.source_api === 'Airtable' ||
-          (sourceResult.content && typeof sourceResult.content === 'object' && 
-           (sourceResult.content.api_data || sourceResult.content.records))) {
-        
-        console.log('🔧 Preprocessing Airtable data for agent consumption...');
-        
-        // Extract clean data from the source result
-        let rawData = sourceResult.content || sourceResult.output || sourceResult;
-        if (typeof rawData === 'string') {
-          try {
-            rawData = JSON.parse(rawData);
-          } catch (e) {
-            // Keep as string if not JSON
-          }
-        }
-        
-        const extractedData = extractAirtableData(rawData);
-        
-        if (extractedData.textSummary) {
-          // Provide both structured and text formats for agent
-          processedData = {
-            // Text format for agent processing
-            text: extractedData.textSummary,
-            // Structured format for programmatic access
-            structured: extractedData.data,
-            // Summary information
-            summary: `Retrieved ${extractedData.totalRecords} records from Airtable with fields: ${extractedData.fields.join(', ')}`,
-            // Original metadata
-            metadata: sourceResult.metadata || {}
-          };
-          
-          console.log(`✅ Preprocessed Airtable data: ${extractedData.totalRecords} records extracted`);
-        } else {
-          processedData = sourceResult;
+      console.log('🔧 Preprocessing Airtable data for agent consumption...');
+      
+      // Extract clean data from the source result
+      let rawData = sourceResult.content || sourceResult.output || sourceResult;
+      if (typeof rawData === 'string') {
+        try {
+          rawData = JSON.parse(rawData);
+        } catch (e) {
+          // Keep as string if not JSON
         }
       }
       
-      // Store the data with appropriate key
-      if (outputHandle === 'output' || outputHandle === 'result') {
-        inputs.input = processedData;
+      const extractedData = extractAirtableData(rawData);
+      
+      if (extractedData.textSummary) {
+        // Provide both structured and text formats for agent
+        processedData = {
+          // Text format for agent processing
+          text: extractedData.textSummary,
+          // Structured format for programmatic access
+          structured: extractedData.data,
+          // Summary information
+          summary: `Retrieved ${extractedData.totalRecords} records from Airtable with fields: ${extractedData.fields.join(', ')}`,
+          // Original metadata
+          metadata: sourceResult.metadata || {}
+        };
+        
+        console.log(`✅ Preprocessed Airtable data: ${extractedData.totalRecords} records extracted`);
+      } else {
+        processedData = sourceResult;
+      }
+    }
+    
+    // --- SCHEMA-AWARE MAPPING ---
+    let mapped = false;
+    // 1. If outputHandle matches a key in the schema, use it
+    if (inputSchema && expectedKeys.includes(outputHandle)) {
+      inputs[outputHandle] = processedData;
+      mapped = true;
+    }
+    // 2. If not, try to map to the first required key
+    if (!mapped && inputSchema) {
+      const requiredKey = expectedKeys.find(k => !inputSchema[k].optional);
+      if (requiredKey && !inputs[requiredKey]) {
+        inputs[requiredKey] = processedData;
+        mapped = true;
+      }
+    }
+    // 3. If still not mapped, default to 'input' or use outputHandle
+    if (!mapped) {
+      if (inputSchema && expectedKeys.includes('input')) {
+        inputs['input'] = processedData;
       } else {
         inputs[outputHandle] = processedData;
       }
-      
-      console.log(`📤 Input from ${sourceNodeId} (${outputHandle}):`, 
-                  typeof processedData === 'object' ? 
-                  `${Object.keys(processedData).length} properties` : 
-                  typeof processedData);
-    } else {
-      console.log(`⚠️ No result found for source node: ${sourceNodeId}`);
     }
+    
+    console.log(`📤 Input from ${sourceNodeId} (${outputHandle}):`, 
+                typeof processedData === 'object' ? 
+                `${Object.keys(processedData).length} properties` : 
+                typeof processedData);
   });
   
   console.log(`🎯 Final inputs for ${nodeId}:`, Object.keys(inputs));
@@ -496,8 +527,8 @@ export const runFlow = async (
       
       try {
         // Collect inputs for this node
-        const nodeInputs = collectInputData(nodeId, edges, executionState, inputs);
-        console.log(`📥 Node inputs for ${nodeId}:`, nodeInputs);
+        const nodeInputs = collectInputData(nodeId, edges, executionState, inputs, nodes);
+        console.log(`�� Node inputs for ${nodeId}:`, nodeInputs);
         
         // Execute the node
         const result = await executeNodeByType(node, nodeInputs, executors);
