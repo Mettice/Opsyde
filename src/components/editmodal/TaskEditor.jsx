@@ -196,6 +196,18 @@ const TaskEditor = ({ node, onSave, onClose }) => {
     setTaskData(normalizeTaskData(node.data));
   }, [node.data]);
 
+  // Sync taskData with node.data when node.data changes (fix for re-editing)
+  useEffect(() => {
+    const normalizedData = normalizeTaskData(node.data);
+    setTaskData(normalizedData);
+    
+    // Also sync field mappings
+    setFieldMappings(node.data.field_mappings || {});
+    
+    // Update service hint or other derived state if needed
+    console.log('TaskEditor: Synced with node data:', normalizedData);
+  }, [node.data]);
+
   // Handler for field mapping changes
   const handleFieldMappingChange = (newMappings) => {
     setFieldMappings(newMappings);
@@ -225,14 +237,6 @@ const TaskEditor = ({ node, onSave, onClose }) => {
         <Typography variant="h6" gutterBottom>
           Task Configuration
         </Typography>
-        
-        <TextField
-          fullWidth
-          label="Task Name"
-          value={taskData.label || ''}
-          onChange={(e) => setTaskData(prev => ({ ...prev, label: e.target.value }))}
-          sx={{ mb: 2 }}
-        />
         
         <TextField
           fullWidth
@@ -304,16 +308,6 @@ const TaskEditor = ({ node, onSave, onClose }) => {
         <FormHelperText>
           Enable for long-running tasks that don't block the workflow
         </FormHelperText>
-      </Box>
-
-      {/* Save Button */}
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-        <Button onClick={onClose} variant="outlined">
-          Cancel
-        </Button>
-        <Button onClick={handleSave} variant="contained" color="primary">
-          Save Task
-        </Button>
       </Box>
     </Box>
   );

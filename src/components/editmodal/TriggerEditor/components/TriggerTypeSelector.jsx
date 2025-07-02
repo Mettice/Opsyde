@@ -20,7 +20,10 @@ const TriggerTypeSelector = ({ formData, handleInputChange }) => {
       <select
         name="triggerType"
         value={formData.triggerType || 'manual'}
-        onChange={handleInputChange}
+        onChange={e => {
+          handleInputChange({ target: { name: 'triggerType', value: e.target.value } });
+          handleInputChange({ target: { name: 'trigger_type', value: e.target.value } });
+        }}
         className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
       >
         <option value="manual">Manual</option>

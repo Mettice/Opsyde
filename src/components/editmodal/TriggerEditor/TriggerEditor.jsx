@@ -30,6 +30,15 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
     setFieldMappings(formData.field_mappings || {});
   }, [formData.field_mappings]);
 
+  // Sync coreConfig with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    setCoreConfig({
+      label: formData.label || '',
+      description: formData.description || '',
+      trigger_type: formData.trigger_type || formData.triggerType || 'manual',
+    });
+  }, [formData.label, formData.description, formData.trigger_type, formData.triggerType]);
+
   // Handler for field mapping changes
   const handleFieldMappingChange = (newMappings) => {
     setFieldMappings(newMappings);
@@ -108,17 +117,16 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
 
   return (
     <>
-      {/* Schema-driven core fields */}
-      <div className="mb-4">
-        <DynamicSchemaForm
-          schema={triggerNodeSchema}
-          nodeType="trigger"
-          formData={coreConfig}
-          handleInputChange={handleCoreConfigChange}
-          onValidationError={handleValidationError}
-        />
-      </div>
-      
+      {/* Removed schema-driven core fields (DynamicSchemaForm) for clarity */}
+      {/* Use only custom UI for core fields and trigger type selection */}
+      <BasicInfoSection 
+        formData={formData} 
+        handleInputChange={handleInputChange} 
+      />
+      <TriggerTypeSelector 
+        formData={formData} 
+        handleInputChange={handleInputChange} 
+      />
       {/* Field Mapper for explicit mapping */}
       <FieldMapper
         nodeId={nodeId || formData.id || formData.nodeId || ''}
@@ -128,7 +136,6 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
         connectedNodes={connectedNodes}
         previousNodeOutputs={previousNodeOutputs}
       />
-
       {/* Optionally show output preview for mapped fields */}
       {previousNodeOutputs && Object.keys(previousNodeOutputs).length > 0 && (
         <NodeOutputPreview
@@ -138,7 +145,6 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
           isVisible={false}
         />
       )}
-      
       {/* Show validation errors */}
       {configErrors.length > 0 && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
@@ -153,16 +159,7 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
           </ul>
         </div>
       )}
-      
       {/* Modular subcomponents for type-specific config */}
-      <BasicInfoSection 
-        formData={formData} 
-        handleInputChange={handleInputChange} 
-      />
-      <TriggerTypeSelector 
-        formData={formData} 
-        handleInputChange={handleInputChange} 
-      />
       {formData.trigger_type === 'schedule' && (
         <ScheduleConfiguration 
           formData={formData} 
@@ -181,28 +178,28 @@ const TriggerEditor = ({ formData, handleInputChange, onSave, onClose, connected
           handleInputChange={handleInputChange} 
         />
       )}
-      {/* Optional: Save/Cancel buttons if you want to enforce schema validation on save */}
-      {onSave && onClose && (
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={configErrors.length > 0 || validationErrors}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-md ${
-              configErrors.length > 0 || validationErrors
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700'
-            }`}
-          >
-            Save Changes
-          </button>
+      {formData.trigger_type === 'universal_webhook' && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-md mt-4">
+          <h4 className="text-blue-800 font-semibold mb-2">Universal Webhook Configuration</h4>
+          <p className="text-blue-700 text-sm mb-2">This trigger will accept webhook payloads from any service. You can map incoming fields in the next step. (Advanced configuration coming soon.)</p>
+          {/* Display the webhook URL */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="font-mono text-xs bg-blue-100 px-2 py-1 rounded select-all">
+              {`/api/triggers/${nodeId || formData.id || formData.nodeId || 'TRIGGER_ID'}`}
+            </span>
+            <button
+              type="button"
+              className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/api/triggers/${nodeId || formData.id || formData.nodeId || 'TRIGGER_ID'}`);
+              }}
+            >
+              Copy
+            </button>
+          </div>
         </div>
       )}
+      {/* Removed duplicate Save/Cancel buttons here. Only use modal's main action buttons. */}
     </>
   );
 };

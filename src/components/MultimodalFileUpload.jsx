@@ -1,17 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { CloudArrowUpIcon, XMarkIcon, DocumentIcon, PhotoIcon, SpeakerWaveIcon, TableCellsIcon, DocumentTextIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 import { useLLMMode } from '../contexts/LLMContext';
-import { ApiKeyNavigator } from './shared/ApiKeyNavigator';    
+import { ApiKeyNavigator } from './shared/ApiKeyNavigator';
+import LLMConfigSection from './editmodal/shared/LLMConfigSection';
 // If you have a BYOK context/hook, import it here
 // import { useBYOK } from '../contexts/BYOKContext';
-
-const LLM_OPTIONS = [
-  { value: 'auto', label: 'Auto (Best for file)' },
-  { value: 'openai', label: 'OpenAI (GPT-4/4V)' },
-  { value: 'gemini', label: 'Gemini (Google)' },
-  { value: 'claude', label: 'Claude (Anthropic)' },
-  // Add more as needed
-];
 
 const DEFAULT_PROMPTS = {
   csv: 'Extract each row as a JSON object with name, email, role, and company. Output as a JSON array.',
@@ -20,23 +13,6 @@ const DEFAULT_PROMPTS = {
   audio: 'Transcribe the audio and summarize as JSON.',
   json: 'Summarize the JSON content and extract key fields.',
   zip: 'List the files in the ZIP and extract structured data from each if possible.'
-};
-
-const LLM_MODELS = {
-  openai: [
-    { value: 'gpt-4', label: 'GPT-4' },
-    { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-    { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' }
-  ],
-  gemini: [
-    { value: 'gemini-pro', label: 'Gemini Pro' },
-    { value: 'gemini-pro-vision', label: 'Gemini Pro Vision' }
-  ],
-  claude: [
-    { value: 'claude-3-opus', label: 'Claude 3 Opus' },
-    { value: 'claude-3-sonnet', label: 'Claude 3 Sonnet' },
-    { value: 'claude-3-haiku', label: 'Claude 3 Haiku' }
-  ]
 };
 
 const MultimodalFileUpload = ({ 
@@ -54,14 +30,19 @@ const MultimodalFileUpload = ({
   const [processing, setProcessing] = useState(false);
   const [expandedPreview, setExpandedPreview] = useState(null);
   const [triggerProcessed, setTriggerProcessed] = useState(false);
-  const [selectedLLM, setSelectedLLM] = useState('auto');
-  const [selectedModel, setSelectedModel] = useState('');
-  const [customPrompt, setCustomPrompt] = useState('');
   const fileInputRef = useRef(null);
-  const [availableLLMs, setAvailableLLMs] = useState([]);
-  const [llmWarning, setLlmWarning] = useState('');
-  const [availableApiKeys, setAvailableApiKeys] = useState({});
-  const [loadingApiKeys, setLoadingApiKeys] = useState(true);
+
+  // LLM Configuration State
+  const [llmConfig, setLlmConfig] = useState({
+    framework: 'openai',
+    frameworkConfig: {
+      provider: '',
+      model: '',
+      temperature: 0.7,
+      max_tokens: 4000
+    }
+  });
+  const [customPrompt, setCustomPrompt] = useState('');
 
   // LLM mode and BYOK context
   const { llmModeEnabled, smartMappingEnabled } = useLLMMode();
@@ -77,50 +58,27 @@ const MultimodalFileUpload = ({
     }
   }, [triggerData, autoProcessTriggerData, triggerProcessed]);
 
-  // Fetch BYOK keys on mount (AgentEditor style)
-  useEffect(() => {
-    async function fetchKeys() {
-      setLoadingApiKeys(true);
-      try {
-        const res = await fetch('/api/user-settings/api-keys');
-        const data = await res.json();
-        if (data.success && data.data && data.data.api_keys) {
-          setAvailableApiKeys(data.data.api_keys);
-          const llms = [
-            { value: 'auto', label: 'Auto (Best for file)', available: true },
-            ...(data.data.api_keys.openai ? [{ value: 'openai', label: 'OpenAI (GPT-4/4V)', available: true }] : []),
-            ...(data.data.api_keys.gemini ? [{ value: 'gemini', label: 'Gemini (Google)', available: true }] : []),
-            ...(data.data.api_keys.claude ? [{ value: 'claude', label: 'Claude (Anthropic)', available: true }] : [])
-          ];
-          setAvailableLLMs(llms);
-          if (!llms.find(opt => opt.value === selectedLLM && opt.available)) {
-            setSelectedLLM('auto');
-          }
-        } else {
-          setAvailableLLMs([{ value: 'auto', label: 'Auto (Best for file)', available: true }]);
+  // Handle LLM config changes from LLMConfigSection
+  const handleLlmConfigChange = (e) => {
+    const { name, value } = e.target;
+    if (name.startsWith('frameworkConfig.')) {
+      const field = name.replace('frameworkConfig.', '');
+      setLlmConfig(prev => ({
+        ...prev,
+        frameworkConfig: {
+          ...prev.frameworkConfig,
+          [field]: value
         }
-      } catch (e) {
-        setAvailableLLMs([{ value: 'auto', label: 'Auto (Best for file)', available: true }]);
-      } finally {
-        setLoadingApiKeys(false);
-      }
-    }
-    fetchKeys();
-  }, []);
-
-  // Warn if user selects unavailable LLM
-  useEffect(() => {
-    if (selectedLLM !== 'auto' && !availableLLMs.find(opt => opt.value === selectedLLM && opt.available)) {
-      setLlmWarning('No API key found for this LLM provider. Please add your key in settings.');
+      }));
     } else {
-      setLlmWarning('');
+      setLlmConfig(prev => ({
+        ...prev,
+        [name]: value
+      }));
     }
-  }, [selectedLLM, availableLLMs]);
+  };
 
-  // Update model selection when provider changes
-  useEffect(() => {
-    setSelectedModel('');
-  }, [selectedLLM]);
+
 
   // Enhanced file type detection with ZIP support
   const getFileType = (file) => {
@@ -269,11 +227,11 @@ const MultimodalFileUpload = ({
         const context = {
           llm_mode_enabled: llmModeEnabled,
           smart_mapping_enabled: smartMappingEnabled,
-          user_keys: availableApiKeys,
+          user_keys: userKeys,
           file_type: fileType,
           file_size: file.size,
-          preferred_llm: selectedLLM,
-          llm_model: selectedModel,
+          preferred_llm: llmConfig.frameworkConfig.provider,
+          llm_model: llmConfig.frameworkConfig.model,
           prompt: customPrompt || getDefaultPrompt(fileType)
         };
 
@@ -425,12 +383,12 @@ const MultimodalFileUpload = ({
             const context = {
               llm_mode_enabled: llmModeEnabled,
               smart_mapping_enabled: smartMappingEnabled,
-              user_keys: availableApiKeys,
+              user_keys: userKeys,
               file_type: 'url',
               source: 'trigger',
               trigger_data: data,
-              preferred_llm: selectedLLM,
-              llm_model: selectedModel,
+              preferred_llm: llmConfig.frameworkConfig.provider,
+              llm_model: llmConfig.frameworkConfig.model,
               prompt: customPrompt || getDefaultPrompt('url')
             };
             
@@ -561,50 +519,13 @@ const MultimodalFileUpload = ({
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* LLM Selection and Prompt UI */}
-      <div className="flex flex-col md:flex-row gap-4 items-center mb-2">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-700 mb-1">LLM Provider</label>
-          <select
-            className="w-full border rounded-md px-2 py-1 text-sm"
-            value={selectedLLM}
-            onChange={e => setSelectedLLM(e.target.value)}
-            disabled={processing || loadingApiKeys}
-          >
-            {availableLLMs.map(opt => (
-              <option key={opt.value} value={opt.value} disabled={!opt.available}>{opt.label}{!opt.available ? ' (No key)' : ''}</option>
-            ))}
-          </select>
-          {llmWarning && <div className="text-xs text-red-600 mt-1">{llmWarning}</div>}
-          {selectedLLM !== 'auto' && (
-            <div className="text-xs text-gray-500 mt-1">
-              {availableApiKeys[selectedLLM] ? 'Key available' : 'No key'}
-            </div>
-          )}
-          <div className="mt-2">
-            <ApiKeyNavigator 
-              availableApiKeys={availableApiKeys} 
-              loadingApiKeys={loadingApiKeys}
-              className="text-sm text-blue-600 hover:text-blue-700"
-            >
-              {loadingApiKeys ? 'Loading API keys...' : 'Manage API Keys'}
-            </ApiKeyNavigator>
-          </div>
-        </div>
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-700 mb-1">Model</label>
-          <select
-            className="w-full border rounded-md px-2 py-1 text-sm"
-            value={selectedModel}
-            onChange={e => setSelectedModel(e.target.value)}
-            disabled={processing || selectedLLM === 'auto' || !LLM_MODELS[selectedLLM]}
-          >
-            <option value="">{selectedLLM === 'auto' ? 'Auto-select model' : 'Select a model'}</option>
-            {LLM_MODELS[selectedLLM]?.map(model => (
-              <option key={model.value} value={model.value}>{model.label}</option>
-            ))}
-          </select>
-        </div>
+      {/* Only render LLMConfigSection for BYOK/LLM config, no extra BYOK banners */}
+      <div className="space-y-4">
+        <LLMConfigSection
+          formData={llmConfig}
+          handleInputChange={handleLlmConfigChange}
+          framework="openai"
+        />
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-700 mb-1">Extraction Prompt</label>
           <textarea

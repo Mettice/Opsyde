@@ -447,80 +447,74 @@ const EnhancedEditModal = ({
     }
   };
 
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    
-    if (name.startsWith('llm.')) {
-      const llmField = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        llm: {
-          ...prev.llm,
-          [llmField]: type === 'checkbox' ? checked : value
-        }
-      }));
-    } else if (name.startsWith('frameworkConfig.')) {
-      const configField = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        frameworkConfig: {
-          ...prev.frameworkConfig,
-          [configField]: type === 'checkbox' ? checked : value
-        }
-      }));
-    } else if (name === 'llmProvider') {
-      // Map llmProvider to llm.provider AND frameworkConfig.provider
-      const newProvider = type === 'checkbox' ? checked : value;
-      
-      // CRITICAL FIX: Auto-select first available model when provider changes
-      const availableModels = LLM_MODELS[newProvider] || [];
-      const newModel = availableModels.length > 0 ? availableModels[0].value : '';
-      
-      console.log(`🔍 Provider changed to: ${newProvider}, auto-selecting model: ${newModel}`);
-      
-      setFormData(prev => {
-        const newData = {
+  const handleInputChange = (eOrData) => {
+    if (eOrData && eOrData.target) {
+      const { name, value, type, checked } = eOrData.target;
+      if (name.startsWith('llm.')) {
+        const llmField = name.split('.')[1];
+        setFormData(prev => ({
           ...prev,
           llm: {
             ...prev.llm,
-            provider: newProvider,
-            model: newModel  // Auto-update model when provider changes
+            [llmField]: type === 'checkbox' ? checked : value
+          }
+        }));
+      } else if (name.startsWith('frameworkConfig.')) {
+        const configField = name.split('.')[1];
+        setFormData(prev => ({
+          ...prev,
+          frameworkConfig: {
+            ...prev.frameworkConfig,
+            [configField]: type === 'checkbox' ? checked : value
+          }
+        }));
+      } else if (name === 'llmProvider') {
+        const newProvider = type === 'checkbox' ? checked : value;
+        const availableModels = LLM_MODELS[newProvider] || [];
+        const newModel = availableModels.length > 0 ? availableModels[0].value : '';
+        setFormData(prev => {
+          const newData = {
+            ...prev,
+            llm: {
+              ...prev.llm,
+              provider: newProvider,
+              model: newModel
+            },
+            frameworkConfig: {
+              ...prev.frameworkConfig,
+              provider: newProvider,
+              model: newModel
+            },
+            llmProvider: newProvider,
+            llmModel: newModel
+          };
+          return newData;
+        });
+      } else if (name === 'llmModel') {
+        setFormData(prev => ({
+          ...prev,
+          llm: {
+            ...prev.llm,
+            model: type === 'checkbox' ? checked : value
           },
           frameworkConfig: {
             ...prev.frameworkConfig,
-            provider: newProvider,
-            model: newModel  // Also update framework config
+            model: type === 'checkbox' ? checked : value
           },
-          llmProvider: newProvider, // Keep for backward compatibility
-          llmModel: newModel // Update legacy field too
-        };
-        console.log(`🔍 New frameworkConfig.provider: ${newData.frameworkConfig.provider}`);
-        console.log(`🔍 New frameworkConfig.model: ${newData.frameworkConfig.model}`);
-        return newData;
-      });
-    } else if (name === 'llmModel') {
-      // 🚀 FIXED: Single setFormData call for llmModel
-      setFormData(prev => ({
-        ...prev,
-        llm: {
-          ...prev.llm,
-          model: type === 'checkbox' ? checked : value
-        },
-        frameworkConfig: {
-          ...prev.frameworkConfig,
-          model: type === 'checkbox' ? checked : value
-        },
-        llmModel: type === 'checkbox' ? checked : value // Keep for backward compatibility
-      }));
-    } else {
-      // 🚀 FIXED: Handle all other inputs properly
-      setFormData(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value
-      }));
+          llmModel: type === 'checkbox' ? checked : value
+        }));
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          [name]: type === 'checkbox' ? checked : value
+        }));
+      }
+      setIsModified(true);
+    } else if (typeof eOrData === 'object' && eOrData !== null) {
+      // Direct data object (from DynamicSchemaForm or similar)
+      setFormData(eOrData);
+      setIsModified(true);
     }
-    
-    setIsModified(true);
   };
 
   const handleFrameworkChange = (e) => {

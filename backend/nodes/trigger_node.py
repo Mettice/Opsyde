@@ -68,14 +68,41 @@ def run_trigger_node(data=None):
     elif trigger_type == "universal_polling":
         service_name = data.get("serviceName", "Unknown API")
         api_endpoint = data.get("apiEndpoint", "")
-        
+        auth_type = data.get('authType', 'none')
+        # Explicit backend validation for missing credentials
+        if auth_type == 'api_key' and not data.get('apiKey'):
+            return {
+                "output": "Missing API Key for API Key authentication.",
+                "type": "error",
+                "trigger_type": "universal_polling",
+                "trigger_id": trigger_id,
+                "service_name": service_name,
+                "error": "API Key is required for API Key authentication."
+            }
+        if auth_type == 'bearer_token' and not data.get('bearerToken'):
+            return {
+                "output": "Missing Bearer Token for Bearer Token authentication.",
+                "type": "error",
+                "trigger_type": "universal_polling",
+                "trigger_id": trigger_id,
+                "service_name": service_name,
+                "error": "Bearer Token is required for Bearer Token authentication."
+            }
+        if auth_type == 'basic_auth' and (not data.get('username') or not data.get('password')):
+            return {
+                "output": "Missing Username or Password for Basic Auth authentication.",
+                "type": "error",
+                "trigger_type": "universal_polling",
+                "trigger_id": trigger_id,
+                "service_name": service_name,
+                "error": "Username and Password are required for Basic Auth authentication."
+            }
         # Actually fetch the API data for the agent
         try:
             import requests
             
             # Set up authentication headers
             headers = {'User-Agent': 'CrewBuilder-Universal-Polling/1.0'}
-            auth_type = data.get('authType', 'none')
             
             if auth_type == 'api_key' and data.get('apiKey'):
                 api_key = data.get('apiKey')

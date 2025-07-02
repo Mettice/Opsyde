@@ -106,6 +106,8 @@ const ToolEditor = ({
   const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
   const [previousNodeOutputs, setPreviousNodeOutputs] = useState({});
   
+  const nodeId = formData.id || formData.nodeId || '';
+
   // Get connected nodes and their outputs
   useEffect(() => {
     const getConnectedNodes = () => {
@@ -195,6 +197,40 @@ const ToolEditor = ({
       handleInputChange({ target: { name: 'framework', value: framework } });
     }
   }, [generatedConfig]);
+
+  // Sync local state with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    // Reset local state to match formData
+    setConfigMode(formData.config_mode || 'schema');
+    setAiPrompt(formData.ai_prompt || '');
+    setGeneratedConfig(null);
+    setIsGenerating(false);
+    setShowAdvanced(false);
+    setClarificationNeeded(false);
+    setClarificationQuestion('');
+    setClarificationInput('');
+    setSelectedEndpoint(null);
+    setAuthInfo({});
+    setShowAuthModal(false);
+    setShowApiKeyModal(false);
+    setApiKeyInput('');
+    setApiKeyValidationLoading(false);
+    
+    // Sync field mappings
+    setFieldMappings(formData.field_mappings || {});
+    
+    // Update selected provider/model if available
+    if (availableApiKeys.length > 0) {
+      const currentProvider = formData.framework_config?.provider || formData.provider;
+      if (currentProvider) {
+        const matchingKey = availableApiKeys.find(key => key.provider === currentProvider);
+        if (matchingKey) {
+          setSelectedProvider(currentProvider);
+          setSelectedModel(matchingKey.model || 'gpt-4');
+        }
+      }
+    }
+  }, [formData, availableApiKeys]);
 
   const loadApiKeys = async () => {
     setLoadingApiKeys(true);
@@ -441,6 +477,72 @@ const ToolEditor = ({
     }
   };
 
+  // Helper: Get available models for a provider (static for now)
+  const getModelsForProvider = (provider) => {
+    const staticModels = {
+      openai: ['gpt-4', 'gpt-3.5-turbo', 'gpt-4o'],
+      anthropic: ['claude-3-opus-20240229', 'claude-3-sonnet-20240229', 'claude-3-haiku-20240307'],
+      openrouter: ['openai/gpt-4', 'anthropic/claude-3-sonnet'],
+      huggingface: ['meta-llama/Llama-2-70b-chat-hf', 'mistralai/Mixtral-8x7B-Instruct-v0.1'],
+      perplexity: ['sonar-pro', 'sonar', 'sonar-deep-research', 'sonar-reasoning-pro', 'sonar-reasoning', 'r1-1776'],
+      gemini: ['gemini-pro']
+    };
+    return staticModels[provider] || [];
+  };
+
+  // Handler for provider change (manual and BYOK mode)
+  const handleProviderChange = (e) => {
+    const provider = e.target.value;
+    const models = getModelsForProvider(provider);
+    const defaultModel = models.length > 0 ? models[0] : '';
+    setSelectedProvider(provider);
+    setSelectedModel(defaultModel);
+    
+    // Only update form data if we're in manual mode
+    if (configMode === 'manual') {
+      handleInputChange({
+        target: {
+          name: 'framework',
+          value: provider
+        }
+      });
+      handleInputChange({
+        target: {
+          name: 'llm_model',
+          value: defaultModel
+        }
+      });
+      handleInputChange({
+        target: {
+          name: 'framework_config',
+          value: { ...formData.framework_config, provider, model: defaultModel }
+        }
+      });
+    }
+  };
+
+  // Handler for model change
+  const handleModelChange = (e) => {
+    const model = e.target.value;
+    setSelectedModel(model);
+    
+    // Only update form data if we're in manual mode
+    if (configMode === 'manual') {
+      handleInputChange({
+        target: {
+          name: 'llm_model',
+          value: model
+        }
+      });
+      handleInputChange({
+        target: {
+          name: 'framework_config',
+          value: { ...formData.framework_config, model }
+        }
+      });
+    }
+  };
+
   const renderModeToggle = () => (
     <Box sx={{ mb: 3 }}>
       <Typography variant="h6" gutterBottom>
@@ -516,11 +618,7 @@ const ToolEditor = ({
                   <InputLabel>Provider</InputLabel>
                   <Select
                     value={selectedProvider}
-                    onChange={e => {
-                      setSelectedProvider(e.target.value);
-                      const key = availableApiKeys.find(k => k.provider === e.target.value);
-                      setSelectedModel(key?.model || 'gpt-4');
-                    }}
+                    onChange={handleProviderChange}
                     label="Provider"
                   >
                     {availableApiKeys.map(key => (
@@ -532,7 +630,7 @@ const ToolEditor = ({
                   <InputLabel>Model</InputLabel>
                   <Select
                     value={selectedModel}
-                    onChange={e => setSelectedModel(e.target.value)}
+                    onChange={handleModelChange}
                     label="Model"
                   >
                     {(PROVIDER_MODELS[selectedProvider] || [{ value: 'gpt-4', label: 'gpt-4' }]).map(model => (
@@ -751,13 +849,11 @@ const ToolEditor = ({
 
       {/* Field Mapper for explicit mapping */}
       <FieldMapper
-        nodeId={formData.id}
+        nodeId={nodeId}
         nodeType="tool"
         currentMappings={fieldMappings}
         onMappingChange={setFieldMappings}
-        connectedNodes={nodes.filter(n => 
-          edges.some(edge => edge.source === n.id && edge.target === formData.id)
-        )}
+        connectedNodes={connectedNodes}
         previousNodeOutputs={previousNodeOutputs}
       />
 

@@ -353,27 +353,27 @@ const agentNodeSchema = {
       optional: true
     },
     llm_model: {
-      type: 'string',
-      description: 'LLM model',
+          type: 'string',
+          description: 'LLM model',
       optional: false,
       default: 'gpt-4'
-    },
-    temperature: {
-      type: 'float',
-      description: 'Temperature',
+        },
+        temperature: {
+          type: 'float',
+          description: 'Temperature',
       optional: true,
       default: 0.7
-    },
-    max_tokens: {
-      type: 'integer',
-      description: 'Max tokens',
+        },
+        max_tokens: {
+          type: 'integer',
+          description: 'Max tokens',
       optional: true,
       default: 4000
-    },
-    framework: {
-      type: 'string',
-      description: 'LLM framework',
-      optional: false
+        },
+        framework: {
+          type: 'string',
+          description: 'LLM framework',
+          optional: false
     },
     framework_config: {
       type: 'object',
@@ -395,7 +395,7 @@ const agentNodeSchema = {
   }
 };
 
-// Chat node schema - Standardized
+// Chat node schema - Standardized with BYOK support
 const chatNodeSchema = {
   fields: {
     ...commonFields,
@@ -406,6 +406,52 @@ const chatNodeSchema = {
       ui_component: 'textarea',
       ui_placeholder: 'Enter system prompt to define the AI assistant behavior...'
     },
+    framework: {
+      type: 'string',
+      description: 'LLM framework',
+      optional: false,
+      options: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity', 'gemini'],
+      ui_component: 'select',
+      ui_placeholder: 'Select framework...'
+    },
+    framework_config: {
+      type: 'object',
+      description: 'Framework configuration',
+      optional: true,
+      ui_component: 'object_editor',
+      properties: {
+        provider: {
+          type: 'string',
+          description: 'LLM provider',
+          optional: true,
+          options: ['openai', 'anthropic', 'openrouter', 'huggingface', 'perplexity', 'gemini'],
+          ui_component: 'byok_provider_selector'
+        },
+        model: {
+          type: 'string',
+          description: 'LLM model',
+          optional: true,
+          ui_component: 'model_selector',
+          depends_on: ['provider']
+        },
+        temperature: {
+          type: 'float',
+          description: 'Temperature (0.0 - 2.0)',
+          optional: true,
+          default: 0.7,
+          ui_component: 'slider',
+          validation: { min_value: 0.0, max_value: 2.0 }
+        },
+        max_tokens: {
+          type: 'integer',
+          description: 'Maximum tokens',
+          optional: true,
+          default: 4000,
+          ui_component: 'number',
+          validation: { min_value: 1, max_value: 32000 }
+        }
+      }
+    },
     llm_model: {
       type: 'string',
       description: 'LLM model',
@@ -414,44 +460,34 @@ const chatNodeSchema = {
     },
     temperature: {
       type: 'float',
-      description: 'Sampling temperature (0.0 = deterministic, 2.0 = very creative)',
-      optional: true,
-      default: 0.7,
-      ui_component: 'slider',
-      validation: { min_value: 0.0, max_value: 2.0 },
-      ui_step: 0.1
-    },
-    max_tokens: {
-      type: 'integer',
-      description: 'Maximum tokens in response',
-      optional: true,
-      default: 4000,
-      ui_component: 'number',
-      validation: { min_value: 1, max_value: 32000 }
-    },
-    framework: {
-      type: 'string',
-      description: 'LLM framework',
-      optional: false
-    },
-    framework_config: {
-      type: 'object',
-      description: 'Framework configuration',
-      optional: true
-    },
+          description: 'Sampling temperature (0.0 = deterministic, 2.0 = very creative)',
+          optional: true,
+          default: 0.7,
+          ui_component: 'slider',
+          validation: { min_value: 0.0, max_value: 2.0 },
+          ui_step: 0.1
+        },
+        max_tokens: {
+          type: 'integer',
+          description: 'Maximum tokens in response',
+          optional: true,
+          default: 4000,
+          ui_component: 'number',
+          validation: { min_value: 1, max_value: 32000 }
+        },
     enable_memory: {
-      type: 'boolean',
+          type: 'boolean',
       description: 'Enable conversation memory',
       optional: true,
       default: false
     },
     max_history: {
-      type: 'integer',
-      description: 'Maximum conversation history length',
-      optional: true,
-      default: 10,
-      ui_component: 'number',
-      validation: { min_value: 1, max_value: 100 }
+          type: 'integer',
+          description: 'Maximum conversation history length',
+          optional: true,
+          default: 10,
+          ui_component: 'number',
+          validation: { min_value: 1, max_value: 100 }
     }
   }
 };

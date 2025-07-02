@@ -288,6 +288,27 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
     setFieldMappings(formData.field_mappings || {});
   }, [formData.field_mappings]);
 
+  // Sync local state with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    // Reset local state to match formData
+    setShowAdvanced(formData.showAdvanced || false);
+    setValidationErrors(formData.validationErrors || {});
+    
+    // Sync field mappings
+    setFieldMappings(formData.field_mappings || {});
+    
+    // Update output core config
+    setOutputCoreConfig({
+      label: formData.label || '',
+      description: formData.description || '',
+      outputType: formData.outputType || 'text',
+      defaultValue: formData.defaultValue || '',
+      required: formData.required || false
+    });
+    
+    console.log('OutputEditor: Synced with form data:', formData);
+  }, [formData]);
+
   // ===== RENDER FUNCTIONS =====
   const renderBYOKStatus = () => {
     if (!isSmartOutput) return null;

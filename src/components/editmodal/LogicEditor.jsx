@@ -111,6 +111,31 @@ const LogicEditor = ({
   // Field mapping state
   const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
 
+  // Sync local state with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    // Reset local state to match formData
+    setBuildMode(formData.buildMode || 'visual');
+    setConditions(formData.conditions || []);
+    setShowTemplates(false);
+    setShowExamples(false);
+    setShowFieldGuide(false);
+    setShowAdvanced(formData.showAdvanced || false);
+    setValidationErrors({});
+    
+    // Sync core config
+    setLogicCoreConfig({
+      label: formData.label || '',
+      description: formData.description || '',
+      conditions: formData.conditions || [],
+      operator: formData.operator || 'AND'
+    });
+    
+    // Sync field mappings
+    setFieldMappings(formData.field_mappings || {});
+    
+    console.log('LogicEditor: Synced with form data:', formData);
+  }, [formData]);
+
   // Generic field detection from connected nodes
   useEffect(() => {
     const detectFields = () => {
@@ -200,22 +225,17 @@ const LogicEditor = ({
     detectFields();
   }, [connectedNodes]);
 
-  // Keep fieldMappings in sync with formData
-  useEffect(() => {
-    setFieldMappings(formData.field_mappings || {});
-  }, [formData.field_mappings]);
-
   // Handler for field mapping changes
   const handleFieldMappingChange = (newMappings) => {
     setFieldMappings(newMappings);
     handleInputChange({ target: { name: 'field_mappings', value: newMappings } });
   };
-
+  
   const handleCoreConfigChange = (field, value) => {
-    // Use the parent's handleInputChange directly
-    if (handleInputChange) {
-      handleInputChange(field, value);
-    }
+  // Use the parent's handleInputChange directly
+  if (handleInputChange) {
+    handleInputChange(field, value);
+  }
   };
 
   // Handle condition changes
@@ -323,14 +343,6 @@ const LogicEditor = ({
         
         <TextField
           fullWidth
-          label="Logic Name"
-          value={formData.label || ''}
-          onChange={(e) => handleInputChange({ target: { name: 'label', value: e.target.value } })}
-          sx={{ mb: 2 }}
-        />
-        
-        <TextField
-          fullWidth
           label="Description"
           placeholder="What does this logic condition do?"
           value={formData.description || ''}
@@ -368,13 +380,13 @@ const LogicEditor = ({
           <Typography variant="h6" gutterBottom>
             Condition
           </Typography>
-          {renderConditionFields()}
+          {renderConditionFields(formData, handleInputChange)}
         </Box>
       )}
 
       {/* Field Mapper for explicit mapping */}
       <FieldMapper
-        nodeId={nodeId}
+        nodeId={nodeId || 'logic-node'}
         nodeType="logic"
         currentMappings={fieldMappings}
         onMappingChange={handleFieldMappingChange}
@@ -483,21 +495,11 @@ const LogicEditor = ({
           ))}
         </Box>
       )}
-
-      {/* Save Button */}
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-        <Button onClick={onClose} variant="outlined">
-          Cancel
-        </Button>
-        <Button onClick={onSave} variant="contained" color="primary">
-          Save Logic
-        </Button>
-      </Box>
     </Box>
   );
 };
 
-const renderConditionFields = () => {
+const renderConditionFields = (formData, handleInputChange) => {
   const conditionType = formData.condition_type;
 
   switch (conditionType) {

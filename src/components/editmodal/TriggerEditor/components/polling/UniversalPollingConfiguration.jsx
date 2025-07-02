@@ -3,7 +3,6 @@ import PropTypes from 'prop-types';
 import { toast } from 'react-hot-toast';
 
 // Sub-components
-import BYOKStatusSection from './BYOKStatusSection';
 import EndpointConfiguration from './EndpointConfiguration';
 import AuthenticationSection from './AuthenticationSection';
 import ChangeDetectionSection from './ChangeDetectionSection';
@@ -12,6 +11,33 @@ import TestingSection from './TestingSection';
 import ConfigurationSummary from './ConfigurationSummary';
 import { LLMConfigSection } from '../../../shared/LLMConfigSection';
 import VisualServiceExplorer from './VisualServiceExplorer';
+
+const SERVICE_PRESETS = [
+  {
+    name: 'Airtable',
+    endpoint: 'https://api.airtable.com/v0/YOUR_BASE_ID/YOUR_TABLE_NAME',
+    authType: 'api_key',
+    pollingInterval: 600,
+    changeDetection: 'array_length',
+    hint: 'Monitor Airtable base for new/updated records.'
+  },
+  {
+    name: 'Google Sheets',
+    endpoint: 'https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/export?format=csv&gid=0',
+    authType: 'none',
+    pollingInterval: 600,
+    changeDetection: 'response_hash',
+    hint: 'Monitor Google Sheets for changes.'
+  },
+  {
+    name: 'Slack',
+    endpoint: 'https://slack.com/api/conversations.history?channel=YOUR_CHANNEL_ID',
+    authType: 'bearer_token',
+    pollingInterval: 300,
+    changeDetection: 'array_length',
+    hint: 'Monitor Slack channel for new messages.'
+  }
+];
 
 const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
   // BYOK Integration - Load API Keys from API Key Manager
@@ -25,6 +51,10 @@ const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
     advanced: false,
     testing: false
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [serviceHint, setServiceHint] = useState('');
 
   // Load API Keys from BYOK Manager
   useEffect(() => {
@@ -75,6 +105,43 @@ const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
       }
     }
   }, [formData.authType, formData.serviceName, availableApiKeys, formData.apiKey, handleInputChange]);
+
+  // Auto-detect service hint
+  useEffect(() => {
+    if (!formData.apiEndpoint) {
+      setServiceHint('');
+      return;
+    }
+    const url = formData.apiEndpoint.toLowerCase();
+    if (url.includes('airtable.com')) setServiceHint('Airtable detected. Use API Key authentication.');
+    else if (url.includes('slack.com')) setServiceHint('Slack detected. Use Bearer Token authentication.');
+    else if (url.includes('google.com')) setServiceHint('Google Sheets detected. Use CSV export URL.');
+    else setServiceHint('');
+  }, [formData.apiEndpoint]);
+
+  // Sync local state with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    // Reset local state to match formData
+    setShowQuickStart(false);
+    setUseVisualMode(false);
+    setExpandedSections({
+      basics: true,
+      advanced: false,
+      testing: false
+    });
+    setShowAdvanced(false);
+    setTestResult(null);
+    setTesting(false);
+    
+    // Update service hint based on current formData
+    if (formData.apiEndpoint) {
+      const url = formData.apiEndpoint.toLowerCase();
+      if (url.includes('airtable.com')) setServiceHint('Airtable detected. Use API Key authentication.');
+      else if (url.includes('slack.com')) setServiceHint('Slack detected. Use Bearer Token authentication.');
+      else if (url.includes('google.com')) setServiceHint('Google Sheets detected. Use CSV export URL.');
+      else setServiceHint('');
+    }
+  }, [formData.apiEndpoint, formData.serviceName, formData.authType, formData.pollingInterval, formData.changeDetectionMethod]);
 
   // Quick start presets
   const quickStartPresets = [
@@ -148,6 +215,38 @@ const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
     }));
   };
 
+  // Test connection handler
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const response = await fetch(formData.apiEndpoint, { method: 'GET' });
+      const contentType = response.headers.get('content-type') || '';
+      let data;
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text();
+      }
+      setTestResult({ success: true, data });
+      toast.success('Connection successful!');
+    } catch (err) {
+      setTestResult({ success: false, error: err.message });
+      toast.error('Connection failed.');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  // Apply preset
+  const applyPreset = preset => {
+    handleInputChange({ target: { name: 'apiEndpoint', value: preset.endpoint } });
+    handleInputChange({ target: { name: 'authType', value: preset.authType } });
+    handleInputChange({ target: { name: 'pollingInterval', value: preset.pollingInterval } });
+    handleInputChange({ target: { name: 'changeDetectionMethod', value: preset.changeDetection } });
+    toast.success(`${preset.name} preset applied!`);
+  };
+
   // Helper component for info tooltips
   const InfoTooltip = ({ children, tooltip }) => (
     <div className="group relative inline-block">
@@ -178,80 +277,8 @@ const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
               <p className="text-sm text-gray-600">Monitor any API for real-time changes</p>
             </div>
           </div>
-          
-          <div className="flex gap-2">
-            <InfoTooltip tooltip="Quick setup with popular presets">
-              <button
-                onClick={() => setShowQuickStart(true)}
-                className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-all text-sm font-medium flex items-center gap-1"
-              >
-                🚀 Quick Start
-              </button>
-            </InfoTooltip>
-            
-            <InfoTooltip tooltip="Switch between visual service picker and manual configuration">
-              <button
-                onClick={() => setUseVisualMode(!useVisualMode)}
-                className={`px-3 py-2 rounded-lg transition-all text-sm font-medium flex items-center gap-1 ${
-                  useVisualMode 
-                    ? 'bg-purple-500 text-white shadow-sm' 
-                    : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <span>{useVisualMode ? '🎨' : '📋'}</span>
-                {useVisualMode ? 'Visual' : 'Manual'}
-              </button>
-            </InfoTooltip>
-          </div>
         </div>
       </div>
-
-      {/* Quick Start Modal - Compact */}
-      {showQuickStart && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold text-gray-800">🚀 Quick Start</h3>
-              <button 
-                onClick={() => setShowQuickStart(false)}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="space-y-2 mb-4">
-              {quickStartPresets.map((preset, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => applyQuickStart(preset)}
-                  className="w-full text-left p-3 border border-gray-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-all"
-                >
-                  <div className="font-medium text-gray-800">{preset.name}</div>
-                  <div className="text-sm text-gray-600">{preset.description}</div>
-                </button>
-              ))}
-            </div>
-            
-            <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded">
-              💡 Presets auto-configure common services. Customize after applying.
-            </div>
-          </div>
-        </div>
-      )}
-
-      <BYOKStatusSection 
-        loadingApiKeys={loadingApiKeys}
-        apiKeyError={apiKeyError}
-        availableApiKeys={availableApiKeys}
-      />
-
-      <LLMConfigSection 
-        formData={formData}
-        handleInputChange={handleInputChange}
-        framework="trigger"
-        showApiKey={true}
-      />
 
       {/* Service Selection Mode */}
       {useVisualMode ? (
@@ -262,96 +289,135 @@ const UniversalPollingConfiguration = ({ formData, handleInputChange }) => {
         />
       ) : (
         <>
-          {/* Collapsible Sections */}
-          <div className="space-y-3">
-            {/* Basic Configuration */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          {/* Presets */}
+          <div className="flex gap-2 mb-2">
+            {SERVICE_PRESETS.map(preset => (
               <button
-                onClick={() => toggleSection('basics')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                key={preset.name}
+                type="button"
+                className="px-2 py-1 bg-blue-100 text-blue-800 rounded hover:bg-blue-200 text-xs"
+                onClick={() => applyPreset(preset)}
               >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">⚙️</span>
-                  <span className="font-medium text-gray-800">Basic Configuration</span>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Required</span>
-                </div>
-                <span className={`transform transition-transform ${expandedSections.basics ? 'rotate-180' : ''}`}>
-                  ⌄
-                </span>
+                {preset.name} Preset
               </button>
-              
-              {expandedSections.basics && (
-                <div className="border-t border-gray-100 p-4 space-y-4">
-                  <EndpointConfiguration 
-                    formData={formData}
-                    handleInputChange={handleInputChange}
+            ))}
+          </div>
+          {/* Essential Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">API Endpoint URL</label>
+              <input
+                type="text"
+                className="w-full border rounded px-2 py-1"
+                value={formData.apiEndpoint || ''}
+                onChange={e => handleInputChange({ target: { name: 'apiEndpoint', value: e.target.value } })}
+                placeholder="https://api.example.com/data"
+              />
+              {serviceHint && <div className="text-xs text-blue-600 mt-1">{serviceHint}</div>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Auth Type</label>
+              <select
+                className="w-full border rounded px-2 py-1"
+                value={formData.authType || 'none'}
+                onChange={e => handleInputChange({ target: { name: 'authType', value: e.target.value } })}
+              >
+                <option value="none">None</option>
+                <option value="api_key">API Key</option>
+                <option value="bearer_token">Bearer Token</option>
+                <option value="basic_auth">Basic Auth</option>
+              </select>
+              {/* Dynamic Auth Inputs */}
+              {formData.authType === 'api_key' && (
+                <input
+                  type="text"
+                  className="w-full border rounded px-2 py-1 mt-2"
+                  placeholder="Enter API Key"
+                  value={formData.apiKey || ''}
+                  onChange={e => handleInputChange({ target: { name: 'apiKey', value: e.target.value } })}
+                />
+              )}
+              {formData.authType === 'bearer_token' && (
+                <input
+                  type="text"
+                  className="w-full border rounded px-2 py-1 mt-2"
+                  placeholder="Enter Bearer Token"
+                  value={formData.bearerToken || ''}
+                  onChange={e => handleInputChange({ target: { name: 'bearerToken', value: e.target.value } })}
+                />
+              )}
+              {formData.authType === 'basic_auth' && (
+                <div className="flex flex-col gap-2 mt-2">
+                  <input
+                    type="text"
+                    className="w-full border rounded px-2 py-1"
+                    placeholder="Username"
+                    value={formData.username || ''}
+                    onChange={e => handleInputChange({ target: { name: 'username', value: e.target.value } })}
                   />
-                  <AuthenticationSection 
-                    formData={formData}
-                    handleInputChange={handleInputChange}
-                  />
-                  <ChangeDetectionSection 
-                    formData={formData}
-                    handleInputChange={handleInputChange}
+                  <input
+                    type="password"
+                    className="w-full border rounded px-2 py-1"
+                    placeholder="Password"
+                    value={formData.password || ''}
+                    onChange={e => handleInputChange({ target: { name: 'password', value: e.target.value } })}
                   />
                 </div>
               )}
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Polling Interval (seconds)</label>
+              <input
+                type="number"
+                className="w-full border rounded px-2 py-1"
+                value={formData.pollingInterval || 300}
+                min={10}
+                onChange={e => handleInputChange({ target: { name: 'pollingInterval', value: e.target.value } })}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Change Detection Method</label>
+              <select
+                className="w-full border rounded px-2 py-1"
+                value={formData.changeDetectionMethod || 'array_length'}
+                onChange={e => handleInputChange({ target: { name: 'changeDetectionMethod', value: e.target.value } })}
+              >
+                <option value="array_length">Array Length</option>
+                <option value="field_value">Field Value</option>
+                <option value="timestamp">Timestamp</option>
+                <option value="response_hash">Response Hash</option>
+              </select>
+            </div>
+          </div>
 
-            {/* Advanced Options */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <button
-                onClick={() => toggleSection('advanced')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🔧</span>
-                  <span className="font-medium text-gray-800">Advanced Options</span>
-                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">Optional</span>
-                </div>
-                <span className={`transform transition-transform ${expandedSections.advanced ? 'rotate-180' : ''}`}>
-                  ⌄
-                </span>
-              </button>
-              
-              {expandedSections.advanced && (
-                <div className="border-t border-gray-100 p-4">
-                  <DataFilteringSection 
-                    formData={formData}
-                    handleInputChange={handleInputChange}
-                  />
-                </div>
-              )}
-            </div>
+          {/* Add TestingSection for AI-powered analysis/test */}
+          <TestingSection formData={formData} handleInputChange={handleInputChange} />
 
-            {/* Testing & Validation */}
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <button
-                onClick={() => toggleSection('testing')}
-                className="w-full p-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">🧪</span>
-                  <span className="font-medium text-gray-800">Test & Validate</span>
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Recommended</span>
-                </div>
-                <span className={`transform transition-transform ${expandedSections.testing ? 'rotate-180' : ''}`}>
-                  ⌄
-                </span>
-              </button>
-              
-              {expandedSections.testing && (
-                <div className="border-t border-gray-100 p-4 space-y-4">
-                  <TestingSection 
-                    formData={formData}
-                    handleInputChange={handleInputChange}
-                  />
-                  <ConfigurationSummary 
-                    formData={formData}
+          {/* Advanced Options */}
+          <div>
+            <button
+              type="button"
+              className="text-xs text-blue-700 underline"
+              onClick={() => setShowAdvanced(v => !v)}
+            >
+              {showAdvanced ? 'Hide Advanced' : 'Show Advanced'}
+            </button>
+            {showAdvanced && (
+              <div className="mt-2 space-y-2">
+                {/* Custom headers, data filtering, etc. can go here */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Custom Headers (JSON)</label>
+                  <input
+                    type="text"
+                    className="w-full border rounded px-2 py-1 text-xs"
+                    value={formData.customHeaders || ''}
+                    onChange={e => handleInputChange({ target: { name: 'customHeaders', value: e.target.value } })}
+                    placeholder='{"Authorization": "Bearer ..."}'
                   />
                 </div>
-              )}
-            </div>
+                {/* Add more advanced options as needed */}
+              </div>
+            )}
           </div>
         </>
       )}

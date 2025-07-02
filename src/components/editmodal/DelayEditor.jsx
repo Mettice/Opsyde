@@ -1,53 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
-import HelpTooltip from '../HelpTooltip';
 import DynamicSchemaForm from './shared/DynamicSchemaForm';
+import { delayNodeSchema } from './shared/nodeSchemas';
 import FieldMapper from './shared/FieldMapper';
 import NodeOutputPreview from '../NodeOutputPreview';
 
 const DelayEditor = ({ formData, handleInputChange, onSave, onClose, connectedNodes = [], previousNodeOutputs = {}, nodeId }) => {
-  // State for schema-driven core delay config
-  const [delayCoreConfig, setDelayCoreConfig] = useState({
-    label: formData.label || '',
-    description: formData.description || '',
-    duration: formData.duration || 5
-  });
+  // Only manage duration in the schema-driven form
+  const [duration, setDuration] = useState(formData.duration || 5);
   const [validationErrors, setValidationErrors] = useState(false);
-
-  // Field mapping state
   const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
 
-  // Keep fieldMappings in sync with formData
   useEffect(() => {
     setFieldMappings(formData.field_mappings || {});
-  }, [formData.field_mappings]);
+    setDuration(formData.duration || 5);
+  }, [formData]);
 
-  // Handler for field mapping changes
   const handleFieldMappingChange = (newMappings) => {
     setFieldMappings(newMappings);
     handleInputChange({ target: { name: 'field_mappings', value: newMappings } });
   };
 
-  // Handler for schema form changes
-  const handleCoreConfigChange = (newConfig) => {
-    setDelayCoreConfig(newConfig);
+  // Only update duration
+  const handleSchemaChange = (newData) => {
+    setDuration(newData.duration);
+    handleInputChange({ target: { name: 'duration', value: newData.duration } });
   };
 
-  // Handler for schema validation
   const handleValidationError = (hasErrors) => {
     setValidationErrors(hasErrors);
-  };
-
-  // Handler for save
-  const handleSave = () => {
-    if (validationErrors) {
-      alert('Please fix validation errors before saving.');
-      return;
-    }
-    onSave({
-      ...formData,
-      ...delayCoreConfig
-    });
   };
 
   return (
@@ -55,12 +36,11 @@ const DelayEditor = ({ formData, handleInputChange, onSave, onClose, connectedNo
       <div className="space-y-4">
         <h3 className="text-lg font-medium text-gray-900">Delay Configuration</h3>
         <DynamicSchemaForm
-          schema={delayNodeSchema}
-          formData={delayCoreConfig}
-          onChange={handleCoreConfigChange}
+          schema={{ fields: { duration: delayNodeSchema.fields.duration } }}
+          formData={{ duration }}
+          onChange={handleSchemaChange}
           onValidationError={handleValidationError}
         />
-        {/* Field Mapper for explicit mapping */}
         <FieldMapper
           nodeId={nodeId || formData.id || formData.nodeId || ''}
           nodeType="delay"
@@ -69,7 +49,6 @@ const DelayEditor = ({ formData, handleInputChange, onSave, onClose, connectedNo
           connectedNodes={connectedNodes}
           previousNodeOutputs={previousNodeOutputs}
         />
-        {/* Optionally show output preview for mapped fields */}
         {previousNodeOutputs && Object.keys(previousNodeOutputs).length > 0 && (
           <NodeOutputPreview
             nodeId={nodeId || formData.id || formData.nodeId || ''}
@@ -78,20 +57,6 @@ const DelayEditor = ({ formData, handleInputChange, onSave, onClose, connectedNo
             isVisible={false}
           />
         )}
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-          >
-            Save Changes
-          </button>
-        </div>
       </div>
     </div>
   );

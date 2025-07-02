@@ -149,6 +149,33 @@ const EnhancedAgentEditor = ({
     setFieldMappings(formData.field_mappings || {});
   }, [formData.field_mappings]);
 
+  // Sync local state with formData when formData changes (fix for re-editing)
+  useEffect(() => {
+    // Reset local state to match formData
+    setUseEnhancedMode(formData.useEnhancedMode || false);
+    setEnhancedFramework(formData.enhancedFramework || '');
+    setEnhancedProvider(formData.enhancedProvider || '');
+    setEnhancedModel(formData.enhancedModel || '');
+    setShowAdvanced(formData.showAdvanced || false);
+    setValidationErrors(formData.validationErrors || {});
+    
+    // Sync field mappings
+    setFieldMappings(formData.field_mappings || {});
+    
+    // Update agent core config
+    setAgentCoreConfig({
+      role: formData.role || '',
+      goal: formData.goal || '',
+      backstory: formData.backstory || '',
+      llmModel: formData.llmModel || '',
+      llmProvider: formData.llmProvider || '',
+      temperature: formData.temperature || 0.7,
+      max_tokens: formData.max_tokens || 4000
+    });
+    
+    console.log('AgentEditor: Synced with form data:', formData);
+  }, [formData]);
+
   // Handler for field mapping changes
   const handleFieldMappingChange = (newMappings) => {
     setFieldMappings(newMappings);
@@ -615,45 +642,7 @@ const EnhancedAgentEditor = ({
 
   const renderFrameworkSelector = () => (
     <div className="mb-6">
-      {/* Enhanced Framework Selection Mode Toggle */}
-      <div className="mb-6 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">Framework Selection Mode</h3>
-            <p className="text-sm text-gray-600">Choose between simple or enhanced framework configuration</p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <span className={`text-sm ${!useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
-              Simple
-            </span>
-            <button
-              type="button"
-              onClick={() => handleModeSwitch(!useEnhancedMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                useEnhancedMode ? 'bg-purple-600' : 'bg-gray-200'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  useEnhancedMode ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <span className={`text-sm ${useEnhancedMode ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
-              Enhanced ✨
-            </span>
-          </div>
-        </div>
-        
-        <div className="text-xs text-gray-500">
-          {useEnhancedMode 
-            ? '✨ Enhanced mode: Native support detection, BYOK integration, and compatibility matrix'
-            : '⚡ Simple mode: Quick framework selection'
-          }
-        </div>
-      </div>
-
-      {/* Enhanced Framework Selector */}
+      {/* Enhanced Framework Selector (no top-level mode toggle) */}
       {useEnhancedMode ? (
         <div className="mb-6">
           <EnhancedFrameworkSelector
@@ -1912,19 +1901,19 @@ const EnhancedAgentEditor = ({
       {/* BYOK Status */}
       {renderBYOKStatus()}
 
-      {/* Enhanced Mode Toggle */}
+      {/* Framework Selection Mode Toggle (keep only this one) */}
       <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
         <div>
-          <h3 className="text-lg font-medium text-gray-900">Configuration Mode</h3>
+          <h3 className="text-lg font-medium text-gray-900">Framework Selection Mode</h3>
           <p className="text-sm text-gray-600">
-            {useEnhancedMode 
-              ? "Enhanced mode: Simplified framework selection with auto-configuration"
-              : "Traditional mode: Full framework-specific configuration options"
-            }
+            Choose between simple or enhanced framework configuration
+          </p>
+          <p className="text-xs text-purple-700 mt-1">
+            <span className="font-semibold">✨ Enhanced mode:</span> Native support detection, BYOK integration, and compatibility matrix
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600">Traditional</span>
+          <span className="text-sm text-gray-600">Simple</span>
           <button
             onClick={() => handleModeSwitch(!useEnhancedMode)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -1937,92 +1926,40 @@ const EnhancedAgentEditor = ({
               }`}
             />
           </button>
-          <span className="text-sm text-gray-600">Enhanced</span>
+          <span className="text-sm text-gray-600">Enhanced ✨</span>
         </div>
       </div>
 
-      {/* Core Agent Configuration */}
-      <div className="space-y-4">
-        <h3 className="text-lg font-medium text-gray-900">Agent Configuration</h3>
-        
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Agent Name *
-          </label>
-          <input
-            type="text"
-            name="label"
-            value={formData.label || ''}
-            onChange={handleInputChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="e.g., Data Analyst Agent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Role *
-          </label>
-          <input
-            type="text"
-            name="role"
-            value={formData.role || ''}
-            onChange={handleInputChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="e.g., Data Analyst, Customer Support Agent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Goal *
-          </label>
-          <textarea
-            name="goal"
-            value={formData.goal || ''}
-            onChange={handleInputChange}
-            rows={3}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="What should this agent accomplish?"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Backstory (Optional)
-          </label>
-          <textarea
-            name="backstory"
-            value={formData.backstory || ''}
-            onChange={handleInputChange}
-            rows={2}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            placeholder="Agent's background, personality, or context"
-          />
-        </div>
-      </div>
-
-      {/* Field Mapper for explicit mapping */}
-      <FieldMapper
-        nodeId={nodeId || formData.id || formData.nodeId || ''}
-        nodeType="agent"
-        currentMappings={fieldMappings}
-        onMappingChange={handleFieldMappingChange}
-        connectedNodes={connectedNodes}
-        previousNodeOutputs={previousNodeOutputs}
-      />
-
-      {/* Framework Selection */}
+      {/* Framework Picker */}
       {renderFrameworkSelector()}
 
-      {/* LLM Configuration */}
-      {formData.framework && renderLLMSelector()}
+      {/* Only show the rest if a framework is selected */}
+      {formData.framework && (
+        <>
+          {/* Field Mapper for explicit mapping (only for framework-specific fields) */}
+          <FieldMapper
+            nodeId={nodeId || formData.id || formData.nodeId || ''}
+            nodeType="agent"
+            currentMappings={fieldMappings}
+            onMappingChange={handleFieldMappingChange}
+            connectedNodes={connectedNodes}
+            previousNodeOutputs={previousNodeOutputs}
+          />
 
-      {/* Framework-Specific Configuration */}
-      {formData.framework && renderFrameworkSpecificFields()}
+          {/* Enhanced Mode: Show only enhanced UI, hide manual LLM config if not relevant */}
+          {useEnhancedMode ? (
+            <>
+              {renderFrameworkSpecificFields && renderFrameworkSpecificFields()}
+            </>
+          ) : (
+            // Simple Mode: Show manual LLM config and framework-specific config
+            <>
+              {renderLLMSelector && renderLLMSelector()}
+              {renderFrameworkSpecificFields && renderFrameworkSpecificFields()}
+            </>
+          )}
+        </>
+      )}
 
       {/* Validation Errors */}
       {Object.keys(validationErrors).length > 0 && (
