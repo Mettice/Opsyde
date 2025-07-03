@@ -114,6 +114,10 @@ class InputNode(BaseNode):
             # NEW: Check for trigger data from upstream trigger nodes
             trigger_data = inputs.get("trigger_data") or inputs.get("api_data") or inputs.get("webhook_data")
             
+            # FIXED: Check for input value in inputs parameter (for test scenarios)
+            if not input_value and "input" in inputs:
+                input_value = inputs["input"]
+            
             logger.info(f"🎯 Processing input node: {input_label} (type: {input_type})")
             logger.info(f"   Has multimodal result: {bool(multimodal_result)}")
             logger.info(f"   Has trigger data: {bool(trigger_data)}")
@@ -143,6 +147,28 @@ class InputNode(BaseNode):
         except Exception as e:
             logger.error(f"Error in input node: {str(e)}")
             return NodeData.from_error(f"Input processing failed: {str(e)}")
+
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute node-specific logic - required by BaseNode"""
+        # Convert NodeData inputs to regular dict
+        regular_inputs = {}
+        for key, node_data in inputs.items():
+            if isinstance(node_data, NodeData):
+                regular_inputs[key] = node_data.get_value()
+            else:
+                regular_inputs[key] = node_data
+        
+        # Convert config to dict
+        if hasattr(config, 'dict'):
+            config_dict = config.dict()
+        elif hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+        
+        # Call the process method
+        result = await self.process(config_dict, regular_inputs, context)
+        return result
 
     async def _process_frontend_multimodal_result(
         self, 

@@ -6,7 +6,8 @@ import DynamicSchemaForm from './shared/DynamicSchemaForm';
 import { logicNodeSchema } from './shared/nodeSchemas';
 import FieldMapper from './shared/FieldMapper';
 import NodeOutputPreview from '../NodeOutputPreview';
-import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch } from '@mui/material';
+import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch, Chip, Divider, Grid, Card, CardContent, IconButton, Tooltip } from '@mui/material';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 // Generic operators for all data types
 const operatorsByType = {
@@ -89,7 +90,8 @@ const LogicEditor = ({
   previousNodeOutputs = {},
   nodeId,
   onSave,
-  onClose
+  onClose,
+  nodeType
 }) => {
   const [buildMode, setBuildMode] = useState('visual');
   const [conditions, setConditions] = useState([]);
@@ -99,6 +101,8 @@ const LogicEditor = ({
   const [showFieldGuide, setShowFieldGuide] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState(null);
 
   // State aligned with logicNodeSchema
   const [logicCoreConfig, setLogicCoreConfig] = useState({
@@ -333,6 +337,34 @@ const LogicEditor = ({
     handleInputChange({ target: { name: 'condition', value: '' } });
   };
 
+  const handleTest = async () => {
+    setTestLoading(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const nodePayload = {
+        ...formData,
+        type: nodeType || formData.type || 'logic',
+        id: nodeId || formData.id || formData.nodeId || ''
+      };
+      const res = await fetch('/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_data: nodePayload, test_inputs: {} })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult(data.result || data.output || data);
+      } else {
+        setTestError(data.error || 'Test failed');
+      }
+    } catch (err) {
+      setTestError(err.message || 'Test failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Core Logic Configuration */}
@@ -428,14 +460,19 @@ const LogicEditor = ({
 
       {/* Test Results */}
       {testResult && (
-        <Box sx={{ mb: 3, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            Test Result:
-          </Typography>
-          <Typography variant="body2">
-            {JSON.stringify(testResult, null, 2)}
-          </Typography>
-        </Box>
+        <div className="mt-2">
+          <ResultDisplayCard
+            content={testResult}
+            title="Test Result"
+            colorScheme="blue"
+            defaultExpanded={false}
+            showMetrics={true}
+            metadata={{
+              nodeType: 'logic',
+              testType: 'preview'
+            }}
+          />
+        </div>
       )}
 
       {/* Advanced Options */}
@@ -495,6 +532,19 @@ const LogicEditor = ({
           ))}
         </Box>
       )}
+
+      <div className="mt-4">
+        <button
+          onClick={handleTest}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={testLoading}
+        >
+          {testLoading ? 'Testing...' : 'Test/Preview'}
+        </button>
+        {testError && (
+          <div className="mt-2 text-red-600">{testError}</div>
+        )}
+      </div>
     </Box>
   );
 };
@@ -679,7 +729,8 @@ LogicEditor.propTypes = {
   previousNodeOutputs: PropTypes.object,
   nodeId: PropTypes.string,
   onSave: PropTypes.func,
-  onClose: PropTypes.func
+  onClose: PropTypes.func,
+  nodeType: PropTypes.string
 };
 
 export default LogicEditor;

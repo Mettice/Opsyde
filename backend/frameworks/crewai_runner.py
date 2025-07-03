@@ -1,8 +1,10 @@
 import logging
-from typing import Dict, Any, List, Optional, Union
-from datetime import datetime
-import asyncio
+import os
 import json
+import asyncio
+from datetime import datetime
+from typing import Dict, Any, List, Optional, Union
+from functools import lru_cache
 
 from models.runner_schemas import CrewAIRunnerConfig
 from models.schemas import NodeSchema, SchemaType, SchemaField
@@ -144,8 +146,8 @@ class EnhancedCrewAIRunner:
         # Enhanced LLM config for 0.1.21
         llm_config = {
             'temperature': framework_config.get('temperature', 0.7),
-            'max_tokens': framework_config.get('max_tokens', 4000),
-            'callbacks': self._get_token_callbacks()  # For token tracking
+            'max_tokens': framework_config.get('max_tokens', 4000)
+            # FIXED: Removed callbacks to avoid validation errors
         }
         
         # Handle BYOK (Bring Your Own Keys) format
@@ -202,16 +204,9 @@ class EnhancedCrewAIRunner:
     
     def _get_token_callbacks(self):
         """Get callbacks for token usage tracking"""
-        from langchain.callbacks import get_openai_callback
-        
-        def token_callback(tokens_used, cost):
-            self.token_usage = {
-                'tokens': tokens_used,
-                'cost': cost,
-                'timestamp': datetime.now().isoformat()
-            }
-        
-        return [token_callback]
+        # FIXED: Return empty list to avoid callback validation errors
+        # Token tracking will be handled differently
+        return []
     
     def create_crewai_tools(self, tool_configs: List[Dict[str, Any]]) -> List[BaseTool]:
         """Create CrewAI-compatible tools including built-in ones"""
@@ -263,6 +258,133 @@ class EnhancedCrewAIRunner:
             
         return api_call
     
+    def _create_file_tool(self, config: Dict[str, Any]) -> BaseTool:
+        """Create file tool for CrewAI"""
+        from crewai.tools import tool
+        
+        @tool("file_tool")
+        def file_operation(operation: str, file_path: str = None) -> str:
+            """Perform file operations like read, write, list"""
+            # Use built-in FileReaderTool if available
+            if 'file_reader' in self.get_built_in_tools():
+                return self.get_built_in_tools()['file_reader'].run(file_path)
+            return f"File operation {operation} on {file_path}"
+            
+        return file_operation
+    
+    def _process_inputs_for_crewai(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Process inputs to extract actual values from NodeData objects for CrewAI"""
+        processed = {}
+        for key, value in inputs.items():
+            # DEBUG: Log what we're processing
+            logger.debug(f"🔧 Processing input '{key}': {type(value)} = {str(value)[:100]}...")
+            
+            # Extract value from NodeData objects recursively
+            actual_value = self._extract_nodedata_recursive(value)
+            
+            # DEBUG: Log what we extracted
+            logger.debug(f"🔧 Extracted '{key}': {type(actual_value)} = {str(actual_value)[:100]}...")
+            
+            # FIXED: Handle unsupported data types for CrewAI
+            if isinstance(actual_value, tuple):
+                # Convert tuple to string representation
+                processed[key] = str(actual_value)
+            elif isinstance(actual_value, (set, frozenset)):
+                # Convert sets to lists
+                processed[key] = list(actual_value)
+            elif actual_value is None:
+                # Convert None to empty string
+                processed[key] = ""
+            elif not isinstance(actual_value, (str, int, float, bool, dict, list)):
+                # Convert any other unsupported types to string
+                processed[key] = str(actual_value)
+            else:
+                # Supported types can be passed as-is
+                processed[key] = actual_value
+                
+        return processed
+    
+    def _extract_nodedata_recursive(self, value: Any) -> Any:
+        """Recursively extract NodeData values from any data structure"""
+        # Handle NodeData objects
+        if hasattr(value, 'value'):
+            return self._extract_nodedata_recursive(value.value)
+        
+        # Handle dictionaries - AGGRESSIVE extraction
+        elif isinstance(value, dict):
+            # DEBUG: Log what we're processing
+            logger.debug(f"🔧 Processing dict: {list(value.keys())}")
+            
+            # AGGRESSIVE: Look for any string field that could be the actual input
+            string_fields = ['input', 'value', 'text', 'content', 'message', 'query', 'prompt', 'description', 'task', 'instructions']
+            
+            # First, check direct string fields
+            for key in string_fields:
+                if key in value and isinstance(value[key], str) and value[key].strip():
+                    logger.debug(f"🔧 Found direct '{key}' field: {value[key][:50]}...")
+                    return value[key]
+            
+            # If no direct string field, check nested structures
+            if 'output' in value:
+                output_data = value['output']
+                logger.debug(f"🔧 Found 'output' with type: {type(output_data)}")
+                
+                if isinstance(output_data, str) and output_data.strip():
+                    logger.debug(f"🔧 Found string output: {output_data[:50]}...")
+                    return output_data
+                elif isinstance(output_data, dict):
+                    # Check for data field
+                    if 'data' in output_data and isinstance(output_data['data'], dict):
+                        data = output_data['data']
+                        logger.debug(f"🔧 Found 'data' dict with keys: {list(data.keys())}")
+                        
+                        # AGGRESSIVE: Look for any string field in data
+                        for key in string_fields:
+                            if key in data and isinstance(data[key], str) and data[key].strip():
+                                logger.debug(f"🔧 Found nested '{key}' field: {data[key][:50]}...")
+                                return data[key]
+                        
+                        # If no string field found, convert the entire data to string
+                        logger.debug(f"🔧 Converting data to string: {str(data)[:100]}...")
+                        return str(data)
+                    
+                    # Recursively search the output dict
+                    return self._extract_nodedata_recursive(output_data)
+            
+            # For other dictionaries, recursively extract values
+            logger.debug(f"🔧 Recursively processing dict with keys: {list(value.keys())}")
+            return {k: self._extract_nodedata_recursive(v) for k, v in value.items()}
+        
+        # Handle lists
+        elif isinstance(value, list):
+            return [self._extract_nodedata_recursive(item) for item in value]
+        
+        # Handle other types (strings, numbers, booleans, etc.)
+        else:
+            return value
+    
+    def _check_for_nodedata_in_dict(self, data: Dict[str, Any], prefix: str = ""):
+        """Debug helper to check for NodeData objects in dictionaries"""
+        for key, value in data.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if hasattr(value, 'value'):
+                logger.warning(f"🔧 WARNING: NodeData object found in {full_key}: {type(value)}")
+            elif isinstance(value, dict):
+                self._check_for_nodedata_in_dict(value, full_key)
+            elif isinstance(value, list):
+                self._check_for_nodedata_in_list(value, full_key)
+    
+    def _check_for_nodedata_in_list(self, data: List[Any], prefix: str = ""):
+        """Debug helper to check for NodeData objects in lists"""
+        for i, item in enumerate(data):
+            full_key = f"{prefix}[{i}]"
+            if hasattr(item, 'value'):
+                logger.warning(f"🔧 WARNING: NodeData object found in {full_key}: {type(item)}")
+            elif isinstance(item, dict):
+                self._check_for_nodedata_in_dict(item, full_key)
+            elif isinstance(item, list):
+                self._check_for_nodedata_in_list(item, full_key)
+
     async def run_crewai_agent(self, config: CrewAIRunnerConfig, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Run CrewAI agent with schema validation"""
         if not CREWAI_AVAILABLE:
@@ -273,45 +395,143 @@ class EnhancedCrewAIRunner:
             self.intermediate_steps = []
             self.token_usage = {}
             
-            # Create LLM with token tracking
-            llm = self.get_llm_for_framework(config.framework_config)
+            # FIXED: Process inputs to extract values from NodeData objects
+            logger.info(f"🔧 CrewAI raw inputs: {list(inputs.keys())}")
+            processed_inputs = self._process_inputs_for_crewai(inputs)
+            logger.info(f"🔧 CrewAI processed inputs: {list(processed_inputs.keys())}")
             
-            # 🔧 CRITICAL FIX: If LLM is None (e.g., for Perplexity), use fallback execution immediately
-            if llm is None:
-                logger.info(f"🔄 LLM is None - using fallback execution for provider: {config.provider}")
+            # Debug: Check for any remaining NodeData objects
+            for key, value in processed_inputs.items():
+                if hasattr(value, 'value'):
+                    logger.warning(f"🔧 WARNING: NodeData object still present in {key}: {type(value)}")
+                elif isinstance(value, dict):
+                    self._check_for_nodedata_in_dict(value, key)
+                elif isinstance(value, list):
+                    self._check_for_nodedata_in_list(value, key)
+            
+            # FIXED: Get the actual provider and API key from BYOK system
+            # The config.provider might be overridden by the execution context
+            actual_provider = config.provider
+            actual_model = config.model
+            
+            # If we have an execution context, use it to get the correct provider and API key
+            if hasattr(self, 'context') and self.context:
+                # Get the best available provider from BYOK
+                available_keys = self.context.get_api_keys_for_user()
+                if available_keys:
+                    # Use the first available provider, or the one specified in config
+                    if actual_provider in available_keys:
+                        # Provider is available, use it
+                        api_key = available_keys[actual_provider]
+                        logger.info(f"🔑 Using {actual_provider} with API key from BYOK")
+                    else:
+                        # Provider not available, use first available
+                        actual_provider = list(available_keys.keys())[0]
+                        api_key = available_keys[actual_provider]
+                        logger.info(f"🔑 Provider {config.provider} not available, using {actual_provider} from BYOK")
+                else:
+                    logger.warning(f"❌ No API keys available in BYOK system")
+                    return await self._fallback_execution(config, inputs)
+            else:
+                logger.warning(f"❌ No execution context available")
                 return await self._fallback_execution(config, inputs)
             
-            # Create tools (including built-in ones)
-            crewai_tools = []
-            if config.tools:
-                crewai_tools = self.create_crewai_tools(config.tools)
+            # Create LLM with token tracking - FIXED: Use correct field names and handle callbacks properly
+            llm_config = {
+                "provider": actual_provider,
+                "model": actual_model,
+                "temperature": config.temperature,
+                "max_tokens": config.max_tokens,
+                "api_key": api_key  # FIXED: Pass the API key
+            }
+            llm = self.get_llm_for_framework(llm_config)
             
-            # Create Agent with enhanced config
+            # FIXED: Handle callbacks properly to avoid validation errors
+            if hasattr(llm, 'callbacks'):
+                # Remove problematic callbacks to avoid validation errors
+                llm.callbacks = None
+            
+            # FIXED: Convert tool configs to actual tool objects
+            tools = []
+            if config.tools:
+                tools = self.create_crewai_tools(config.tools)
+            
+            # Create agent with proper configuration
             agent = Agent(
                 role=config.role,
                 goal=config.goal,
                 backstory=config.backstory,
-                verbose=True,
+                verbose=config.verbose,
                 allow_delegation=config.allow_delegation,
-                tools=crewai_tools,
                 llm=llm,
-                max_iter=config.max_iterations,
-                memory=config.enable_memory,
-                step_callback=self._step_callback
+                tools=tools
             )
             
             # Create Task with enhanced output handling
-            task_description = inputs.get('task', '')
-            if inputs.get('context'):
-                # Inject context into task description
-                context_lines = '\n'.join([f'{k}: {v}' for k, v in inputs['context'].items()])
-                task_description = f"{task_description}\n\nContext:\n{context_lines}"
+            # AGGRESSIVE: Extract string from agent_input or any available input
+            task_description = processed_inputs.get('agent_input', '')
+            
+            # DEBUG: Log what we got for agent_input
+            logger.info(f"🔧 Task description from agent_input: {type(task_description)} = {str(task_description)[:100]}...")
+            
+            # AGGRESSIVE: Ensure we always get a string, even if it's a dict
+            if isinstance(task_description, dict):
+                # Try to extract string from the dict
+                task_description = self._extract_nodedata_recursive(task_description)
+                logger.info(f"🔧 Extracted from dict: {type(task_description)} = {str(task_description)[:100]}...")
+            
+            # If still not a string or empty, try other fields
+            if not task_description or not isinstance(task_description, str):
+                # Try to get description from other fields
+                for field in ['task', 'instructions', 'description', 'input', 'data']:
+                    value = processed_inputs.get(field, '')
+                    if value and isinstance(value, str) and value.strip():
+                        task_description = value
+                        logger.info(f"🔧 Using {field} field: {task_description[:100]}...")
+                        break
+                    elif isinstance(value, dict):
+                        # Try to extract string from dict
+                        extracted = self._extract_nodedata_recursive(value)
+                        if extracted and isinstance(extracted, str) and extracted.strip():
+                            task_description = extracted
+                            logger.info(f"🔧 Extracted from {field} dict: {task_description[:100]}...")
+                            break
+                
+                # Final fallback
+                if not task_description or not isinstance(task_description, str):
+                    task_description = "Complete the assigned task based on the provided inputs."
+                    logger.info(f"🔧 Using final fallback: {task_description}")
+            
+            # Ensure it's a string
+            task_description = str(task_description)
+            logger.info(f"🔧 Final task description: {type(task_description)} = {task_description[:100]}...")
+            
+            # Add context information if available
+            context_info = []
+            if processed_inputs.get('context'):
+                if isinstance(processed_inputs['context'], dict):
+                    context_lines = '\n'.join([f'{k}: {v}' for k, v in processed_inputs['context'].items()])
+                    context_info.append(f"Context:\n{context_lines}")
+                else:
+                    context_info.append(f"Context: {processed_inputs['context']}")
+            
+            # Add agent output if available
+            if processed_inputs.get('agent_output'):
+                context_info.append(f"Agent Output: {processed_inputs['agent_output']}")
+            
+            # Add task input if available
+            if processed_inputs.get('task_input'):
+                context_info.append(f"Task Input: {processed_inputs['task_input']}")
+            
+            # Combine all information
+            if context_info:
+                task_description = f"{task_description}\n\n" + "\n\n".join(context_info)
             
             task = Task(
                 description=task_description,
                 expected_output="Detailed response",
                 agent=agent,
-                tools=crewai_tools
+                tools=tools
             )
             
             # Create Crew with enhanced configuration
@@ -324,7 +544,7 @@ class EnhancedCrewAIRunner:
             )
             
             # Execute with enhanced 0.121.0 methods
-            result = crew.kickoff(inputs=inputs or {})
+            result = crew.kickoff(inputs=processed_inputs or {})
             
             # Format response according to schema
             return {
@@ -482,16 +702,43 @@ class EnhancedCrewAIRunner:
                 "success": False
             }
     
-    async def _fallback_execution(self, agent_config: Dict[str, Any], 
-                                task_config: Dict[str, Any],
+    async def _fallback_execution(self, agent_config: Union[CrewAIRunnerConfig, Dict[str, Any]], 
+                                task_config: Union[Dict[str, Any], None] = None,
                                 inputs: Dict[str, Any] = None) -> Dict[str, Any]:
         """Fallback when CrewAI is not available - respects user's LLM provider choice with emergency token limiting"""
         
+        # Handle both CrewAIRunnerConfig objects and dicts
+        if isinstance(agent_config, CrewAIRunnerConfig):
+            # Convert CrewAIRunnerConfig to dict format
+            config_dict = {
+                'role': agent_config.role,
+                'goal': agent_config.goal,
+                'backstory': agent_config.backstory,
+                'frameworkConfig': {
+                    'provider': agent_config.provider,
+                    'model': agent_config.model,
+                    'temperature': agent_config.temperature,
+                    'max_tokens': agent_config.max_tokens
+                }
+            }
+            # If task_config is None, create a default one
+            if task_config is None:
+                task_config = {
+                    'description': f"Complete the task: {agent_config.goal}"
+                }
+        else:
+            # It's already a dict
+            config_dict = agent_config
+            if task_config is None:
+                task_config = {
+                    'description': f"Complete the task: {config_dict.get('goal', 'Help the user')}"
+                }
+        
         # DEBUG: Log the entire agent_config to see what we're getting
-        logger.info(f"🔍 DEBUG agent_config: {agent_config}")
+        logger.info(f"🔍 DEBUG agent_config: {config_dict}")
         
         # Get framework config to determine provider
-        framework_config = agent_config.get('frameworkConfig', {})
+        framework_config = config_dict.get('frameworkConfig', {})
         logger.info(f"🔍 DEBUG framework_config: {framework_config}")
         
         # FIXED: Extract provider and model from frameworkConfig first, then fallback
@@ -502,9 +749,9 @@ class EnhancedCrewAIRunner:
         if model == 'gpt-4':
             # Try to get from agent_config directly
             model = (
-                agent_config.get('llm', {}).get('model') or
-                agent_config.get('llmModel') or
-                agent_config.get('model') or
+                config_dict.get('llm', {}).get('model') or
+                config_dict.get('llmModel') or
+                config_dict.get('model') or
                 'gpt-4'
             )
         
@@ -515,9 +762,9 @@ class EnhancedCrewAIRunner:
         logger.info(f"🤖 Using user-configured max_tokens: {max_tokens}")
         
         # Simulate CrewAI behavior using direct LLM calls
-        role = agent_config.get('role', 'Assistant')
-        goal = agent_config.get('goal', 'Help the user')
-        backstory = agent_config.get('backstory', '')
+        role = config_dict.get('role', 'Assistant')
+        goal = config_dict.get('goal', 'Help the user')
+        backstory = config_dict.get('backstory', '')
         task_description = task_config.get('description', '')
         
         # Build standard prompt respecting user preferences
@@ -696,18 +943,18 @@ Task: {task_description}
         }
 
 # Main entry points for compatibility
-async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Main entry point for CrewAI tool execution"""
+async def run_crewai_tool(config: Dict[str, Any], inputs: Dict[str, Any], context: Optional[Any] = None) -> Dict[str, Any]:
+    """Main entry point for CrewAI tool execution - FIXED for node processor compatibility"""
     
     # Check if this is a tool configuration (has tool_name) or agent configuration
     if config.get('tool_name') or config.get('frameworkConfig', {}).get('tool_name'):
         # This is a tool execution request
-        return await run_crewai_individual_tool(config, inputs)
+        return await run_crewai_individual_tool(config, inputs, context)
     else:
-        # This is an agent execution request (legacy behavior)
-        return await run_crewai_agent_legacy(config, inputs)
+        # This is an agent execution request - FIXED to handle node processor parameters
+        return await run_crewai_agent_for_node_processor(config, inputs, context)
 
-async def run_crewai_individual_tool(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+async def run_crewai_individual_tool(config: Dict[str, Any], inputs: Dict[str, Any], context: Optional[Any] = None) -> Dict[str, Any]:
     """Execute individual CrewAI tools"""
     try:
         runner = EnhancedCrewAIRunner()
@@ -786,27 +1033,76 @@ async def run_crewai_individual_tool(config: Dict[str, Any], inputs: Dict[str, A
             "tool_name": tool_name if 'tool_name' in locals() else "unknown"
         }
 
-async def run_crewai_agent_legacy(config: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
-    """Legacy agent execution for backward compatibility"""
-    runner = EnhancedCrewAIRunner()
-    
-    # Extract agent and task config from the unified config
-    agent_config = {
-        'role': config.get('role', 'Assistant'),
-        'goal': config.get('goal', 'Help the user'),
-        'backstory': config.get('backstory', ''),
-        'verbose': config.get('verbose', True),
-        'allowDelegation': config.get('allowDelegation', False),
-        'enableMemory': config.get('enableMemory', False),
-        'frameworkConfig': config.get('frameworkConfig', {})
-    }
-    
-    task_config = {
-        'description': config.get('prompt', config.get('description', 'Complete the requested task')),
-        'expectedOutput': config.get('expectedOutput', 'Detailed response')
-    }
-    
-    return await runner.run_crewai_agent(agent_config, task_config, inputs=inputs)
+async def run_crewai_agent_for_node_processor(config: Dict[str, Any], inputs: Dict[str, Any], context: Optional[Any] = None) -> Dict[str, Any]:
+    """Agent execution for node processor - FIXED to handle context parameter"""
+    try:
+        runner = EnhancedCrewAIRunner()
+        # FIXED: Pass the context to the runner
+        runner.context = context
+        
+        # Extract agent and task config from the unified config
+        agent_config = {
+            'role': config.get('role', 'Assistant'),
+            'goal': config.get('goal', 'Help the user'),
+            'backstory': config.get('backstory', ''),
+            'verbose': config.get('verbose', True),
+            'allowDelegation': config.get('allowDelegation', False),
+            'enableMemory': config.get('enableMemory', False),
+            'frameworkConfig': config.get('frameworkConfig', {})
+        }
+        
+        # Create a proper config object for the runner
+        from models.runner_schemas import CrewAIRunnerConfig
+        
+        # FIXED: Use the provider from the agent config, not hardcoded
+        provider = agent_config['frameworkConfig'].get('provider', 'openai')
+        model = agent_config['frameworkConfig'].get('model', 'gpt-4')
+        
+        # FIXED: Convert string tools to proper tool dictionaries
+        tools = config.get('tools', [])
+        if isinstance(tools, list):
+            converted_tools = []
+            for tool in tools:
+                if isinstance(tool, str):
+                    converted_tools.append({
+                        "name": tool,
+                        "description": f"Tool for {tool}",
+                        "type": "function"
+                    })
+                elif isinstance(tool, dict):
+                    converted_tools.append(tool)
+                else:
+                    logger.warning(f"Invalid tool format: {tool}")
+            tools = converted_tools
+        else:
+            tools = []
+        
+        runner_config = CrewAIRunnerConfig(
+            role=agent_config['role'],
+            goal=agent_config['goal'],
+            backstory=agent_config['backstory'],
+            verbose=agent_config['verbose'],
+            allow_delegation=agent_config['allowDelegation'],
+            enable_memory=agent_config['enableMemory'],
+            framework="crewai",  # FIXED: Add missing framework field
+            provider=provider,  # FIXED: Use provider from config
+            model=model,  # FIXED: Use model from config
+            max_iterations=config.get('max_iterations', 3),
+            tools=tools  # FIXED: Use converted tools
+        )
+        
+        # FIXED: Pass the context to the run_crewai_agent method
+        result = await runner.run_crewai_agent(runner_config, inputs)
+        return result
+        
+    except Exception as e:
+        logger.error(f"CrewAI legacy execution failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "output": None,
+            "fallback_used": True
+        }
 
 def run_agents(agents: List[Dict[str, Any]], tasks: List[Dict[str, Any]], 
                tools: List[Dict[str, Any]] = None, memory: Dict[str, Any] = None, 

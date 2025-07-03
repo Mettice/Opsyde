@@ -8,6 +8,7 @@ import { taskNodeSchema } from './shared/nodeSchemas';
 import { toast } from 'react-toastify';
 import { normalizeTaskData } from '../EditModall';
 import { TextField, Select, MenuItem, Checkbox, FormControlLabel, FormHelperText, Box, Typography, Button, FormControl, InputLabel } from '@mui/material';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 const TaskEditor = ({ node, onSave, onClose }) => {
   const { showEditModal } = useBuilderUI();
@@ -41,6 +42,9 @@ const TaskEditor = ({ node, onSave, onClose }) => {
   }
   
   const [taskData, setTaskData] = useState(normalizeTaskData(node.data));
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState(null);
 
   // Get connected nodes and their outputs
   useEffect(() => {
@@ -227,6 +231,29 @@ const TaskEditor = ({ node, onSave, onClose }) => {
     return connected;
   };
 
+  const handleTest = async () => {
+    setTestLoading(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_data: taskData, test_inputs: {} })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult(data.result || data.output || data);
+      } else {
+        setTestError(data.error || 'Test failed');
+      }
+    } catch (err) {
+      setTestError(err.message || 'Test failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* BYOK Status */}
@@ -309,6 +336,34 @@ const TaskEditor = ({ node, onSave, onClose }) => {
           Enable for long-running tasks that don't block the workflow
         </FormHelperText>
       </Box>
+
+      <div className="mt-4">
+        <button
+          onClick={handleTest}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={testLoading}
+        >
+          {testLoading ? 'Testing...' : 'Test/Preview'}
+        </button>
+        {testError && (
+          <div className="mt-2 text-red-600">{testError}</div>
+        )}
+        {testResult && (
+          <div className="mt-2">
+            <ResultDisplayCard
+              content={testResult}
+              title="Test Result"
+              colorScheme="blue"
+              defaultExpanded={false}
+              showMetrics={true}
+              metadata={{
+                nodeType: 'task',
+                testType: 'preview'
+              }}
+            />
+          </div>
+        )}
+      </div>
     </Box>
   );
 };

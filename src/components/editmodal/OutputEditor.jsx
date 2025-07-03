@@ -10,7 +10,8 @@ import DynamicSchemaForm from './shared/DynamicSchemaForm';
 import { outputNodeSchema } from './shared/nodeSchemas';
 import FieldMapper from './shared/FieldMapper';
 import NodeOutputPreview from '../NodeOutputPreview';
-import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch } from '@mui/material';
+import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch, Alert, Chip, Divider, Grid, Card, CardContent, IconButton, Tooltip, CircularProgress } from '@mui/material';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedNodes = [], previousNodeOutputs = {}, nodeId }) => {
   // ===== STATE MANAGEMENT =====
@@ -20,6 +21,9 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
   const [apiKeyError, setApiKeyError] = useState(null);
   const [validationErrors, setValidationErrors] = useState({});
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState(null);
 
   // State for schema-driven core output config
   const [outputCoreConfig, setOutputCoreConfig] = useState({
@@ -206,6 +210,29 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
     
     // Reset config when output type changes
     handleInputChange({ target: { name: 'config', value: {} } });
+  };
+
+  const handleTest = async () => {
+    setTestLoading(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_data: formData, test_inputs: {} })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult(data.result || data.output || data);
+      } else {
+        setTestError(data.error || 'Test failed');
+      }
+    } catch (err) {
+      setTestError(err.message || 'Test failed');
+    } finally {
+      setTestLoading(false);
+    }
   };
 
   // ===== EFFECTS =====
@@ -821,15 +848,6 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
         <Typography variant="h6" gutterBottom>
           Output Configuration
         </Typography>
-        
-        <TextField
-          fullWidth
-          label="Output Name"
-          value={formData.label || ''}
-          onChange={(e) => handleInputChange({ target: { name: 'label', value: e.target.value } })}
-          sx={{ mb: 2 }}
-        />
-        
         <TextField
           fullWidth
           label="Description"
@@ -877,7 +895,7 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
 
       {/* Field Mapper for explicit mapping */}
       <FieldMapper
-        nodeId={nodeId}
+        nodeId={nodeId || formData.id || formData.nodeId || ''}
         nodeType="output"
         currentMappings={fieldMappings}
         onMappingChange={handleFieldMappingChange}
@@ -958,15 +976,34 @@ const OutputEditor = ({ formData, handleInputChange, onSave, onClose, connectedN
         </Box>
       )}
 
-      {/* Save Button */}
-      <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-        <Button onClick={onClose} variant="outlined">
-          Cancel
-        </Button>
-        <Button onClick={handleSave} variant="contained" color="primary">
-          Save Output
-        </Button>
-      </Box>
+      {/* Test/Preview Button */}
+      <div className="mt-4">
+        <button
+          onClick={handleTest}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={testLoading}
+        >
+          {testLoading ? 'Testing...' : 'Test/Preview'}
+        </button>
+        {testError && (
+          <div className="mt-2 text-red-600">{testError}</div>
+        )}
+        {testResult && (
+          <div className="mt-2">
+            <ResultDisplayCard
+              content={testResult}
+              title="Test Result"
+              colorScheme="blue"
+              defaultExpanded={false}
+              showMetrics={true}
+              metadata={{
+                nodeType: 'output',
+                testType: 'preview'
+              }}
+            />
+          </div>
+        )}
+      </div>
     </Box>
   );
 };

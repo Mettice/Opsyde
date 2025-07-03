@@ -45,10 +45,16 @@ class WorkflowExecutionContext:
         elif node_type == 'agent':
             self.variables['agent_output'] = output_data
             self.variables['agent_result'] = output_data
+            # If output_data is a dict and has 'result', set agent_output to that value for mapping
+            if isinstance(output_data, dict) and 'result' in output_data:
+                self.variables['agent_output'] = output_data['result']
             
         elif node_type == 'task':
             self.variables['task_output'] = output_data
             self.variables['task_result'] = output_data
+            # If output_data is a dict and has 'result', set task_output to that value for mapping
+            if isinstance(output_data, dict) and 'result' in output_data:
+                self.variables['task_output'] = output_data['result']
             
         elif node_type == 'input':
             self.variables['input_data'] = output_data
@@ -274,7 +280,65 @@ class WorkflowExecutionContext:
             "total_variables": len(self.variables),
             "node_outputs_count": len(self.node_outputs),
             "metadata": self.metadata,
-            "available_variables": list(self.variables.keys())
+            "available_variables": list(self.variables.keys()),
+            "data_flow_analysis": self._analyze_data_flow(),
+            "performance_metrics": self._get_performance_metrics()
+        }
+    
+    def _analyze_data_flow(self) -> Dict[str, Any]:
+        """Analyze data flow between nodes"""
+        analysis = {
+            "data_sources": {},
+            "data_sinks": {},
+            "data_transformations": {},
+            "potential_issues": []
+        }
+        
+        for node_id, output_info in self.node_outputs.items():
+            node_type = output_info['node_type']
+            output_data = output_info['data']
+            
+            # Track data sources
+            if node_type in ['input', 'trigger']:
+                analysis["data_sources"][node_id] = {
+                    "type": node_type,
+                    "data_type": type(output_data).__name__,
+                    "size": len(str(output_data)) if output_data else 0
+                }
+            
+            # Track data sinks
+            if node_type in ['output']:
+                analysis["data_sinks"][node_id] = {
+                    "type": node_type,
+                    "data_type": type(output_data).__name__
+                }
+            
+            # Track transformations
+            if node_type in ['agent', 'task', 'tool', 'logic']:
+                analysis["data_transformations"][node_id] = {
+                    "type": node_type,
+                    "input_size": 0,  # Could be enhanced to track actual input size
+                    "output_size": len(str(output_data)) if output_data else 0,
+                    "transformation_type": "processing"
+                }
+        
+        return analysis
+    
+    def _get_performance_metrics(self) -> Dict[str, Any]:
+        """Get performance metrics for the workflow"""
+        if not self.execution_order:
+            return {"status": "no_execution"}
+        
+        total_nodes = len(self.execution_order)
+        completed_nodes = len(self.node_outputs)
+        
+        return {
+            "total_nodes": total_nodes,
+            "completed_nodes": completed_nodes,
+            "success_rate": (completed_nodes / total_nodes) if total_nodes > 0 else 0,
+            "execution_time": (datetime.now() - datetime.fromisoformat(self.metadata["started_at"])).total_seconds(),
+            "average_node_execution_time": 0,  # Could be enhanced to track individual node times
+            "memory_usage": len(str(self.variables)) + len(str(self.node_outputs))
         }
 
 class WorkflowDataManager:

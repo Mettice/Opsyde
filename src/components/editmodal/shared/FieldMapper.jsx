@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { useNodeSchema } from '../../../hooks/useNodeSchema';
 
 const FieldMapper = ({ 
   nodeId, 
@@ -13,6 +14,9 @@ const FieldMapper = ({
   const [mappings, setMappings] = useState(currentMappings);
   const [showMapper, setShowMapper] = useState(false);
   const [selectedSourceNode, setSelectedSourceNode] = useState('');
+
+  // Fetch schema for this node type
+  const { schema, loading: schemaLoading, error: schemaError } = useNodeSchema(nodeType);
 
   // Get available fields from previous nodes
   const getAvailableFields = () => {
@@ -51,8 +55,19 @@ const FieldMapper = ({
 
   const availableFieldsList = getAvailableFields();
 
-  // Get target fields based on node type
+  // Get target fields from schema if available
   const getTargetFields = () => {
+    if (schema && schema.properties) {
+      return Object.entries(schema.properties)
+        .filter(([name, def]) => !def.readOnly)
+        .map(([name, def]) => ({
+          name,
+          type: def.type,
+          description: def.description,
+          required: (schema.required || []).includes(name),
+        }));
+    }
+    // fallback to old logic if schema not available
     const targetFields = {
       task: ['query', 'context', 'agent_output', 'parameters'],
       agent: ['input', 'context', 'parameters', 'memory'],
@@ -64,8 +79,7 @@ const FieldMapper = ({
       trigger: ['trigger_data', 'api_data', 'webhook_data'],
       input: ['value', 'default_value', 'placeholder', 'validation']
     };
-    
-    return targetFields[nodeType] || ['input', 'data', 'parameters'];
+    return (targetFields[nodeType] || ['input', 'data', 'parameters']).map(name => ({ name }));
   };
 
   const targetFields = getTargetFields();
@@ -98,12 +112,12 @@ const FieldMapper = ({
     targetFields.forEach(targetField => {
       // Try to find a matching field by name similarity
       const matchingField = availableFieldsList.find(field => 
-        field.path.toLowerCase().includes(targetField.toLowerCase()) ||
-        targetField.toLowerCase().includes(field.path.toLowerCase())
+        field.path.toLowerCase().includes(targetField.name.toLowerCase()) ||
+        targetField.name.toLowerCase().includes(field.path.toLowerCase())
       );
       
       if (matchingField) {
-        autoMappings[targetField] = matchingField.path;
+        autoMappings[targetField.name] = matchingField.path;
       }
     });
     
@@ -193,29 +207,31 @@ const FieldMapper = ({
           <div>
             <h4 className="text-md font-medium text-gray-700 mb-2">Map to {nodeType} Inputs</h4>
             <div className="space-y-3">
+              {schemaLoading && <div className="text-sm text-gray-400">Loading schema...</div>}
+              {schemaError && <div className="text-sm text-red-500">Error loading schema: {schemaError.message}</div>}
               {targetFields.map(targetField => (
-                <div key={targetField} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-md">
+                <div key={targetField.name} className="flex items-center space-x-3 p-3 border border-gray-200 rounded-md">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {targetField}
+                      {targetField.name} {targetField.required && <span className="text-red-500">*</span>}
+                      <span className="ml-2 text-xs text-gray-400">({targetField.type})</span>
                     </label>
+                    <div className="text-xs text-gray-500 mb-1">{targetField.description}</div>
                     <select
-                      value={mappings[targetField] || ''}
-                      onChange={(e) => handleMappingChange(targetField, e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full border border-gray-300 rounded px-2 py-1"
+                      value={mappings[targetField.name] || ''}
+                      onChange={e => handleMappingChange(targetField.name, e.target.value)}
                     >
                       <option value="">-- Select field --</option>
-                      {availableFieldsList.map((field, index) => (
-                        <option key={index} value={field.path}>
-                          {field.displayName}
-                        </option>
+                      {availableFieldsList.map(field => (
+                        <option key={field.path} value={field.path}>{field.displayName}</option>
                       ))}
                     </select>
                   </div>
-                  {mappings[targetField] && (
+                  {mappings[targetField.name] && (
                     <button
-                      onClick={() => removeMapping(targetField)}
-                      className="px-2 py-1 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200"
+                      className="ml-2 px-2 py-1 text-xs bg-gray-200 rounded hover:bg-gray-300"
+                      onClick={() => removeMapping(targetField.name)}
                     >
                       Remove
                     </button>

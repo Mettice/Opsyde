@@ -12,7 +12,7 @@ import asyncio
 import os
 from dataclasses import dataclass, field
 from collections.abc import Mapping
-from backend.framework_registry import framework_registry
+from framework_registry import framework_registry
 
 # UPDATED: Import the new Supabase service
 from services.user_settings_service import user_settings_service
@@ -186,6 +186,11 @@ class WorkflowExecutionContext(Mapping):
             if framework in ["trigger", "input", "output", "logic", "delay"]:
                 return enhanced_config
                 
+            # Skip validation if framework or LLM provider is not specified
+            if not framework or not llm_provider:
+                logger.debug(f"Skipping framework validation for node with framework='{framework}' and llm_provider='{llm_provider}'")
+                return enhanced_config
+                
             # Get API keys from context
             api_keys = {}
             if self.user_id:
@@ -203,7 +208,8 @@ class WorkflowExecutionContext(Mapping):
             
             if not validation_result["valid"]:
                 logger.warning(f"Framework validation failed: {validation_result['error']}")
-                return enhanced_config
+                # Don't return early - continue with the config as-is
+                # The node processor will handle the validation failure gracefully
             
             # If we have an API key for the provider, add it to the config
             if llm_provider and llm_provider in api_keys:

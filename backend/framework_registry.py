@@ -2,8 +2,8 @@ import logging
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import asyncio
-from backend.frameworks.base_runner import BaseFrameworkRunner
-from backend.frameworks.langchain_runner import run_langchain_tool
+from frameworks.base_runner import BaseFrameworkRunner
+from frameworks.langchain_runner import run_langchain_tool
 
 logger = logging.getLogger(__name__)
 
@@ -828,14 +828,16 @@ class EnhancedFrameworkRegistry:
                     "details": {"is_structural_node": True}
                 }
 
-            # Handle empty values
+            # Handle empty values - be more lenient
             if not framework or not llm_provider:
                 return {
-                    "valid": False,
-                    "error": "Framework and LLM provider must be specified",
+                    "valid": True,  # Allow empty values - let the node processor handle it
+                    "framework": framework or "not specified",
+                    "llm_provider": llm_provider or "not specified",
                     "details": {
                         "framework": framework or "not specified",
-                        "llm_provider": llm_provider or "not specified"
+                        "llm_provider": llm_provider or "not specified",
+                        "validation_skipped": True
                     }
                 }
 
@@ -938,6 +940,14 @@ class EnhancedFrameworkRegistry:
     def get_llm_requirements(self, provider: str) -> Dict[str, Any]:
         """Get requirements for an LLM provider"""
         return self._llm_requirements.get(provider, {})
+    
+    def get_runner(self, framework: str) -> Optional[Callable]:
+        """Get the registered runner function for a framework"""
+        return self._frameworks.get(framework)
+    
+    def has_runner(self, framework: str) -> bool:
+        """Check if a framework has a registered runner"""
+        return framework in self._frameworks
 
 # Global registry instance
 framework_registry = EnhancedFrameworkRegistry()

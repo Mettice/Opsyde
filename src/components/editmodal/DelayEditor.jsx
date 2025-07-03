@@ -5,7 +5,7 @@ import { delayNodeSchema } from './shared/nodeSchemas';
 import FieldMapper from './shared/FieldMapper';
 import NodeOutputPreview from '../NodeOutputPreview';
 
-const DelayEditor = ({ formData, handleInputChange, onSave, onClose, connectedNodes = [], previousNodeOutputs = {}, nodeId }) => {
+const DelayEditor = ({ formData, handleInputChange = () => {}, onSave, onClose, connectedNodes = [], previousNodeOutputs = {}, nodeId }) => {
   // Only manage duration in the schema-driven form
   const [duration, setDuration] = useState(formData.duration || 5);
   const [validationErrors, setValidationErrors] = useState(false);

@@ -377,16 +377,15 @@ const EnhancedEditModal = ({
   // Populate form data when nodeData changes
   useEffect(() => {
     if (nodeData) {
-      console.log("Setting enhanced form data:", nodeData);
-      
+      // Support both {data: {...}} and flat config
+      const config = nodeData.data ? nodeData.data : nodeData;
+      console.log("Setting enhanced form data:", config);
       // Handle both old and new data structures
-      const migratedData = migrateNodeData(nodeData);
-      
+      const migratedData = migrateNodeData(config);
       let normalizedData = migratedData;
       if (currentNodeType === 'agent') {
         normalizedData = normalizeAgentData(migratedData);
       }
-      
       setFormData(normalizedData);
       setIsModified(false);
     }

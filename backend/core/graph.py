@@ -115,6 +115,8 @@ def get_node_inputs(node_id: str, edges: List[Dict], node_results: Dict, global_
     Get inputs for a specific node based on edges and previous results
     Enhanced with data preprocessing for agent consumption
     """
+    from .utils import get_clean_output, clean_node_inputs
+    
     inputs = {}
     
     # Add global inputs first (these are override)
@@ -131,56 +133,39 @@ def get_node_inputs(node_id: str, edges: List[Dict], node_results: Dict, global_
         if source_node_id in node_results:
             source_result = node_results[source_node_id]
             
-            # 🚀 NEW: Enhanced data extraction for standardized results
-            data_to_pass = None
+            # 🚀 NEW: Use the clean output utility to unwrap nested structures
+            data_to_pass = get_clean_output(source_result)
             
-            # Handle standardized result format from UnifiedRunner
-            if isinstance(source_result, dict) and "success" in source_result and "data" in source_result:
-                if source_result["success"]:
-                    # 🔧 CRITICAL FIX: Preserve API data structure for agent consumption
-                    raw_data = source_result["data"]
-                    
-                    # Check if this is API data from a trigger
-                    if isinstance(raw_data, dict) and (
-                        raw_data.get("type") == "api_data" or 
-                        "api_data" in raw_data or 
-                        "records" in raw_data or
-                        raw_data.get("trigger_type") == "universal_polling"
-                    ):
-                        logger.info(f"🔧 Preserving API data structure for {node_id}")
-                        # For agent nodes, provide the FULL API data structure
-                        current_node = next((n for n in (nodes or []) if n.get('id') == node_id), None)
-                        if current_node and current_node.get('type') == 'agent':
+            # Special handling for API data to agents (preserve full structure)
+            current_node = next((n for n in (nodes or []) if n.get('id') == node_id), None)
+            if current_node and current_node.get('type') == 'agent':
+                # For agents, we might want to preserve API data structure
+                if isinstance(source_result, dict) and "success" in source_result and "data" in source_result:
+                    if source_result["success"]:
+                        raw_data = source_result["data"]
+                        # Check if this is API data from a trigger
+                        if isinstance(raw_data, dict) and (
+                            raw_data.get("type") == "api_data" or 
+                            "api_data" in raw_data or 
+                            "records" in raw_data or
+                            raw_data.get("trigger_type") == "universal_polling"
+                        ):
+                            logger.info(f"🔧 Agent {node_id} receiving full API data: {raw_data.get('service_name', 'Unknown Service')}")
                             # Agent gets the complete trigger result with all metadata
                             data_to_pass = raw_data
-                            logger.info(f"🔧 Agent {node_id} receiving full API data: {raw_data.get('service_name', 'Unknown Service')}")
                             
                             # Extract record count for debugging
                             records = raw_data.get('api_data', {}).get('records', raw_data.get('records', []))
                             if records:
                                 logger.info(f"🔧 Agent {node_id} will process {len(records)} records")
-                        else:
-                            # Other nodes get extracted data
-                            if "_clean_data" in source_result:
-                                data_to_pass = source_result["_clean_data"]
-                            else:
-                                data_to_pass = raw_data
-                    else:
-                        # Non-API data - use clean data if available
-                        if "_clean_data" in source_result:
-                            data_to_pass = source_result["_clean_data"]
-                            logger.info(f"🔧 Using extracted clean data for {node_id}")
-                        else:
-                            data_to_pass = raw_data
-                            logger.info(f"🔧 Using raw data for {node_id}")
-                else:
-                    # Handle error case
-                    logger.warning(f"🔧 Source node {source_node_id} failed, skipping data")
-                    continue
-            else:
-                # Legacy support - use the result as-is
-                data_to_pass = source_result
-                logger.info(f"🔧 Using legacy result format for {node_id}")
+            
+            # 🔧 CRITICAL FIX: Additional logging for task nodes
+            if current_node and current_node.get('type') == 'task':
+                logger.info(f"🔧 Task {node_id} processing data: {type(data_to_pass).__name__}")
+                if isinstance(data_to_pass, str):
+                    logger.info(f"🔧 Task {node_id} final data preview: {data_to_pass[:100]}...")
+                elif isinstance(data_to_pass, dict):
+                    logger.info(f"🔧 Task {node_id} final data keys: {list(data_to_pass.keys())}")
             
             # Set the input using the target handle
             inputs[target_handle] = data_to_pass

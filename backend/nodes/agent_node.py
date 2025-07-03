@@ -63,6 +63,7 @@ class AgentNodeConfig(NodeConfig):
                 optional=True,
                 items=SchemaField(
                     type=SchemaType.OBJECT,
+                    description='Collaborating agent information',
                     properties={
                         'name': SchemaField(type=SchemaType.STRING, description='Agent name'),
                         'role': SchemaField(type=SchemaType.STRING, description='Agent role'),
@@ -198,99 +199,58 @@ class AgentNode(BaseNode):
                             "result": value.get('result', ''),
                             "framework": value.get('framework', 'unknown')
                         })
-                        formatted_inputs[f"agent_input_{key}"] = value.get('result', '')
+                        
+                        # Add to formatted inputs for context
+                        formatted_inputs[f"agent_{len(collaborating_agents)}_result"] = value.get('result', '')
                     else:
-                        # Regular data input - use as-is since graph processor cleaned it
+                        # Regular input data
                         formatted_inputs[key] = value
-                elif isinstance(value, str):
-                    formatted_inputs[key] = value
                 else:
-                    # Convert other types to string for agent processing
-                    formatted_inputs[key] = str(value) if value is not None else ""
+                    # Simple value
+                    formatted_inputs[key] = value
             
-            # Build context from collaborating agents
-            collaboration_context = ""
-            if collaborating_agents:
-                logger.info(f"🤝 Agent {agent_config['role']} collaborating with {len(collaborating_agents)} other agents")
-                collaboration_context = "\n\nCollaboration Context:\n"
-                for i, agent in enumerate(collaborating_agents, 1):
-                    collaboration_context += f"{i}. {agent['role']} ({agent['framework']}) says: {agent['result']}\n"
-                collaboration_context += "\nPlease consider this information in your response.\n"
+            # Extract main query from inputs
+            query = self._extract_main_query(formatted_inputs)
             
-            # Determine the main query/task
-            main_query = self._extract_main_query(formatted_inputs)
+            # Execute agent based on framework
+            framework = agent_config["framework"]
+            result = await self._execute_agent_by_framework(framework, agent_config, query, formatted_inputs, context)
             
-            # Add collaboration context to the query
-            if collaboration_context:
-                main_query += collaboration_context
-            
-            # Execute based on framework
-            framework = agent_config["framework"].lower()
-            result = await self._execute_agent_by_framework(framework, agent_config, main_query, formatted_inputs)
-            
-            # Prepare agent result for potential agent-to-agent communication
-            agent_result = {
-                "type": "agent_result",
-                "agent_name": node_data.get("label", agent_config["role"]),
-                "role": agent_config["role"],
-                "framework": framework,
-                "result": result,
+            # Create metadata
+            metadata = {
+                "node_id": node_id,
+                "node_type": "agent",
                 "timestamp": datetime.now().isoformat(),
-                "collaborating_agents": [agent["name"] for agent in collaborating_agents],
+                "collaborating_agents": collaborating_agents,
                 "llm": {
-                    "provider": agent_config.get("llmProvider", "openai"),
-                    "model": agent_config.get("llmModel", "gpt-4")
-                },
-                "llmProvider": agent_config.get("llmProvider", "openai"),
-                "llmModel": agent_config.get("llmModel", "gpt-4"),
-                "temperature": agent_config.get("temperature", 0.7),
-                "max_tokens": agent_config.get("max_tokens", 4000)
-            }
-            
-            logger.info(f"✅ Agent {agent_config['role']} completed successfully")
-            
-            return {
-                "success": True,
-                "type": "text",
-                "output": result,
-                "text_output": result,  # Clean text for display
-                "result": result,       # For compatibility
-                "agent_name": node_data.get("label", agent_config["role"]),
-                "role": agent_config["role"],
-                "framework": framework,
-                "llm": {
-                    "provider": agent_config.get("llmProvider", "openai"),
-                    "model": agent_config.get("llmModel", "gpt-4")
-                },
-                "llmProvider": agent_config.get("llmProvider", "openai"),
-                "llmModel": agent_config.get("llmModel", "gpt-4"),
-                "temperature": agent_config.get("temperature", 0.7),
-                "max_tokens": agent_config.get("max_tokens", 4000),
-                "metadata": {
-                    "node_id": node_id,
-                    "node_type": "agent",
-                    "timestamp": datetime.now().isoformat(),
-                    "collaborating_agents": collaborating_agents,
-                    "llm": {
-                        "provider": agent_config.get("llmProvider", "openai"),
-                        "model": agent_config.get("llmModel", "gpt-4")
-                    },
-                    "llmProvider": agent_config.get("llmProvider", "openai"),
-                    "llmModel": agent_config.get("llmModel", "gpt-4"),
-                    "temperature": agent_config.get("temperature", 0.7),
-                    "max_tokens": agent_config.get("max_tokens", 4000),
-                    "agent_result": agent_result
+                    "provider": agent_config["llmProvider"],
+                    "model": agent_config["llmModel"],
+                    "temperature": agent_config["temperature"],
+                    "max_tokens": agent_config["max_tokens"]
                 }
             }
             
+            outputs = {
+                "result": result,
+                "metadata": metadata,
+                "agent_name": agent_config["role"],
+                "role": agent_config["role"],
+                "framework": framework,
+                "agent_output": result
+            }
+            
+            return outputs
+            
         except Exception as e:
-            logger.error(f"❌ Error in agent node: {str(e)}")
+            logger.error(f"Agent processing failed: {str(e)}")
             return {
-                "success": False,
-                "type": "error",
+                "result": f"Agent processing failed: {str(e)}",
                 "error": str(e),
-                "agent_name": node_data.get("label", "Unknown Agent"),
-                "timestamp": datetime.now().isoformat()
+                "metadata": {
+                    "node_id": node_id if 'node_id' in locals() else 'unknown',
+                    "node_type": "agent",
+                    "timestamp": datetime.now().isoformat()
+                }
             }
 
     def _extract_main_query(self, inputs: Dict[str, Any]) -> str:
@@ -421,12 +381,12 @@ class AgentNode(BaseNode):
             logger.error(f"Error extracting query from inputs: {str(e)}")
             return "Process the provided data"
     
-    async def _execute_agent_by_framework(self, framework: str, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
+    async def _execute_agent_by_framework(self, framework: str, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any], context: Dict[str, Any] = None) -> str:
         """Execute agent using the specified framework"""
         
         try:
             if framework == "crewai":
-                return await self._execute_crewai_agent(agent_config, query, inputs)
+                return await self._execute_crewai_agent(agent_config, query, inputs, context)
             elif framework == "langchain":
                 return await self._execute_langchain_agent(agent_config, query, inputs)
             elif framework == "autogen":
@@ -449,7 +409,7 @@ class AgentNode(BaseNode):
             # Fallback to simple response
             return f"I'm {agent_config['role']}. I encountered an error while processing your request: {str(e)}"
     
-    async def _execute_crewai_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any]) -> str:
+    async def _execute_crewai_agent(self, agent_config: Dict[str, Any], query: str, inputs: Dict[str, Any], context: Dict[str, Any] = None) -> str:
         """Execute using CrewAI framework"""
         try:
             from frameworks.crewai_runner import EnhancedCrewAIRunner
@@ -498,8 +458,47 @@ class AgentNode(BaseNode):
                 "expectedOutput": "Detailed response based on the agent's role and expertise"
             }
             
-            result = await runner.run_crewai_agent(crewai_config, task_config, inputs=inputs)
-            return result.get("output", "No response from CrewAI agent")
+            # FIXED: Use the correct method signature and convert tools properly
+            from models.runner_schemas import CrewAIRunnerConfig
+            
+            # Convert string tools to proper tool dictionaries
+            tools = agent_config.get("tools", [])
+            converted_tools = []  # FIXED: Always initialize converted_tools
+            if tools and isinstance(tools, list):
+                for tool in tools:
+                    if isinstance(tool, str):
+                        converted_tools.append({
+                            "name": tool,
+                            "description": f"Tool for {tool}",
+                            "type": "function"
+                        })
+                    elif isinstance(tool, dict):
+                        converted_tools.append(tool)
+                    else:
+                        logger.warning(f"Invalid tool format: {tool}")
+                tools = converted_tools
+            
+            # Create proper config object
+            runner_config = CrewAIRunnerConfig(
+                role=crewai_config["role"],
+                goal=crewai_config["goal"],
+                backstory=crewai_config["backstory"],
+                verbose=crewai_config["verbose"],
+                allow_delegation=crewai_config["allowDelegation"],
+                enable_memory=crewai_config["enableMemory"],
+                framework="crewai",
+                provider=crewai_config["frameworkConfig"]["provider"],
+                model=crewai_config["frameworkConfig"]["model"],
+                temperature=crewai_config["frameworkConfig"]["temperature"],
+                max_tokens=crewai_config["frameworkConfig"]["max_tokens"],
+                tools=tools  # Use the converted tools
+            )
+            
+            # Pass context to runner
+            runner.context = context
+            
+            result = await runner.run_crewai_agent(runner_config, inputs)
+            return result.get("result", "No response from CrewAI agent")
             
         except ImportError:
             logger.error("CrewAI framework not available")
@@ -674,6 +673,28 @@ class AgentNode(BaseNode):
         except Exception as e:
             logger.error(f"Perplexity execution failed: {str(e)}")
             return f"I'm {agent_config['role']}. I encountered an error while processing your request: {str(e)}"
+
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute node-specific logic - required by BaseNode"""
+        # Convert NodeData inputs to regular dict
+        regular_inputs = {}
+        for key, node_data in inputs.items():
+            if isinstance(node_data, NodeData):
+                regular_inputs[key] = node_data.get_value()
+            else:
+                regular_inputs[key] = node_data
+        
+        # Convert config to dict
+        if hasattr(config, 'dict'):
+            config_dict = config.dict()
+        elif hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+        
+        # Call the process method
+        result = await self.process(config_dict, regular_inputs, context)
+        return result
 
 
 # Standalone function for backward compatibility

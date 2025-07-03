@@ -68,8 +68,12 @@ class SimpleMapper:
             Value at the specified path, or None if not found
         """
         try:
+            # Use utility function to clean the data first
+            from .utils import get_clean_output
+            cleaned_data = get_clean_output(data)
+            
             keys = path.split('.')
-            value = data
+            value = cleaned_data
             
             for key in keys:
                 if isinstance(value, dict) and key in value:
@@ -190,6 +194,22 @@ class SimpleMapper:
         extract_fields(data)
         return fields
     
+    def get_available_fields_dict(self, data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+        """
+        Extract all available fields from data as a dictionary for fallback use.
+        
+        Args:
+            data: Source data dictionary
+            
+        Returns:
+            Dictionary with field paths as keys and field info as values
+        """
+        fields_list = self.get_available_fields(data)
+        fields_dict = {}
+        for field in fields_list:
+            fields_dict[field['path']] = field
+        return fields_dict
+    
     def _format_sample_value(self, value: Any) -> str:
         """
         Format a sample value for display in UI.
@@ -262,4 +282,16 @@ def get_available_fields_simple(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     Returns:
         List of field information
     """
-    return simple_mapper.get_available_fields(data) 
+    return simple_mapper.get_available_fields(data)
+
+def get_available_fields_dict_simple(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    Get available fields from data as a dictionary for fallback use.
+    
+    Args:
+        data: Source data dictionary
+        
+    Returns:
+        Dictionary with field paths as keys and field info as values
+    """
+    return simple_mapper.get_available_fields_dict(data) 

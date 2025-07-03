@@ -200,6 +200,20 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ Node processor initialization failed: {str(e)}")
     
+    # Initialize framework registry
+    try:
+        from framework_registry import framework_registry
+        from frameworks.crewai_runner import run_crewai_tool
+        
+        # Register CrewAI framework
+        framework_registry.register("crewai", run_crewai_tool)
+        logger.info("✅ CrewAI framework registered")
+        
+        # Register other frameworks as needed
+        logger.info(f"✅ Available frameworks: {framework_registry.get_available_frameworks()}")
+    except Exception as e:
+        logger.error(f"❌ Framework registry initialization failed: {str(e)}")
+    
     # Initialize scheduler PROPERLY in async context
     try:
         from backend.frameworks.apscheduler_manager import scheduler_manager

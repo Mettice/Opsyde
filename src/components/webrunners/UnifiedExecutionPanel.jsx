@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import NodeResultDisplay from '../flowcanvas/NodeResultDisplay';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 // Safe JSON stringify function to handle circular references and React elements
 const safeStringify = (obj, indent = 2) => {
@@ -281,9 +281,18 @@ export default function UnifiedExecutionPanel({
                 </div>
               ) : (
                 processedResults.map((result) => (
-                  <NodeResultDisplay 
+                  <ResultDisplayCard 
                     key={result.id} 
-                    result={result}
+                    content={result}
+                    title={result.node_name || result.nodeId || 'Node Result'}
+                    colorScheme={result.status === 'error' ? 'orange' : 'blue'}
+                    defaultExpanded={false}
+                    showMetrics={true}
+                    metadata={{
+                      nodeType: result.node_type || result.type,
+                      timestamp: result.timestamp,
+                      status: result.status
+                    }}
                   />
                 ))
               )}

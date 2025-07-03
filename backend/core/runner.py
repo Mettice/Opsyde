@@ -539,7 +539,13 @@ class UnifiedRunner:
                 llm_config = node_data.get("frameworkConfig", {})
                 llm_provider = llm_config.get("provider") or node_data.get("llmProvider")
                 
-                validation = validate_framework_llm_combination(framework, llm_provider)
+                # Create validation context with API keys from execution context
+                validation_context = {}
+                if hasattr(self, 'execution_context') and self.execution_context:
+                    api_keys = self.execution_context.get_api_keys_for_user()
+                    validation_context = {"api_keys": api_keys}
+                
+                validation = validate_framework_llm_combination(framework, llm_provider, validation_context)
                 if not validation["valid"]:
                     error_result = {
                         "type": "error",

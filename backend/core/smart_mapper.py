@@ -41,6 +41,10 @@ class SmartMapper:
         logger.info(f"🧠 Smart mapping inputs for node {node_id} ({node_type})")
         
         try:
+            # Convert WorkflowExecutionContext to dict if needed
+            if hasattr(context, 'to_dict'):
+                context = context.to_dict()
+            
             # 1. Get expected inputs for this node type
             expected_inputs = self._get_expected_inputs(node, context)
             
@@ -63,39 +67,162 @@ class SmartMapper:
         except Exception as e:
             logger.error(f"❌ Smart mapping failed for {node_id}: {str(e)}")
             # Fallback: return context variables as-is
-            return context.get('variables', {})
+            if hasattr(context, 'get'):
+                return context.get('variables', {})
+            else:
+                return {}
     
     def _get_expected_inputs(self, node: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Get expected inputs for a node, prioritizing schema-based definitions"""
-        node_data = node.get('data', {})
-        node_type = node.get('type', 'unknown')
-        node_id = node.get('id', 'unknown')
-        
-        # 🔥 NEW: Use schema-based field definitions if available
-        if 'input_schema' in node_data and hasattr(node_data['input_schema'], 'fields'):
-            schema_fields = {}
-            input_schema = node_data['input_schema']
+        """Get expected inputs for a node using node configuration classes"""
+        try:
+            node_data = node.get('data', {})
+            node_type = node.get('type', 'unknown')
+            node_id = node.get('id', 'unknown')
             
-            for field_name, field_def in input_schema.fields.items():
-                schema_fields[field_name] = {
-                    'type': field_def.type.value if hasattr(field_def.type, 'value') else str(field_def.type),
-                    'description': field_def.description,
-                    'required': field_name in input_schema.required_fields,
-                    'default': field_def.default,
-                    'source': 'schema_definition'
+            # Get schema from node configuration classes directly
+            try:
+                # Import node configuration classes
+                if node_type == 'agent':
+                    from nodes.agent_node import AgentNodeConfig
+                    config_class = AgentNodeConfig
+                elif node_type == 'task':
+                    from nodes.task_node import TaskNodeConfig
+                    config_class = TaskNodeConfig
+                elif node_type == 'tool':
+                    from nodes.tool_node import ToolNodeConfig
+                    config_class = ToolNodeConfig
+                elif node_type == 'input':
+                    from nodes.input_node import InputNodeConfig
+                    config_class = InputNodeConfig
+                elif node_type == 'output':
+                    from nodes.output_node import OutputNodeConfig
+                    config_class = OutputNodeConfig
+                elif node_type == 'logic':
+                    from nodes.logic_node import LogicNodeConfig
+                    config_class = LogicNodeConfig
+                elif node_type == 'delay':
+                    from nodes.delay_node import DelayNodeConfig
+                    config_class = DelayNodeConfig
+                else:
+                    logger.warning(f"Unknown node type: {node_type}")
+                    return {}
+                
+                # Create temporary instance to get schema
+                base_config = {
+                    'node_id': node_id,
+                    'node_type': node_type,
+                    'label': node_data.get('label', 'temp'),
+                    'description': node_data.get('description', 'temp')
                 }
+                
+                # Add node-specific required fields
+                if node_type == 'agent':
+                    config_data = {
+                        **base_config,
+                        'role': node_data.get('role', 'temp'),
+                        'goal': node_data.get('goal', 'temp'),
+                        'backstory': node_data.get('backstory', 'temp'),
+                        'systemMessage': node_data.get('systemMessage', 'temp'),
+                        'llmConfig': node_data.get('llmConfig', {}),
+                        'tools': node_data.get('tools', [])
+                    }
+                elif node_type == 'task':
+                    config_data = {
+                        **base_config,
+                        'prompt': node_data.get('prompt', node_data.get('description', 'temp')),
+                        'goal': node_data.get('goal', 'temp')
+                    }
+                elif node_type == 'tool':
+                    config_data = {
+                        **base_config,
+                        'toolType': node_data.get('toolType', node_data.get('tool_type', 'api')),
+                        'framework': node_data.get('framework', 'api')
+                    }
+                elif node_type == 'input':
+                    config_data = {
+                        **base_config,
+                        'input_type': node_data.get('input_type', 'text')
+                    }
+                elif node_type == 'output':
+                    config_data = {
+                        **base_config,
+                        'output_type': node_data.get('output_type', 'console')
+                    }
+                elif node_type == 'logic':
+                    config_data = {
+                        **base_config,
+                        'condition': node_data.get('condition', 'equals')
+                    }
+                elif node_type == 'delay':
+                    config_data = {
+                        **base_config,
+                        'duration': node_data.get('duration', '5s')
+                    }
+                else:
+                    config_data = base_config
+                
+                # Create instance and get input schema
+                config_instance = config_class(**config_data)
+                input_schema = config_instance.input_schema
+                
+                if input_schema and hasattr(input_schema, 'fields'):
+                    expected_fields = {}
+                    for field_name, field_def in input_schema.fields.items():
+                        expected_fields[field_name] = {
+                            'type': field_def.type.value if hasattr(field_def.type, 'value') else str(field_def.type),
+                            'description': field_def.description,
+                            'required': field_name in input_schema.required_fields if hasattr(input_schema, 'required_fields') else False,
+                            'default': field_def.default if hasattr(field_def, 'default') else None,
+                            'source': 'node_config_class'
+                        }
+                    logger.info(f"🎯 Using node config class schema for {node_id}: {list(expected_fields.keys())}")
+                    return expected_fields
+                else:
+                    logger.warning(f"⚠️ No input schema found for {node_type} node")
+                    return {}
+                    
+            except Exception as e:
+                logger.error(f"❌ Error getting schema for {node_type} node: {str(e)}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"❌ Error in _get_expected_inputs: {str(e)}")
             
-            logger.info(f"🎯 Using schema-based inputs for {node_id}: {list(schema_fields.keys())}")
-            return schema_fields
-        
-        # 2. Use node-specific input definitions
-        if 'inputs' in node_data:
-            logger.info(f"🎯 Using node-specific inputs for {node_id}: {list(node_data['inputs'].keys())}")
-            return node_data['inputs']
-
-        # 3. Fallback: use context variables as inputs
-        logger.info(f"🎯 Using context variables as inputs for {node_id}: {list(context.get('variables', {}).keys())}")
-        return context.get('variables', {})
+            # 🔥 ROBUST FALLBACK: Try multiple fallback strategies
+            logger.info(f"🔄 Smart mapping failed for {node_type} node {node_id}, trying fallbacks...")
+            
+            # Fallback 1: Try simple mapper
+            try:
+                from core.simple_mapper import simple_mapper
+                previous_outputs = context.get('previous_outputs', {})
+                if previous_outputs:
+                    available_fields = simple_mapper.get_available_fields_dict(previous_outputs)
+                    logger.info(f"🔄 Simple mapper fallback for {node_id}: {list(available_fields.keys())}")
+                    return available_fields
+            except Exception as fallback_error:
+                logger.warning(f"⚠️ Simple mapper fallback failed: {str(fallback_error)}")
+            
+            # Fallback 2: Use context variables
+            context_vars = context.get('variables', {})
+            if context_vars:
+                logger.info(f"🎯 Using context variables as inputs for {node_id}: {list(context_vars.keys())}")
+                return context_vars
+            
+            # Fallback 3: Use workflow data manager variables
+            try:
+                from core.workflow_data_manager import workflow_data_manager
+                if hasattr(context, 'workflow_id') and context.workflow_id:
+                    workflow_context = workflow_data_manager.get_context(context.workflow_id)
+                    if workflow_context:
+                        available_vars = workflow_context.get_available_variables()
+                        logger.info(f"🎯 Using workflow variables for {node_id}: {list(available_vars.keys())}")
+                        return available_vars
+            except Exception as workflow_error:
+                logger.warning(f"⚠️ Workflow data manager fallback failed: {str(workflow_error)}")
+            
+            # Final fallback: return empty dict
+            logger.warning(f"⚠️ All fallbacks failed for {node_type} node {node_id}")
+            return {}
 
     
     def _map_from_context(
@@ -117,8 +244,14 @@ class SmartMapper:
                 # Call _schema_based_match for each input individually
                 best_match, confidence = self._schema_based_match(input_name, input_config, previous_outputs)
                 if best_match and confidence > 0.7:  # Only use high-confidence matches
+                    # FIXED: Extract the actual value from the tuple
+                    if isinstance(best_match, tuple) and len(best_match) == 2:
+                        actual_value = best_match[1]  # Get the value, not the key
+                    else:
+                        actual_value = best_match
+                        
                     mapped_inputs[input_name] = {
-                        'value': best_match,
+                        'value': actual_value,
                         'source': f"schema_match:{input_name}",
                         'confidence': confidence
                     }
@@ -160,7 +293,7 @@ class SmartMapper:
             'query': ['query', 'question', 'prompt', 'request', 'search', 'ask', 'user_query', 'user_question'],
             'context': ['context', 'background', 'info', 'information', 'details', 'description', 'background_info'],
             'user_input': ['user_input', 'input', 'message', 'text', 'content', 'user_message', 'user_text'],
-            'task_input': ['task_input', 'input', 'data', 'content', 'instructions', 'task_data'],
+            'task_input': ['task_input', 'input', 'data', 'content', 'instructions', 'task_data', 'result', 'output', 'agent_output'],
             'agent_output': ['agent_output', 'output', 'result', 'response', 'agent_result', 'previous_output'],
             'input_data': ['input_data', 'data', 'payload', 'content', 'input', 'information'],
             'parameters': ['parameters', 'params', 'config', 'configuration', 'settings', 'options'],
@@ -539,6 +672,22 @@ class SmartMapper:
             logger.error(f"Error calculating semantic similarity: {str(e)}")
             return 0.0
 
+    def _extract_value(self, value):
+        # Helper to extract value from NodeData or return as is
+        logger.debug(f"🔧 Smart mapper extracting value: {type(value).__name__}")
+        
+        # Use the utility function for consistent extraction
+        from .utils import get_clean_output
+        return get_clean_output(value)
+
+    def map_inputs(self, expected_inputs, previous_outputs):
+        mapped = {}
+        for key in expected_inputs:
+            value = previous_outputs.get(key)
+            value = self._extract_value(value)
+            mapped[key] = value
+        return mapped
+
 # Global instance
 smart_mapper = SmartMapper()
 
@@ -571,9 +720,13 @@ async def smart_map_inputs(node: Dict[str, Any], context: Dict[str, Any], previo
     if not node_type:
         raise ValueError("Node must have a 'type' field")
     
-    # Validate context structure
-    if not isinstance(context, dict):
-        raise ValueError("Context must be a dictionary")
+    # Validate context structure - allow both dict and WorkflowExecutionContext
+    if not isinstance(context, dict) and not hasattr(context, 'to_dict'):
+        raise ValueError("Context must be a dictionary or WorkflowExecutionContext")
+    
+    # Convert WorkflowExecutionContext to dict if needed
+    if hasattr(context, 'to_dict'):
+        context = context.to_dict()
     
     mapper = SmartMapper()
     return await mapper.smart_map_inputs(node, context, previous_outputs)

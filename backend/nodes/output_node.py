@@ -100,15 +100,44 @@ class OutputNode(BaseNode):
     async def process(self, node, inputs, context):
         return await super().process(node, inputs, context)
 
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute node-specific logic - required by BaseNode"""
+        # Convert NodeData inputs to regular dict
+        regular_inputs = {}
+        for key, node_data in inputs.items():
+            if isinstance(node_data, NodeData):
+                regular_inputs[key] = node_data.get_value()
+            else:
+                regular_inputs[key] = node_data
+        
+        # Convert config to dict
+        if hasattr(config, 'dict'):
+            config_dict = config.dict()
+        elif hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+        
+        # Create a mock node structure for the process method
+        mock_node = {
+            'id': 'output-node',
+            'data': config_dict
+        }
+        
+        # Call the process method
+        result = await self.process(mock_node, regular_inputs, context)
+        return result
+
     def __init__(self):
         """Initialize the OutputNode with AI integration support"""
         self.logger = logging.getLogger(__name__)
         
         # Initialize AI runner for smart outputs
         try:
-            from frameworks.ai_runner import AIRunner
-            self.ai_runner = AIRunner()
-            self.logger.info("AI runner initialized for smart outputs")
+            # Try to import from the correct location
+            from frameworks.ai_integration_runner import AIIntegrationRunner
+            self.ai_runner = AIIntegrationRunner()
+            self.logger.info("AI integration runner initialized for smart outputs")
         except ImportError:
             self.logger.warning("AI runner not available, smart outputs will use fallback")
             self.ai_runner = None

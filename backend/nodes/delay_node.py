@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 class DelayNodeConfig(NodeConfig):
     """Configuration for Delay nodes"""
+    label: str
+    description: str
     duration: str = Field(default="5s", description="Delay duration (e.g., '5s', '2m')")
     input_schema: NodeSchema = Field(default_factory=lambda: NodeSchema(
         fields={
@@ -68,6 +70,69 @@ class DelayNode(BaseNode):
 
     async def process(self, node, inputs, context):
         return await super().process(node, inputs, context)
+    
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute the delay node"""
+        try:
+            # Extract duration from config
+            duration_str = config.duration if hasattr(config, 'duration') else "5s"
+            
+            # Parse duration
+            match = re.match(r"(\d+)(s|m|h)", duration_str.strip().lower())
+            if not match:
+                raise ValueError(f"Invalid delay format: {duration_str}")
+
+            # Calculate delay in seconds
+            value, unit = match.groups()
+            value = int(value)
+            seconds = value * (60 if unit == "m" else 3600 if unit == "h" else 1)
+            
+            # Log the delay
+            logger.info(f"Starting delay of {duration_str} ({seconds} seconds)")
+            start_time = datetime.now()
+            
+            # Execute the delay
+            await asyncio.sleep(seconds)
+            
+            # Calculate actual duration
+            end_time = datetime.now()
+            actual_duration = (end_time - start_time).total_seconds()
+            
+            # Get input data to pass through
+            input_data = None
+            for key, value in inputs.items():
+                if isinstance(value, NodeData) and not value.is_error():
+                    input_data = value.value
+                    break
+                elif not isinstance(value, NodeData):
+                    input_data = value
+                    break
+            
+            # Return structured response
+            return {
+                "type": "delay_result",
+                "output": input_data,  # Pass through input data
+                "metadata": {
+                    "timestamp": end_time.isoformat(),
+                    "node_type": "delay",
+                    "start_time": start_time.isoformat(),
+                    "end_time": end_time.isoformat(),
+                    "duration": duration_str,
+                    "seconds": seconds,
+                    "actual_duration": actual_duration
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Delay execution error: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "delay"
+                }
+            }
 
 async def run_delay_node(data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
     """

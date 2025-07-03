@@ -1430,6 +1430,77 @@ export const optimizedTemplates = [
         'Performance monitoring'
       ]
     }
+  },
+
+  // 🧪 Minimal Test Workflow (New Schema)
+  {
+    name: '🧪 Minimal Test Workflow (New Schema)',
+    description: 'A minimal test workflow using the new schema, field mapping, and LLM config. Use as a reference for building new templates.',
+    thumbnail: '/img/test-minimal.png',
+    nodes: [
+      {
+        id: 'input-test',
+        type: 'input',
+        position: { x: 50, y: 100 },
+        data: {
+          label: 'Test Input',
+          inputType: 'text',
+          placeholder: 'Enter test input',
+          defaultValue: 'Sample input',
+          nodeId: 'input-test',
+          nodeType: 'input'
+        }
+      },
+      {
+        id: 'agent-test',
+        type: 'agent',
+        position: { x: 300, y: 100 },
+        data: {
+          label: 'Test Agent',
+          role: 'Test Agent',
+          goal: 'Test the agent node template loading',
+          backstory: 'This is a test template for the builder.',
+          framework: 'crewai',
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 1000
+          },
+          llmProvider: 'openai',
+          llmModel: 'gpt-4',
+          temperature: 0.7,
+          max_tokens: 1000,
+          field_mappings: {
+            // Example: map input value to agent input
+            input: 'input-test.value'
+          },
+          nodeId: 'agent-test',
+          nodeType: 'agent'
+        }
+      },
+      {
+        id: 'output-test',
+        type: 'output',
+        position: { x: 550, y: 100 },
+        data: {
+          label: 'Test Output',
+          outputType: 'text',
+          description: 'Test output node',
+          nodeId: 'output-test',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: [
+      { id: 'e1', source: 'input-test', target: 'agent-test' },
+      { id: 'e2', source: 'agent-test', target: 'output-test' }
+    ],
+    tags: ['Test', 'Minimal', 'New Schema'],
+    complexity: 'Beginner',
+    estimatedTime: '1 minute',
+    agentCount: 1,
+    nodeCount: 3
   }
 ];
 

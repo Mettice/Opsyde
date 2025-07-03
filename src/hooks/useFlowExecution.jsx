@@ -907,6 +907,7 @@ export const useFlowExecution = ({ nodes, edges, inputs }) => {
     // Core execution functions
     runCrew,
     validateFlow,
+    testExecutionStates,
     
     // State
     isExecuting,

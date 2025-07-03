@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import EnhancedFrameworkSelector from '../toolTemplates/EnhancedFrameworkSelector';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 const LinkedInOutreachTemplate = () => {
   // Workflow state
@@ -934,7 +935,17 @@ Message is ready to send with minor optimizations. The personalization and value
                   <h4 className="font-medium text-gray-800 mb-2">📧 Generated Messages</h4>
                   <div className="text-sm text-gray-600">
                     {results.generation?.output ? (
-                      <pre className="whitespace-pre-wrap">{JSON.stringify(results.generation.output, null, 2)}</pre>
+                      <ResultDisplayCard
+                        content={results.generation.output}
+                        title="Generated Messages"
+                        colorScheme="green"
+                        defaultExpanded={false}
+                        showMetrics={true}
+                        metadata={{
+                          resultType: 'generation',
+                          nodeType: 'template'
+                        }}
+                      />
                     ) : (
                       'No messages generated yet'
                     )}

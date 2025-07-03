@@ -351,60 +351,82 @@ class TaskNode(BaseNode):
             # Handle the case based on whether we found agents or not
             if not connected_agents:
                 logger.warning(f"No agents connected to task: {task_name}")
-                # Check if this is a data processing task that doesn't need an agent
-                # OR if we have any meaningful input data to process
-                has_meaningful_inputs = False
                 
-                # Check for any meaningful input data
-                for key, value in formatted_inputs.items():
-                    if isinstance(value, dict):
-                        # Check for various types of meaningful data
-                        if (value.get('type') in ['text', 'file', 'url', 'tool_result', 'agent_result'] or
-                            'value' in value or 'data' in value or 'result' in value):
+                # Try to get agent configuration from the node data itself
+                node_data = node if isinstance(node, dict) else node.dict() if hasattr(node, 'dict') else {}
+                agent_ref = node_data.get('data', {}).get('agentId') or node_data.get('data', {}).get('agent_ref')
+                
+                if agent_ref:
+                    logger.info(f"Found agent reference in node data: {agent_ref}")
+                    # Create a basic agent configuration from the node data
+                    agent_info = {
+                        "role": node_data.get('data', {}).get('agentName', 'Assistant'),
+                        "goal": node_data.get('data', {}).get('agentRole', 'Help the user'),
+                        "backstory": "",
+                        "framework": "crewai",  # Default to crewai
+                        "llmModel": "gpt-4",
+                        "llmProvider": "openai",
+                        "temperature": 0.7,
+                        "max_tokens": 4000,
+                        "allowDelegation": False
+                    }
+                    connected_agents.append(agent_info)
+                    logger.info(f"Created agent configuration from node data: {agent_info['role']}")
+                
+                # If still no agents, check if this is a data processing task that doesn't need an agent
+                if not connected_agents:
+                    has_meaningful_inputs = False
+                    
+                    # Check for any meaningful input data
+                    for key, value in formatted_inputs.items():
+                        if isinstance(value, dict):
+                            # Check for various types of meaningful data
+                            if (value.get('type') in ['text', 'file', 'url', 'tool_result', 'agent_result'] or
+                                'value' in value or 'data' in value or 'result' in value):
+                                has_meaningful_inputs = True
+                                break
+                        elif isinstance(value, str) and value.strip():
                             has_meaningful_inputs = True
                             break
-                    elif isinstance(value, str) and value.strip():
-                        has_meaningful_inputs = True
-                        break
-                    elif value is not None:
-                        has_meaningful_inputs = True
-                        break
-                
-                if has_meaningful_inputs:
-                    logger.info(f"Task {task_name} will process data without agent")
-                    # Process the task as a data transformation/processing task
-                    agent_response = await self._process_data_task(task_name, description, formatted_inputs, expected_output)
+                        elif value is not None:
+                            has_meaningful_inputs = True
+                            break
                     
-                    # Create task result for data processing
-                    result = {
-                        "type": "task_result",
-                        "task_name": task_name,
-                        "description": description,
-                        "expected_output": expected_output,
-                        "is_async": is_async,
-                        "inputs": formatted_inputs,
-                        "status": "completed",
-                        "timestamp": datetime.now().isoformat(),
-                        "result": agent_response,
-                        "query": description or "Data processing task"
-                    }
-                    
-                    logger.info(f"✅ Task {task_name} completed data processing successfully")
-                    return result
-                else:
-                    # Only return error if we have no agents AND no meaningful input data
-                    logger.error(f"Task {task_name} has no connected agents and no meaningful input data")
-                    return {
-                        "success": False,
-                        "type": "error",
-                        "error": "Task requires at least one connected agent or meaningful input data to process"
-                    }
-            else:
-                # We have connected agents - proceed with agent-based processing
-                # Extract the primary agent (first in the list)
-                primary_agent = connected_agents[0]
-                agent_role = primary_agent.get("role", "Assistant")
-                agent_goal = primary_agent.get("goal", "Help the user")
+                    if has_meaningful_inputs:
+                        logger.info(f"Task {task_name} will process data without agent")
+                        # Process the task as a data transformation/processing task
+                        agent_response = await self._process_data_task(task_name, description, formatted_inputs, expected_output)
+                        
+                        # Create task result for data processing
+                        result = {
+                            "type": "task_result",
+                            "task_name": task_name,
+                            "description": description,
+                            "expected_output": expected_output,
+                            "is_async": is_async,
+                            "inputs": formatted_inputs,
+                            "status": "completed",
+                            "timestamp": datetime.now().isoformat(),
+                            "result": agent_response,
+                            "query": description or "Data processing task"
+                        }
+                        
+                        logger.info(f"✅ Task {task_name} completed data processing successfully")
+                        return result
+                    else:
+                        # Only return error if we have no agents AND no meaningful input data
+                        logger.error(f"Task {task_name} has no connected agents and no meaningful input data")
+                        return {
+                            "success": False,
+                            "type": "error",
+                            "error": "Task requires at least one connected agent or meaningful input data to process"
+                        }
+            
+            # We have connected agents - proceed with agent-based processing
+            # Extract the primary agent (first in the list)
+            primary_agent = connected_agents[0]
+            agent_role = primary_agent.get("role", "Assistant")
+            agent_goal = primary_agent.get("goal", "Help the user")
             
             # Initialize enhanced framework config
             enhanced_framework_config = {
@@ -488,7 +510,7 @@ class TaskNode(BaseNode):
                         logger.info("Using CrewAI framework for agent task")
                         
                         # Create CrewAI runner instance
-                        crewai_runner = EnhancedCrewAIRunner()
+                        runner = EnhancedCrewAIRunner()
                         
                         # Extract LLM provider from multiple possible locations
                         llm_provider = (
@@ -588,11 +610,64 @@ class TaskNode(BaseNode):
                             "expectedOutput": expected_output or "Detailed response to the query"
                         }
                         
-                        # Run the agent
-                        result = await crewai_runner.run_crewai_agent(
-                            agent_config=agent_data, 
-                            task_config=task_data,
-                            inputs=formatted_inputs
+                        # Run the agent - FIXED: Use correct parameter format
+                        # Create a unified config for the runner
+                        unified_config = {
+                            **agent_data,
+                            **task_data,
+                            'frameworkConfig': agent_data.get('frameworkConfig', {})
+                        }
+                        
+                        # FIXED: Create proper CrewAIRunnerConfig object
+                        from models.runner_schemas import CrewAIRunnerConfig
+                        
+                        # FIXED: Use the provider from the agent data, not hardcoded
+                        provider = agent_data.get('frameworkConfig', {}).get('provider', 'openai')
+                        model = agent_data.get('frameworkConfig', {}).get('model', 'gpt-4')
+                        
+                        # FIXED: Convert string tools to proper tool dictionaries
+                        tools = task_data.get('tools', [])
+                        converted_tools = []  # FIXED: Always initialize converted_tools
+                        if tools and isinstance(tools, list):
+                            # Convert string tools to proper tool dictionaries
+                            for tool in tools:
+                                if isinstance(tool, str):
+                                    # Convert string tool name to tool dictionary
+                                    converted_tools.append({
+                                        "name": tool,
+                                        "description": f"Tool for {tool}",
+                                        "type": "function"
+                                    })
+                                elif isinstance(tool, dict):
+                                    converted_tools.append(tool)
+                                else:
+                                    logger.warning(f"Invalid tool format: {tool}")
+                            tools = converted_tools
+                        
+                        runner_config = CrewAIRunnerConfig(
+                            role=agent_data.get('role', 'Assistant'),
+                            goal=agent_data.get('goal', 'Help the user'),
+                            backstory=agent_data.get('backstory', ''),
+                            verbose=agent_data.get('verbose', True),
+                            allow_delegation=agent_data.get('allowDelegation', False),
+                            enable_memory=agent_data.get('enableMemory', False),
+                            framework="crewai",
+                            provider=provider,  # FIXED: Use provider from agent data
+                            model=model,  # FIXED: Use model from agent data
+                            temperature=agent_data.get('temperature', 0.7),
+                            max_tokens=agent_data.get('max_tokens', 4000),
+                            max_iterations=task_data.get('max_iterations', 3),
+                            tools=tools  # FIXED: Use converted tools
+                        )
+                        
+                        # FIXED: Create runner instance and pass context
+                        runner = EnhancedCrewAIRunner()
+                        runner.context = context  # FIXED: Pass the execution context
+                        
+                        # Call the runner with the correct signature
+                        result = await runner.run_crewai_agent(
+                            runner_config, 
+                            formatted_inputs
                         )
                         agent_response = result.get("output", "No response from CrewAI agent")
                     except ImportError as e:
@@ -1204,6 +1279,74 @@ class TaskNode(BaseNode):
         except Exception as e:
             logger.error(f"Error processing data task {task_name}: {str(e)}")
             return f"Error processing data task {task_name}: {str(e)}"
+
+    def _extract_value_from_nodedata(self, value):
+        """Extract actual value from NodeData object or return as is"""
+        from models.data import NodeData
+        if isinstance(value, NodeData):
+            return value.value
+        return value
+
+    def _process_inputs_for_crewai(self, inputs):
+        """Process inputs to extract actual values for CrewAI"""
+        processed = {}
+        for key, value in inputs.items():
+            actual_value = self._extract_value_from_nodedata(value)
+            processed[key] = actual_value
+        return processed
+
+    async def run(self, inputs: Dict[str, Any], context: Any = None) -> Dict[str, Any]:
+        """Run the task node with enhanced input processing"""
+        try:
+            # Extract actual values from NodeData objects
+            processed_inputs = self._process_inputs_for_crewai(inputs)
+            
+            logger.info(f"Task ⚡ {self.label} received inputs: {list(processed_inputs.keys())}")
+            
+            # Log the actual values (not NodeData objects)
+            for key, value in processed_inputs.items():
+                logger.info(f"Input '{key}': type={type(value).__name__}, value={str(value)[:100] if value else None}")
+            
+            # Use the existing process method with processed inputs
+            # Create a mock node object for compatibility
+            mock_node = {
+                'id': 'task-run',
+                'data': {
+                    'label': self.label,
+                    'description': self.description,
+                    'expectedOutput': self.expected_output,
+                    'async': self.async_execution,
+                    'dependencies': self.dependencies
+                }
+            }
+            
+            # Create a mock context
+            mock_context = ExecutionContext(
+                execution_id="task-run",
+                node_results={},
+                global_inputs=processed_inputs,
+                memory={},
+                metadata={}
+            )
+            
+            # Call the existing process method
+            result = await self.process(mock_node, processed_inputs, mock_context)
+            
+            return {
+                "success": True,
+                "type": "task_result",
+                "output": result,
+                "timestamp": datetime.now().isoformat()
+            }
+
+        except Exception as e:
+            logger.error(f"Error in run method: {str(e)}")
+            return {
+                "success": False,
+                "type": "error",
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
 
 
 # Standalone function for node processor compatibility

@@ -33,10 +33,14 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Grid,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import { useBuilderUI } from '../../contexts/BuilderUIContext';
 import { useFlow } from '../../contexts/FlowContext';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 const PROVIDER_MODELS = {
   openai: [
@@ -101,6 +105,8 @@ const ToolEditor = ({
   const [showApiKeyModal, setShowApiKeyModal] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [apiKeyValidationLoading, setApiKeyValidationLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState(null);
 
   // Field Mapping State
   const [fieldMappings, setFieldMappings] = useState(formData.field_mappings || {});
@@ -540,6 +546,29 @@ const ToolEditor = ({
           value: { ...formData.framework_config, model }
         }
       });
+    }
+  };
+
+  const handleTest = async () => {
+    setTestLoading(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_data: formData, test_inputs: {} })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult(data.result || data.output || data);
+      } else {
+        setTestError(data.error || 'Test failed');
+      }
+    } catch (err) {
+      setTestError(err.message || 'Test failed');
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -1244,6 +1273,34 @@ const ToolEditor = ({
           </DialogActions>
         </Dialog>
       )}
+
+      <div className="mt-4">
+        <button
+          onClick={handleTest}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={testLoading}
+        >
+          {testLoading ? 'Testing...' : 'Test/Preview'}
+        </button>
+        {testError && (
+          <div className="mt-2 text-red-600">{testError}</div>
+        )}
+        {testResult && (
+          <div className="mt-2">
+            <ResultDisplayCard
+              content={testResult}
+              title="Test Result"
+              colorScheme="blue"
+              defaultExpanded={false}
+              showMetrics={true}
+              metadata={{
+                nodeType: 'tool',
+                testType: 'preview'
+              }}
+            />
+          </div>
+        )}
+      </div>
     </Box>
   );
 };

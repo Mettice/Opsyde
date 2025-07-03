@@ -1,24 +1,64 @@
 import React, { useState } from 'react';
 import ExecutionLog from '../ExecutionLog';
-import CVResultsDisplay from '../CVResultsDisplay';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 export default function FlowExecutionPanel({ logs, isMinimized, onToggleMinimize, onClose }) {
   const [activeTab, setActiveTab] = useState('logs');
   
   const renderLogContent = (log) => {
     if (log.status === 'error') {
-      return <div className="text-red-500">{log.error}</div>;
+      return (
+        <ResultDisplayCard
+          content={{ error: log.error || 'An error occurred' }}
+          title="Execution Error"
+          colorScheme="orange"
+          defaultExpanded={true}
+          showMetrics={false}
+        />
+      );
     }
 
     if (log.status === 'started') {
-      return <div className="text-blue-500">Started execution...</div>;
+      return (
+        <ResultDisplayCard
+          content="Started execution..."
+          title="Execution Started"
+          colorScheme="blue"
+          defaultExpanded={false}
+          showMetrics={false}
+        />
+      );
     }
 
     if (log.status === 'completed') {
       if (log.result?.type === 'cv_result') {
-        return <CVResultsDisplay results={log.result.data} />;
+        return (
+          <ResultDisplayCard
+            content={log.result.data}
+            title="CV Analysis Results"
+            colorScheme="green"
+            defaultExpanded={false}
+            showMetrics={true}
+            metadata={{
+              resultType: 'cv_result',
+              nodeType: log.type
+            }}
+          />
+        );
       }
-      return <pre className="whitespace-pre-wrap">{JSON.stringify(log.result, null, 2)}</pre>;
+      return (
+        <ResultDisplayCard
+          content={log.result}
+          title="Execution Result"
+          colorScheme="green"
+          defaultExpanded={false}
+          showMetrics={true}
+          metadata={{
+            nodeType: log.type,
+            nodeName: log.nodeName || log.nodeId
+          }}
+        />
+      );
     }
 
     return null;

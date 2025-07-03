@@ -967,6 +967,7 @@ export default function UnifiedExecutionPanel({
               getLogStyle={getLogStyle}
               getCardStyle={getCardStyle}
               getStatusIcon={getStatusIcon}
+              processStandardizedResult={(result) => result}
             />
           )}
           

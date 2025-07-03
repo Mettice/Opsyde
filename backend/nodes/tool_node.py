@@ -636,6 +636,56 @@ class ToolNode(BaseNode):
         required = ['url']
         return all(key in config for key in required)
 
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute the tool node"""
+        try:
+            # Convert config to dict for processing
+            config_dict = config.dict() if hasattr(config, 'dict') else config
+            
+            # Process inputs to extract actual values from NodeData
+            processed_inputs = {}
+            for key, value in inputs.items():
+                if isinstance(value, NodeData) and not value.is_error():
+                    processed_inputs[key] = value.value
+                elif not isinstance(value, NodeData):
+                    processed_inputs[key] = value
+            
+            # Route to appropriate processor based on tool type
+            tool_type = config_dict.get('toolType', 'api')
+            
+            if tool_type == 'llm':
+                result = await self._process_llm_tool(config_dict, processed_inputs)
+            elif tool_type == 'api':
+                result = await self._process_api_tool(config_dict, processed_inputs)
+            elif tool_type == 'webhook':
+                result = await self._process_webhook_tool(config_dict, processed_inputs)
+            elif tool_type == 'custom':
+                result = await self._process_custom_tool(config_dict, processed_inputs)
+            else:
+                # Default to API tool
+                result = await self._process_api_tool(config_dict, processed_inputs)
+            
+            return {
+                "type": "tool_result",
+                "output": result,
+                "metadata": {
+                    "tool_type": tool_type,
+                    "framework": config_dict.get('framework', 'api'),
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Tool execution error: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "tool"
+                }
+            }
+
 # Register enhanced handler function
 async def process_tool_node(
     node_data: Dict[str, Any], 

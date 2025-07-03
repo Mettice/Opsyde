@@ -102,7 +102,7 @@ def run_trigger_node(data=None):
             import requests
             
             # Set up authentication headers
-            headers = {'User-Agent': 'CrewBuilder-Universal-Polling/1.0'}
+            headers = {'User-Agent': 'Nodai-Universal-Polling/1.0'}
             
             if auth_type == 'api_key' and data.get('apiKey'):
                 api_key = data.get('apiKey')
@@ -441,5 +441,102 @@ class TriggerNode(BaseNode):
 
     async def process(self, node, inputs, context):
         return await super().process(node, inputs, context)
+    
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute the trigger node"""
+        try:
+            # Convert config to dict for processing
+            config_dict = config.dict() if hasattr(config, 'dict') else config
+            
+            # Get trigger type
+            trigger_type = config_dict.get('triggerType', 'manual')
+            
+            # For manual triggers, just return a success response
+            if trigger_type == 'manual':
+                return {
+                    "type": "trigger_result",
+                    "output": {
+                        "trigger_type": trigger_type,
+                        "status": "triggered",
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    "metadata": {
+                        "node_type": "trigger",
+                        "trigger_type": trigger_type,
+                        "trigger_id": config_dict.get('id', 'manual'),
+                        "timestamp": datetime.now().isoformat(),
+                        "data_summary": "Manual trigger executed"
+                    }
+                }
+            
+            # For other trigger types, fetch data if configured
+            elif trigger_type in ['universal_polling', 'universal_webhook']:
+                # Fetch API data if configured
+                api_data = await fetch_api_data(config_dict)
+                
+                if api_data:
+                    # Filter the data if configured
+                    filtered_data = _filter_api_data(api_data, config_dict)
+                    
+                    return {
+                        "type": "trigger_result",
+                        "output": filtered_data,
+                        "metadata": {
+                            "node_type": "trigger",
+                            "trigger_type": trigger_type,
+                            "trigger_id": config_dict.get('id', 'api'),
+                            "service_name": config_dict.get('serviceName', 'unknown'),
+                            "timestamp": datetime.now().isoformat(),
+                            "data_summary": f"Retrieved {len(filtered_data) if isinstance(filtered_data, list) else 1} records",
+                            "api_data": api_data
+                        },
+                        "api_data": api_data,
+                        "standard_records": filtered_data
+                    }
+                else:
+                    return {
+                        "type": "trigger_result",
+                        "output": {
+                            "trigger_type": trigger_type,
+                            "status": "no_data",
+                            "timestamp": datetime.now().isoformat()
+                        },
+                        "metadata": {
+                            "node_type": "trigger",
+                            "trigger_type": trigger_type,
+                            "trigger_id": config_dict.get('id', 'api'),
+                            "timestamp": datetime.now().isoformat(),
+                            "data_summary": "No data retrieved"
+                        }
+                    }
+            
+            # Default response for other trigger types
+            else:
+                return {
+                    "type": "trigger_result",
+                    "output": {
+                        "trigger_type": trigger_type,
+                        "status": "triggered",
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    "metadata": {
+                        "node_type": "trigger",
+                        "trigger_type": trigger_type,
+                        "trigger_id": config_dict.get('id', 'unknown'),
+                        "timestamp": datetime.now().isoformat(),
+                        "data_summary": f"{trigger_type} trigger executed"
+                    }
+                }
+            
+        except Exception as e:
+            logger.error(f"Trigger execution error: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "trigger"
+                }
+            }
 
 

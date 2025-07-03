@@ -153,6 +153,20 @@ class NodeProcessor:
         """Wrap value as NodeData if needed"""
         if isinstance(value, NodeData):
             return value
+        
+        # Debug what we're wrapping
+        logger.debug(f"🔧 Wrapping value: {type(value).__name__} = {value}")
+        
+        # Handle None values explicitly
+        if value is None:
+            logger.warning(f"🔧 Wrapping None value - this might cause issues")
+            return NodeData.from_value("")  # Return empty string instead of None
+        
+        # Handle empty values
+        if isinstance(value, (str, list, dict)) and not value:
+            logger.debug(f"🔧 Wrapping empty {type(value).__name__}")
+            return NodeData.from_value(value)
+        
         return NodeData.from_value(value)
 
     def _smart_fix_node_config(self, node: Dict[str, Any]) -> Dict[str, Any]:
@@ -435,12 +449,23 @@ class NodeProcessor:
         if not handler:
             error_msg = f"No handler found for node type: {node_type}"
             logger.error(error_msg)
-            return NodeData(error=error_msg)
+            return NodeData.from_error(error_msg)
 
-        # Convert inputs to NodeData format
+        # 🔧 CRITICAL FIX: Clean inputs before processing
+        from .utils import clean_node_inputs
+        cleaned_inputs = clean_node_inputs(inputs)
+        
+        # Convert cleaned inputs to NodeData format with enhanced debugging
         nodedata_inputs = {}
-        for key, value in inputs.items():
+        logger.info(f"🔧 Converting cleaned inputs for {node_type} node {node_id}:")
+        for key, value in cleaned_inputs.items():
+            logger.info(f"   - {key}: {type(value).__name__} = {value}")
             nodedata_inputs[key] = self._wrap_as_nodedata(value)
+            # Debug the wrapped value
+            if hasattr(nodedata_inputs[key], 'value'):
+                logger.info(f"   - {key} wrapped: {type(nodedata_inputs[key].value).__name__} = {nodedata_inputs[key].value}")
+            else:
+                logger.info(f"   - {key} wrapped: {type(nodedata_inputs[key]).__name__}")
 
         # Execute the node
         logger.info(f"🔄 Executing traditional {node_type} handler for {node_id}")
@@ -453,14 +478,17 @@ class NodeProcessor:
 
             # Ensure result is NodeData
             if not isinstance(result, NodeData):
-                result = NodeData(value=result)
+                if isinstance(result, dict) and 'error' in result:
+                    return NodeData.from_error(result['error'])
+                else:
+                    result = NodeData.from_value(result)
                 
             return result
             
         except Exception as e:
             error_msg = f"Traditional handler failed: {str(e)}"
             logger.error(error_msg)
-            return NodeData(error=error_msg)
+            return NodeData.from_error(error_msg)
 
     async def process_node(
         self, 
@@ -518,6 +546,39 @@ class NodeProcessor:
             
             # 4. Get appropriate runner
             framework = node.get('data', {}).get('framework', node.get('type', 'unknown'))
+            
+            # For structural nodes, use traditional handlers directly
+            structural_nodes = ["trigger", "input", "output", "logic", "delay", "task"]
+            if node.get('type') in structural_nodes:
+                logger.info(f"🔄 Using traditional handler for structural node: {node.get('type')}")
+                try:
+                    result = await self._process_with_traditional_handler(node, mapped_inputs, context)
+                    return {
+                        "valid": True,
+                        "output": result,
+                        "errors": [],
+                        "debug": {
+                            "handler": "traditional",
+                            "node_id": node.get("id", "unknown"),
+                            "node_type": node.get("type", "unknown")
+                        }
+                    }
+                except Exception as e:
+                    error_msg = f"Traditional handler failed: {str(e)}"
+                    logger.error(error_msg)
+                    return {
+                        "valid": False,
+                        "output": None,
+                        "errors": [error_msg],
+                        "debug": {
+                            "exception": str(e),
+                            "handler": "traditional",
+                            "node_id": node.get("id", "unknown"),
+                            "node_type": node.get("type", "unknown")
+                        }
+                    }
+            
+            # For framework-based nodes, get the runner
             runner = self._get_framework_runner(framework)
             if isinstance(runner, NodeData) and runner.is_error():
                 return {
@@ -818,22 +879,39 @@ class NodeProcessor:
             # Build config
             config = {**node.get('data', {}), **getattr(runner, 'config', {})}
 
-            # 2. Run the node
-            if hasattr(runner, 'run'):
+            # 2. Run the node - Handle both function runners and object runners
+            result = None
+            if callable(runner):
+                # Function runner (e.g., run_crewai_tool)
+                logger.info(f"🔧 Using function runner: {runner.__name__}")
+                # FIXED: Pass context to function runners
+                import inspect
+                sig = inspect.signature(runner)
+                if 'context' in sig.parameters:
+                    result = await runner(config, inputs, context)
+                else:
+                    result = await runner(config, inputs)
+            elif hasattr(runner, 'run'):
+                # Object runner with run method
+                logger.info(f"🔧 Using object runner: {runner.__class__.__name__}")
                 result = await runner.run(config, inputs)
             elif hasattr(runner, 'run_tool'):
+                # Object runner with run_tool method
+                logger.info(f"🔧 Using tool runner: {runner.__class__.__name__}")
                 result = await runner.run_tool(config, inputs)
             elif hasattr(runner, 'run_agent'):
+                # Object runner with run_agent method
+                logger.info(f"🔧 Using agent runner: {runner.__class__.__name__}")
                 result = await runner.run_agent(config, inputs)
             else:
-                error_msg = f"Runner {runner.__class__.__name__} has no valid run method"
+                error_msg = f"Runner {runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__} has no valid run method"
                 logger.error(error_msg)
                 return {
                     "valid": False,
                     "output": None,
                     "errors": [error_msg],
                     "debug": {
-                        "runner_type": runner.__class__.__name__,
+                        "runner_type": runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__,
                         "node_id": node.get("id", "unknown"),
                         "node_type": node.get("type", "unknown")
                     }
@@ -857,7 +935,7 @@ class NodeProcessor:
                 "output": result,
                 "errors": [],
                 "debug": {
-                    "runner_type": runner.__class__.__name__,
+                    "runner_type": runner.__class__.__name__ if hasattr(runner, '__class__') else type(runner).__name__,
                     "node_id": node.get("id", "unknown"),
                     "node_type": node.get("type", "unknown"),
                     "execution_time": datetime.now().isoformat()
@@ -873,7 +951,7 @@ class NodeProcessor:
                 "errors": [error_msg],
                 "debug": {
                     "exception": str(e),
-                    "runner_type": runner.__class__.__name__ if runner else None,
+                    "runner_type": runner.__class__.__name__ if runner and hasattr(runner, '__class__') else type(runner).__name__ if runner else None,
                     "node_id": node.get("id", "unknown"),
                     "node_type": node.get("type", "unknown"),
                     "execution_time": datetime.now().isoformat()
@@ -988,7 +1066,8 @@ class NodeProcessor:
         """Smart map inputs using semantic matching and type checking"""
         try:
             from .smart_mapper import smart_map_inputs
-            return await smart_map_inputs(node, inputs, context)
+            # Pass parameters in correct order: (node, context, previous_outputs)
+            return await smart_map_inputs(node, context or {}, inputs)
         except Exception as e:
             logger.error(f"Smart mapping failed: {str(e)}")
             return inputs

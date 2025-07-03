@@ -1,31 +1,51 @@
 import React from 'react';
-import CVResultsDisplay from './CVResultsDisplay';
+import ResultDisplayCard from './rich-content/renderers/ResultDisplayCard';
 
 const ExecutionLog = ({ logs }) => {
   const renderLogContent = (log) => {
     // Check if this is a CV parser result
     if (log.result?.type === "cv_result" && log.result?.data) {
       return (
-        <div className="bg-white rounded-lg shadow p-4">
-          <CVResultsDisplay results={log.result.data} />
-        </div>
+        <ResultDisplayCard
+          content={log.result.data}
+          title="CV Analysis Results"
+          colorScheme="green"
+          defaultExpanded={false}
+          showMetrics={true}
+          metadata={{
+            resultType: 'cv_result',
+            nodeType: log.type
+          }}
+        />
       );
     }
 
     // For error status
     if (log.status === 'error') {
       return (
-        <div className="text-red-600">
-          {log.error || 'An error occurred'}
-        </div>
+        <ResultDisplayCard
+          content={{ error: log.error || 'An error occurred' }}
+          title="Execution Error"
+          colorScheme="orange"
+          defaultExpanded={true}
+          showMetrics={false}
+        />
       );
     }
 
     // For normal results
     return (
-      <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
-        {JSON.stringify(log.result || log, null, 2)}
-      </pre>
+      <ResultDisplayCard
+        content={log.result || log}
+        title="Execution Result"
+        colorScheme="blue"
+        defaultExpanded={false}
+        showMetrics={true}
+        metadata={{
+          nodeType: log.type,
+          nodeName: log.nodeName || log.nodeId
+        }}
+      />
     );
   };
 

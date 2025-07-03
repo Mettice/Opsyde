@@ -230,4 +230,95 @@ class LogicNode(BaseNode):
         return LogicNodeConfig
 
     async def process(self, node, inputs, context):
-        return await super().process(node, inputs, context) 
+        """Process logic node with condition evaluation"""
+        try:
+            # Extract node data
+            if isinstance(node, dict):
+                node_data = node
+                node_id = node_data.get('id', 'unknown')
+            else:
+                node_data = node.data
+                node_id = node.id
+            
+            # Get condition from node data
+            condition = node_data.get("condition", "True")
+            if not condition:
+                condition = "True"
+            
+            logger.info(f"🔍 Processing logic node: {node_data.get('label', 'Logic')}")
+            logger.info(f"   Condition: {condition}")
+            
+            # Convert inputs to regular dict if needed
+            regular_inputs = {}
+            for key, value in inputs.items():
+                if hasattr(value, 'get_value'):
+                    regular_inputs[key] = value.get_value()
+                else:
+                    regular_inputs[key] = value
+            
+            # Evaluate the condition
+            result = evaluate_condition(condition, regular_inputs)
+            
+            # Get the main input data to pass through
+            main_input_data = None
+            if regular_inputs:
+                # Find the main input data (prefer task output, then agent output, then any data)
+                for key, value in regular_inputs.items():
+                    if 'task' in key.lower() or 'agent' in key.lower():
+                        main_input_data = value
+                        break
+                
+                # Fallback to first input if no task/agent input found
+                if main_input_data is None:
+                    main_input_data = next(iter(regular_inputs.values()))
+            
+            # Create metadata
+            metadata = {
+                "node_id": node_id,
+                "node_type": "logic",
+                "timestamp": datetime.now().isoformat(),
+                "condition_evaluated": condition,
+                "data_passed_through": main_input_data is not None
+            }
+            
+            return {
+                "result": result,
+                "metadata": metadata,
+                "value": main_input_data,  # Preserve original data for downstream nodes
+                "condition": condition,
+                "path": "true" if result else "false"
+            }
+            
+        except Exception as e:
+            logger.error(f"Logic processing failed: {str(e)}")
+            return {
+                "result": False,
+                "error": str(e),
+                "metadata": {
+                    "node_id": node_id if 'node_id' in locals() else 'unknown',
+                    "node_type": "logic",
+                    "timestamp": datetime.now().isoformat()
+                }
+            }
+
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute node-specific logic - required by BaseNode"""
+        # Convert NodeData inputs to regular dict
+        regular_inputs = {}
+        for key, node_data in inputs.items():
+            if isinstance(node_data, NodeData):
+                regular_inputs[key] = node_data.get_value()
+            else:
+                regular_inputs[key] = node_data
+        
+        # Convert config to dict
+        if hasattr(config, 'dict'):
+            config_dict = config.dict()
+        elif hasattr(config, 'model_dump'):
+            config_dict = config.model_dump()
+        else:
+            config_dict = config
+        
+        # Call the process method
+        result = await self.process(config_dict, regular_inputs, context)
+        return result 

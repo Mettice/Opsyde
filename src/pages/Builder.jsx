@@ -306,6 +306,7 @@ const BuilderPageContent = () => {
     executionState,
     runCrew,
     validateFlow,
+    testExecutionStates,
     nodeStates,
     connectionStates,
     // NEW: Smart Mapping Integration

@@ -511,3 +511,53 @@ class ChatNode(BaseNode):
 
     async def process(self, node, inputs, context):
         return await super().process(node, inputs, context)
+    
+    async def _execute(self, config: BaseModel, inputs: Dict[str, NodeData], context: Dict[str, Any]) -> Any:
+        """Execute the chat node"""
+        try:
+            # Convert config to dict for processing
+            config_dict = config.dict() if hasattr(config, 'dict') else config
+            
+            # Process inputs to extract actual values from NodeData
+            processed_inputs = {}
+            for key, value in inputs.items():
+                if isinstance(value, NodeData) and not value.is_error():
+                    processed_inputs[key] = value.value
+                elif not isinstance(value, NodeData):
+                    processed_inputs[key] = value
+            
+            # Execute chat processing
+            result = await run_chat_node(config_dict, processed_inputs, context)
+            
+            if result.get("type") == "chat_result":
+                return {
+                    "type": "chat_result",
+                    "output": result.get("output", {}).get("raw", "No response"),
+                    "metadata": {
+                        "node_type": "chat",
+                        "model": result.get("metadata", {}).get("model", "unknown"),
+                        "framework": result.get("metadata", {}).get("framework", "unknown"),
+                        "session_id": result.get("metadata", {}).get("session_id", ""),
+                        "timestamp": datetime.now().isoformat()
+                    }
+                }
+            else:
+                return {
+                    "type": "error",
+                    "error": result.get("error", "Chat processing failed"),
+                    "metadata": {
+                        "timestamp": datetime.now().isoformat(),
+                        "node_type": "chat"
+                    }
+                }
+            
+        except Exception as e:
+            logger.error(f"Chat execution error: {str(e)}")
+            return {
+                "type": "error",
+                "error": str(e),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "node_type": "chat"
+                }
+            }

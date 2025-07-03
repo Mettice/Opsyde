@@ -147,7 +147,9 @@ class CrewAIRunnerConfig(BaseRunnerConfig):
     role: str = Field(..., description="Agent role")
     goal: str = Field(..., description="Agent goal")
     backstory: Optional[str] = Field(default=None, description="Agent backstory")
+    verbose: bool = Field(default=True, description="Enable verbose output")
     allow_delegation: bool = Field(default=False, description="Allow task delegation")
+    enable_memory: bool = Field(default=False, description="Enable memory for the agent")
     
     # Enhanced memory configuration
     memory_config: Dict[str, Any] = Field(default_factory=lambda: {

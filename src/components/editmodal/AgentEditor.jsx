@@ -9,6 +9,7 @@ import { agentNodeSchema } from './shared/nodeSchemas';
 import FieldMapper from './shared/FieldMapper';
 import NodeOutputPreview from '../NodeOutputPreview';
 import { Box, Typography, TextField, FormControl, InputLabel, Select, MenuItem, Button, FormControlLabel, Switch, Chip, Slider, Checkbox, Radio, RadioGroup } from '@mui/material';
+import ResultDisplayCard from '../rich-content/renderers/ResultDisplayCard';
 
 // Framework and LLM constants
 const AVAILABLE_FRAMEWORKS = [
@@ -79,7 +80,8 @@ const EnhancedAgentEditor = ({
   handleFrameworkChange,
   connectedNodes = [],
   previousNodeOutputs = {},
-  nodeId
+  nodeId,
+  nodeType
 }) => {
   
   // 🔑 BYOK State Management
@@ -1896,6 +1898,41 @@ const EnhancedAgentEditor = ({
     }
   };
 
+  const [testResult, setTestResult] = useState(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError, setTestError] = useState(null);
+  const [testInput, setTestInput] = useState('');
+
+  const handleTest = async () => {
+    setTestLoading(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const nodePayload = {
+        ...formData,
+        type: nodeType || formData.type || 'agent',
+        id: nodeId || formData.id || formData.nodeId || ''
+      };
+      // Send test input as agent_input to match backend schema
+      const test_inputs = { agent_input: testInput || 'Test input value' };
+      const res = await fetch('/api/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node_data: nodePayload, test_inputs })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setTestResult(data.result || data.output || data);
+      } else {
+        setTestError(data.error || 'Test failed');
+      }
+    } catch (err) {
+      setTestError(err.message || 'Test failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       {/* BYOK Status */}
@@ -1972,6 +2009,41 @@ const EnhancedAgentEditor = ({
           ))}
         </div>
       )}
+
+      <div className="mt-4">
+        <input
+          type="text"
+          placeholder="Enter test input value"
+          value={testInput}
+          onChange={e => setTestInput(e.target.value)}
+          className="mb-2 px-3 py-2 border rounded w-full"
+        />
+        <button
+          onClick={handleTest}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={testLoading}
+        >
+          {testLoading ? 'Testing...' : 'Test/Preview'}
+        </button>
+        {testError && (
+          <div className="mt-2 text-red-600">{testError}</div>
+        )}
+        {testResult && (
+          <div className="mt-2">
+            <ResultDisplayCard
+              content={testResult}
+              title="Test Result"
+              colorScheme="blue"
+              defaultExpanded={false}
+              showMetrics={true}
+              metadata={{
+                nodeType: 'agent',
+                testType: 'preview'
+              }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -1982,7 +2054,8 @@ EnhancedAgentEditor.propTypes = {
   handleFrameworkChange: PropTypes.func.isRequired,
   connectedNodes: PropTypes.array,
   previousNodeOutputs: PropTypes.object,
-  nodeId: PropTypes.string
+  nodeId: PropTypes.string,
+  nodeType: PropTypes.string
 };
 
 export default EnhancedAgentEditor;
