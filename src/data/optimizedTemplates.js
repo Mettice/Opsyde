@@ -15,6 +15,236 @@ const convertToAnimatedEdges = (edges) => {
 };
 
 export const optimizedTemplates = [
+  // 🏢 NEW: Real-World Business Template - Customer Support Automation
+  {
+    name: '🎯 Customer Support Automation',
+    description: 'Automated customer inquiry processing with intelligent response generation',
+    thumbnail: '/img/customer-support.png',
+    nodes: [
+      {
+        id: 'input-customer-inquiry',
+        type: 'input',
+        position: { x: 50, y: 100 },
+        data: {
+          label: '📧 Customer Inquiry',
+          inputType: 'text',
+          placeholder: 'I need help with my order #12345',
+          description: 'Customer support inquiry or question',
+          nodeId: 'input-customer-inquiry',
+          nodeType: 'input'
+        }
+      },
+      {
+        id: 'agent-support-specialist',
+        type: 'agent',
+        position: { x: 300, y: 100 },
+        data: {
+          label: '🎯 Support Specialist',
+          role: 'Customer Support Specialist',
+          goal: 'Analyze customer inquiries and provide helpful, accurate responses',
+          backstory: 'Experienced customer service professional with deep knowledge of products, policies, and problem-solving techniques.',
+          framework: 'crewai',
+          tools: ['search', 'calculator'],
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.3,
+            max_tokens: 1500
+          },
+          verbose: false,
+          nodeId: 'agent-support-specialist',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.3,
+            max_tokens: 1500
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.3,
+          max_tokens: 1500
+        }
+      },
+      {
+        id: 'task-response-generation',
+        type: 'task',
+        position: { x: 550, y: 100 },
+        data: {
+          label: '💬 Generate Response',
+          description: 'Create a professional, helpful response to the customer inquiry',
+          expectedOutput: 'Professional customer support response with next steps',
+          agentId: 'agent-support-specialist',
+          nodeId: 'task-response-generation',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'logic-escalation-check',
+        type: 'logic',
+        position: { x: 800, y: 100 },
+        data: {
+          label: '⚠️ Escalation Check',
+          condition: 'response && (response.includes("escalate") || response.includes("manager") || response.includes("urgent"))',
+          description: 'Check if inquiry needs human escalation',
+          nodeId: 'logic-escalation-check',
+          nodeType: 'logic'
+        }
+      },
+      {
+        id: 'output-customer-response',
+        type: 'output',
+        position: { x: 1050, y: 50 },
+        data: {
+          label: '📧 Send Response',
+          outputType: 'email',
+          description: 'Send automated response to customer',
+          nodeId: 'output-customer-response',
+          nodeType: 'output'
+        }
+      },
+      {
+        id: 'output-escalation-ticket',
+        type: 'output',
+        position: { x: 1050, y: 150 },
+        data: {
+          label: '🎫 Create Ticket',
+          outputType: 'webhook',
+          description: 'Create escalation ticket for human agent',
+          nodeId: 'output-escalation-ticket',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      { id: 'e1', source: 'input-customer-inquiry', target: 'agent-support-specialist' },
+      { id: 'e2', source: 'agent-support-specialist', target: 'task-response-generation' },
+      { id: 'e3', source: 'task-response-generation', target: 'logic-escalation-check' },
+      { id: 'e4', source: 'logic-escalation-check', target: 'output-customer-response' },
+      { id: 'e5', source: 'logic-escalation-check', target: 'output-escalation-ticket' }
+    ]),
+    tags: ['Customer Support', 'Automation', 'Business', 'Real-World'],
+    complexity: 'Medium',
+    estimatedTime: '2-3 minutes',
+    agentCount: 1,
+    nodeCount: 6
+  },
+
+  // 📈 NEW: Real-World Business Template - Content Marketing Automation
+  {
+    name: '📈 Content Marketing Automation',
+    description: 'Automated content creation and social media posting workflow',
+    thumbnail: '/img/content-marketing.png',
+    nodes: [
+      {
+        id: 'input-content-brief',
+        type: 'input',
+        position: { x: 50, y: 100 },
+        data: {
+          label: '📝 Content Brief',
+          inputType: 'text',
+          placeholder: 'Create a blog post about AI trends in 2024',
+          description: 'Content creation brief or topic',
+          nodeId: 'input-content-brief',
+          nodeType: 'input'
+        }
+      },
+      {
+        id: 'agent-content-creator',
+        type: 'agent',
+        position: { x: 300, y: 100 },
+        data: {
+          label: '✍️ Content Creator',
+          role: 'Content Marketing Specialist',
+          goal: 'Create engaging, SEO-optimized content for various platforms',
+          backstory: 'Experienced content creator with expertise in digital marketing, SEO, and social media trends.',
+          framework: 'crewai',
+          tools: ['search', 'url_reader'],
+          frameworkConfig: {
+            provider: 'openai',
+            model: 'gpt-4',
+            temperature: 0.7,
+            max_tokens: 2000
+          },
+          verbose: false,
+          nodeId: 'agent-content-creator',
+          nodeType: 'agent',
+          llm: {
+            provider: "openai",
+            model: "gpt-4",
+            temperature: 0.7,
+            max_tokens: 2000
+          },
+          llmProvider: "openai",
+          llmModel: "gpt-4",
+          temperature: 0.7,
+          max_tokens: 2000
+        }
+      },
+      {
+        id: 'task-content-generation',
+        type: 'task',
+        position: { x: 550, y: 100 },
+        data: {
+          label: '📄 Generate Content',
+          description: 'Create comprehensive content including blog post and social media variations',
+          expectedOutput: 'Complete content package with blog post and social media posts',
+          agentId: 'agent-content-creator',
+          nodeId: 'task-content-generation',
+          nodeType: 'task'
+        }
+      },
+      {
+        id: 'logic-content-quality',
+        type: 'logic',
+        position: { x: 800, y: 100 },
+        data: {
+          label: '✅ Quality Check',
+          condition: 'content && content.length > 500 && !content.includes("error")',
+          description: 'Verify content meets quality standards',
+          nodeId: 'logic-content-quality',
+          nodeType: 'logic'
+        }
+      },
+      {
+        id: 'output-blog-post',
+        type: 'output',
+        position: { x: 1050, y: 50 },
+        data: {
+          label: '📝 Publish Blog',
+          outputType: 'cms',
+          description: 'Publish blog post to CMS',
+          nodeId: 'output-blog-post',
+          nodeType: 'output'
+        }
+      },
+      {
+        id: 'output-social-media',
+        type: 'output',
+        position: { x: 1050, y: 150 },
+        data: {
+          label: '📱 Social Media',
+          outputType: 'webhook',
+          description: 'Schedule social media posts',
+          nodeId: 'output-social-media',
+          nodeType: 'output'
+        }
+      }
+    ],
+    edges: convertToAnimatedEdges([
+      { id: 'e1', source: 'input-content-brief', target: 'agent-content-creator' },
+      { id: 'e2', source: 'agent-content-creator', target: 'task-content-generation' },
+      { id: 'e3', source: 'task-content-generation', target: 'logic-content-quality' },
+      { id: 'e4', source: 'logic-content-quality', target: 'output-blog-post' },
+      { id: 'e5', source: 'logic-content-quality', target: 'output-social-media' }
+    ]),
+    tags: ['Content Marketing', 'Automation', 'Business', 'Real-World'],
+    complexity: 'Medium',
+    estimatedTime: '3-4 minutes',
+    agentCount: 1,
+    nodeCount: 6
+  },
+
   // ✅ OPTIMIZED: HolidayPirates (was 11 nodes → now 6 nodes)
   {
     name: '🏴‍☠️ HolidayPirates Deal Finder (Optimized)',

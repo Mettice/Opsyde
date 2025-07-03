@@ -217,12 +217,28 @@ class TaskNode(BaseNode):
                 enhanced_framework_config = getattr(config, 'frameworkConfig', {}) or {}
                 logger.info(f"🔧 TaskNode enhanced frameworkConfig from Node object: {enhanced_framework_config}")
 
-            # Format input data - SIMPLIFIED since graph processor now provides clean data
+            # Format input data - ENHANCED to handle NodeData objects
             formatted_inputs = {}
             if inputs:
                 for key, value in inputs.items():
-                    # 🚀 SIMPLIFIED INPUT PROCESSING - Graph processor provides clean data
-                    if isinstance(value, dict):
+                    # Handle NodeData objects (common case from graph processor)
+                    if hasattr(value, 'value'):
+                        # Extract the actual value from NodeData
+                        actual_value = value.value
+                        if isinstance(actual_value, dict):
+                            # Check if this needs further extraction
+                            if 'output' in actual_value:
+                                formatted_inputs[key] = actual_value['output']
+                            elif 'value' in actual_value:
+                                formatted_inputs[key] = actual_value['value']
+                            elif 'result' in actual_value:
+                                formatted_inputs[key] = actual_value['result']
+                            else:
+                                formatted_inputs[key] = actual_value
+                        else:
+                            formatted_inputs[key] = actual_value
+                    # Handle regular dict objects
+                    elif isinstance(value, dict):
                         # Check if this needs further extraction
                         if 'output' in value:
                             formatted_inputs[key] = value['output']
@@ -264,16 +280,18 @@ class TaskNode(BaseNode):
                     connected_agents.append(agent_info)
                     logger.info(f"Found direct agent in inputs: {agent_info['role']} (framework: {agent_info['framework']})")
             
-            # 2. Look for agent results in the inputs
+            # 2. Look for agent results in the inputs - ENHANCED to handle agent output
             if not connected_agents:
                 for key, value in formatted_inputs.items():
                     if isinstance(value, dict):
-                        # Check if this is an agent result
+                        # Check if this is an agent result or agent output
                         if (value.get('type') == 'agent_result' or 
                             'agent_name' in value or 
                             'role' in value or
                             key.startswith('agent-') or
-                            key.startswith('input_from_agent-')):
+                            key.startswith('input_from_agent-') or
+                            'result' in value or  # Agent output often has 'result' field
+                            'agent_output' in value):  # Direct agent output
                             
                             # Extract agent info from the result or metadata
                             metadata = value.get('metadata', {})
@@ -314,7 +332,51 @@ class TaskNode(BaseNode):
                             logger.info(f"Found connected agent: {agent_info['role']} (framework: {agent_info['framework']})")
                             break  # Found one, that's enough
             
-            # 3. If no agents found in formatted inputs, check the original inputs
+            # 3. CRITICAL FIX: Look for agent output in task_input (common case when agent connects to task)
+            if not connected_agents and 'task_input' in formatted_inputs:
+                task_input = formatted_inputs['task_input']
+                if isinstance(task_input, str) and task_input.strip():
+                    # This is likely agent output passed as task_input
+                    logger.info(f"Found agent output in task_input: {task_input[:100]}...")
+                    # Create a basic agent configuration for processing
+                    agent_info = {
+                        "role": "Assistant",
+                        "goal": "Process the provided input",
+                        "backstory": "",
+                        "framework": "crewai",  # Default to crewai for task processing
+                        "llmModel": "gpt-4",
+                        "llmProvider": "openai",
+                        "temperature": 0.7,
+                        "max_tokens": 4000,
+                        "allowDelegation": False
+                    }
+                    connected_agents.append(agent_info)
+                    logger.info(f"Created agent config for task_input processing: {agent_info['role']}")
+            
+            # 4. ENHANCED: Look for agent output in any string input that looks like agent output
+            if not connected_agents:
+                for key, value in formatted_inputs.items():
+                    if isinstance(value, str) and value.strip():
+                        # Check if this looks like agent output (contains meaningful content)
+                        if len(value) > 50 and any(word in value.lower() for word in ['the', 'is', 'are', 'was', 'were', 'and', 'or', 'but']):
+                            logger.info(f"Found potential agent output in {key}: {value[:100]}...")
+                            # Create a basic agent configuration for processing
+                            agent_info = {
+                                "role": "Assistant",
+                                "goal": "Process the provided input",
+                                "backstory": "",
+                                "framework": "crewai",  # Default to crewai for task processing
+                                "llmModel": "gpt-4",
+                                "llmProvider": "openai",
+                                "temperature": 0.7,
+                                "max_tokens": 4000,
+                                "allowDelegation": False
+                            }
+                            connected_agents.append(agent_info)
+                            logger.info(f"Created agent config for {key} processing: {agent_info['role']}")
+                            break  # Found one, that's enough
+            
+            # 5. If no agents found in formatted inputs, check the original inputs
             if not connected_agents:
                 for key, value in inputs.items():
                     if hasattr(value, 'value') and isinstance(value.value, dict):
