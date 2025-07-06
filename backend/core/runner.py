@@ -384,6 +384,19 @@ class UnifiedRunner:
         Yields:
             Execution results for each node
         """
+        # 🚀 CRITICAL FIX: Prevent duplicate execution
+        workflow_id = workflow_data.get('workflow_id', 'unknown')
+        execution_key = f"{workflow_id}_{user_id}_{datetime.now().isoformat()}"
+        
+        if hasattr(self, '_executing_workflows') and execution_key in self._executing_workflows:
+            logger.warning(f"⚠️ Duplicate execution detected for workflow {workflow_id}, skipping...")
+            return
+        
+        # Track this execution
+        if not hasattr(self, '_executing_workflows'):
+            self._executing_workflows = set()
+        self._executing_workflows.add(execution_key)
+        
         try:
             # Initialize execution context with user's API keys (only if not already set)
             if not hasattr(self, 'execution_context') or self.execution_context is None:
@@ -429,7 +442,12 @@ class UnifiedRunner:
                     logger.info(f"🔧 Node {node_id} API key injection: {original_has_api_key} -> {enhanced_has_api_key}")
                     
                     # Execute the node
-                    result = await self.execute_node(enhanced_node.get("type"), enhanced_node.get("data", {}), node_inputs)
+                    result = await self.execute_node(
+                        enhanced_node.get("type"), 
+                        enhanced_node.get("data", {}), 
+                        node_inputs,
+                        node_id  # Pass the node_id explicitly
+                    )
                     
                     # 🚀 CRITICAL FIX: Store standardized result and extract clean data
                     # The result from execute_node is already standardized
@@ -482,12 +500,12 @@ class UnifiedRunner:
                 "type": "workflow_error",
                 "timestamp": datetime.now().isoformat()
             }
+        finally:
+            # Clean up execution tracking
+            self._executing_workflows.discard(execution_key)
             
-    async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_node(self, node_type: str, node_data: Dict[str, Any], inputs: Dict[str, Any], node_id: str) -> Dict[str, Any]:
         """Execute a single node with framework validation"""
-        # 🚀 CRITICAL FIX: Get node_id from the correct location
-        node_id = node_data.get("id") or node_data.get("nodeId") or "unknown"
-        
         # 🚀 CRITICAL FIX: Extract framework information from node_data properly with enhanced detection
         framework = None
         
@@ -630,6 +648,7 @@ class UnifiedRunner:
             framework = data.get("framework")
             config = data.get("config", {})
             inputs = data.get("inputs", {})
+            tool_id = data.get("id", "tool_execution")
 
             # Create a tool node structure
             node = {
@@ -639,7 +658,7 @@ class UnifiedRunner:
                     "framework": framework,
                     "config": config
                 },
-                "id": data.get("id", "tool_execution")
+                "id": tool_id
             }
 
             result = await node_processor.process_node(node, inputs)

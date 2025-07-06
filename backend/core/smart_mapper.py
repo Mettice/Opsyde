@@ -11,6 +11,13 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# 🚀 FIXED: Add unwrap helper for NodeData objects
+def _to_raw(val):
+    """Unwrap NodeData objects to get the raw value"""
+    if hasattr(val, 'value'):
+        return val.value
+    return val
+
 class SmartMapper:
     """Handles intelligent input mapping between workflow nodes"""
     
@@ -261,6 +268,30 @@ class SmartMapper:
             if input_name in mapped_inputs:
                 continue  # Already mapped via schema
             
+            # 🚀 FIXED: Add fallback logic for task_output from result field
+            if input_name == "task_output" and previous_outputs:
+                for var_name, var_value in previous_outputs.items():
+                    raw_val = _to_raw(var_value)
+                    if isinstance(raw_val, dict):
+                        # First try to get from 'value' field (logic node preserves data here)
+                        if "value" in raw_val and raw_val["value"] is not None:
+                            mapped_inputs[input_name] = {
+                                'value': _to_raw(raw_val["value"]),
+                                'source': f"fallback_value:{var_name}",
+                                'confidence': 0.95
+                            }
+                            logger.info(f"🎯 Found task_output from {var_name}.value field")
+                            break
+                        # Fallback to 'result' field
+                        elif "result" in raw_val:
+                            mapped_inputs[input_name] = {
+                                'value': _to_raw(raw_val["result"]),
+                                'source': f"fallback_result:{var_name}",
+                                'confidence': 0.9
+                            }
+                            logger.info(f"🎯 Found task_output from {var_name}.result field")
+                            break
+            
             # Try semantic matching first
             best_match, confidence = self._semantic_match(input_name, variables)
             if best_match and confidence > 0.6:
@@ -280,6 +311,84 @@ class SmartMapper:
                     'confidence': 0.5
                 }
                 continue
+            
+            # 🚀 NEW: Try to find preserved data in 'value' fields from previous outputs
+            if previous_outputs:
+                for var_name, var_value in previous_outputs.items():
+                    raw_val = _to_raw(var_value)
+                    if isinstance(raw_val, dict) and "value" in raw_val and raw_val["value"] is not None:
+                        # Check if this value is compatible with the expected input
+                        if self._is_type_compatible(raw_val["value"], input_config.get('type', 'any')):
+                            mapped_inputs[input_name] = {
+                                'value': _to_raw(raw_val["value"]),
+                                'source': f"preserved_value:{var_name}",
+                                'confidence': 0.8
+                            }
+                            logger.info(f"🎯 Found {input_name} from preserved value in {var_name}")
+                            break
+            
+            # 🚀 ENHANCED: Look for any input that might need the preserved story content
+            if input_name in ['task_output', 'input', 'content', 'data'] and previous_outputs:
+                for var_name, var_value in previous_outputs.items():
+                    raw_val = _to_raw(var_value)
+                    if isinstance(raw_val, dict) and "value" in raw_val and raw_val["value"] is not None:
+                        # If this is a string with substantial content, it's likely the story
+                        if isinstance(raw_val["value"], str) and len(raw_val["value"]) > 100:
+                            mapped_inputs[input_name] = {
+                                'value': _to_raw(raw_val["value"]),
+                                'source': f"story_content:{var_name}",
+                                'confidence': 0.9
+                            }
+                            logger.info(f"🎯 Found story content for {input_name} from {var_name}: {len(raw_val['value'])} chars")
+                            break
+                        # Special case: if we're looking for 'input' and the preserved value is a string, use it
+                        elif input_name == "input" and isinstance(raw_val["value"], str):
+                            mapped_inputs[input_name] = {
+                                'value': raw_val["value"],
+                                'source': f"preserved_string_value:{var_name}",
+                                'confidence': 0.9
+                            }
+                            logger.info(f"🎯 Found {input_name} from preserved string value in {var_name}")
+                            break
+            
+            # 🚀 ULTIMATE FALLBACK: Look for ANY value field with substantial content
+            if input_name == "input" and previous_outputs:
+                for var_name, var_value in previous_outputs.items():
+                    raw_val = _to_raw(var_value)
+                    if isinstance(raw_val, dict) and "value" in raw_val and raw_val["value"] is not None:
+                        # If this is a string with substantial content, use it regardless of input name
+                        if isinstance(raw_val["value"], str) and len(raw_val["value"]) > 50:
+                            mapped_inputs[input_name] = {
+                                'value': raw_val["value"],
+                                'source': f"ultimate_fallback:{var_name}",
+                                'confidence': 0.85
+                            }
+                            logger.info(f"🎯 ULTIMATE FALLBACK: Found content for {input_name} from {var_name}: {len(raw_val['value'])} chars")
+                            break
+            
+            # 🚀 CRITICAL FIX: Special handling for output node to get story content
+            if input_name == "input" and previous_outputs:
+                for var_name, var_value in previous_outputs.items():
+                    raw_val = _to_raw(var_value)
+                    if isinstance(raw_val, dict) and "value" in raw_val and raw_val["value"] is not None:
+                        # If this is a string with substantial content, it's the story we want
+                        if isinstance(raw_val["value"], str) and len(raw_val["value"]) > 100:
+                            mapped_inputs[input_name] = {
+                                'value': raw_val["value"],
+                                'source': f"output_story_content:{var_name}",
+                                'confidence': 0.95
+                            }
+                            logger.info(f"🎯 CRITICAL: Found story content for output node from {var_name}: {len(raw_val['value'])} chars")
+                            break
+                        # Also check for any substantial string content in the value field
+                        elif isinstance(raw_val["value"], str) and len(raw_val["value"]) > 10:
+                            mapped_inputs[input_name] = {
+                                'value': raw_val["value"],
+                                'source': f"output_content:{var_name}",
+                                'confidence': 0.9
+                            }
+                            logger.info(f"🎯 Found content for output node from {var_name}: {len(raw_val['value'])} chars")
+                            break
         
         return mapped_inputs
     
@@ -678,7 +787,12 @@ class SmartMapper:
         
         # Use the utility function for consistent extraction
         from .utils import get_clean_output
-        return get_clean_output(value)
+        value = get_clean_output(value)
+        
+        # 🚀 FIXED: Add one more branch to recurse through NodeData and inner dicts
+        if isinstance(value, dict) and 'value' in value and len(value) == 1:
+            return get_clean_output(value['value'])
+        return value
 
     def map_inputs(self, expected_inputs, previous_outputs):
         mapped = {}

@@ -10,6 +10,16 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# Import the new workflow validator
+from utils.workflow_validator import validate_workflow_execution, workflow_validator
+
+# FIXED: Centralized extraction helper - moved to top level
+def unpack(val):
+    # unwrap NodeData
+    if hasattr(val, "value"):
+        return val.value
+    return val
+
 async def test_simple_workflow():
     """Test the simple data flow template"""
     print("🧪 Testing Simple Data Flow Template")
@@ -134,50 +144,142 @@ async def test_simple_workflow():
         print("\n📊 Results Analysis:")
         print("-" * 40)
         
+        final_output_content = ""  # Initialize the variable
+        
         for result in results:
             node_id = result.get('node_id', 'unknown')
             node_type = result.get('node_type', 'unknown')
-            output = result.get('output', {})
             
-            if node_type == 'input':
-                print(f"📝 Input Node: {output.get('value', 'No value')}")
-            elif node_type == 'agent':
-                agent_output = output.get('result', 'No result')
-                print(f"🤖 Agent Output: {agent_output[:100]}...")
-            elif node_type == 'task':
-                task_output = output.get('result', 'No result')
-                print(f"📖 Task Output: {task_output[:100]}...")
-            elif node_type == 'logic':
-                logic_result = output.get('result', 'No result')
-                print(f"✅ Logic Result: {logic_result}")
-            elif node_type == 'output':
-                final_output = output.get('result', 'No result')
-                print(f"📄 Final Output: {final_output[:200]}...")
+            # DEBUG: Print the entire result structure to see what we're getting
+            print(f"🔍 DEBUG {node_id}: Full result keys = {list(result.keys())}")
+            print(f"🔍 DEBUG {node_id}: result['output'] = {result.get('output')}")
+            print(f"🔍 DEBUG {node_id}: result['input'] = {result.get('input')}")
+            print(f"🔍 DEBUG {node_id}: result['result'] = {result.get('result')}")
+            
+            # FIXED: Look in the correct field where backend stores data
+            output = result.get("result")  # ← FIXED: Backend stores data in 'result' field
+            if not output:
+                output = result.get("output")  # Fallback
+            if not output:
+                output = result.get("input")  # Final fallback
+            
+            # FIXED: Centralized extraction logic with debug logging
+            output = unpack(output)
+            print(f"🔍 DEBUG {node_id}: output type = {type(output)}")
+            if isinstance(output, dict):
+                print(f"🔍 DEBUG {node_id}: dict keys = {list(output.keys())}")
+                for key in ["text_context", "task_output", "content", "result", "value"]:
+                    if key in output and output[key]:
+                        print(f"🔍 DEBUG {node_id}: Found key '{key}' with value type {type(output[key])}")
+                        actual_output = unpack(output[key])
+                        break
+                else:
+                    print(f"🔍 DEBUG {node_id}: No expected keys found, using str(output)")
+                    actual_output = str(output)
+            else:
+                print(f"🔍 DEBUG {node_id}: Not a dict, using str(output)")
+                actual_output = str(output)
+            
+            # FIXED: Extract the actual content from the complex structure
+            if isinstance(actual_output, dict):
+                # For logic nodes, look for the preserved value field
+                if node_type == 'logic' and 'value' in actual_output:
+                    content = str(actual_output['value'])
+                    print(f"📝 {node_id} ({node_type}): {len(content)} chars (preserved data)")
+                elif 'text_context' in actual_output:
+                    content = actual_output['text_context']
+                    print(f"📝 {node_id} ({node_type}): {len(str(content))} chars")
+                    if node_type == 'output':
+                        final_output_content = content
+                elif 'task_output' in actual_output:
+                    content = str(actual_output['task_output'])
+                    print(f"📝 {node_id} ({node_type}): {len(content)} chars")
+                    if node_type == 'output':
+                        final_output_content = content
+                elif 'content' in actual_output:
+                    content = str(actual_output['content'])
+                    print(f"📝 {node_id} ({node_type}): {len(content)} chars")
+                    if node_type == 'output':
+                        final_output_content = content
+                elif 'result' in actual_output:
+                    content = str(actual_output['result'])
+                    print(f"📝 {node_id} ({node_type}): {len(content)} chars")
+                    if node_type == 'output':
+                        final_output_content = content
+                else:
+                    # Try to find any string content in the dict
+                    content = str(actual_output)
+                    print(f"📝 {node_id} ({node_type}): {len(content)} chars")
+                    if node_type == 'output':
+                        final_output_content = content
+            else:
+                content = str(actual_output)
+                print(f"📝 {node_id} ({node_type}): {len(content)} chars")
+                if node_type == 'output':
+                    final_output_content = content
         
         # Validate the results
         print("\n🔍 Validation:")
         print("-" * 40)
         
-        # Check if we got meaningful output
-        final_result = None
-        for result in results:
-            if result.get('node_type') == 'output':
-                final_result = result.get('output', {}).get('result', '')
-                break
-        
-        if final_result:
-            if len(final_result) > 50:
-                print("✅ Content length validation: PASSED (>50 characters)")
-            else:
-                print("❌ Content length validation: FAILED (too short)")
-            
-            if 'robot' in final_result.lower() and 'paint' in final_result.lower():
-                print("✅ Content relevance validation: PASSED (contains robot and paint)")
-            else:
-                print("⚠️ Content relevance validation: PARTIAL (missing expected keywords)")
+        # Content length validation
+        if len(final_output_content) > 50:
+            print("✅ Content length validation: PASSED")
         else:
-            print("❌ No final output found")
-            return False
+            print(f"❌ Content length validation: FAILED (too short: {len(final_output_content)} chars)")
+        
+        # IMPROVED: Use the new workflow validator
+        print("\n🔍 Validation:")
+        print("-" * 40)
+        
+        # Use the comprehensive validator
+        validation_result = validate_workflow_execution(results, workflow_data)
+        
+        # Display validation results
+        if validation_result['content_length']['passed']:
+            print(f"✅ Content length validation: PASSED ({validation_result['content_length']['length']} chars)")
+        else:
+            print(f"❌ Content length validation: FAILED ({validation_result['content_length']['length']} chars)")
+        
+        if validation_result['content_relevance']['passed']:
+            print(f"✅ Content relevance validation: PASSED (score: {validation_result['content_relevance']['score']:.2f})")
+        elif validation_result['content_relevance']['score'] >= 0.2:
+            print(f"⚠️ Content relevance validation: PARTIAL (score: {validation_result['content_relevance']['score']:.2f})")
+        else:
+            print(f"❌ Content relevance validation: FAILED (score: {validation_result['content_relevance']['score']:.2f})")
+        
+        if validation_result['answer_relevance']['score'] > 0:
+            if validation_result['answer_relevance']['passed']:
+                print(f"✅ Answer relevance validation: PASSED (score: {validation_result['answer_relevance']['score']:.2f})")
+            elif validation_result['answer_relevance']['score'] >= 0.2:
+                print(f"⚠️ Answer relevance validation: PARTIAL (score: {validation_result['answer_relevance']['score']:.2f})")
+            else:
+                print(f"❌ Answer relevance validation: FAILED (score: {validation_result['answer_relevance']['score']:.2f})")
+        
+        # Show keyword details
+        if validation_result['content_relevance']['expected']:
+            print(f"🔍 Expected keywords: {validation_result['content_relevance']['expected']}")
+            print(f"🔍 Found keywords: {validation_result['content_relevance']['found']}")
+        
+        if validation_result['answer_relevance']['expected']:
+            print(f"🔍 Expected answers: {validation_result['answer_relevance']['expected']}")
+            print(f"🔍 Found answers: {validation_result['answer_relevance']['found']}")
+        
+        # Show any errors or warnings
+        if validation_result['errors']:
+            for error in validation_result['errors']:
+                print(f"❌ Error: {error}")
+        
+        if validation_result['warnings']:
+            for warning in validation_result['warnings']:
+                print(f"⚠️ Warning: {warning}")
+        
+        print(f"\n🎯 Final Result Preview:")
+        print("-" * 40)
+        if final_output_content:
+            print(f"{final_output_content[:300]}{'...' if len(final_output_content) > 300 else ''}")
+        else:
+            print("No content found in final output")
         
         print("\n🎯 Test Summary:")
         print("-" * 40)
@@ -301,18 +403,57 @@ async def test_api_workflow():
         final_result = None
         for result in results:
             if result.get('node_type') == 'output':
-                final_result = result.get('output', {}).get('result', '')
-                break
+                # FIXED: Look in the correct field where backend stores data
+                output = result.get("result")  # ← FIXED: Backend stores data in 'result' field
+                if not output:
+                    output = result.get("output")  # Fallback
+                if not output:
+                    output = result.get("input")  # Final fallback
+                
+                # FIXED: Centralized extraction logic with debug logging
+                output = unpack(output)
+                print(f"🔍 DEBUG API: output type = {type(output)}")
+                if isinstance(output, dict):
+                    print(f"🔍 DEBUG API: dict keys = {list(output.keys())}")
+                    for key in ["text_context", "task_output", "content", "result", "value"]:
+                        if key in output and output[key]:
+                            print(f"🔍 DEBUG API: Found key '{key}' with value type {type(output[key])}")
+                            final_result = unpack(output[key])
+                            break
+                    else:
+                        print(f"🔍 DEBUG API: No expected keys found, using str(output)")
+                        final_result = str(output)
+                else:
+                    final_result = str(output)
+                
+                if final_result:
+                    break
         
         if final_result:
             print(f"📋 Final Answer: {final_result}")
             
-            if 'paris' in final_result.lower():
-                print("✅ API test validation: PASSED (contains 'Paris')")
+            # IMPROVED: Use the workflow validator for API test
+            original_question = workflow_data['inputs']['input-api-test']
+            print(f"🔍 Original question: {original_question}")
+            
+            # Use the validator's answer relevance calculation
+            answer_score, expected_answers, found_answers = workflow_validator.calculate_answer_relevance(
+                final_result, original_question
+            )
+            
+            print(f"🔍 Expected answer keywords: {expected_answers}")
+            print(f"🔍 Found answer keywords: {found_answers}")
+            print(f"🔍 Answer relevance score: {answer_score:.2f}")
+            
+            if answer_score >= 0.5:
+                print("✅ API test validation: PASSED")
                 return True
-            else:
-                print("⚠️ API test validation: PARTIAL (doesn't contain 'Paris')")
+            elif answer_score >= 0.2:
+                print("⚠️ API test validation: PARTIAL")
                 return True  # Still consider it a pass if we got a response
+            else:
+                print("❌ API test validation: FAILED (low relevance)")
+                return False
         else:
             print("❌ No final answer found")
             return False

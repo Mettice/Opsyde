@@ -15,6 +15,7 @@ import { useLogExport } from './hooks/useLogExport';
 import LogsTab from './components/LogsTab';
 import StatsTab from './components/StatsTab';
 import ExportTab from './components/ExportTab';
+import WorkflowValidationCard from '../validation/WorkflowValidationCard';
 import './UnifiedExecutionPanel.css';
 
 /**
@@ -900,6 +901,7 @@ export default function UnifiedExecutionPanel({
                       { id: 'results', label: 'Results', icon: '📋' },
                       { id: 'logs', label: 'Logs', icon: '📝' },
                       { id: 'stats', label: 'Statistics', icon: '📊' },
+                      { id: 'validation', label: 'Validation', icon: '🔍' },
                       { id: 'smart_mapping', label: 'Smart Mapping', icon: '🧠' },
                       { id: 'export', label: 'Export', icon: '📤' }
                     ].map((tab) => (
@@ -979,6 +981,46 @@ export default function UnifiedExecutionPanel({
               derivedStats={derivedStats}
               structuredLogs={processedStructuredLogs}
             />
+          )}
+          
+          {activeTab === 'validation' && (
+            <div className="h-full overflow-y-auto p-6">
+              <div className="max-w-4xl mx-auto">
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                      <span className="text-2xl">🔍</span>
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-800">Workflow Validation</h2>
+                      <p className="text-gray-600">Intelligent content validation and quality assessment</p>
+                    </div>
+                  </div>
+                  
+                  {executionResults.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">🔍</div>
+                      <div className="text-lg font-medium mb-2">No Validation Data</div>
+                      <div className="text-sm text-gray-500">Run a workflow to see validation results</div>
+                    </div>
+                  ) : (
+                    <WorkflowValidationCard
+                      results={executionResults}
+                      workflowData={{
+                        inputs: {
+                          'input-test-data': 'Create a short story about a robot learning to paint',
+                          'input-api-test': 'What is the capital of France?'
+                        }
+                      }}
+                      showDetails={true}
+                      onValidationComplete={(result) => {
+                        console.log('Validation completed:', result);
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
           )}
           
           {activeTab === 'smart_mapping' && (

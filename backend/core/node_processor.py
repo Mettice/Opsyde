@@ -157,10 +157,10 @@ class NodeProcessor:
         # Debug what we're wrapping
         logger.debug(f"🔧 Wrapping value: {type(value).__name__} = {value}")
         
-        # Handle None values explicitly
+        # Handle None values explicitly - return None instead of empty string
         if value is None:
-            logger.warning(f"🔧 Wrapping None value - this might cause issues")
-            return NodeData.from_value("")  # Return empty string instead of None
+            logger.debug(f"🔧 Skipping None value - not wrapping")
+            return None  # Return None instead of wrapping as empty string
         
         # Handle empty values
         if isinstance(value, (str, list, dict)) and not value:

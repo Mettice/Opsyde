@@ -262,15 +262,36 @@ class LogicNode(BaseNode):
             # Get the main input data to pass through
             main_input_data = None
             if regular_inputs:
+                logger.info(f"🔍 Logic node received inputs: {list(regular_inputs.keys())}")
                 # Find the main input data (prefer task output, then agent output, then any data)
                 for key, value in regular_inputs.items():
+                    logger.info(f"🔍 Processing input '{key}': type={type(value).__name__}")
+                    if isinstance(value, dict):
+                        logger.info(f"🔍 Input '{key}' keys: {list(value.keys())}")
+                        if 'result' in value:
+                            logger.info(f"🔍 Found 'result' in '{key}': {len(str(value['result']))} chars")
+                    
                     if 'task' in key.lower() or 'agent' in key.lower():
-                        main_input_data = value
+                        # If this is a task output, extract the actual result content
+                        if isinstance(value, dict) and 'result' in value:
+                            main_input_data = value['result']  # Extract the actual story content
+                            logger.info(f"🎯 Extracted story from {key}.result: {len(str(main_input_data))} chars")
+                        else:
+                            main_input_data = value
+                            logger.info(f"🎯 Using {key} as-is: {len(str(main_input_data))} chars")
                         break
                 
                 # Fallback to first input if no task/agent input found
                 if main_input_data is None:
-                    main_input_data = next(iter(regular_inputs.values()))
+                    first_key, first_value = next(iter(regular_inputs.items()))
+                    logger.info(f"🔍 Fallback to first input '{first_key}': type={type(first_value).__name__}")
+                    # If it's a dict with 'result', extract the result
+                    if isinstance(first_value, dict) and 'result' in first_value:
+                        main_input_data = first_value['result']
+                        logger.info(f"🎯 Extracted story from fallback {first_key}.result: {len(str(main_input_data))} chars")
+                    else:
+                        main_input_data = first_value
+                        logger.info(f"🎯 Using fallback {first_key} as-is: {len(str(main_input_data))} chars")
             
             # Create metadata
             metadata = {
@@ -281,13 +302,17 @@ class LogicNode(BaseNode):
                 "data_passed_through": main_input_data is not None
             }
             
-            return {
+            output_data = {
                 "result": result,
                 "metadata": metadata,
                 "value": main_input_data,  # Preserve original data for downstream nodes
                 "condition": condition,
                 "path": "true" if result else "false"
             }
+            
+            logger.info(f"🎯 Logic node returning: result={result}, value type={type(main_input_data).__name__}, value length={len(str(main_input_data)) if main_input_data else 0} chars")
+            
+            return output_data
             
         except Exception as e:
             logger.error(f"Logic processing failed: {str(e)}")

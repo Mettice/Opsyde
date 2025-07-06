@@ -195,6 +195,11 @@ class OutputNode(BaseNode):
         rich_outputs = []
         
         for input_id, node_data in inputs.items():
+            if node_data is None:
+                self.logger.warning(f"Input {input_id} is None, skipping")
+                collected_data[f"{input_id}_error"] = "Input is None"
+                continue
+                
             if node_data.is_error():
                 collected_data[f"{input_id}_error"] = node_data.error
             else:

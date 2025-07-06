@@ -14,6 +14,9 @@ JSON_FORMAT = {
     'message': '%(message)s'
 }
 
+# Global logger cache to prevent duplicate handlers
+_logger_cache = {}
+
 class JSONFormatter(logging.Formatter):
     """Custom formatter for JSON-structured logs"""
     
@@ -52,7 +55,10 @@ class StructuredLogger:
     def __init__(self, name: str, level: str = 'INFO'):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(getattr(logging, level.upper()))
-        self.setup_handlers()
+        
+        # Only setup handlers if they don't already exist
+        if not self.logger.handlers:
+            self.setup_handlers()
         
     def setup_handlers(self):
         """Setup console and file handlers"""
@@ -101,39 +107,44 @@ class StructuredLogger:
         self._log('CRITICAL', message, kwargs)
 
 def get_logger(name: str) -> StructuredLogger:
-    """Get or create a structured logger instance"""
-    return StructuredLogger(name)
+    """Get or create a structured logger instance - FIXED to prevent duplicates"""
+    if name not in _logger_cache:
+        _logger_cache[name] = StructuredLogger(name)
+    return _logger_cache[name]
 
 def setup_logging(level: str = 'INFO') -> logging.Logger:
     """Setup and return the root logger with standard configuration"""
     logger = logging.getLogger('backend')
     logger.setLevel(getattr(logging, level.upper()))
     
-    # Create console handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setFormatter(logging.Formatter(DEFAULT_FORMAT))
-    logger.addHandler(console_handler)
-    
-    # Create file handler for JSON logs
-    log_dir = Path('logs')
-    log_dir.mkdir(exist_ok=True)
-    
-    file_handler = logging.FileHandler(
-        log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.json"
-    )
-    file_handler.setFormatter(JSONFormatter())
-    logger.addHandler(file_handler)
+    # Only add handlers if they don't already exist
+    if not logger.handlers:
+        # Create console handler
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setFormatter(logging.Formatter(DEFAULT_FORMAT))
+        logger.addHandler(console_handler)
+        
+        # Create file handler for JSON logs
+        log_dir = Path('logs')
+        log_dir.mkdir(exist_ok=True)
+        
+        file_handler = logging.FileHandler(
+            log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.json"
+        )
+        file_handler.setFormatter(JSONFormatter())
+        logger.addHandler(file_handler)
     
     return logger
 
-# Configure root logger
-logging.basicConfig(
-    level=logging.INFO,
-    format=DEFAULT_FORMAT,
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# Configure root logger only once
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format=DEFAULT_FORMAT,
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
 
 # Example usage:
 # logger = get_logger(__name__)

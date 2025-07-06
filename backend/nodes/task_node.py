@@ -731,7 +731,10 @@ class TaskNode(BaseNode):
                             runner_config, 
                             formatted_inputs
                         )
-                        agent_response = result.get("output", "No response from CrewAI agent")
+                        # FIXED: CrewAI runner returns "result" not "output"
+                        agent_response = result.get("result", "No response from CrewAI agent")
+                        if not agent_response and result.get("error"):
+                            agent_response = f"Error: {result.get('error')}"
                     except ImportError as e:
                         logger.error(f"CrewAI runner import error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
@@ -831,7 +834,10 @@ class TaskNode(BaseNode):
                         
                         # Run the LangChain agent
                         result = await run_langchain_tool(config, inputs_data)
-                        agent_response = result.get("output", "No response from LangChain agent")
+                        # FIXED: LangChain runner returns "result" not "output"
+                        agent_response = result.get("result", "No response from LangChain agent")
+                        if not agent_response and result.get("error"):
+                            agent_response = f"Error: {result.get('error')}"
                     except ImportError as e:
                         logger.error(f"LangChain runner import error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
@@ -883,7 +889,10 @@ class TaskNode(BaseNode):
                         
                         # Run the AutoGen agent
                         result = await run_autogen_tool(config, inputs_data)
-                        agent_response = result.get("output", "No response from AutoGen agent")
+                        # FIXED: AutoGen runner returns "result" not "output"
+                        agent_response = result.get("result", "No response from AutoGen agent")
+                        if not agent_response and result.get("error"):
+                            agent_response = f"Error: {result.get('error')}"
                     except ImportError as e:
                         logger.error(f"AutoGen runner import error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
@@ -935,7 +944,10 @@ class TaskNode(BaseNode):
                         
                         # Run the LlamaIndex agent
                         result = await run_llamaindex_tool(config, inputs_data)
-                        agent_response = result.get("output", "No response from LlamaIndex agent")
+                        # FIXED: LlamaIndex runner returns "result" not "output"
+                        agent_response = result.get("result", "No response from LlamaIndex agent")
+                        if not agent_response and result.get("error"):
+                            agent_response = f"Error: {result.get('error')}"
                     except ImportError as e:
                         logger.error(f"LlamaIndex runner import error: {str(e)}")
                         agent_response = await self._execute_agent_query(primary_agent, user_query)
